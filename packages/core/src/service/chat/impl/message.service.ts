@@ -15,7 +15,7 @@ import { messageAttachmentsSchema } from "@/domain/chat/model/message-attachment
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
-import { forkCopySeeder } from "@/domain/chat/logic/fork-copy-seeder.js";
+import { ForkCopySeeder } from "@/domain/chat/logic/fork-copy-seeder.js";
 import { TdbcTransaction } from "@/infra/tdbc/logic/transaction-helper.js";
 import type { LongTaskHooks } from "@/domain/abort/model/abort-scope.js";
 import { AbortError } from "@/domain/abort/logic/create-abort-error.js";
@@ -48,32 +48,32 @@ const log = LogFactory.create("chat.message");
 
 /** Dependencies for {@link DefaultMessageService}. */
 interface MessageServiceDeps {
-  readonly conn: TdbcConnection;
-  readonly sessions: SessionRepository;
-  readonly messages: MessageRepository;
-  readonly vfs: VfsEntryRepository;
-  readonly checkpoints: MessageCheckpointRepository;
-  readonly revisions: VfsRevisionRepository;
+    readonly conn: TdbcConnection;
+    readonly sessions: SessionRepository;
+    readonly messages: MessageRepository;
+    readonly vfs: VfsEntryRepository;
+    readonly checkpoints: MessageCheckpointRepository;
+    readonly revisions: VfsRevisionRepository;
 }
 
 /**
  * Message service with monotonic `seq` and fork support.
  */
 export class DefaultMessageService implements MessageService {
-  constructor(private readonly deps: MessageServiceDeps) {}
+    constructor(private readonly deps: MessageServiceDeps) {}
 
-  /**
+    /**
    * 失效该会话的 API prompt 占用（进程内热层 + session KKV 行双删）。
    *
    * 本类只持有 conn：就地建一个 SessionKkvService（无状态、只是仓储包装），
    * 与 message-transcript-effects / run-compaction 的失效口径一致。所有调用点
    * 都在 `conn.transaction` 块外，KKV 删除已 await（失败只吞 warn，不冒泡）。
    */
-  private async invalidatePromptTokens(sessionId: string): Promise<void> {
-    await SessionApiPromptTokenEntry.invalidate(SessionKkvServiceFactory.create(this.deps.conn), sessionId);
-  }
+    private async invalidatePromptTokens(sessionId: string): Promise<void> {
+        await SessionApiPromptTokenEntry.invalidate(SessionKkvServiceFactory.create(this.deps.conn), sessionId);
+    }
 
-  /**
+    /**
    * 失效该会话的工具调用数缓存（usage_stats.toolUseCount，纯加速数据：
    * 失败只影响下次读数现算，best-effort 不冒泡）。
    *
@@ -86,351 +86,352 @@ export class DefaultMessageService implements MessageService {
    * 解压循环，delete 先落、陈旧 set 后写会让失效被覆盖且不自愈；哨兵让
    * 读口回填前能复核「原值是否仍等于 miss 时所见」，不等即放弃回填。
    */
-  private async invalidateToolUseCount(sessionId: string): Promise<void> {
-    try {
-      await SessionKkvServiceFactory.create(this.deps.conn).set(sessionId, SESSION_KKV_DOMAIN_USAGE_STATS, USAGE_STATS_TOOL_USE_COUNT_KEY, "");
-    } catch (error) {
-      log.warn(`工具调用数缓存失效失败（下次读数将现算）：${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-
-  listBySession(sessionId: string, options?: { includeHidden?: boolean }, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>> {
-    return this.deps.messages.listBySession(sessionId, options, hooks);
-  }
-
-  listMessageHeadersBySession(sessionId: string): Promise<ChatMessageHeader[]> {
-    return this.deps.messages.listMessageHeadersBySession(sessionId);
-  }
-
-  listBySessionFromSeq(sessionId: string, fromSeq: number, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>> {
-    return this.deps.messages.listBySessionFromSeq(sessionId, fromSeq, hooks);
-  }
-
-  listBySessionTail(sessionId: string, options: { limit: number }, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>> {
-    return this.deps.messages.listBySessionTail(sessionId, options.limit, hooks);
-  }
-
-  listBySessionTailOfRole(sessionId: string, options: { role: string; limit: number }, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>> {
-    return this.deps.messages.listBySessionTailOfRole(sessionId, options.role, options.limit, hooks);
-  }
-
-  listBySessionPage(sessionId: string, options: { limit: number; beforeSeq?: number }, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>> {
-    return this.deps.messages.listBySessionPage(sessionId, options.limit, options.beforeSeq, hooks);
-  }
-
-  async get(id: string): Promise<Result<ChatMessageData, AppError>> {
-    const message = await this.deps.messages.findById(id);
-    if (message == null) {
-      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `message not found: ${id}`, kind: "message", id, messageId: id }));
-    }
-    return Result.ok(message);
-  }
-
-  async append(sessionId: string, role: string, content: MessageContent, options?: Parameters<MessageService["append"]>[3]): Promise<Result<ChatMessageData, AppError>> {
-    const session = await this.deps.sessions.findById(sessionId);
-    if (session == null) {
-      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `session not found: ${sessionId}`, kind: "session", id: sessionId }));
-    }
-    const parsedContent = MessageContentParse.parseValue(content);
-    if (!parsedContent.ok) {
-      return Result.err(parsedContent.error);
-    }
-    const normalizedContent = parsedContent.value;
-    const attachments = options?.attachments == null || options.attachments.length === 0 ? undefined : messageAttachmentsSchema.parse(options.attachments);
-    const seq = await this.deps.messages.nextSeq(sessionId);
-    // New messages are visible by default
-    const message: ChatMessageData = {
-      id: Random.uuid(),
-      sessionId,
-      seq,
-      role,
-      content: normalizedContent,
-      provider: options?.provider ?? null,
-      modelName: options?.modelName ?? null,
-      providerId: options?.providerId ?? null,
-      raw: options?.raw ?? null,
-      createdAtMs: Date.now(),
-      hidden: false,
-      ...(attachments != null ? { attachments } : {}),
-      ...(options?.usage != null ? { usage: options.usage } : {}),
-    };
-    // 记账点（唯一）：带 token 真值的 assistant 消息与账本行同事务落库——
-    // chat_message 九列照写不停写（上下文占用 chip 与 session_run_state 依赖
-    // 它，那是「会话内容属性」，随会话删），usage_record 另起一行作「账本」
-    // （永续，删除链不碰），统计读口改打账本后数字不再随删除归零。
-    // 无 token 真值（prompt/completion 皆空）与无 usage 的消息不写账本——
-    // 与旧统计口径 USAGE_NOT_NULL_SQL 同源，普通消息走原直通插入零额外开销。
-    const usageRecord = UsageRecord.buildFromMessage(message);
-    if (usageRecord == null) {
-      await this.deps.messages.insert(message);
-    } else {
-      await this.deps.conn.transaction(async (tx) => {
-        // 事务内必须用 tx 句柄建仓储：根连接在事务持有连接互斥锁期间不可用
-        //（tdbc 驱动 mutex 语义），与 delete() 的多表同事务写法一致。
-        await new SqliteMessageRepository(tx).insert(message);
-        await new SqliteUsageRecordRepository(tx).insert(usageRecord);
-      });
-    }
-    // 消息「增」不再失效 API 占用（统计优先口径，2026-09-29 真机复验拍板）：
-    // 纯追加由读口的「基线 + anchorSeq 之后追加消息的增量估算」覆盖（metric
-    // 同款），失效反而会让 run 起步的压缩评估与 chip 首帧跌回估算档（评估
-    // 已 preferEstimate 廉价即回，真正多付的是 UI 刷新路径的后台精确计数）。
-    // 删除/改写/隐藏类路径（delete/updateContent/hide/show/hideRange/
-    // showRange/truncateAfter）的失效保留——增量表达不了内容消失。
-    // 工具调用数缓存：仅含 tool_use 块的追加失效（run 的工具步在此失效、
-    // 纯文本追加不动缓存——避免 run 内每步无谓重算）。
-    const hasToolUse = ChatMessage.from(message).toolUseCount() > 0;
-    if (role === "assistant" && hasToolUse) {
-      await this.invalidateToolUseCount(sessionId);
-    }
-    return Result.ok(ChatMessage.from(message));
-  }
-
-  async delete(id: string): Promise<Result<void, AppError>> {
-    const message = await this.deps.messages.findById(id);
-    if (message == null) {
-      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `message not found: ${id}`, kind: "message", id, messageId: id }));
-    }
-
-    const session = await this.deps.sessions.findById(message.sessionId);
-    if (session == null) {
-      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `session not found: ${message.sessionId}`, kind: "session", id: message.sessionId }));
-    }
-
-    await this.deps.conn.transaction(async (tx) => {
-      const messages = new SqliteMessageRepository(tx);
-      const checkpoints = new SqliteMessageCheckpointRepository(tx);
-      const revisions = new SqliteVfsRevisionRepository(tx);
-
-      const deleted = await messages.delete(id);
-      if (!deleted) {
-        throw new AppError("CHAT_NOT_FOUND", { detail: `message not found: ${id}`, kind: "message", id, messageId: id });
-      }
-
-      // 发生删除即清 backfill 游标：消息删除改变计数口径（count < 游标或圈段
-      // 位移），残留会让下次 backfill 判定错位——清掉走保守全量自愈。
-      await new SqliteSessionKkvRepository(tx).clearDomain(message.sessionId, SESSION_KKV_DOMAIN_BACKFILL_CURSOR);
-      await checkpoints.deleteCheckpointsForMessages(message.sessionId, [id]);
-      await RevisionGc.sweepSession(revisions, session.projectId, message.sessionId);
-    });
-    await DeferredBlobGc.run(this.deps.conn);
-    await this.invalidatePromptTokens(message.sessionId);
-    await this.invalidateToolUseCount(message.sessionId);
-    return Result.ok(undefined);
-  }
-
-  async updateContent(messageId: string, content: MessageContent): Promise<Result<ChatMessageData, AppError>> {
-    const parsedContent = MessageContentParse.parseValue(content);
-    if (!parsedContent.ok) {
-      return Result.err(parsedContent.error);
-    }
-    // 正文替换收进事务（行缺失即抛、不留半写状态）。序列化与压缩编码都
-    // 下沉到 repository（port 签名为 MessageContent 对象）。
-    // read 引用换算（旧 blocks −1、新 blocks +1）已随 E1 清理版退役。
-    await this.deps.conn.transaction(async (tx) => {
-      const messages = new SqliteMessageRepository(tx);
-      const existing = await messages.findById(messageId);
-      if (existing == null) {
-        throw new AppError("CHAT_NOT_FOUND", { detail: `message not found: ${messageId}`, kind: "message", id: messageId, messageId });
-      }
-      const updated = await messages.updateContent(messageId, parsedContent.value);
-      if (!updated) {
-        throw new AppError("CHAT_NOT_FOUND", { detail: `message not found: ${messageId}`, kind: "message", id: messageId, messageId });
-      }
-    });
-    const message = await this.get(messageId);
-    if (!message.ok) return message;
-    await this.invalidatePromptTokens(message.value.sessionId);
-    await this.invalidateToolUseCount(message.value.sessionId);
-    return Result.ok(message.value);
-  }
-
-  async fork(sessionId: string, upToMessageId: string, hooks?: LongTaskHooks): Promise<Result<ChatSession, AppError>> {
-    const source = await this.deps.sessions.findById(sessionId);
-    if (source == null) {
-      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `session not found: ${sessionId}`, kind: "session", id: sessionId }));
-    }
-    const upTo = await this.deps.messages.findById(upToMessageId);
-    if (upTo == null || upTo.sessionId !== sessionId) {
-      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `message not found: ${upToMessageId}`, kind: "message", id: upToMessageId, sessionId, messageId: upToMessageId }));
-    }
-    // 上界收窄读口：fork 的全部消费都落在「锚点及更早」方向（下方
-    // seedForkCopyParity 吃同一份 toCopy），锚点之后的
-    // 整条尾巴是纯浪费。旧形态是 listBySession 全量读 + 事务内 filter 丢弃。
-    const allRead = await this.deps.messages.listBySessionUpToSeq(sessionId, upTo.seq, hooks);
-    if (allRead.kind === "failed") return Result.err(allRead.error);
-    // 中断不是错误：本方法出口是边界，转抛 AbortError 交给上层（IPC / CLI）收口。
-    if (allRead.kind !== "completed") throw AbortError.create();
-    const all = allRead.value;
-    if (all.length === 0) {
-      // 空集合守卫**必须在开事务之前**：上界读口在事务外，锚点之前的消息一条都
-      // 没有时直接拒绝，不为一个必然回滚的动作开事务。
-      return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { detail: "No messages to fork up to the given id" }));
-    }
-    const projectSessions = await this.deps.sessions.listByProject(source.projectId);
-    const forkBaseTitle = source.title?.trim() || "会话";
-    const forkTitlePattern = new RegExp(`^${forkBaseTitle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}_ckpt_(\\d+)$`);
-    let maxForkIndex = 0;
-    for (const session of projectSessions) {
-      if (session.title == null || session.title === "") {
-        continue;
-      }
-      const match = session.title.match(forkTitlePattern);
-      if (match) {
-        maxForkIndex = Math.max(maxForkIndex, Number.parseInt(match[1]!, 10));
-      }
-    }
-    const forkTitle = `${forkBaseTitle}_ckpt_${maxForkIndex + 1}`;
-    const forkTransaction = this.deps.conn.transaction(async (tx) => {
-      const r = { sessions: new SqliteSessionRepository(tx), messages: new SqliteMessageRepository(tx), vfs: new SqliteVfsEntryRepository(tx) };
-      // 上界读口的返回集合与旧的 all.filter(m => m.seq <= upTo.seq) 逐条等价，
-      // 零新增过滤语义（含 hidden 行——fork 要 Preserve hidden state）。
-      const toCopy = all;
-      const now = Date.now();
-      const forked: ChatSession = {
-        id: Random.uuid(),
-        projectId: source.projectId,
-        title: forkTitle,
-        // P2-13：fork 出的是独立主会话，不继承源会话的 parent 关系。
-        parentSessionId: null,
-        createdAtMs: now,
-        updatedAtMs: now,
-      };
-      await r.sessions.insert(forked);
-      // 刻意不复制 session_kkv（SPEC：fork/copy 不复制 kkv）
-      // 刻意不复制 composer_draft_json（维持现状）
-      // agent_config_json：继承源会话配置（与 copy 一致）。必须走 repo 层——
-      // NULL 静默跳过；service 层 getSessionAgentConfig 对 NULL 会抛且不在本事务上。
-      const sourceAgentConfigJson = await r.sessions.getSessionAgentConfig(source.id);
-      if (sourceAgentConfigJson != null) {
-        await r.sessions.setSessionAgentConfig(forked.id, sourceAgentConfigJson, now);
-      }
-      // 顺序钉死：VFS → MSG(ids) → helper(REV + RULE + CK)
-      // entry_id 化后会话独立 scope：session:{pid}:{sid}，逻辑前缀为 "/"
-      // 事务边界（平台协议例外）：VFS 复制与批量写入的中断/失败都必须抛错，
-      // 才能让驱动整体回滚——直接 return Outcome 会 commit 半写 fork。
-      const copyOptions = { contentStore: new SqliteVfsContentStore(tx), hooks };
-      const vfsCopied = await VfsTreeCopy.copyTree(r.vfs, { scopeKey: `session:${source.projectId}:${source.id}` }, "/", { scopeKey: `session:${source.projectId}:${forked.id}` }, "/", copyOptions);
-      if (vfsCopied.kind === "failed") throw vfsCopied.error;
-      if (vfsCopied.kind !== "completed") throw AbortError.create();
-
-      const newMessages: { id: string }[] = [];
-      let seq = 1;
-      // 逐条 INSERT 改成先构造数组再一次 batchInsert，把 M 次 round-trip 收敛成 1 次。
-      const forkedMessages: ChatMessageData[] = [];
-      for (const msg of toCopy) {
-        const id = Random.uuid();
-        // Preserve hidden state when forking
-        forkedMessages.push({ ...msg, id, sessionId: forked.id, seq });
-        newMessages.push({ id });
-        seq++;
-      }
-      const inserted = await r.messages.batchInsert(forkedMessages, hooks);
-      // 事务边界（平台协议例外）：中断/失败都必须抛错才能让驱动整体回滚，
-      // 不能把 Outcome 直接 return——那样外层事务会 commit 半批 fork。
-      if (inserted.kind === "failed") throw inserted.error;
-      if (inserted.kind !== "completed") throw AbortError.create();
-      // seed 失败靠抛错回滚（总纲 §五例外 2）：事务回调内 return r 不回滚会留下半写 fork，
-      // 解包字收口在 unwrapOrRollback（门⑦），异常穿出 transaction 由调用链端点 catch 收口。
-      await TdbcTransaction.unwrapOrRollback(await forkCopySeeder.seed(tx, { projectId: source.projectId, sourceSessionId: source.id, targetSessionId: forked.id, newMessages }));
-      return forked;
-    });
-    return Result.ok(await forkTransaction);
-  }
-
-  async hide(messageId: string): Promise<Result<void, AppError>> {
-    const existing = await this.deps.messages.findById(messageId);
-    if (existing == null) {
-      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `message not found: ${messageId}`, kind: "message", id: messageId, messageId }));
-    }
-    const updated = await this.deps.messages.updateHidden(messageId, true);
-    if (!updated) {
-      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `message not found: ${messageId}`, kind: "message", id: messageId, messageId }));
-    }
-    await this.invalidatePromptTokens(existing.sessionId);
-    return Result.ok(undefined);
-  }
-
-  async show(messageId: string): Promise<Result<void, AppError>> {
-    const existing = await this.deps.messages.findById(messageId);
-    if (existing == null) {
-      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `message not found: ${messageId}`, kind: "message", id: messageId, messageId }));
-    }
-    const updated = await this.deps.messages.updateHidden(messageId, false);
-    if (!updated) {
-      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `message not found: ${messageId}`, kind: "message", id: messageId, messageId }));
-    }
-    await this.invalidatePromptTokens(existing.sessionId);
-    return Result.ok(undefined);
-  }
-
-  async hideRange(sessionId: string, fromSeq: number, toSeq: number): Promise<Result<number, AppError>> {
-    // Verify session exists
-    const session = await this.deps.sessions.findById(sessionId);
-    if (session == null) {
-      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `session not found: ${sessionId}`, kind: "session", id: sessionId }));
-    }
-    const count = await this.deps.messages.updateHiddenRange(sessionId, fromSeq, toSeq, true);
-    if (count > 0) {
-      await this.invalidatePromptTokens(sessionId);
-    }
-    return Result.ok(count);
-  }
-
-  async showRange(sessionId: string, fromSeq: number, toSeq: number): Promise<Result<number, AppError>> {
-    // Verify session exists
-    const session = await this.deps.sessions.findById(sessionId);
-    if (session == null) {
-      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `session not found: ${sessionId}`, kind: "session", id: sessionId }));
-    }
-    const count = await this.deps.messages.updateHiddenRange(sessionId, fromSeq, toSeq, false);
-    if (count > 0) {
-      await this.invalidatePromptTokens(sessionId);
-    }
-    return Result.ok(count);
-  }
-
-  /** nm-style: keep-public — MessageService 端口方法，chat-agent-session 经端口单点调用；实现无法脱离接口内联。 */
-  async truncateAfter(sessionId: string, afterMessageId: string | null): Promise<Result<void, AppError>> {
-    const session = await this.deps.sessions.findById(sessionId);
-    if (session == null) {
-      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `session not found: ${sessionId}`, kind: "session", id: sessionId }));
-    }
-
-    if (afterMessageId == null) {
-      // anchor 为 null → 清空整 session：产出「要删的消息 id」这一删除链素材。
-      // 窄投影读口（1 列 id）替掉原来的 21 列全量读，且**移进写事务**——旧形态
-      // 读在事务外，读到 id 集合之后新 append 的消息会被 deleteBySession 删掉、
-      // 但它的 checkpoint 不在 ids 里 ⇒ 孤儿 checkpoint。产出的 ids 就是要删的
-      // 写集合，按「产出写集合的读必须留在事务内」处理。
-      await this.deps.conn.transaction(async (tx) => {
-        const messages = new SqliteMessageRepository(tx);
-        const checkpoints = new SqliteMessageCheckpointRepository(tx);
-        const ids = await messages.listIdsBySession(sessionId);
-        if (ids.length > 0) {
-          // 发生删除即清 backfill 游标（清空重聊场景 seq 全量复用，防线同 delete）。
-          await new SqliteSessionKkvRepository(tx).clearDomain(sessionId, SESSION_KKV_DOMAIN_BACKFILL_CURSOR);
-          await checkpoints.deleteCheckpointsForMessages(sessionId, ids);
+    private async invalidateToolUseCount(sessionId: string): Promise<void> {
+        try {
+            await SessionKkvServiceFactory.create(this.deps.conn).set(sessionId, SESSION_KKV_DOMAIN_USAGE_STATS, USAGE_STATS_TOOL_USE_COUNT_KEY, "");
+        } catch (error) {
+            log.warn(`工具调用数缓存失效失败（下次读数将现算）：${error instanceof Error ? error.message : String(error)}`);
         }
-        await messages.deleteBySession(sessionId);
-      });
-      await this.invalidatePromptTokens(sessionId);
-      await this.invalidateToolUseCount(sessionId);
-      return Result.ok(undefined);
     }
 
-    const anchor = await this.deps.messages.findById(afterMessageId);
-    if (anchor == null || anchor.sessionId !== sessionId) {
-      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `message not found: ${afterMessageId}`, kind: "message", id: afterMessageId, sessionId, messageId: afterMessageId }));
+    listBySession(sessionId: string, options?: { includeHidden?: boolean }, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>> {
+        return this.deps.messages.listBySession(sessionId, options, hooks);
     }
 
-    // tail 截断核心与回滚 / 批量删共用 `TruncateTail.truncate`：删除链、backfill
-    // 游标、Composer 状态条域的清理只有一份实现（读也一并留在事务内，产出写集合）。
-    await this.deps.conn.transaction(async (tx) => {
-      await TruncateTail.truncate(MessageCheckpointFactory.createTruncateTailDeps(tx), { projectId: session.projectId, sessionId, afterSeq: anchor.seq, sweepRevisions: false });
-    });
-    await this.invalidatePromptTokens(sessionId);
-    await this.invalidateToolUseCount(sessionId);
-    return Result.ok(undefined);
-  }
+    listMessageHeadersBySession(sessionId: string): Promise<ChatMessageHeader[]> {
+        return this.deps.messages.listMessageHeadersBySession(sessionId);
+    }
+
+    listBySessionFromSeq(sessionId: string, fromSeq: number, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>> {
+        return this.deps.messages.listBySessionFromSeq(sessionId, fromSeq, hooks);
+    }
+
+    listBySessionTail(sessionId: string, options: { limit: number }, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>> {
+        return this.deps.messages.listBySessionTail(sessionId, options.limit, hooks);
+    }
+
+    listBySessionTailOfRole(sessionId: string, options: { role: string; limit: number }, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>> {
+        return this.deps.messages.listBySessionTailOfRole(sessionId, options.role, options.limit, hooks);
+    }
+
+    listBySessionPage(sessionId: string, options: { limit: number; beforeSeq?: number }, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>> {
+        return this.deps.messages.listBySessionPage(sessionId, options.limit, options.beforeSeq, hooks);
+    }
+
+    async get(id: string): Promise<Result<ChatMessageData, AppError>> {
+        const message = await this.deps.messages.findById(id);
+        if (message == null) {
+            return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `message not found: ${id}`, kind: "message", id, messageId: id }));
+        }
+        return Result.ok(message);
+    }
+
+    async append(sessionId: string, role: string, content: MessageContent, options?: Parameters<MessageService["append"]>[3]): Promise<Result<ChatMessageData, AppError>> {
+        const session = await this.deps.sessions.findById(sessionId);
+        if (session == null) {
+            return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `session not found: ${sessionId}`, kind: "session", id: sessionId }));
+        }
+        const parsedContent = MessageContentParse.parseValue(content);
+        if (!parsedContent.ok) {
+            return Result.err(parsedContent.error);
+        }
+        const normalizedContent = parsedContent.value;
+        const attachments = options?.attachments == null || options.attachments.length === 0 ? undefined : messageAttachmentsSchema.parse(options.attachments);
+        const seq = await this.deps.messages.nextSeq(sessionId);
+        // New messages are visible by default
+        const message: ChatMessageData = {
+            id: Random.uuid(),
+            sessionId,
+            seq,
+            role,
+            content: normalizedContent,
+            provider: options?.provider ?? null,
+            modelName: options?.modelName ?? null,
+            providerId: options?.providerId ?? null,
+            raw: options?.raw ?? null,
+            createdAtMs: Date.now(),
+            hidden: false,
+            ...(attachments != null ? { attachments } : {}),
+            ...(options?.usage != null ? { usage: options.usage } : {}),
+        };
+        // 记账点（唯一）：带 token 真值的 assistant 消息与账本行同事务落库——
+        // chat_message 九列照写不停写（上下文占用 chip 与 session_run_state 依赖
+        // 它，那是「会话内容属性」，随会话删），usage_record 另起一行作「账本」
+        // （永续，删除链不碰），统计读口改打账本后数字不再随删除归零。
+        // 无 token 真值（prompt/completion 皆空）与无 usage 的消息不写账本——
+        // 与旧统计口径 USAGE_NOT_NULL_SQL 同源，普通消息走原直通插入零额外开销。
+        const usageRecord = UsageRecord.buildFromMessage(message);
+        if (usageRecord == null) {
+            await this.deps.messages.insert(message);
+        } else {
+            await this.deps.conn.transaction(async (tx) => {
+                // 事务内必须用 tx 句柄建仓储：根连接在事务持有连接互斥锁期间不可用
+                //（tdbc 驱动 mutex 语义），与 delete() 的多表同事务写法一致。
+                await new SqliteMessageRepository(tx).insert(message);
+                await new SqliteUsageRecordRepository(tx).insert(usageRecord);
+            });
+        }
+        // 消息「增」不再失效 API 占用（统计优先口径，2026-09-29 真机复验拍板）：
+        // 纯追加由读口的「基线 + anchorSeq 之后追加消息的增量估算」覆盖（metric
+        // 同款），失效反而会让 run 起步的压缩评估与 chip 首帧跌回估算档（评估
+        // 已 preferEstimate 廉价即回，真正多付的是 UI 刷新路径的后台精确计数）。
+        // 删除/改写/隐藏类路径（delete/updateContent/hide/show/hideRange/
+        // showRange/truncateAfter）的失效保留——增量表达不了内容消失。
+        // 工具调用数缓存：仅含 tool_use 块的追加失效（run 的工具步在此失效、
+        // 纯文本追加不动缓存——避免 run 内每步无谓重算）。
+        const hasToolUse = ChatMessage.from(message).toolUseCount() > 0;
+        if (role === "assistant" && hasToolUse) {
+            await this.invalidateToolUseCount(sessionId);
+        }
+        return Result.ok(ChatMessage.from(message));
+    }
+
+    async delete(id: string): Promise<Result<void, AppError>> {
+        const message = await this.deps.messages.findById(id);
+        if (message == null) {
+            return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `message not found: ${id}`, kind: "message", id, messageId: id }));
+        }
+
+        const session = await this.deps.sessions.findById(message.sessionId);
+        if (session == null) {
+            return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `session not found: ${message.sessionId}`, kind: "session", id: message.sessionId }));
+        }
+
+        await this.deps.conn.transaction(async (tx) => {
+            const messages = new SqliteMessageRepository(tx);
+            const checkpoints = new SqliteMessageCheckpointRepository(tx);
+            const revisions = new SqliteVfsRevisionRepository(tx);
+
+            const deleted = await messages.delete(id);
+            if (!deleted) {
+                throw new AppError("CHAT_NOT_FOUND", { detail: `message not found: ${id}`, kind: "message", id, messageId: id });
+            }
+
+            // 发生删除即清 backfill 游标：消息删除改变计数口径（count < 游标或圈段
+            // 位移），残留会让下次 backfill 判定错位——清掉走保守全量自愈。
+            await new SqliteSessionKkvRepository(tx).clearDomain(message.sessionId, SESSION_KKV_DOMAIN_BACKFILL_CURSOR);
+            await checkpoints.deleteCheckpointsForMessages(message.sessionId, [id]);
+            await RevisionGc.sweepSession(revisions, session.projectId, message.sessionId);
+        });
+        await DeferredBlobGc.run(this.deps.conn);
+        await this.invalidatePromptTokens(message.sessionId);
+        await this.invalidateToolUseCount(message.sessionId);
+        return Result.ok(undefined);
+    }
+
+    async updateContent(messageId: string, content: MessageContent): Promise<Result<ChatMessageData, AppError>> {
+        const parsedContent = MessageContentParse.parseValue(content);
+        if (!parsedContent.ok) {
+            return Result.err(parsedContent.error);
+        }
+        // 正文替换收进事务（行缺失即抛、不留半写状态）。序列化与压缩编码都
+        // 下沉到 repository（port 签名为 MessageContent 对象）。
+        // read 引用换算（旧 blocks −1、新 blocks +1）已随 E1 清理版退役。
+        await this.deps.conn.transaction(async (tx) => {
+            const messages = new SqliteMessageRepository(tx);
+            const existing = await messages.findById(messageId);
+            if (existing == null) {
+                throw new AppError("CHAT_NOT_FOUND", { detail: `message not found: ${messageId}`, kind: "message", id: messageId, messageId });
+            }
+            const updated = await messages.updateContent(messageId, parsedContent.value);
+            if (!updated) {
+                throw new AppError("CHAT_NOT_FOUND", { detail: `message not found: ${messageId}`, kind: "message", id: messageId, messageId });
+            }
+        });
+        const message = await this.get(messageId);
+        if (!message.ok) return message;
+        await this.invalidatePromptTokens(message.value.sessionId);
+        await this.invalidateToolUseCount(message.value.sessionId);
+        return Result.ok(message.value);
+    }
+
+    async fork(sessionId: string, upToMessageId: string, hooks?: LongTaskHooks): Promise<Outcome<ChatSession>> {
+        const source = await this.deps.sessions.findById(sessionId);
+        if (source == null) {
+            return { kind: "failed", error: new AppError("CHAT_NOT_FOUND", { detail: `session not found: ${sessionId}`, kind: "session", id: sessionId }) };
+        }
+        const upTo = await this.deps.messages.findById(upToMessageId);
+        if (upTo == null || upTo.sessionId !== sessionId) {
+            return { kind: "failed", error: new AppError("CHAT_NOT_FOUND", { detail: `message not found: ${upToMessageId}`, kind: "message", id: upToMessageId, sessionId, messageId: upToMessageId }) };
+        }
+        // 上界收窄读口：fork 的全部消费都落在「锚点及更早」方向（下方
+        // seedForkCopyParity 吃同一份 toCopy），锚点之后的
+        // 整条尾巴是纯浪费。旧形态是 listBySession 全量读 + 事务内 filter 丢弃。
+        const allRead = await this.deps.messages.listBySessionUpToSeq(sessionId, upTo.seq, hooks);
+        if (allRead.kind === "failed") return { kind: "failed", error: allRead.error };
+        // 中断沿返回值上行（Outcome 通道）：cancelled/replaced 原样透传，事务回调内的
+        // 中断仍走 throw 回滚（平台强制），由 repository 出口转回 Outcome。
+        if (allRead.kind !== "completed") return allRead;
+        const all = allRead.value;
+        if (all.length === 0) {
+            // 空集合守卫**必须在开事务之前**：上界读口在事务外，锚点之前的消息一条都
+            // 没有时直接拒绝，不为一个必然回滚的动作开事务。
+            return { kind: "failed", error: new AppError("CHAT_INVALID_ARGUMENT", { detail: "No messages to fork up to the given id" }) };
+        }
+        const projectSessions = await this.deps.sessions.listByProject(source.projectId);
+        const forkBaseTitle = source.title?.trim() || "会话";
+        const forkTitlePattern = new RegExp(`^${forkBaseTitle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}_ckpt_(\\d+)$`);
+        let maxForkIndex = 0;
+        for (const session of projectSessions) {
+            if (session.title == null || session.title === "") {
+                continue;
+            }
+            const match = session.title.match(forkTitlePattern);
+            if (match) {
+                maxForkIndex = Math.max(maxForkIndex, Number.parseInt(match[1]!, 10));
+            }
+        }
+        const forkTitle = `${forkBaseTitle}_ckpt_${maxForkIndex + 1}`;
+        const forkTransaction = this.deps.conn.transaction(async (tx) => {
+            const r = { sessions: new SqliteSessionRepository(tx), messages: new SqliteMessageRepository(tx), vfs: new SqliteVfsEntryRepository(tx) };
+            // 上界读口的返回集合与旧的 all.filter(m => m.seq <= upTo.seq) 逐条等价，
+            // 零新增过滤语义（含 hidden 行——fork 要 Preserve hidden state）。
+            const toCopy = all;
+            const now = Date.now();
+            const forked: ChatSession = {
+                id: Random.uuid(),
+                projectId: source.projectId,
+                title: forkTitle,
+                // P2-13：fork 出的是独立主会话，不继承源会话的 parent 关系。
+                parentSessionId: null,
+                createdAtMs: now,
+                updatedAtMs: now,
+            };
+            await r.sessions.insert(forked);
+            // 刻意不复制 session_kkv（SPEC：fork/copy 不复制 kkv）
+            // 刻意不复制 composer_draft_json（维持现状）
+            // agent_config_json：继承源会话配置（与 copy 一致）。必须走 repo 层——
+            // NULL 静默跳过；service 层 getSessionAgentConfig 对 NULL 会抛且不在本事务上。
+            const sourceAgentConfigJson = await r.sessions.getSessionAgentConfig(source.id);
+            if (sourceAgentConfigJson != null) {
+                await r.sessions.setSessionAgentConfig(forked.id, sourceAgentConfigJson, now);
+            }
+            // 顺序钉死：VFS → MSG(ids) → helper(REV + RULE + CK)
+            // entry_id 化后会话独立 scope：session:{pid}:{sid}，逻辑前缀为 "/"
+            // 事务边界（平台协议例外）：VFS 复制与批量写入的中断/失败都必须抛错，
+            // 才能让驱动整体回滚——直接 return Outcome 会 commit 半写 fork。
+            const copyOptions = { contentStore: new SqliteVfsContentStore(tx), hooks };
+            const vfsCopied = await VfsTreeCopy.copyTree({ repo: r.vfs, from: { scope: { scopeKey: `session:${source.projectId}:${source.id}` }, pathPrefix: "/" }, to: { scope: { scopeKey: `session:${source.projectId}:${forked.id}` }, pathPrefix: "/" }, ...copyOptions });
+            if (vfsCopied.kind === "failed") throw vfsCopied.error;
+            if (vfsCopied.kind !== "completed") throw AbortError.create();
+
+            const newMessages: { id: string }[] = [];
+            let seq = 1;
+            // 逐条 INSERT 改成先构造数组再一次 batchInsert，把 M 次 round-trip 收敛成 1 次。
+            const forkedMessages: ChatMessageData[] = [];
+            for (const msg of toCopy) {
+                const id = Random.uuid();
+                // Preserve hidden state when forking
+                forkedMessages.push({ ...msg, id, sessionId: forked.id, seq });
+                newMessages.push({ id });
+                seq++;
+            }
+            const inserted = await r.messages.batchInsert(forkedMessages, hooks);
+            // 事务边界（平台协议例外）：中断/失败都必须抛错才能让驱动整体回滚，
+            // 不能把 Outcome 直接 return——那样外层事务会 commit 半批 fork。
+            if (inserted.kind === "failed") throw inserted.error;
+            if (inserted.kind !== "completed") throw AbortError.create();
+            // seed 失败靠抛错回滚（总纲 §五例外 2）：事务回调内 return r 不回滚会留下半写 fork，
+            // 解包字收口在 unwrapOrRollback（门⑦），异常穿出 transaction 由调用链端点 catch 收口。
+            await TdbcTransaction.unwrapOrRollback(await ForkCopySeeder.seed(tx, { projectId: source.projectId, sourceSessionId: source.id, targetSessionId: forked.id, newMessages }));
+            return forked;
+        });
+        return { kind: "completed", value: await forkTransaction };
+    }
+
+    async hide(messageId: string): Promise<Result<void, AppError>> {
+        const existing = await this.deps.messages.findById(messageId);
+        if (existing == null) {
+            return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `message not found: ${messageId}`, kind: "message", id: messageId, messageId }));
+        }
+        const updated = await this.deps.messages.updateHidden(messageId, true);
+        if (!updated) {
+            return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `message not found: ${messageId}`, kind: "message", id: messageId, messageId }));
+        }
+        await this.invalidatePromptTokens(existing.sessionId);
+        return Result.ok(undefined);
+    }
+
+    async show(messageId: string): Promise<Result<void, AppError>> {
+        const existing = await this.deps.messages.findById(messageId);
+        if (existing == null) {
+            return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `message not found: ${messageId}`, kind: "message", id: messageId, messageId }));
+        }
+        const updated = await this.deps.messages.updateHidden(messageId, false);
+        if (!updated) {
+            return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `message not found: ${messageId}`, kind: "message", id: messageId, messageId }));
+        }
+        await this.invalidatePromptTokens(existing.sessionId);
+        return Result.ok(undefined);
+    }
+
+    async hideRange(sessionId: string, fromSeq: number, toSeq: number): Promise<Result<number, AppError>> {
+        // Verify session exists
+        const session = await this.deps.sessions.findById(sessionId);
+        if (session == null) {
+            return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `session not found: ${sessionId}`, kind: "session", id: sessionId }));
+        }
+        const count = await this.deps.messages.updateHiddenRange(sessionId, fromSeq, toSeq, true);
+        if (count > 0) {
+            await this.invalidatePromptTokens(sessionId);
+        }
+        return Result.ok(count);
+    }
+
+    async showRange(sessionId: string, fromSeq: number, toSeq: number): Promise<Result<number, AppError>> {
+        // Verify session exists
+        const session = await this.deps.sessions.findById(sessionId);
+        if (session == null) {
+            return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `session not found: ${sessionId}`, kind: "session", id: sessionId }));
+        }
+        const count = await this.deps.messages.updateHiddenRange(sessionId, fromSeq, toSeq, false);
+        if (count > 0) {
+            await this.invalidatePromptTokens(sessionId);
+        }
+        return Result.ok(count);
+    }
+
+    /** nm-style: keep-public — MessageService 端口方法，chat-agent-session 经端口单点调用；实现无法脱离接口内联。 */
+    async truncateAfter(sessionId: string, afterMessageId: string | null): Promise<Result<void, AppError>> {
+        const session = await this.deps.sessions.findById(sessionId);
+        if (session == null) {
+            return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `session not found: ${sessionId}`, kind: "session", id: sessionId }));
+        }
+
+        if (afterMessageId == null) {
+            // anchor 为 null → 清空整 session：产出「要删的消息 id」这一删除链素材。
+            // 窄投影读口（1 列 id）替掉原来的 21 列全量读，且**移进写事务**——旧形态
+            // 读在事务外，读到 id 集合之后新 append 的消息会被 deleteBySession 删掉、
+            // 但它的 checkpoint 不在 ids 里 ⇒ 孤儿 checkpoint。产出的 ids 就是要删的
+            // 写集合，按「产出写集合的读必须留在事务内」处理。
+            await this.deps.conn.transaction(async (tx) => {
+                const messages = new SqliteMessageRepository(tx);
+                const checkpoints = new SqliteMessageCheckpointRepository(tx);
+                const ids = await messages.listIdsBySession(sessionId);
+                if (ids.length > 0) {
+                    // 发生删除即清 backfill 游标（清空重聊场景 seq 全量复用，防线同 delete）。
+                    await new SqliteSessionKkvRepository(tx).clearDomain(sessionId, SESSION_KKV_DOMAIN_BACKFILL_CURSOR);
+                    await checkpoints.deleteCheckpointsForMessages(sessionId, ids);
+                }
+                await messages.deleteBySession(sessionId);
+            });
+            await this.invalidatePromptTokens(sessionId);
+            await this.invalidateToolUseCount(sessionId);
+            return Result.ok(undefined);
+        }
+
+        const anchor = await this.deps.messages.findById(afterMessageId);
+        if (anchor == null || anchor.sessionId !== sessionId) {
+            return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `message not found: ${afterMessageId}`, kind: "message", id: afterMessageId, sessionId, messageId: afterMessageId }));
+        }
+
+        // tail 截断核心与回滚 / 批量删共用 `TruncateTail.truncate`：删除链、backfill
+        // 游标、Composer 状态条域的清理只有一份实现（读也一并留在事务内，产出写集合）。
+        await this.deps.conn.transaction(async (tx) => {
+            await TruncateTail.truncate(MessageCheckpointFactory.createTruncateTailDeps(tx), { projectId: session.projectId, sessionId, afterSeq: anchor.seq, sweepRevisions: false });
+        });
+        await this.invalidatePromptTokens(sessionId);
+        await this.invalidateToolUseCount(sessionId);
+        return Result.ok(undefined);
+    }
 }

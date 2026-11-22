@@ -12,75 +12,75 @@ export type ThinkingLevel = "off" | "low" | "medium" | "high";
 
 /** {@link SavedModelGenerationSettings} 中的采样小节。 */
 export interface SavedModelSamplingSettings {
-  readonly enabled: boolean;
-  readonly params?: ModelSamplingParams;
+    readonly enabled: boolean;
+    readonly params?: ModelSamplingParams;
 }
 
 /** 内部预算：不直接映射 HTTP 生成 body。 */
 interface SavedModelInternalSettings {
-  readonly contextWindowTokens: number;
-  readonly tokenCounterMode: TokenizerOverride;
+    readonly contextWindowTokens: number;
+    readonly tokenCounterMode: TokenizerOverride;
 }
 
 /** 生成参数：采样与思考强度档位。 */
 interface SavedModelGenerationSettings {
-  readonly sampling: SavedModelSamplingSettings;
-  readonly thinkingLevel: ThinkingLevel;
+    readonly sampling: SavedModelSamplingSettings;
+    readonly thinkingLevel: ThinkingLevel;
 }
 
 /** 单条已保存模型的完整设置（内存恒为 v2）。 */
 export interface SavedModelSettings {
-  readonly schemaVersion: 2;
-  readonly internal: SavedModelInternalSettings;
-  readonly generation: SavedModelGenerationSettings;
+    readonly schemaVersion: 2;
+    readonly internal: SavedModelInternalSettings;
+    readonly generation: SavedModelGenerationSettings;
 }
 
 /** {@link SavedModelSettings} 的部分更新（IPC 保持扁平字段）。 */
 export interface SavedModelSettingsPatch {
-  readonly contextWindowTokens?: number;
-  readonly sampling?: SavedModelSamplingSettings;
-  readonly tokenCounterMode?: TokenizerOverride;
-  readonly thinkingLevel?: ThinkingLevel;
+    readonly contextWindowTokens?: number;
+    readonly sampling?: SavedModelSamplingSettings;
+    readonly tokenCounterMode?: TokenizerOverride;
+    readonly thinkingLevel?: ThinkingLevel;
 }
 
 export const SavedModelSettings = {
-  /** 读取上下文窗口 token 上限。 */
-  contextWindowTokens(settings: SavedModelSettings): number {
-    return settings.internal.contextWindowTokens;
-  },
+    /** 读取上下文窗口 token 上限。 */
+    contextWindowTokens(settings: SavedModelSettings): number {
+        return settings.internal.contextWindowTokens;
+    },
 
-  /** 读取 token 计数器模式。 */
-  tokenCounterMode(settings: SavedModelSettings): TokenizerOverride {
-    return settings.internal.tokenCounterMode;
-  },
+    /** 读取 token 计数器模式。 */
+    tokenCounterMode(settings: SavedModelSettings): TokenizerOverride {
+        return settings.internal.tokenCounterMode;
+    },
 
-  /** 读取生成采样小节。 */
-  sampling(settings: SavedModelSettings): SavedModelSamplingSettings {
-    return settings.generation.sampling;
-  },
+    /** 读取生成采样小节。 */
+    sampling(settings: SavedModelSettings): SavedModelSamplingSettings {
+        return settings.generation.sampling;
+    },
 
-  /** 读取思考强度档位。 */
-  thinkingLevel(settings: SavedModelSettings): ThinkingLevel {
-    return settings.generation.thinkingLevel;
-  },
+    /** 读取思考强度档位。 */
+    thinkingLevel(settings: SavedModelSettings): ThinkingLevel {
+        return settings.generation.thinkingLevel;
+    },
 
-  /**
+    /**
    * 将扁平 patch 合并进已有 v2 设置。
    *
    * @param settings 当前设置。
    * @param patch 部分更新。
    */
-  applyPatch(settings: SavedModelSettings, patch: SavedModelSettingsPatch): SavedModelSettings {
-    return {
-      schemaVersion: 2,
-      internal: {
-        contextWindowTokens: patch.contextWindowTokens ?? settings.internal.contextWindowTokens,
-        tokenCounterMode: patch.tokenCounterMode ?? settings.internal.tokenCounterMode,
-      },
-      generation: {
-        sampling: patch.sampling ?? settings.generation.sampling,
-        thinkingLevel: patch.thinkingLevel ?? settings.generation.thinkingLevel,
-      },
-    };
-  },
+    applyPatch(settings: SavedModelSettings, patch: SavedModelSettingsPatch): SavedModelSettings {
+        return {
+            schemaVersion: 2,
+            internal: {
+                contextWindowTokens: patch.contextWindowTokens ?? settings.internal.contextWindowTokens,
+                tokenCounterMode: patch.tokenCounterMode ?? settings.internal.tokenCounterMode,
+            },
+            generation: {
+                sampling: patch.sampling ?? settings.generation.sampling,
+                thinkingLevel: patch.thinkingLevel ?? settings.generation.thinkingLevel,
+            },
+        };
+    },
 } as const;

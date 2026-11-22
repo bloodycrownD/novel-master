@@ -19,114 +19,114 @@ import type { VfsRevision, VfsRevisionStatus } from "../model/vfs-revision.js";
  * active 行无 hash 且 `content` 非空时由 repo put 后只写 hash。
  */
 export type VfsRevisionAppendInput = VfsRevision & {
-  readonly contentHash?: string | null;
+    readonly contentHash?: string | null;
 };
 
 /**
  * revision 行轻量元数据（不解 ContentStore 正文）。
  */
 export type VfsRevisionPointerMeta = {
-  readonly status: VfsRevisionStatus;
-  readonly contentHash: string | null;
+    readonly status: VfsRevisionStatus;
+    readonly contentHash: string | null;
 };
 
 /**
  * Persistence contract for vfs_revision rows.
  */
 export interface VfsRevisionRepository {
-  /**
+    /**
    * 按 entryId + version 读取完整 revision（解正文；正文损坏走 `Result.err`）。
    *
    * @returns `null` when no row exists for the pair.
    */
-  findByEntryAndVersion(
-    entryId: number,
-    version: number
-  ): Promise<Result<VfsRevision | null, AppError>>;
+    findByEntryAndVersion(
+        entryId: number,
+        version: number
+    ): Promise<Result<VfsRevision | null, AppError>>;
 
-  /** 判断指定 entryId+version 的 revision 行是否存在（不解正文）。 */
-  existsByEntryAndVersion(entryId: number, version: number): Promise<boolean>;
+    /** 判断指定 entryId+version 的 revision 行是否存在（不解正文）。 */
+    existsByEntryAndVersion(entryId: number, version: number): Promise<boolean>;
 
-  /**
+    /**
    * 读取指定 entryId+version 的 status / content_hash（不解正文）。
    *
    * @returns 行不存在时为 `null`
    */
-  findMetaByEntryAndVersion(
-    entryId: number,
-    version: number
-  ): Promise<VfsRevisionPointerMeta | null>;
+    findMetaByEntryAndVersion(
+        entryId: number,
+        version: number
+    ): Promise<VfsRevisionPointerMeta | null>;
 
-  /**
+    /**
    * 批量读取指定 (entryId, version) 的 status / content_hash（不解正文）。
    *
    * @returns 键为 `entryId:version`；不存在的 pair 不在 map 中
    */
-  findMetasByEntryVersions(
-    pairs: ReadonlyArray<{ readonly entryId: number; readonly version: number }>
-  ): Promise<Map<string, VfsRevisionPointerMeta>>;
+    findMetasByEntryVersions(
+        pairs: ReadonlyArray<{ readonly entryId: number; readonly version: number }>
+    ): Promise<Map<string, VfsRevisionPointerMeta>>;
 
-  /**
+    /**
    * Returns the highest stored revision version for an entry.
    *
    * @returns `null` when no revision rows exist for the entry.
    */
-  findMaxVersionForEntry(entryId: number): Promise<number | null>;
+    findMaxVersionForEntry(entryId: number): Promise<number | null>;
 
-  /**
+    /**
    * 批量读取多个 entry 的最高 revision version（`IN` 分块 + `GROUP BY` 聚合）。
    *
    * @remarks 供递归删除等批量场景一次取齐 MAX，避免逐 entry 查询的 N+1；
    * 没有 revision 行的 entry 不进 Map。
    */
-  findMaxVersionsForEntries(entryIds: number[]): Promise<Map<number, number>>;
+    findMaxVersionsForEntries(entryIds: number[]): Promise<Map<number, number>>;
 
-  /** Appends a new revision row; never updates existing rows. */
-  append(input: VfsRevisionAppendInput): Promise<void>;
+    /** Appends a new revision row; never updates existing rows. */
+    append(input: VfsRevisionAppendInput): Promise<void>;
 
-  /**
+    /**
    * 列出 scope 下某逻辑路径前缀的所有 `(entryId, version)` revision 键。
    *
    * @remarks Used by revision GC to enumerate candidates for deletion.
    */
-  listKeysUnderScope(
-    scopeKey: string,
-    pathPrefix: string
-  ): Promise<ReadonlyArray<{ entryId: number; version: number }>>;
+    listKeysUnderScope(
+        scopeKey: string,
+        pathPrefix: string
+    ): Promise<ReadonlyArray<{ entryId: number; version: number }>>;
 
-  /**
+    /**
    * 同 {@link listKeysUnderScope}，但一并带回当前 `ref_count`。
    *
    * @remarks repair 对账用：期望值（checkpoint 指针 + live head 两类之和）
    * 与当前值的双向对账——偏低走 floor 上调，偏高（疑似泄漏）只报告不自动修，
    * 都需要当前值参与比对。
    */
-  listKeysWithRefCountUnderScope(
-    scopeKey: string,
-    pathPrefix: string
-  ): Promise<
-    ReadonlyArray<{ entryId: number; version: number; refCount: number }>
-  >;
+    listKeysWithRefCountUnderScope(
+        scopeKey: string,
+        pathPrefix: string
+    ): Promise<
+        ReadonlyArray<{ entryId: number; version: number; refCount: number }>
+    >;
 
-  /**
+    /**
    * 删除 scope 下某逻辑路径前缀内、`entryId:version` 键不在 `reachable` 中的 revision 行。
    *
    * @returns Count of deleted rows.
    */
-  deleteExceptReachable(
-    scopeKey: string,
-    pathPrefix: string,
-    reachable: ReadonlySet<string>
-  ): Promise<number>;
+    deleteExceptReachable(
+        scopeKey: string,
+        pathPrefix: string,
+        reachable: ReadonlySet<string>
+    ): Promise<number>;
 
-  /** 对 (entryId, version) 的 ref_count 增减；行不存在且 delta<0 时为 no-op。 */
-  adjustRefCount(
-    entryId: number,
-    version: number,
-    delta: number
-  ): Promise<void>;
+    /** 对 (entryId, version) 的 ref_count 增减；行不存在且 delta<0 时为 no-op。 */
+    adjustRefCount(
+        entryId: number,
+        version: number,
+        delta: number
+    ): Promise<void>;
 
-  /**
+    /**
    * 批量增减 ref_count。
    *
    * delta = +1 时，对缺失的 (entryId, version) 行抛 `AppError("VFS_NOT_FOUND")`——
@@ -138,64 +138,64 @@ export interface VfsRevisionRepository {
    * 入参为空时直接返回，不发任何 SQL。批量场景（seed-fork / copy / delete）用它替换
    * 逐条 adjustRefCount 的循环，把 N 次 SQL 往返压成 ceil(N/chunk) 次。
    */
-  batchAdjustRefCount(
-    pointers: ReadonlyArray<{
-      readonly entryId: number;
-      readonly version: number;
-    }>,
-    delta: 1 | -1
-  ): Promise<void>;
+    batchAdjustRefCount(
+        pointers: ReadonlyArray<{
+            readonly entryId: number;
+            readonly version: number;
+        }>,
+        delta: 1 | -1
+    ): Promise<void>;
 
-  /**
+    /**
    * 批量增减 ref_count（自定义 delta，seed 场景用）。
    *
    * 与 {@link batchAdjustRefCount} 相同，但 delta 可以是任意正整数——seed 场景
    * 一次性加 `msgCount`，比 expand 成 N 份再调 +1 更高效。delta > 0 做存在性校验，
    * delta < 0 时缺失行 no-op。
    */
-  batchAdjustRefCountWithDelta(
-    pointers: ReadonlyArray<{
-      readonly entryId: number;
-      readonly version: number;
-    }>,
-    delta: number
-  ): Promise<void>;
+    batchAdjustRefCountWithDelta(
+        pointers: ReadonlyArray<{
+            readonly entryId: number;
+            readonly version: number;
+        }>,
+        delta: number
+    ): Promise<void>;
 
-  /**
+    /**
    * 批量检查哪些 (entryId, version) 的 revision 行已存在。
    *
    * @returns 已存在的 pair 集合，key 格式为 `${entryId}:${version}`
    */
-  findExistingEntryVersionKeys(
-    pairs: ReadonlyArray<{ readonly entryId: number; readonly version: number }>
-  ): Promise<Set<string>>;
+    findExistingEntryVersionKeys(
+        pairs: ReadonlyArray<{ readonly entryId: number; readonly version: number }>
+    ): Promise<Set<string>>;
 
-  /**
+    /**
    * 批量插入 revision 行并直接设置 ref_count。
    *
    * @remarks 与逐条 append + adjustRefCount 等效，但在一个原生调用内完成。
    * 仅用于 tree-copy / seed 的「全新 revision」场景（调用方已确保行不存在）。
    * content_hash 非 null 时触发器会自动 bump blob ref_count。
    */
-  batchAppendWithRefCount(
-    items: ReadonlyArray<{
-      readonly entryId: number;
-      readonly version: number;
-      readonly contentHash: string | null;
-      readonly status: string;
-      readonly mtimeMs: number;
-      readonly refCount: number;
-    }>
-  ): Promise<void>;
+    batchAppendWithRefCount(
+        items: ReadonlyArray<{
+            readonly entryId: number;
+            readonly version: number;
+            readonly contentHash: string | null;
+            readonly status: string;
+            readonly mtimeMs: number;
+            readonly refCount: number;
+        }>
+    ): Promise<void>;
 
-  /** 将 ref_count 上调至 expected（只增不减，保守纠偏）。 */
-  repairRefCountFloor(
-    entryId: number,
-    version: number,
-    expected: number
-  ): Promise<boolean>;
+    /** 将 ref_count 上调至 expected（只增不减，保守纠偏）。 */
+    repairRefCountFloor(
+        entryId: number,
+        version: number,
+        expected: number
+    ): Promise<boolean>;
 
-  /**
+    /**
    * 批量版本 {@link repairRefCountFloor}，把 N 次 SELECT + N 次 UPDATE 压成
    * ceil(N/500) 次 SELECT + ceil(N/500) 次 batch UPDATE。
    *
@@ -207,28 +207,28 @@ export interface VfsRevisionRepository {
    *
    * @returns 实际发生上调的行数
    */
-  batchRepairRefCountFloor(
-    items: ReadonlyArray<{
-      readonly entryId: number;
-      readonly version: number;
-      readonly expected: number;
-    }>
-  ): Promise<number>;
+    batchRepairRefCountFloor(
+        items: ReadonlyArray<{
+            readonly entryId: number;
+            readonly version: number;
+            readonly expected: number;
+        }>
+    ): Promise<number>;
 
-  /**
+    /**
    * 删除 scope 下某逻辑路径前缀内 ref_count <= 0 的 revision 行。
    *
    * @param excludePrefixes - 非空时，这些逻辑路径前缀下的 revision 不参与 GC
    *   （隔离豁免，如 `meta/skills`）；前缀可带或不带前导 `/`。
    * @returns 删除行数
    */
-  deleteUnreferencedUnderScope(
-    scopeKey: string,
-    pathPrefix: string,
-    excludePrefixes?: readonly string[]
-  ): Promise<number>;
+    deleteUnreferencedUnderScope(
+        scopeKey: string,
+        pathPrefix: string,
+        excludePrefixes?: readonly string[]
+    ): Promise<number>;
 
-  /**
+    /**
    * 全局清扫：删除 ref_count<=0 且 entry_id 已不在 vfs_entry 的 revision 行。
    *
    * 用于回收「删文件后遗留的 JOIN 孤儿」——deleteUnreferencedUnderScope 靠
@@ -238,5 +238,5 @@ export interface VfsRevisionRepository {
    *
    * @returns 删除行数
    */
-  deleteGlobalOrphans(): Promise<number>;
+    deleteGlobalOrphans(): Promise<number>;
 }

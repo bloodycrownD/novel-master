@@ -19,8 +19,8 @@ const DIRECTIVE_PATTERN = /nm-style:\s*(keep-bare|keep-local|keep-public|public-
 const DIRECTIVE_ALIASES: Record<string, KeepDirective> = { "keep-bare": "keep-bare", "keep-local": "keep-local", "keep-public": "keep-public", "public-one-ref": "keep-public" };
 
 function directiveIn(text: string): KeepDirective | undefined {
-  const match = DIRECTIVE_PATTERN.exec(text);
-  return match == null ? undefined : DIRECTIVE_ALIASES[match[1]];
+    const match = DIRECTIVE_PATTERN.exec(text);
+    return match == null ? undefined : DIRECTIVE_ALIASES[match[1]];
 }
 
 /**
@@ -29,22 +29,22 @@ function directiveIn(text: string): KeepDirective | undefined {
  * 覆盖它却查不到），而 trivia 切片里只有注释与空白，直接正则更完整也无假阳性面。
  */
 function directiveAt(sourceFile: ts.SourceFile, node: ts.Node): KeepDirective | undefined {
-  return directiveIn(sourceFile.text.slice(node.getFullStart(), node.getStart(sourceFile)));
+    return directiveIn(sourceFile.text.slice(node.getFullStart(), node.getStart(sourceFile)));
 }
 
 /** 注释挂载的最外层：语句级节点与类/对象成员。锚点自身没有指令就不再向上。 */
 function isCommentAnchor(node: ts.Node): boolean {
-  return ts.isStatement(node) || ts.isPropertyAssignment(node) || ts.isPropertyDeclaration(node) || ts.isMethodDeclaration(node) || ts.isGetAccessorDeclaration(node) || ts.isSetAccessorDeclaration(node);
+    return ts.isStatement(node) || ts.isPropertyAssignment(node) || ts.isPropertyDeclaration(node) || ts.isMethodDeclaration(node) || ts.isGetAccessorDeclaration(node) || ts.isSetAccessorDeclaration(node);
 }
 
 /** 任意函数形态节点（含箭头、函数表达式、方法简写）上的 nm-style keep 指令；没有则 undefined。 */
 export function keepDirectiveOf(node: ts.Node): KeepDirective | undefined {
-  const sourceFile = node.getSourceFile();
-  if (sourceFile == null) return undefined;
-  for (let current: ts.Node | undefined = node; current != null; current = current.parent) {
-    const directive = directiveAt(sourceFile, current);
-    if (directive != null) return directive;
-    if (isCommentAnchor(current)) return undefined;
-  }
-  return undefined;
+    const sourceFile = node.getSourceFile();
+    if (sourceFile == null) return undefined;
+    for (let current: ts.Node | undefined = node; current != null; current = current.parent) {
+        const directive = directiveAt(sourceFile, current);
+        if (directive != null) return directive;
+        if (isCommentAnchor(current)) return undefined;
+    }
+    return undefined;
 }

@@ -8,7 +8,7 @@
 export type { AgentDefinition, AgentDefinitionPatch } from "@novel-master/core/agent";
 
 export {
-  DEFAULT_SUBAGENT_DEFINITION,
-  PENDING_RUN_ID,
-  RunLifecycle,
+    DEFAULT_SUBAGENT_DEFINITION,
+    PENDING_RUN_ID,
+    RunLifecycle,
 } from "@novel-master/core/agent";

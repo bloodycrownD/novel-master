@@ -16,373 +16,362 @@ novelMasterTestFixture();
 
 /** 双 checkpoint 场景：回滚到第一个 assistant anchor。 */
 async function setupR1Scenario() {
-  const ctx = getNovelMasterTestContext();
-  const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-  const session = unwrap(await ctx.sessions.create(project.id));
-  const svfs = ctx.sessionVfs(project.id, session.id);
+    const ctx = getNovelMasterTestContext();
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
+    const svfs = ctx.sessionVfs(project.id, session.id);
 
-  const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("poem")));
-  const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
-    blocks: [{ type: "text", text: "here" }],
-  }));
-  await svfs.write("/poem.md", "roses", { versionCheck: false });
-  unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("poem")));
+    const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
+        blocks: [{ type: "text", text: "here" }],
+    }));
+    await svfs.write("/poem.md", "roses", { versionCheck: false });
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
-  unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("more")));
-  const assistant2 = unwrap(await ctx.messages.append(session.id, "assistant", {
-    blocks: [{ type: "text", text: "later" }],
-  }));
-  await svfs.write("/poem.md", "violets", { versionCheck: false });
-  unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("more")));
+    const assistant2 = unwrap(await ctx.messages.append(session.id, "assistant", {
+        blocks: [{ type: "text", text: "later" }],
+    }));
+    await svfs.write("/poem.md", "violets", { versionCheck: false });
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id));
 
-  return { ctx, project, session, svfs, user1, assistant1, assistant2 };
+    return { ctx, project, session, svfs, user1, assistant1, assistant2 };
 }
 
 /** 通过 entryId 删除特定 anchor revision 行。 */
 async function deleteAnchorRevisionForPath(
-  ctx: ReturnType<typeof getNovelMasterTestContext>,
-  projectId: string,
-  sessionId: string,
-  logicalPath: string,
+    ctx: ReturnType<typeof getNovelMasterTestContext>,
+    projectId: string,
+    sessionId: string,
+    logicalPath: string,
 ) {
-  const { LogicalPath } = await import("../../src/domain/vfs/logic/vfs-path-mapper.js");
-  const sk = LogicalPath.scopeKey({ kind: "session", projectId, sessionId });
-  const entries = new SqliteVfsEntryRepository(ctx.conn);
-  const entry = unwrap(await entries.findByPath(sk, logicalPath));
-  if (entry == null) throw new Error(`entry not found for ${logicalPath}`);
-  const revisions = await ctx.conn.query<{ version: number }>(
-    "SELECT version FROM vfs_revision WHERE entry_id = ? ORDER BY version ASC",
-    [entry.entryId],
-  );
-  const anchorVersion = revisions[0]!.version;
-  await ctx.conn.execute(
-    "DELETE FROM vfs_revision WHERE entry_id = ? AND version = ?",
-    [entry.entryId, anchorVersion],
-  );
-  return anchorVersion;
+    const { LogicalPath } = await import("../../src/domain/vfs/logic/vfs-path-mapper.js");
+    const sk = LogicalPath.scopeKey({ kind: "session", projectId, sessionId });
+    const entries = new SqliteVfsEntryRepository(ctx.conn);
+    const entry = unwrap(await entries.findByPath(sk, logicalPath));
+    if (entry == null) throw new Error(`entry not found for ${logicalPath}`);
+    const revisions = await ctx.conn.query<{ version: number }>(
+        "SELECT version FROM vfs_revision WHERE entry_id = ? ORDER BY version ASC",
+        [entry.entryId],
+    );
+    const anchorVersion = revisions[0]!.version;
+    await ctx.conn.execute(
+        "DELETE FROM vfs_revision WHERE entry_id = ? AND version = ?",
+        [entry.entryId, anchorVersion],
+    );
+    return anchorVersion;
 }
 
 /** 双文件 anchor + tail 修改，/b.md 锚点 revision 可被删除。 */
 async function setupMultiFilePartialScenario() {
-  const ctx = getNovelMasterTestContext();
-  const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-  const session = unwrap(await ctx.sessions.create(project.id));
-  const svfs = ctx.sessionVfs(project.id, session.id);
+    const ctx = getNovelMasterTestContext();
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
+    const svfs = ctx.sessionVfs(project.id, session.id);
 
-  const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("go")));
-  const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
-    blocks: [{ type: "text", text: "write" }],
-  }));
-  await svfs.write("/a.md", "anchor-a", { versionCheck: false });
-  await svfs.write("/b.md", "anchor-b", { versionCheck: false });
-  unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("go")));
+    const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
+        blocks: [{ type: "text", text: "write" }],
+    }));
+    await svfs.write("/a.md", "anchor-a", { versionCheck: false });
+    await svfs.write("/b.md", "anchor-b", { versionCheck: false });
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
-  unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("more")));
-  const assistant2 = unwrap(await ctx.messages.append(session.id, "assistant", {
-    blocks: [{ type: "text", text: "later" }],
-  }));
-  await svfs.write("/a.md", "tail-a", { versionCheck: false });
-  await svfs.write("/b.md", "tail-b", { versionCheck: false });
-  unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id));
+    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("more")));
+    const assistant2 = unwrap(await ctx.messages.append(session.id, "assistant", {
+        blocks: [{ type: "text", text: "later" }],
+    }));
+    await svfs.write("/a.md", "tail-a", { versionCheck: false });
+    await svfs.write("/b.md", "tail-b", { versionCheck: false });
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id));
 
-  return { ctx, project, session, svfs, user1, assistant1, assistant2 };
+    return { ctx, project, session, svfs, user1, assistant1, assistant2 };
 }
 
 describe("MessageRollbackService (revision head backfill)", () => {
-  it("RB1: 多文件 revision 缺失且未确认 — 抛 BACKFILL_REQUIRED，消息与 VFS 不变", async () => {
-    const { ctx, project, session, svfs, assistant1 } =
-      await setupMultiFilePartialScenario();
+    it("RB1: 多文件 revision 缺失且未确认 — 抛 BACKFILL_REQUIRED，消息与 VFS 不变", async () => {
+        const { ctx, project, session, svfs, assistant1 } =
+            await setupMultiFilePartialScenario();
 
-    await deleteAnchorRevisionForPath(ctx, project.id, session.id, "/b.md");
+        await deleteAnchorRevisionForPath(ctx, project.id, session.id, "/b.md");
 
-    await rejectsErr(
-      () =>
-        ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant1.id),
-      (error: unknown) => {
-        assert.equal(RollbackErrorGuards.isRevisionBackfillRequired(error), true);
-        const err = error as { details?: { missingLogicalPaths?: readonly string[] } };
-        assert.deepEqual(err.details?.missingLogicalPaths, ["/b.md"]);
-        return true;
-      },
-    );
+        await rejectsErr(
+            () =>
+                ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant1.id),
+            (error: unknown) => {
+                assert.equal(RollbackErrorGuards.isRevisionBackfillRequired(error), true);
+                const err = error as { details?: { missingLogicalPaths?: readonly string[] } };
+                assert.deepEqual(err.details?.missingLogicalPaths, ["/b.md"]);
+                return true;
+            },
+        );
 
-    assert.equal(unwrap(await svfs.read("/a.md")).content, "tail-a");
-    assert.equal(unwrap(await svfs.read("/b.md")).content, "tail-b");
-    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
-    assert.equal(messages.length, 4);
-  });
+        assert.equal(unwrap(await svfs.read("/a.md")).content, "tail-a");
+        assert.equal(unwrap(await svfs.read("/b.md")).content, "tail-b");
+        const messages = outcomeValue(await ctx.messages.listBySession(session.id));
+        assert.equal(messages.length, 4);
+    });
 
-  it("RB2: 多文件 partial reconcile — A 精确恢复，B 保持现状", async () => {
-    const { ctx, project, session, svfs, user1, assistant1 } =
-      await setupMultiFilePartialScenario();
+    it("RB2: 多文件 partial reconcile — A 精确恢复，B 保持现状", async () => {
+        const { ctx, project, session, svfs, user1, assistant1 } =
+            await setupMultiFilePartialScenario();
 
-    await deleteAnchorRevisionForPath(ctx, project.id, session.id, "/b.md");
+        await deleteAnchorRevisionForPath(ctx, project.id, session.id, "/b.md");
 
-    await ctx.sessionFs.rollbackFilesToMessage(
-      session.id,
-      project.id,
-      assistant1.id,
-      { revisionHeadBackfill: true },
-    );
+        await ctx.sessionFs.rollbackFilesToMessage(
+            session.id,
+            project.id,
+            assistant1.id,
+            { revisionHeadBackfill: true },
+        );
 
-    assert.equal(unwrap(await svfs.read("/a.md")).content, "anchor-a");
-    assert.equal(unwrap(await svfs.read("/b.md")).content, "tail-b");
-    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
-    assert.equal(messages.length, 2);
-    assert.equal(messages[0]!.id, user1.id);
-    assert.equal(messages[1]!.id, assistant1.id);
-  });
+        assert.equal(unwrap(await svfs.read("/a.md")).content, "anchor-a");
+        assert.equal(unwrap(await svfs.read("/b.md")).content, "tail-b");
+        const messages = outcomeValue(await ctx.messages.listBySession(session.id));
+        assert.equal(messages.length, 2);
+        assert.equal(messages[0]!.id, user1.id);
+        assert.equal(messages[1]!.id, assistant1.id);
+    });
 
-  it("RB4: backfill 时 entry 不存在 — 写入 deleted revision", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
-    const revisions = new SqliteVfsRevisionRepository(ctx.conn);
-    const entries = new SqliteVfsEntryRepository(ctx.conn);
-    const scope = {
-      kind: "session" as const,
-      projectId: project.id,
-      sessionId: session.id,
-    };
-    const { LogicalPath } = await import("../../src/domain/vfs/logic/vfs-path-mapper.js");
-    const sk = LogicalPath.scopeKey(scope);
+    it("RB4: backfill 时 entry 不存在 — 写入 deleted revision", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
+        const revisions = new SqliteVfsRevisionRepository(ctx.conn);
+        const entries = new SqliteVfsEntryRepository(ctx.conn);
+        const scope = {
+            kind: "session" as const,
+            projectId: project.id,
+            sessionId: session.id,
+        };
+        const { LogicalPath } = await import("../../src/domain/vfs/logic/vfs-path-mapper.js");
+        const sk = LogicalPath.scopeKey(scope);
 
-    const backfilled = unwrap(await BackfillMissingRevision.backfillIfNeeded(
-      { revisionRepo: revisions, entryRepo: entries },
-      sk,
-      "/ghost.md",
-      null,  // entryId = null → entry not exist
-      7,
-    ));
+        // entryId = null → entry not exist
+        const backfilled = unwrap(await BackfillMissingRevision.backfillIfNeeded({ revisionRepo: revisions, entryRepo: entries, scopeKey: sk, logicalPath: "/ghost.md", entryId: null, targetVersion: 7 }));
 
-    assert.equal(backfilled, false);
-  });
+        assert.equal(backfilled, false);
+    });
 
-  it("RB4b(纯删除): entry 已删但 revision 在 — 回滚后文件复现 anchor 内容", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
+    it("RB4b(纯删除): entry 已删但 revision 在 — 回滚后文件复现 anchor 内容", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
 
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("go")));
-    const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "write" }],
-    }));
-    await svfs.write("/gone.md", "anchor-gone", { versionCheck: false });
-    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
+        const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("go")));
+        const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "write" }],
+        }));
+        await svfs.write("/gone.md", "anchor-gone", { versionCheck: false });
+        unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
-    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("more")));
-    unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "later" },
-      ],
-    }));
-    // 常规删除：deleteWithRevision 写墓碑 revision 后物理删除 entry 行。
-    unwrap(await svfs.delete("/gone.md"));
+        unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("more")));
+        unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "later" },
+            ],
+        }));
+        // 常规删除：deleteWithRevision 写墓碑 revision 后物理删除 entry 行。
+        unwrap(await svfs.delete("/gone.md"));
 
-    // 不手工删 revision 行——checkpoint 的 path 快照 + 旧 entryId 应让回滚复活文件。
-    await ctx.sessionFs.rollbackFilesToMessage(
-      session.id,
-      project.id,
-      assistant1.id,
-      { revisionHeadBackfill: true },
-    );
+        // 不手工删 revision 行——checkpoint 的 path 快照 + 旧 entryId 应让回滚复活文件。
+        await ctx.sessionFs.rollbackFilesToMessage(
+            session.id,
+            project.id,
+            assistant1.id,
+            { revisionHeadBackfill: true },
+        );
 
-    assert.equal(unwrap(await svfs.read("/gone.md")).content, "anchor-gone");
-    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
-    assert.equal(messages.length, 2);
-    assert.equal(messages[0]!.id, user1.id);
-    assert.equal(messages[1]!.id, assistant1.id);
-  });
+        assert.equal(unwrap(await svfs.read("/gone.md")).content, "anchor-gone");
+        const messages = outcomeValue(await ctx.messages.listBySession(session.id));
+        assert.equal(messages.length, 2);
+        assert.equal(messages[0]!.id, user1.id);
+        assert.equal(messages[1]!.id, assistant1.id);
+    });
 
-  it("RB4b(纯删除·无 backfill 选项): 不抛 BACKFILL_REQUIRED，直接复现", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
+    it("RB4b(纯删除·无 backfill 选项): 不抛 BACKFILL_REQUIRED，直接复现", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
 
-    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("go")));
-    const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "write" }],
-    }));
-    await svfs.write("/gone2.md", "anchor-content", { versionCheck: false });
-    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
+        unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("go")));
+        const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "write" }],
+        }));
+        await svfs.write("/gone2.md", "anchor-content", { versionCheck: false });
+        unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
-    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("more")));
-    unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "later" }],
-    }));
-    unwrap(await svfs.delete("/gone2.md"));
+        unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("more")));
+        unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "later" }],
+        }));
+        unwrap(await svfs.delete("/gone2.md"));
 
-    // entry 已删但 checkpoint 旧 entryId 的 revision 行在 → 不算 missing，
-    // 无需 revisionHeadBackfill 确认也不应抛 BACKFILL_REQUIRED。
-    await ctx.sessionFs.rollbackFilesToMessage(
-      session.id,
-      project.id,
-      assistant1.id,
-    );
+        // entry 已删但 checkpoint 旧 entryId 的 revision 行在 → 不算 missing，
+        // 无需 revisionHeadBackfill 确认也不应抛 BACKFILL_REQUIRED。
+        await ctx.sessionFs.rollbackFilesToMessage(
+            session.id,
+            project.id,
+            assistant1.id,
+        );
 
-    assert.equal(unwrap(await svfs.read("/gone2.md")).content, "anchor-content");
-  });
+        assert.equal(unwrap(await svfs.read("/gone2.md")).content, "anchor-content");
+    });
 
-  it("RB4b(手工删 revision 行): entry 与 revision 都缺 — 维持降级不复现", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
+    it("RB4b(手工删 revision 行): entry 与 revision 都缺 — 维持降级不复现", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
 
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("go")));
-    const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "write" }],
-    }));
-    await svfs.write("/gone.md", "anchor-gone", { versionCheck: false });
-    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
+        const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("go")));
+        const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "write" }],
+        }));
+        await svfs.write("/gone.md", "anchor-gone", { versionCheck: false });
+        unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
-    // 先拿到 entryId 再删除 entry
-    const { LogicalPath } = await import("../../src/domain/vfs/logic/vfs-path-mapper.js");
-    const sk = LogicalPath.scopeKey({ kind: "session", projectId: project.id, sessionId: session.id });
-    const entries = new SqliteVfsEntryRepository(ctx.conn);
-    const entry = unwrap(await entries.findByPath(sk, "/gone.md"));
-    assert.ok(entry != null);
-    const entryId = entry.entryId;
+        // 先拿到 entryId 再删除 entry
+        const { LogicalPath } = await import("../../src/domain/vfs/logic/vfs-path-mapper.js");
+        const sk = LogicalPath.scopeKey({ kind: "session", projectId: project.id, sessionId: session.id });
+        const entries = new SqliteVfsEntryRepository(ctx.conn);
+        const entry = unwrap(await entries.findByPath(sk, "/gone.md"));
+        assert.ok(entry != null);
+        const entryId = entry.entryId;
 
-    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("more")));
-    unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "later" }],
-    }));
-    unwrap(await svfs.delete("/gone.md"));
+        unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("more")));
+        unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "later" }],
+        }));
+        unwrap(await svfs.delete("/gone.md"));
 
-    // 手动删除 anchor revision 行（revision 真缺，非 entry 缺）——
-    // backfill 按旧 entryId 回补 deleted 墓碑，回滚走删除降级，不复现。
-    const revisions = await ctx.conn.query<{ version: number }>(
-      "SELECT version FROM vfs_revision WHERE entry_id = ? ORDER BY version ASC",
-      [entryId],
-    );
-    await ctx.conn.execute(
-      "DELETE FROM vfs_revision WHERE entry_id = ? AND version = ?",
-      [entryId, revisions[0]!.version],
-    );
+        // 手动删除 anchor revision 行（revision 真缺，非 entry 缺）——
+        // backfill 按旧 entryId 回补 deleted 墓碑，回滚走删除降级，不复现。
+        const revisions = await ctx.conn.query<{ version: number }>(
+            "SELECT version FROM vfs_revision WHERE entry_id = ? ORDER BY version ASC",
+            [entryId],
+        );
+        await ctx.conn.execute(
+            "DELETE FROM vfs_revision WHERE entry_id = ? AND version = ?",
+            [entryId, revisions[0]!.version],
+        );
 
-    await ctx.sessionFs.rollbackFilesToMessage(
-      session.id,
-      project.id,
-      assistant1.id,
-      { revisionHeadBackfill: true },
-    );
+        await ctx.sessionFs.rollbackFilesToMessage(
+            session.id,
+            project.id,
+            assistant1.id,
+            { revisionHeadBackfill: true },
+        );
 
-    {
-      const r = await svfs.read("/gone.md");
-      assert.ok(!r.ok && AppErrorOps.is(r.error, "VFS_NOT_FOUND"), "降级路径读取应走 Err 且为 VFS_NOT_FOUND");
-    }
-    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
-    assert.equal(messages.length, 2);
-    assert.equal(messages[0]!.id, user1.id);
-    assert.equal(messages[1]!.id, assistant1.id);
-  });
+        {
+            const r = await svfs.read("/gone.md");
+            assert.ok(!r.ok && AppErrorOps.is(r.error, "VFS_NOT_FOUND"), "降级路径读取应走 Err 且为 VFS_NOT_FOUND");
+        }
+        const messages = outcomeValue(await ctx.messages.listBySession(session.id));
+        assert.equal(messages.length, 2);
+        assert.equal(messages[0]!.id, user1.id);
+        assert.equal(messages[1]!.id, assistant1.id);
+    });
 
-  it("单文件 anchor revision 缺失 — revisionHeadBackfill 成功，内容不变", async () => {
-    const { ctx, project, session, svfs, user1, assistant1 } =
-      await setupR1Scenario();
+    it("单文件 anchor revision 缺失 — revisionHeadBackfill 成功，内容不变", async () => {
+        const { ctx, project, session, svfs, user1, assistant1 } =
+            await setupR1Scenario();
 
-    await deleteAnchorRevisionForPath(ctx, project.id, session.id, "/poem.md");
+        await deleteAnchorRevisionForPath(ctx, project.id, session.id, "/poem.md");
 
-    await ctx.sessionFs.rollbackFilesToMessage(
-      session.id,
-      project.id,
-      assistant1.id,
-      { revisionHeadBackfill: true },
-    );
+        await ctx.sessionFs.rollbackFilesToMessage(
+            session.id,
+            project.id,
+            assistant1.id,
+            { revisionHeadBackfill: true },
+        );
 
-    assert.equal(unwrap(await svfs.read("/poem.md")).content, "violets");
-    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
-    assert.equal(messages.length, 2);
-    assert.equal(messages[0]!.id, user1.id);
-    assert.equal(messages[1]!.id, assistant1.id);
-  });
+        assert.equal(unwrap(await svfs.read("/poem.md")).content, "violets");
+        const messages = outcomeValue(await ctx.messages.listBySession(session.id));
+        assert.equal(messages.length, 2);
+        assert.equal(messages[0]!.id, user1.id);
+        assert.equal(messages[1]!.id, assistant1.id);
+    });
 
-  it("RB3: 所有 revision 完好 — 与 R1 一致精确恢复", async () => {
-    const { ctx, project, session, svfs, user1, assistant1 } =
-      await setupR1Scenario();
+    it("RB3: 所有 revision 完好 — 与 R1 一致精确恢复", async () => {
+        const { ctx, project, session, svfs, user1, assistant1 } =
+            await setupR1Scenario();
 
-    await ctx.sessionFs.rollbackFilesToMessage(
-      session.id,
-      project.id,
-      assistant1.id,
-    );
+        await ctx.sessionFs.rollbackFilesToMessage(
+            session.id,
+            project.id,
+            assistant1.id,
+        );
 
-    assert.equal(unwrap(await svfs.read("/poem.md")).content, "roses");
-    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
-    assert.equal(messages.length, 2);
-    assert.equal(messages[0]!.id, user1.id);
-    assert.equal(messages[1]!.id, assistant1.id);
-  });
+        assert.equal(unwrap(await svfs.read("/poem.md")).content, "roses");
+        const messages = outcomeValue(await ctx.messages.listBySession(session.id));
+        assert.equal(messages.length, 2);
+        assert.equal(messages[0]!.id, user1.id);
+        assert.equal(messages[1]!.id, assistant1.id);
+    });
 
-  it("RB5: revision 已存在时不重复 append", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
-    const revisions = new SqliteVfsRevisionRepository(ctx.conn);
-    const entries = new SqliteVfsEntryRepository(ctx.conn);
-    const { LogicalPath } = await import("../../src/domain/vfs/logic/vfs-path-mapper.js");
-    const scope = {
-      kind: "session" as const,
-      projectId: project.id,
-      sessionId: session.id,
-    };
-    const sk = LogicalPath.scopeKey(scope);
+    it("RB5: revision 已存在时不重复 append", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
+        const revisions = new SqliteVfsRevisionRepository(ctx.conn);
+        const entries = new SqliteVfsEntryRepository(ctx.conn);
+        const { LogicalPath } = await import("../../src/domain/vfs/logic/vfs-path-mapper.js");
+        const scope = {
+            kind: "session" as const,
+            projectId: project.id,
+            sessionId: session.id,
+        };
+        const sk = LogicalPath.scopeKey(scope);
 
-    await svfs.write("/exists.md", "content", { versionCheck: false });
-    const entry = unwrap(await entries.findByPath(sk, "/exists.md"));
-    assert.ok(entry != null);
-    const before = await ctx.conn.query<{ version: number }>(
-      "SELECT version FROM vfs_revision WHERE entry_id = ?",
-      [entry.entryId],
-    );
+        await svfs.write("/exists.md", "content", { versionCheck: false });
+        const entry = unwrap(await entries.findByPath(sk, "/exists.md"));
+        assert.ok(entry != null);
+        const before = await ctx.conn.query<{ version: number }>(
+            "SELECT version FROM vfs_revision WHERE entry_id = ?",
+            [entry.entryId],
+        );
 
-    const backfilled = unwrap(await BackfillMissingRevision.backfillIfNeeded(
-      { revisionRepo: revisions, entryRepo: entries },
-      sk,
-      "/exists.md",
-      entry.entryId,
-      1,
-    ));
+        const backfilled = unwrap(await BackfillMissingRevision.backfillIfNeeded({ revisionRepo: revisions, entryRepo: entries, scopeKey: sk, logicalPath: "/exists.md", entryId: entry.entryId, targetVersion: 1 }));
 
-    assert.equal(backfilled, false);
-    const after = await ctx.conn.query<{ version: number }>(
-      "SELECT version FROM vfs_revision WHERE entry_id = ?",
-      [entry.entryId],
-    );
-    assert.equal(after.length, before.length);
-  });
+        assert.equal(backfilled, false);
+        const after = await ctx.conn.query<{ version: number }>(
+            "SELECT version FROM vfs_revision WHERE entry_id = ?",
+            [entry.entryId],
+        );
+        assert.equal(after.length, before.length);
+    });
 
-  it("skipVfsReconcile 与 revisionHeadBackfill 同时指定时抛错", async () => {
-    const { ctx, project, session, assistant1 } = await setupR1Scenario();
+    it("skipVfsReconcile 与 revisionHeadBackfill 同时指定时抛错", async () => {
+        const { ctx, project, session, assistant1 } = await setupR1Scenario();
 
-    await rejectsErr(
-      () =>
-        ctx.sessionFs.rollbackFilesToMessage(
-          session.id,
-          project.id,
-          assistant1.id,
-          { skipVfsReconcile: true, revisionHeadBackfill: true },
-        ),
-      (error: unknown) => (error as {messageKey?: string}).messageKey === "error.session_fs.invalid_rollback_options",
-    );
-  });
+        await rejectsErr(
+            () =>
+                ctx.sessionFs.rollbackFilesToMessage(
+                    session.id,
+                    project.id,
+                    assistant1.id,
+                    { skipVfsReconcile: true, revisionHeadBackfill: true },
+                ),
+            (error: unknown) => (error as {messageKey?: string}).messageKey === "error.session_fs.invalid_rollback_options",
+        );
+    });
 
 });
 
 /** 错误用户可见文案：带 messageKey 时经 tCore 渲染（G1-G3 descriptor 契约），否则回退 message。 */
 function renderError(error: unknown): string {
-  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
-  return textOf(error);
+    const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
+    return textOf(error);
 }
 
 /** 含 cause 链（ToolError 包装 AppError 时 messageKey 在 cause 上）。 */
 function textOf(error: unknown): string {
-  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
-  if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
-  if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
-  return e.message;
+    const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
+    if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
+    if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
+    return e.message;
 }

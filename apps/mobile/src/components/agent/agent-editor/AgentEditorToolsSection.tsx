@@ -7,7 +7,9 @@
 import React from 'react';
 import {Text} from 'react-native';
 
-import {TOOL_MODE_OPTIONS, type ToolsMode} from '@/config-forms/agent';
+import {BUILTIN_TOOL_CATALOG, TOOL_MODE_OPTIONS, type ToolsMode} from '@/config-forms/agent';
+
+import {coreT} from '@/i18n/core';
 
 import {FormField} from '../../form/FormField';
 import {FormSectionCard} from '../../form/FormSectionCard';
@@ -17,53 +19,52 @@ import {styles} from './agent-editor-form.styles';
 import {type AgentEditorTokens} from './agent-editor-types';
 
 type Props = {
-  tokens: AgentEditorTokens;
-  toolsMode: ToolsMode;
-  onToolsModeChange: (value: ToolsMode) => void;
-  toolsSelected: readonly string[];
-  onToolsSelectedChange: (value: string[]) => void;
-  /** 只读态（内置智能体详情）：模式下拉与工具选择器全禁用灰显。 */
-  readOnly?: boolean;
+    tokens: AgentEditorTokens;
+    toolsMode: ToolsMode;
+    onToolsModeChange: (value: ToolsMode) => void;
+    toolsSelected: readonly string[];
+    onToolsSelectedChange: (value: string[]) => void;
+    /** 只读态（内置智能体详情）：模式下拉与工具选择器全禁用灰显。 */
+    readOnly?: boolean;
 };
 
 export function AgentEditorToolsSection({
-  tokens,
-  toolsMode,
-  onToolsModeChange,
-  toolsSelected,
-  onToolsSelectedChange,
-  readOnly = false,
+    tokens,
+    toolsMode,
+    onToolsModeChange,
+    toolsSelected,
+    onToolsSelectedChange,
+    readOnly = false,
 }: Props) {
-  return (
-    <FormSectionCard title="工具策略" tokens={tokens}>
-      <FormField label="模式" tokens={tokens}>
-        <FormSelectField
-          tokens={tokens}
-          value={toolsMode}
-          onChange={value => onToolsModeChange(value as ToolsMode)}
-          options={TOOL_MODE_OPTIONS}
-          sheetTitle="工具名单模式"
-          disabled={readOnly}
-        />
-      </FormField>
-      {toolsMode !== 'default' ? (
-        <FormField
-          label={toolsMode === 'allow' ? '白名单工具' : '黑名单工具'}
-          tokens={tokens}
-        >
-          <ToolPolicyPicker
-            tokens={tokens}
-            selected={toolsSelected}
-            onChange={onToolsSelectedChange}
-            disabled={readOnly}
-          />
-        </FormField>
-      ) : (
-        <Text style={[styles.hint, {color: tokens.textSecondary}]}>
-          未配置时使用全部内置工具（11
-          个）：task、read、write、edit、fs、glob、grep、skill、agent、curl、search。
-        </Text>
-      )}
-    </FormSectionCard>
-  );
+    return (
+        <FormSectionCard title={coreT({key: "ui.agent.tools_section"})} tokens={tokens}>
+            <FormField label={coreT({key: "ui.agent.tools_mode_label"})} tokens={tokens}>
+                <FormSelectField
+                    tokens={tokens}
+                    value={toolsMode}
+                    onChange={value => onToolsModeChange(value as ToolsMode)}
+                    options={TOOL_MODE_OPTIONS}
+                    sheetTitle={coreT({key: "ui.agent.tools_mode_picker_title"})}
+                    disabled={readOnly}
+                />
+            </FormField>
+            {toolsMode !== 'default' ? (
+                <FormField
+                    label={toolsMode === 'allow' ? coreT({key: "ui.agent.allowlist_label"}) : coreT({key: "ui.agent.denylist_label"})}
+                    tokens={tokens}
+                >
+                    <ToolPolicyPicker
+                        tokens={tokens}
+                        selected={toolsSelected}
+                        onChange={onToolsSelectedChange}
+                        disabled={readOnly}
+                    />
+                </FormField>
+            ) : (
+                <Text style={[styles.hint, {color: tokens.textSecondary}]}>
+                    {coreT({key: "ui.agent.builtin_tools_hint", params: {count: String(BUILTIN_TOOL_CATALOG.length)}})}
+                </Text>
+            )}
+        </FormSectionCard>
+    );
 }

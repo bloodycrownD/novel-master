@@ -1,56 +1,51 @@
+import { coreT } from "@shared/logic/core-i18n";
 import { Button } from "./Button";
 
 export type UpdateCheckResultKind = "up-to-date" | "error";
 
-const UPDATE_CHECK_RESULT_TITLE = "版本检查";
-const UPDATE_CHECK_UP_TO_DATE_MESSAGE = "当前已是最新版本";
-const UPDATE_CHECK_FAILED_MESSAGE = "无法检查更新，请检查网络";
-
 type UpdateCheckResultModalProps = {
-  open: boolean;
-  kind: UpdateCheckResultKind;
-  onClose: () => void;
-  onSnoozeToday: () => void | Promise<void>;
+    open: boolean;
+    kind: UpdateCheckResultKind;
+    onClose: () => void;
+    onSnoozeToday: () => void | Promise<void>;
 };
 
-function messageForKind(kind: UpdateCheckResultKind): string {
-  return kind === "up-to-date"
-    ? UPDATE_CHECK_UP_TO_DATE_MESSAGE
-    : UPDATE_CHECK_FAILED_MESSAGE;
-}
-
 export function UpdateCheckResultModal({
-  open,
-  kind,
-  onClose,
-  onSnoozeToday,
+    open,
+    kind,
+    onClose,
+    onSnoozeToday,
 }: UpdateCheckResultModalProps) {
-  if (!open) {
-    return null;
-  }
+    if (!open) {
+        return null;
+    }
 
-  return (
-    <div className="text-prompt-overlay" onClick={onClose}>
-      <div
-        className="update-modal"
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby="update-check-result-title"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 id="update-check-result-title" className="update-modal__title">
-          {UPDATE_CHECK_RESULT_TITLE}
-        </h3>
-        <p className="update-modal__hint">{messageForKind(kind)}</p>
-        <div className="update-modal__actions update-modal__actions--between">
-          <Button variant="secondary" onClick={onClose}>
-            关闭
-          </Button>
-          <Button variant="secondary" onClick={() => void onSnoozeToday()}>
-            今日不再提醒
-          </Button>
+    return (
+        <div className="text-prompt-overlay" onClick={onClose}>
+            <div
+                className="update-modal"
+                role="alertdialog"
+                aria-modal="true"
+                aria-labelledby="update-check-result-title"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <h3 id="update-check-result-title" className="update-modal__title">
+                    {coreT({key: "ui.update.check_title"})}
+                </h3>
+                <p className="update-modal__hint">
+                    {kind === "up-to-date"
+                        ? coreT({key: "ui.update.up_to_date"})
+                        : coreT({key: "ui.update.check_failed"})}
+                </p>
+                <div className="update-modal__actions update-modal__actions--between">
+                    <Button variant="secondary" onClick={onClose}>
+                        {coreT({key: "ui.common.close"})}
+                    </Button>
+                    <Button variant="secondary" onClick={() => void onSnoozeToday()}>
+                        {coreT({key: "ui.update.remind_off_today"})}
+                    </Button>
+                </div>
+            </div>
         </div>
-      </div>
-    </div>
-  );
+    );
 }

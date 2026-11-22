@@ -21,8 +21,8 @@ export type AgentSettingsTab = "primary" | "subagent";
  * 双端 UI 的 picker 过滤统一消费本函数，不各自内联判断。
  */
 export function agentModeMatchesTab(mode: AgentDefinition["mode"] | undefined, tab: AgentSettingsTab): boolean {
-  const normalized = mode ?? "all";
-  return tab === "primary"
-    ? normalized !== "subagent"
-    : normalized !== "primary";
+    const normalized = mode ?? "all";
+    return tab === "primary"
+        ? normalized !== "subagent"
+        : normalized !== "primary";
 }

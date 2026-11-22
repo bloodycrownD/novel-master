@@ -9,29 +9,29 @@ import {vfsPage} from '../pageobjects/vfs.page';
  * - after：UI 删掉这个项目——其下会话与 VFS 文件随项目一并删除。
  */
 describe('E1 VFS rename conflict', () => {
-  let projectName = '';
+    let projectName = '';
 
-  before(async () => {
-    projectName = await appPage.launchFresh('E2E VFS Rename');
-    await appPage.switchToWorkspacePanel();
-  });
+    before(async () => {
+        projectName = await appPage.launchFresh('E2E VFS Rename');
+        await appPage.switchToWorkspacePanel();
+    });
 
-  after(async () => {
-    if (projectName === '') {
-      return;
-    }
-    await appPage.deleteProjectViaDrawer(projectName);
-  });
+    after(async () => {
+        if (projectName === '') {
+            return;
+        }
+        await appPage.deleteProjectViaDrawer(projectName);
+    });
 
-  it('shows duplicate-name toast and keeps both files', async () => {
-    await vfsPage.createFile('a.md');
-    await vfsPage.createFile('b.md');
-    await vfsPage.renameFile('b.md', 'a.md');
+    it('shows duplicate-name toast and keeps both files', async () => {
+        await vfsPage.createFile('a.md');
+        await vfsPage.createFile('b.md');
+        await vfsPage.renameFile('b.md', 'a.md');
 
-    const toast = await vfsPage.readToastMessage();
-    expect(toast).toContain('名称不能重复');
+        const toast = await vfsPage.readToastMessage();
+        expect(toast).toContain('名称不能重复');
 
-    await vfsPage.expectRowVisible('a.md');
-    await vfsPage.expectRowVisible('b.md');
-  });
+        await vfsPage.expectRowVisible('a.md');
+        await vfsPage.expectRowVisible('b.md');
+    });
 });

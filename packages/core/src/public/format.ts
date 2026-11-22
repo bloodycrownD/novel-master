@@ -1,9 +1,9 @@
 export { StreamMetricsLine } from "../domain/format/format-stream-metrics-line.js";
 export type { StreamMetricsLineInput, StreamMetricsLineParts } from "../domain/format/format-stream-metrics-line.js";
 export {
-  SLIDING_TOKEN_RATE_WINDOW_MS,
-  SlidingTokenRate,
-  type TokenRateSampler,
+    SLIDING_TOKEN_RATE_WINDOW_MS,
+    SlidingTokenRate,
+    type TokenRateSampler,
 } from "../domain/format/sliding-token-rate.js";
 export { StreamFinalRate } from "../domain/format/stream-final-rate.js";
 /**

@@ -10,103 +10,103 @@ const MODULE = "nm-compaction-conditions";
 const KEY = "policy";
 
 describe("compaction conditions store integrity", () => {
-  it("S1: empty database getConditions returns null", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const store = CompactionFactory.createConditionsStore(ctx.conn);
-    assert.equal(unwrap(await store.getConditions()), null);
-    await ctx.conn.close();
-  });
+    it("S1: empty database getConditions returns null", async () => {
+        const ctx = await openNovelMasterTestConnection();
+        const store = CompactionFactory.createConditionsStore(ctx.conn);
+        assert.equal(unwrap(await store.getConditions()), null);
+        await ctx.conn.close();
+    });
 
-  it("S2: corrupt JSON returns INVALID_SCHEMA", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const kkv = createKkvService(ctx.conn);
-    const store = CompactionFactory.createConditionsStore(ctx.conn);
-    await kkv.set(MODULE, KEY, "{invalid json");
-    const rejected = await store.getConditions();
-    assert.equal(rejected.ok, false);
-    if (!rejected.ok) assert.ok(AppErrorOps.is(rejected.error, "COMPACTION_CONDITIONS_INVALID_SCHEMA"));
-    await ctx.conn.close();
-  });
+    it("S2: corrupt JSON returns INVALID_SCHEMA", async () => {
+        const ctx = await openNovelMasterTestConnection();
+        const kkv = createKkvService(ctx.conn);
+        const store = CompactionFactory.createConditionsStore(ctx.conn);
+        await kkv.set(MODULE, KEY, "{invalid json");
+        const rejected = await store.getConditions();
+        assert.equal(rejected.ok, false);
+        if (!rejected.ok) assert.ok(AppErrorOps.is(rejected.error, "COMPACTION_CONDITIONS_INVALID_SCHEMA"));
+        await ctx.conn.close();
+    });
 
-  it("S3: enabled v3 without trigger returns INVALID_SCHEMA on get", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const kkv = createKkvService(ctx.conn);
-    const store = CompactionFactory.createConditionsStore(ctx.conn);
-    await kkv.set(
-      MODULE,
-      KEY,
-      JSON.stringify({ schemaVersion: 3, enabled: true }),
-    );
-    const rejected = await store.getConditions();
-    assert.equal(rejected.ok, false);
-    if (!rejected.ok) assert.ok(AppErrorOps.is(rejected.error, "COMPACTION_CONDITIONS_INVALID_SCHEMA"));
-    await ctx.conn.close();
-  });
+    it("S3: enabled v3 without trigger returns INVALID_SCHEMA on get", async () => {
+        const ctx = await openNovelMasterTestConnection();
+        const kkv = createKkvService(ctx.conn);
+        const store = CompactionFactory.createConditionsStore(ctx.conn);
+        await kkv.set(
+            MODULE,
+            KEY,
+            JSON.stringify({ schemaVersion: 3, enabled: true }),
+        );
+        const rejected = await store.getConditions();
+        assert.equal(rejected.ok, false);
+        if (!rejected.ok) assert.ok(AppErrorOps.is(rejected.error, "COMPACTION_CONDITIONS_INVALID_SCHEMA"));
+        await ctx.conn.close();
+    });
 
-  it("S4: disabled v3 without trigger returns enabled false", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const kkv = createKkvService(ctx.conn);
-    const store = CompactionFactory.createConditionsStore(ctx.conn);
-    await kkv.set(
-      MODULE,
-      KEY,
-      JSON.stringify({ schemaVersion: 3, enabled: false }),
-    );
-    const conditions = unwrap(await store.getConditions());
-    assert.equal(conditions?.enabled, false);
-    await ctx.conn.close();
-  });
+    it("S4: disabled v3 without trigger returns enabled false", async () => {
+        const ctx = await openNovelMasterTestConnection();
+        const kkv = createKkvService(ctx.conn);
+        const store = CompactionFactory.createConditionsStore(ctx.conn);
+        await kkv.set(
+            MODULE,
+            KEY,
+            JSON.stringify({ schemaVersion: 3, enabled: false }),
+        );
+        const conditions = unwrap(await store.getConditions());
+        assert.equal(conditions?.enabled, false);
+        await ctx.conn.close();
+    });
 
-  it("S5: setConditions invalid does not persist", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const store = CompactionFactory.createConditionsStore(ctx.conn);
-    await assert.rejects(
-      () =>
-        store.setConditions({ schemaVersion: 4, enabled: true }),
-      (error: unknown) => AppErrorOps.is(error, "COMPACTION_CONDITIONS_INVALID_SCHEMA"),
-    );
-    assert.equal(unwrap(await store.getConditions()), null);
-    await ctx.conn.close();
-  });
+    it("S5: setConditions invalid does not persist", async () => {
+        const ctx = await openNovelMasterTestConnection();
+        const store = CompactionFactory.createConditionsStore(ctx.conn);
+        await assert.rejects(
+            () =>
+                store.setConditions({ schemaVersion: 4, enabled: true }),
+            (error: unknown) => AppErrorOps.is(error, "COMPACTION_CONDITIONS_INVALID_SCHEMA"),
+        );
+        assert.equal(unwrap(await store.getConditions()), null);
+        await ctx.conn.close();
+    });
 
-  it("S6: setConditions round-trip", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const store = CompactionFactory.createConditionsStore(ctx.conn);
-    const input = {
-      schemaVersion: 4 as const,
-      enabled: true,
-      tokenRatio: 0.75,
-      visibleFloor: 10,
-    };
-    await store.setConditions(input);
-    const loaded = unwrap(await store.getConditions());
-    assert.deepEqual(loaded, input);
-    await ctx.conn.close();
-  });
+    it("S6: setConditions round-trip", async () => {
+        const ctx = await openNovelMasterTestConnection();
+        const store = CompactionFactory.createConditionsStore(ctx.conn);
+        const input = {
+            schemaVersion: 4 as const,
+            enabled: true,
+            tokenRatio: 0.75,
+            visibleFloor: 10,
+        };
+        await store.setConditions(input);
+        const loaded = unwrap(await store.getConditions());
+        assert.deepEqual(loaded, input);
+        await ctx.conn.close();
+    });
 
-  it("S7: v2 document migrates on read and writes v4", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const kkv = createKkvService(ctx.conn);
-    const store = CompactionFactory.createConditionsStore(ctx.conn);
-    await kkv.set(
-      MODULE,
-      KEY,
-      JSON.stringify({
-        schemaVersion: 2,
-        enabled: true,
-        tokenThreshold: 12000,
-        visibleFloor: 20,
-      }),
-    );
-    const first = unwrap(await store.getConditions());
-    assert.equal(first?.schemaVersion, 4);
-    assert.equal(first?.tokenRatio, 0.8);
-    assert.equal(first?.visibleFloor, 20);
-    assert.equal(first?.hideStartDepth, 6);
-    const raw = unwrap(await kkv.get(MODULE, KEY));
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    assert.equal(parsed.schemaVersion, 4);
-    assert.equal(parsed.hideStartDepth, 6);
-    await ctx.conn.close();
-  });
+    it("S7: v2 document migrates on read and writes v4", async () => {
+        const ctx = await openNovelMasterTestConnection();
+        const kkv = createKkvService(ctx.conn);
+        const store = CompactionFactory.createConditionsStore(ctx.conn);
+        await kkv.set(
+            MODULE,
+            KEY,
+            JSON.stringify({
+                schemaVersion: 2,
+                enabled: true,
+                tokenThreshold: 12000,
+                visibleFloor: 20,
+            }),
+        );
+        const first = unwrap(await store.getConditions());
+        assert.equal(first?.schemaVersion, 4);
+        assert.equal(first?.tokenRatio, 0.8);
+        assert.equal(first?.visibleFloor, 20);
+        assert.equal(first?.hideStartDepth, 6);
+        const raw = unwrap(await kkv.get(MODULE, KEY));
+        const parsed = JSON.parse(raw) as Record<string, unknown>;
+        assert.equal(parsed.schemaVersion, 4);
+        assert.equal(parsed.hideStartDepth, 6);
+        await ctx.conn.close();
+    });
 });

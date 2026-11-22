@@ -6,25 +6,25 @@ import {  PromptLlmInputCount, DefaultTokenCounterRegistry, TokenizerRegistry  }
 import {  emptyRegistryDeps  } from "./registry-test-helpers.js";
 
 const minimalParams = {
-  layout: { persist: [], dynamic: [] },
-  ctx: { workplaceDisplay: "", messages: [] },
-  savedModelId: "openai/gpt-4o",
-  registry: DefaultTokenCounterRegistry.create(emptyRegistryDeps()),
+    layout: { persist: [], dynamic: [] },
+    ctx: { workplaceDisplay: "", messages: [] },
+    savedModelId: "openai/gpt-4o",
+    registry: DefaultTokenCounterRegistry.create(emptyRegistryDeps()),
 } as const;
 
 describe("countPromptLlmInput", () => {
-  after(() => {
-    registerNodeTokenizerDriverForTests();
-  });
+    after(() => {
+        registerNodeTokenizerDriverForTests();
+    });
 
-  it("throws AssertionError when no NMTP driver is registered", async () => {
-    TokenizerRegistry.clear();
-    await assert.rejects(
-      () => PromptLlmInputCount.count(minimalParams),
-      (e) =>
-        e instanceof AssertionError &&
-        e.message.includes("Tokenizer: no driver registered") &&
-        e.message.includes("registerTokenizerNodeDriver"),
-    );
-  });
+    it("throws AssertionError when no NMTP driver is registered", async () => {
+        TokenizerRegistry.clear();
+        await assert.rejects(
+            () => PromptLlmInputCount.count(minimalParams),
+            (e) =>
+                e instanceof AssertionError &&
+                e.message.includes("Tokenizer: no driver registered") &&
+                e.message.includes("registerTokenizerNodeDriver"),
+        );
+    });
 });

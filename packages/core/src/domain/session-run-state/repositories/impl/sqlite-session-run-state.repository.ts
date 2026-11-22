@@ -6,6 +6,7 @@
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
+import { SessionRunStateSql } from "@/infra/sql-template/generated/session_run_state.mapper.generated.js";
 import { TdbcTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import type { Row } from "@/infra/tdbc/types.js";
 import { Coerce } from "@/common/coerce.js";
@@ -13,22 +14,22 @@ import type { SessionRunState, SessionRunStatus } from "../../model/session-run-
 import type { SessionRunStateRepository } from "../session-run-state.port.js";
 
 function rowToState(row: Row): SessionRunState {
-  return {
-    sessionId: String(row.session_id),
-    projectId: String(row.project_id),
-    runId: String(row.run_id),
-    status: String(row.status) as SessionRunStatus,
-    startedAtMs: Number(row.started_at_ms),
-    textChars: Number(row.text_chars),
-    thinkingChars: Number(row.thinking_chars),
-    completionTokens: Number(row.completion_tokens ?? 0),
-    // token_source 列收窄：仅认 usage/heuristic，脏值/缺省回退 heuristic。
-    tokenSource: row.token_source === "usage" ? "usage" : "heuristic",
-    partialText: Coerce.nullableText(row.partial_text),
-    partialThinking: Coerce.nullableText(row.partial_thinking),
-    pendingChildrenJson: Coerce.nullableText(row.pending_children_json),
-    updatedAtMs: Number(row.updated_at_ms),
-  };
+    return {
+        sessionId: String(row.session_id),
+        projectId: String(row.project_id),
+        runId: String(row.run_id),
+        status: String(row.status) as SessionRunStatus,
+        startedAtMs: Number(row.started_at_ms),
+        textChars: Number(row.text_chars),
+        thinkingChars: Number(row.thinking_chars),
+        completionTokens: Number(row.completion_tokens ?? 0),
+        // token_source 列收窄：仅认 usage/heuristic，脏值/缺省回退 heuristic。
+        tokenSource: row.token_source === "usage" ? "usage" : "heuristic",
+        partialText: Coerce.nullableText(row.partial_text),
+        partialThinking: Coerce.nullableText(row.partial_thinking),
+        pendingChildrenJson: Coerce.nullableText(row.pending_children_json),
+        updatedAtMs: Number(row.updated_at_ms),
+    };
 }
 
 /**
@@ -38,48 +39,38 @@ function rowToState(row: Row): SessionRunState {
  * 需要与其它表同事务清理时（删除联动）也可安全地在事务连接上调用。
  */
 export class SqliteSessionRunStateRepository implements SessionRunStateRepository {
-  private readonly parser = new SqlTemplateParser();
+    private readonly parser = new SqlTemplateParser();
 
-  constructor(private readonly conn: TdbcConnection) {}
+    constructor(private readonly conn: TdbcConnection) {}
 
-  async get(sessionId: string): Promise<SessionRunState | null> {
-    const sql = `SELECT session_id, project_id, run_id, status, started_at_ms, text_chars, thinking_chars, completion_tokens, token_source, partial_text, partial_thinking, pending_children_json, updated_at_ms FROM session_run_state WHERE session_id = #{sessionId}`;
-    const rows = await TdbcTemplate.query(this.conn, this.parser, sql, { sessionId });
-    if (rows.length === 0) {
-      return null;
+    async get(sessionId: string): Promise<SessionRunState | null> {
+        const rows = await TdbcTemplate.query(this.conn, this.parser, SessionRunStateSql.get, { sessionId });
+        if (rows.length === 0) {
+            return null;
+        }
+        return rowToState(rows[0]!);
     }
-    return rowToState(rows[0]!);
-  }
 
-  async upsert(state: SessionRunState): Promise<void> {
-    const sql = `INSERT INTO session_run_state (session_id, project_id, run_id, status, started_at_ms, text_chars, thinking_chars, completion_tokens, token_source, partial_text, partial_thinking, pending_children_json, updated_at_ms) VALUES (#{sessionId}, #{projectId}, #{runId}, #{status}, #{startedAtMs}, #{textChars}, #{thinkingChars}, #{completionTokens}, #{tokenSource}, #{partialText}, #{partialThinking}, #{pendingChildrenJson}, #{updatedAtMs}) ON CONFLICT(session_id) DO UPDATE SET project_id = excluded.project_id, run_id = excluded.run_id, status = excluded.status, started_at_ms = excluded.started_at_ms, text_chars = excluded.text_chars, thinking_chars = excluded.thinking_chars, completion_tokens = excluded.completion_tokens, token_source = excluded.token_source, partial_text = excluded.partial_text, partial_thinking = excluded.partial_thinking, pending_children_json = excluded.pending_children_json, updated_at_ms = excluded.updated_at_ms`;
-    await TdbcTemplate.execute(this.conn, this.parser, sql, { ...state });
-  }
-
-  async listByStatuses(statuses: readonly SessionRunStatus[]): Promise<SessionRunState[]> {
-    const unique = [...new Set(statuses)];
-    if (unique.length === 0) {
-      return [];
+    async upsert(state: SessionRunState): Promise<void> {
+        await TdbcTemplate.execute(this.conn, this.parser, SessionRunStateSql.upsert, { ...state });
     }
-    const bindings: Record<string, string> = {};
-    const placeholders: string[] = [];
-    for (const [index, status] of unique.entries()) {
-      bindings[`status${index}`] = status;
-      placeholders.push(`#{status${index}}`);
+
+    async listByStatuses(statuses: readonly SessionRunStatus[]): Promise<SessionRunState[]> {
+        const unique = [...new Set(statuses)];
+        if (unique.length === 0) {
+            return [];
+        }
+        const rows = await TdbcTemplate.query(this.conn, this.parser, SessionRunStateSql.listByStatuses, { statuses: unique });
+        return rows.map(rowToState);
     }
-    const inClause = placeholders.join(", ");
-    const sql = `SELECT session_id, project_id, run_id, status, started_at_ms, text_chars, thinking_chars, completion_tokens, token_source, partial_text, partial_thinking, pending_children_json, updated_at_ms FROM session_run_state WHERE status IN (${inClause}) ORDER BY session_id`;
-    const rows = await TdbcTemplate.query(this.conn, this.parser, sql, bindings);
-    return rows.map(rowToState);
-  }
 
-  async deleteBySession(sessionId: string): Promise<boolean> {
-    const result = await TdbcTemplate.execute(this.conn, this.parser, `DELETE FROM session_run_state WHERE session_id = #{sessionId}`, { sessionId });
-    return result.changes > 0;
-  }
+    async deleteBySession(sessionId: string): Promise<boolean> {
+        const result = await TdbcTemplate.execute(this.conn, this.parser, SessionRunStateSql.deleteBySession, { sessionId });
+        return result.changes > 0;
+    }
 
-  async deleteByProject(projectId: string): Promise<boolean> {
-    const result = await TdbcTemplate.execute(this.conn, this.parser, `DELETE FROM session_run_state WHERE project_id = #{projectId}`, { projectId });
-    return result.changes > 0;
-  }
+    async deleteByProject(projectId: string): Promise<boolean> {
+        const result = await TdbcTemplate.execute(this.conn, this.parser, SessionRunStateSql.deleteByProject, { projectId });
+        return result.changes > 0;
+    }
 }

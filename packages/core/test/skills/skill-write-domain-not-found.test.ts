@@ -24,229 +24,190 @@ import {  tCore  } from "../helpers/core-i18n.js";
 novelMasterTestFixture();
 
 function entry(name: string, description: string): string {
-  return `---\nname: ${name}\ndescription: ${description}\n---\n\n正文\n`;
+    return `---\nname: ${name}\ndescription: ${description}\n---\n\n正文\n`;
 }
 
 /** 错误通道迁移二期：域内未找到改走 Result.err；非 NOT_FOUND 的写失败仍原样 throw 透传——两种失败形态都收。 */
 async function captureError(fn: () => Promise<Result<unknown, AppError>>): Promise<Error> {
-  let result: Result<unknown, AppError>;
-  try {
-    result = await fn();
-  } catch (error) {
+    let result: Result<unknown, AppError>;
+    try {
+        result = await fn();
+    } catch (error) {
+        assert.ok(
+            error instanceof Error,
+            `抛出的应是 Error 实例，实际：${String(error)}`
+        );
+        return error;
+    }
+    assert.ok(!result.ok, "预期失败：Result.err 或透传 throw 二者其一");
+    if (result.ok) {
+        throw new assert.AssertionError({
+            message: "预期 Err，但调用成功返回了",
+        });
+    }
     assert.ok(
-      error instanceof Error,
-      `抛出的应是 Error 实例，实际：${String(error)}`
+        result.error instanceof Error,
+        `Err 载荷应是 Error 实例，实际：${String(result.error)}`
     );
-    return error;
-  }
-  assert.ok(!result.ok, "预期失败：Result.err 或透传 throw 二者其一");
-  if (result.ok) {
-    throw new assert.AssertionError({
-      message: "预期 Err，但调用成功返回了",
-    });
-  }
-  assert.ok(
-    result.error instanceof Error,
-    `Err 载荷应是 Error 实例，实际：${String(result.error)}`
-  );
-  return result.error;
+    return result.error;
 }
 
 function asSkillError(error: Error, context: string): AppError<"SKILL_NOT_FOUND"> {
-  assert.ok(
-    AppErrorOps.is(error, "SKILL_NOT_FOUND"),
-    `${context} 应抛 SKILL_NOT_FOUND，实际：${error.name}: ${error.message}`
-  );
-  return error as AppError<"SKILL_NOT_FOUND">;
+    assert.ok(
+        AppErrorOps.is(error, "SKILL_NOT_FOUND"),
+        `${context} 应抛 SKILL_NOT_FOUND，实际：${error.name}: ${error.message}`
+    );
+    return error as AppError<"SKILL_NOT_FOUND">;
 }
 
 describe("写操作域内未找到（回归：skill 工具 edit 报裸 VFS 路径）", () => {
-  it("edit 落 project 域、技能只在 global 域：报错指向 domain:\"global\"", async () => {
-    const ctx = getNovelMasterTestContext();
-    const skills = SkillsServiceFactory.create(ctx.conn);
-    const suffix = testIsolationSuffix();
-    const name = `global-only-${suffix}`;
-    const project = unwrap(await ctx.projects.create(`P-${suffix}`));
+    it("edit 落 project 域、技能只在 global 域：报错指向 domain:\"global\"", async () => {
+        const ctx = getNovelMasterTestContext();
+        const skills = SkillsServiceFactory.create(ctx.conn);
+        const suffix = testIsolationSuffix();
+        const name = `global-only-${suffix}`;
+        const project = unwrap(await ctx.projects.create(`P-${suffix}`));
 
-    unwrap(await skills.writeSkillFile("global", name, undefined, entry(name, "全局技能")));
+        unwrap(await skills.writeSkillFile({ domain: "global", name, content: entry(name, "全局技能") }));
 
-    const raw = await captureError(() =>
-      skills.editSkillFile(
-        "project",
-        name,
-        undefined,
-        { oldString: "正文", newString: "改写" },
-        project.id
-      )
-    );
-    const error = asSkillError(raw, "edit 落 project 域");
+        const raw = await captureError(() =>
+            skills.editSkillFile({ domain: "project", name, match: { oldString: "正文", newString: "改写" }, projectId: project.id })
+        );
+        const error = asSkillError(raw, "edit 落 project 域");
 
-    assert.ok(
-      !/Path not found/.test(renderError(error)),
-      `不应泄漏 VFS 裸路径文案，实际：${error.message}`
-    );
-    assert.match(renderError(error), /project/, "文案应说明命中的是 project 域");
-    assert.match(
-      renderError(error),
-      /domain:"global"/,
-      "文案应明确给出可操作参数 domain:\"global\""
-    );
-  });
+        assert.ok(
+            !/Path not found/.test(renderError(error)),
+            `不应泄漏 VFS 裸路径文案，实际：${error.message}`
+        );
+        assert.match(renderError(error), /project/, "文案应说明命中的是 project 域");
+        assert.match(
+            renderError(error),
+            /domain:"global"/,
+            "文案应明确给出可操作参数 domain:\"global\""
+        );
+    });
 
-  it("edit 落 global 域、技能只在 project 域：报错指向 domain:\"project\"", async () => {
-    const ctx = getNovelMasterTestContext();
-    const skills = SkillsServiceFactory.create(ctx.conn);
-    const suffix = testIsolationSuffix();
-    const name = `project-only-${suffix}`;
-    const project = unwrap(await ctx.projects.create(`P-${suffix}`));
+    it("edit 落 global 域、技能只在 project 域：报错指向 domain:\"project\"", async () => {
+        const ctx = getNovelMasterTestContext();
+        const skills = SkillsServiceFactory.create(ctx.conn);
+        const suffix = testIsolationSuffix();
+        const name = `project-only-${suffix}`;
+        const project = unwrap(await ctx.projects.create(`P-${suffix}`));
 
-    unwrap(await skills.writeSkillFile(
-      "project",
-      name,
-      undefined,
-      entry(name, "项目技能"),
-      project.id
-    ));
+        unwrap(await skills.writeSkillFile({ domain: "project", name, content: entry(name, "项目技能"), projectId: project.id }));
 
-    // projectId 必须传：skill 工具的 edit/write 恒定透传 ctx.skills.projectId
-    const raw = await captureError(() =>
-      skills.editSkillFile(
-        "global",
-        name,
-        undefined,
-        { oldString: "正文", newString: "改写" },
-        project.id
-      )
-    );
-    const error = asSkillError(raw, "edit 落 global 域");
+        // projectId 必须传：skill 工具的 edit/write 恒定透传 ctx.skills.projectId
+        const raw = await captureError(() =>
+            skills.editSkillFile({ domain: "global", name, match: { oldString: "正文", newString: "改写" }, projectId: project.id })
+        );
+        const error = asSkillError(raw, "edit 落 global 域");
 
-    assert.match(renderError(error), /domain:"project"/);
-  });
+        assert.match(renderError(error), /domain:"project"/);
+    });
 
-  it("edit 落 global 域但无 projectId：明说无法确认 project 域，不谎报「没有」", async () => {
-    const ctx = getNovelMasterTestContext();
-    const skills = SkillsServiceFactory.create(ctx.conn);
-    const name = `no-projid-${testIsolationSuffix()}`;
+    it("edit 落 global 域但无 projectId：明说无法确认 project 域，不谎报「没有」", async () => {
+        const ctx = getNovelMasterTestContext();
+        const skills = SkillsServiceFactory.create(ctx.conn);
+        const name = `no-projid-${testIsolationSuffix()}`;
 
-    const raw = await captureError(() =>
-      skills.editSkillFile(
-        "global",
-        name,
-        undefined,
-        { oldString: "正文", newString: "改写" }
-      )
-    );
-    const error = asSkillError(raw, "global 域无 projectId");
+        const raw = await captureError(() =>
+            skills.editSkillFile({ domain: "global", name, match: { oldString: "正文", newString: "改写" } })
+        );
+        const error = asSkillError(raw, "global 域无 projectId");
 
-    assert.match(renderError(error), /未能确认 project 域/);
-    assert.ok(
-      !/domain:"project"/.test(renderError(error)),
-      `查不了就不该指示切域，实际：${error.message}`
-    );
-  });
+        assert.match(renderError(error), /未能确认 project 域/);
+        assert.ok(
+            !/domain:"project"/.test(renderError(error)),
+            `查不了就不该指示切域，实际：${error.message}`
+        );
+    });
 
-  it("两域都不存在：给新建提示，不误导去改另一域", async () => {
-    const ctx = getNovelMasterTestContext();
-    const skills = SkillsServiceFactory.create(ctx.conn);
-    const suffix = testIsolationSuffix();
-    const name = `nowhere-${suffix}`;
-    const project = unwrap(await ctx.projects.create(`P-${suffix}`));
+    it("两域都不存在：给新建提示，不误导去改另一域", async () => {
+        const ctx = getNovelMasterTestContext();
+        const skills = SkillsServiceFactory.create(ctx.conn);
+        const suffix = testIsolationSuffix();
+        const name = `nowhere-${suffix}`;
+        const project = unwrap(await ctx.projects.create(`P-${suffix}`));
 
-    const raw = await captureError(() =>
-      skills.editSkillFile(
-        "project",
-        name,
-        undefined,
-        { oldString: "正文", newString: "改写" },
-        project.id
-      )
-    );
-    const error = asSkillError(raw, "两域皆无");
+        const raw = await captureError(() =>
+            skills.editSkillFile({ domain: "project", name, match: { oldString: "正文", newString: "改写" }, projectId: project.id })
+        );
+        const error = asSkillError(raw, "两域皆无");
 
-    assert.ok(
-      !/domain:"global"/.test(renderError(error)),
-      `另一域没有该技能时不应提示切域，实际：${error.message}`
-    );
-    assert.match(renderError(error), /新建/);
-  });
+        assert.ok(
+            !/domain:"global"/.test(renderError(error)),
+            `另一域没有该技能时不应提示切域，实际：${error.message}`
+        );
+        assert.match(renderError(error), /新建/);
+    });
 
-  it("write 落 project 域、技能只在 global 域：在 project 域新建副本，不动 global", async () => {
-    const ctx = getNovelMasterTestContext();
-    const skills = SkillsServiceFactory.create(ctx.conn);
-    const suffix = testIsolationSuffix();
-    const name = `global-only-w-${suffix}`;
-    const project = unwrap(await ctx.projects.create(`P-${suffix}`));
+    it("write 落 project 域、技能只在 global 域：在 project 域新建副本，不动 global", async () => {
+        const ctx = getNovelMasterTestContext();
+        const skills = SkillsServiceFactory.create(ctx.conn);
+        const suffix = testIsolationSuffix();
+        const name = `global-only-w-${suffix}`;
+        const project = unwrap(await ctx.projects.create(`P-${suffix}`));
 
-    unwrap(await skills.writeSkillFile("global", name, undefined, entry(name, "全局技能")));
-    unwrap(await skills.writeSkillFile("project", name, undefined, "覆盖", project.id));
+        unwrap(await skills.writeSkillFile({ domain: "global", name, content: entry(name, "全局技能") }));
+        unwrap(await skills.writeSkillFile({ domain: "project", name, content: "覆盖", projectId: project.id }));
 
-    // write 语义 = 向新目录写即新建（tools.port 既有约定），不是「找到生效副本改」
-    const projectCopy = unwrap(await skills.readSkillFile(
-      "project",
-      name,
-      undefined,
-      project.id
-    ));
-    assert.equal(projectCopy.domain, "project");
-    assert.equal(projectCopy.content, "覆盖");
+        // write 语义 = 向新目录写即新建（tools.port 既有约定），不是「找到生效副本改」
+        const projectCopy = unwrap(await skills.readSkillFile(
+            "project",
+            name,
+            undefined,
+            project.id
+        ));
+        assert.equal(projectCopy.domain, "project");
+        assert.equal(projectCopy.content, "覆盖");
 
-    const global = unwrap(await skills.readSkillFile("global", name));
-    assert.match(global.content, /全局技能/, "global 域本体不应被 write 波及");
-  });
+        const global = unwrap(await skills.readSkillFile("global", name));
+        assert.match(global.content, /全局技能/, "global 域本体不应被 write 波及");
+    });
 
-  it("显式传对 domain 时 edit 正常成功（防止改坏正向路径）", async () => {
-    const ctx = getNovelMasterTestContext();
-    const skills = SkillsServiceFactory.create(ctx.conn);
-    const name = `global-ok-${testIsolationSuffix()}`;
+    it("显式传对 domain 时 edit 正常成功（防止改坏正向路径）", async () => {
+        const ctx = getNovelMasterTestContext();
+        const skills = SkillsServiceFactory.create(ctx.conn);
+        const name = `global-ok-${testIsolationSuffix()}`;
 
-    unwrap(await skills.writeSkillFile("global", name, undefined, entry(name, "全局技能")));
+        unwrap(await skills.writeSkillFile({ domain: "global", name, content: entry(name, "全局技能") }));
 
-    const result = unwrap(await skills.editSkillFile(
-      "global",
-      name,
-      undefined,
-      { oldString: "正文", newString: "改写后的正文" }
-    ));
+        const result = unwrap(await skills.editSkillFile({ domain: "global", name, match: { oldString: "正文", newString: "改写后的正文" } }));
 
-    assert.ok(result.replacements > 0);
-    const read = unwrap(await skills.readSkillFile("global", name));
-    assert.match(read.content, /改写后的正文/);
-  });
+        assert.ok(result.replacements > 0);
+        const read = unwrap(await skills.readSkillFile("global", name));
+        assert.match(read.content, /改写后的正文/);
+    });
 
-  it("非 NOT_FOUND 的写失败原样透传，不被误转成域错误", async () => {
-    const ctx = getNovelMasterTestContext();
-    const skills = SkillsServiceFactory.create(ctx.conn);
-    const name = `nomatch-${testIsolationSuffix()}`;
+    it("非 NOT_FOUND 的写失败原样透传，不被误转成域错误", async () => {
+        const ctx = getNovelMasterTestContext();
+        const skills = SkillsServiceFactory.create(ctx.conn);
+        const name = `nomatch-${testIsolationSuffix()}`;
 
-    unwrap(await skills.writeSkillFile("global", name, undefined, entry(name, "全局技能")));
+        unwrap(await skills.writeSkillFile({ domain: "global", name, content: entry(name, "全局技能") }));
 
-    // oldString 匹配不到 = VFS 侧的其它错误码，不应被 rethrowWriteNotFound 吞成域错误
-    const error = await captureError(() =>
-      skills.editSkillFile(
-        "global",
-        name,
-        undefined,
-        { oldString: "绝对不存在的匹配串", newString: "x" }
-      )
-    );
+        // oldString 匹配不到 = VFS 侧的其它错误码，不应被 rethrowWriteNotFound 吞成域错误
+        const error = await captureError(() =>
+            skills.editSkillFile({ domain: "global", name, match: { oldString: "绝对不存在的匹配串", newString: "x" } })
+        );
 
-    assert.ok(
-      !AppErrorOps.is(error, "SKILL_NOT_FOUND"),
-      `匹配失败不应伪装成域内未找到，实际：${error.name}: ${error.message}`
-    );
-  });
+        assert.ok(
+            !AppErrorOps.is(error, "SKILL_NOT_FOUND"),
+            `匹配失败不应伪装成域内未找到，实际：${error.name}: ${error.message}`
+        );
+    });
 });
 
 /** 错误用户可见文案：带 messageKey 时经 tCore 渲染（G1-G3 descriptor 契约），否则回退 message。 */
 function renderError(error: unknown): string {
-  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
-  return textOf(error);
+    const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
+    return textOf(error);
 }
 
 /** 含 cause 链（ToolError 包装 AppError 时 messageKey 在 cause 上）。 */
 function textOf(error: unknown): string {
-  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
-  if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
-  if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
-  return e.message;
+    const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
+    if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
+    if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
+    return e.message;
 }

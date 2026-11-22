@@ -15,82 +15,82 @@ import { Result } from "@/errors/either.js";
 
 /** {@link EphemeralOverlayAgentSession.append} 的消息选项（overlay 不落库，但保留附件透传）。 */
 interface EphemeralAppendOptions {
-  provider?: string | null;
-  modelName?: string | null;
-  raw?: Record<string, unknown> | null;
-  usage?: MessageUsage;
-  /**
+    provider?: string | null;
+    modelName?: string | null;
+    raw?: Record<string, unknown> | null;
+    usage?: MessageUsage;
+    /**
    * 结构化附件：overlay 虽然不落 SQLite，但附件必须带上——
    * event 触发的 agent run 若挂附件，静默丢弃会让提示词链路少掉整份
    * 文件正文（hydrate 读的就是 message.attachments）。
    */
-  attachments?: readonly MessageAttachment[];
+    attachments?: readonly MessageAttachment[];
 }
 
 /**
  * {@link AgentSession} that lists base + overlay messages; {@link append} never hits SQLite.
  */
 export class EphemeralOverlayAgentSession implements AgentSession {
-  private readonly overlay: ChatMessageData[] = [];
-  private nextSeq = 1_000_000_000;
+    private readonly overlay: ChatMessageData[] = [];
+    private nextSeq = 1_000_000_000;
 
-  constructor(private readonly base: AgentSession, readonly sessionId: string) {}
+    constructor(private readonly base: AgentSession, readonly sessionId: string) {}
 
-  /** 工作区归属透传 base——overlay 不改变工作区 session 归属。 */
-  get workplaceScopeSessionId(): string {
-    return this.base.workplaceScopeSessionId;
-  }
-
-  /** KKV 归属透传 base——overlay 不改变 rule_snapshot / file_cache 的归属。 */
-  get kkvScopeSessionId(): string {
-    return this.base.kkvScopeSessionId;
-  }
-
-  async list(): Promise<readonly ChatMessageData[]> {
-    const base = await this.base.list();
-    return [...base, ...this.overlay];
-  }
-
-  async append(role: string, content: MessageContent, options?: EphemeralAppendOptions): Promise<Result<ChatMessageData, AppError>> {
-    const seq = this.nextSeq++;
-    const message: ChatMessageData = {
-      id: `ephemeral-${seq}`,
-      sessionId: this.sessionId,
-      seq,
-      role,
-      content,
-      provider: options?.provider ?? null,
-      modelName: options?.modelName ?? null,
-      raw: options?.raw ?? null,
-      createdAtMs: Date.now(),
-      hidden: false,
-      ...(options?.usage != null ? { usage: options.usage } : {}),
-      ...(options?.attachments != null && options.attachments.length > 0 ? { attachments: options.attachments } : {}),
-    };
-    this.overlay.push(message);
-    return Result.ok(message);
-  }
-
-  hideRange(fromSeq: number, toSeq: number): Promise<Result<number, AppError>> {
-    return this.base.hideRange(fromSeq, toSeq);
-  }
-
-  /** nm-style: keep-public — 检查器跨类同名误判：AgentSession 端口契约方法，三个实现共享此名。 */
-  async truncateAfterMessage(afterMessageId: string | null): Promise<Result<void, AppError>> {
-    // EphemeralOverlayAgentSession 只在 RAM overlay 里追加消息；
-    // base 列表是只读历史，不在本职责范围内截断。
-    if (afterMessageId == null) {
-      this.overlay.length = 0;
-      return Result.ok(undefined);
+    /** 工作区归属透传 base——overlay 不改变工作区 session 归属。 */
+    get workplaceScopeSessionId(): string {
+        return this.base.workplaceScopeSessionId;
     }
-    const idx = this.overlay.findIndex((m) => m.id === afterMessageId);
-    if (idx >= 0) {
-      // anchor 命中 overlay：只截 overlay
-      this.overlay.splice(idx + 1);
-      return Result.ok(undefined);
+
+    /** KKV 归属透传 base——overlay 不改变 rule_snapshot / file_cache 的归属。 */
+    get kkvScopeSessionId(): string {
+        return this.base.kkvScopeSessionId;
     }
-    // anchor 命中 base（turn 起点在历史里）：overlay 整段都是本 turn 写的，全清
-    this.overlay.length = 0;
-    return Result.ok(undefined);
-  }
+
+    async list(): Promise<readonly ChatMessageData[]> {
+        const base = await this.base.list();
+        return [...base, ...this.overlay];
+    }
+
+    async append(role: string, content: MessageContent, options?: EphemeralAppendOptions): Promise<Result<ChatMessageData, AppError>> {
+        const seq = this.nextSeq++;
+        const message: ChatMessageData = {
+            id: `ephemeral-${seq}`,
+            sessionId: this.sessionId,
+            seq,
+            role,
+            content,
+            provider: options?.provider ?? null,
+            modelName: options?.modelName ?? null,
+            raw: options?.raw ?? null,
+            createdAtMs: Date.now(),
+            hidden: false,
+            ...(options?.usage != null ? { usage: options.usage } : {}),
+            ...(options?.attachments != null && options.attachments.length > 0 ? { attachments: options.attachments } : {}),
+        };
+        this.overlay.push(message);
+        return Result.ok(message);
+    }
+
+    hideRange(fromSeq: number, toSeq: number): Promise<Result<number, AppError>> {
+        return this.base.hideRange(fromSeq, toSeq);
+    }
+
+    /** nm-style: keep-public — 检查器跨类同名误判：AgentSession 端口契约方法，三个实现共享此名。 */
+    async truncateAfterMessage(afterMessageId: string | null): Promise<Result<void, AppError>> {
+        // EphemeralOverlayAgentSession 只在 RAM overlay 里追加消息；
+        // base 列表是只读历史，不在本职责范围内截断。
+        if (afterMessageId == null) {
+            this.overlay.length = 0;
+            return Result.ok(undefined);
+        }
+        const idx = this.overlay.findIndex((m) => m.id === afterMessageId);
+        if (idx >= 0) {
+            // anchor 命中 overlay：只截 overlay
+            this.overlay.splice(idx + 1);
+            return Result.ok(undefined);
+        }
+        // anchor 命中 base（turn 起点在历史里）：overlay 整段都是本 turn 写的，全清
+        this.overlay.length = 0;
+        return Result.ok(undefined);
+    }
 }

@@ -10,255 +10,255 @@ import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-t
 import {  rejectsErr  } from "../helpers/result-unwrap.js";
 
 const BASE_DEF: AgentDefinition = {
-  name: "test",
-  prompts: { persist: [], dynamic: [] },
+    name: "test",
+    prompts: { persist: [], dynamic: [] },
 };
 
 function vfsRegistryNames(): string[] {
-  const registry = new ToolRegistry<BuiltinToolContext>();
-  BuiltinTools.register(registry);
-  return registry.list();
+    const registry = new ToolRegistry<BuiltinToolContext>();
+    BuiltinTools.register(registry);
+    return registry.list();
 }
 
 const mockToolCtx: BuiltinToolContext = {
-  vfs: {} as never,
-  projectId: "proj",
-  sessionId: "sess",
-  subagent: {
-    agentRegistry: {} as never,
-    messages: {} as never,
-    sessions: {} as never,
-    createChildSession: async () => "",
-    runChildAgent: async () => ({} as never),
-    resolveChildModelId: () => ({ savedModelId: "", workspaceModelId: "" }),
-    depth: 0,
-    parentSignal: new AbortController().signal,
-    callableAgents: [{ name: "general" }],
-  },
+    vfs: {} as never,
+    projectId: "proj",
+    sessionId: "sess",
+    subagent: {
+        agentRegistry: {} as never,
+        messages: {} as never,
+        sessions: {} as never,
+        createChildSession: async () => "",
+        runChildAgent: async () => ({} as never),
+        resolveChildModelId: () => ({ savedModelId: "", workspaceModelId: "" }),
+        depth: 0,
+        parentSignal: new AbortController().signal,
+        callableAgents: [{ name: "general" }],
+    },
 };
 
 describe("agent tool policy", () => {
-  const registryNames = new Set(vfsRegistryNames());
+    const registryNames = new Set(vfsRegistryNames());
 
-  function expectPolicyError(result: { readonly ok: boolean; readonly error?: unknown }): AppError<"AGENT_INVALID_TOOL_POLICY"> {
-    assert.equal(result.ok, false);
-    if (result.ok) {
-      throw new Error("expected tool policy error");
+    function expectPolicyError(result: { readonly ok: boolean; readonly error?: unknown }): AppError<"AGENT_INVALID_TOOL_POLICY"> {
+        assert.equal(result.ok, false);
+        if (result.ok) {
+            throw new Error("expected tool policy error");
+        }
+        assert.ok(AppErrorOps.is(result.error, "AGENT_INVALID_TOOL_POLICY"));
+        return result.error;
     }
-    assert.ok(AppErrorOps.is(result.error, "AGENT_INVALID_TOOL_POLICY"));
-    return result.error;
-  }
 
-  it("T1: no tools config exposes all builtin tools", () => {
-    const base = new ToolRegistry<BuiltinToolContext>();
-    BuiltinTools.register(base);
-    const filtered = AgentTools.resolveRegistry(base, BASE_DEF);
-    assert.deepEqual(filtered.list().sort(), vfsRegistryNames().sort());
-    assert.equal(ToolDefinitions.fromRegistry(filtered, mockToolCtx).length, vfsRegistryNames().length);
-  });
+    it("T1: no tools config exposes all builtin tools", () => {
+        const base = new ToolRegistry<BuiltinToolContext>();
+        BuiltinTools.register(base);
+        const filtered = AgentTools.resolveRegistry(base, BASE_DEF);
+        assert.deepEqual(filtered.list().sort(), vfsRegistryNames().sort());
+        assert.equal(ToolDefinitions.fromRegistry(filtered, mockToolCtx).length, vfsRegistryNames().length);
+    });
 
-  it("T2: allow list restricts LLM tools", () => {
-    const def: AgentDefinition = {
-      ...BASE_DEF,
-      tools: { allow: ["read", "grep"] },
-    };
-    const base = new ToolRegistry<BuiltinToolContext>();
-    BuiltinTools.register(base);
-    const filtered = AgentTools.resolveRegistry(base, def);
-    assert.deepEqual(filtered.list().sort(), ["grep", "read"]);
-    assert.equal(ToolDefinitions.fromRegistry(filtered, mockToolCtx).length, 2);
-    assert.equal(filtered.get("write"), undefined);
-  });
+    it("T2: allow list restricts LLM tools", () => {
+        const def: AgentDefinition = {
+            ...BASE_DEF,
+            tools: { allow: ["read", "grep"] },
+        };
+        const base = new ToolRegistry<BuiltinToolContext>();
+        BuiltinTools.register(base);
+        const filtered = AgentTools.resolveRegistry(base, def);
+        assert.deepEqual(filtered.list().sort(), ["grep", "read"]);
+        assert.equal(ToolDefinitions.fromRegistry(filtered, mockToolCtx).length, 2);
+        assert.equal(filtered.get("write"), undefined);
+    });
 
-  it("T3: empty allow yields no tools", () => {
-    const def: AgentDefinition = {
-      ...BASE_DEF,
-      tools: { allow: [] },
-    };
-    const base = new ToolRegistry<BuiltinToolContext>();
-    BuiltinTools.register(base);
-    const filtered = AgentTools.resolveRegistry(base, def);
-    assert.deepEqual(filtered.list(), []);
-    assert.equal(ToolDefinitions.fromRegistry(filtered, mockToolCtx).length, 0);
-  });
+    it("T3: empty allow yields no tools", () => {
+        const def: AgentDefinition = {
+            ...BASE_DEF,
+            tools: { allow: [] },
+        };
+        const base = new ToolRegistry<BuiltinToolContext>();
+        BuiltinTools.register(base);
+        const filtered = AgentTools.resolveRegistry(base, def);
+        assert.deepEqual(filtered.list(), []);
+        assert.equal(ToolDefinitions.fromRegistry(filtered, mockToolCtx).length, 0);
+    });
 
-  it("T4: deny list removes named tools", () => {
-    const def: AgentDefinition = {
-      ...BASE_DEF,
-      tools: { deny: ["write"] },
-    };
-    const base = new ToolRegistry<BuiltinToolContext>();
-    BuiltinTools.register(base);
-    const filtered = AgentTools.resolveRegistry(base, def);
-    assert.ok(!filtered.list().includes("write"));
-    assert.ok(filtered.list().includes("read"));
-    assert.equal(filtered.list().length, vfsRegistryNames().length - 1);
-  });
+    it("T4: deny list removes named tools", () => {
+        const def: AgentDefinition = {
+            ...BASE_DEF,
+            tools: { deny: ["write"] },
+        };
+        const base = new ToolRegistry<BuiltinToolContext>();
+        BuiltinTools.register(base);
+        const filtered = AgentTools.resolveRegistry(base, def);
+        assert.ok(!filtered.list().includes("write"));
+        assert.ok(filtered.list().includes("read"));
+        assert.equal(filtered.list().length, vfsRegistryNames().length - 1);
+    });
 
-  it("T5: allow and deny together fails validation", () => {
-    expectPolicyError(AgentToolPolicyValidator.validate({ allow: ["read"], deny: ["write"] }, registryNames));
-  });
+    it("T5: allow and deny together fails validation", () => {
+        expectPolicyError(AgentToolPolicyValidator.validate({ allow: ["read"], deny: ["write"] }, registryNames));
+    });
 
-  it("T5b: 不可信的 allow/deny 形状返回 policy error 而不是 TypeError", () => {
-    expectPolicyError(AgentToolPolicyValidator.validate({ allow: "read" } as unknown as AgentToolPolicy, registryNames));
-    expectPolicyError(AgentToolPolicyValidator.validate({ deny: [1] } as unknown as AgentToolPolicy, registryNames));
-  });
+    it("T5b: 不可信的 allow/deny 形状返回 policy error 而不是 TypeError", () => {
+        expectPolicyError(AgentToolPolicyValidator.validate({ allow: "read" } as unknown as AgentToolPolicy, registryNames));
+        expectPolicyError(AgentToolPolicyValidator.validate({ deny: [1] } as unknown as AgentToolPolicy, registryNames));
+    });
 
-  it("accepts legacy vfs.* names in allow list", () => {
-    const def: AgentDefinition = {
-      ...BASE_DEF,
-      tools: { allow: ["vfs.read", "vfs.grep"] },
-    };
-    const base = new ToolRegistry<BuiltinToolContext>();
-    BuiltinTools.register(base);
-    const filtered = AgentTools.resolveRegistry(base, def);
-    assert.deepEqual(filtered.list().sort(), ["grep", "read"]);
-  });
+    it("accepts legacy vfs.* names in allow list", () => {
+        const def: AgentDefinition = {
+            ...BASE_DEF,
+            tools: { allow: ["vfs.read", "vfs.grep"] },
+        };
+        const base = new ToolRegistry<BuiltinToolContext>();
+        BuiltinTools.register(base);
+        const filtered = AgentTools.resolveRegistry(base, def);
+        assert.deepEqual(filtered.list().sort(), ["grep", "read"]);
+    });
 
-  it("T6: unknown tool name fails validation", () => {
-    expectPolicyError(AgentToolPolicyValidator.validate({ allow: ["vfs.nope"] }, registryNames));
-  });
+    it("T6: unknown tool name fails validation", () => {
+        expectPolicyError(AgentToolPolicyValidator.validate({ allow: ["vfs.nope"] }, registryNames));
+    });
 
-  it("T9: legacy replace tool name fails validation with migration hint", () => {
-    const error = expectPolicyError(AgentToolPolicyValidator.validate({ allow: ["replace"] }, registryNames));
-    assert.ok(error.message.includes("replace"));
-    assert.ok(error.message.includes("edit"));
-  });
+    it("T9: legacy replace tool name fails validation with migration hint", () => {
+        const error = expectPolicyError(AgentToolPolicyValidator.validate({ allow: ["replace"] }, registryNames));
+        assert.ok(error.message.includes("replace"));
+        assert.ok(error.message.includes("edit"));
+    });
 
-  it("AgentDefinitionValidator.validate runs tool policy when names provided", async () => {
-    const result = await AgentDefinitionValidator.validate({ ...BASE_DEF, tools: { allow: ["vfs.nope"] } }, { registeredToolNames: vfsRegistryNames() });
-    expectPolicyError(result);
-  });
+    it("AgentDefinitionValidator.validate runs tool policy when names provided", async () => {
+        const result = await AgentDefinitionValidator.validate({ ...BASE_DEF, tools: { allow: ["vfs.nope"] } }, { registeredToolNames: vfsRegistryNames() });
+        expectPolicyError(result);
+    });
 
-  it("empty deny matches default (all tools)", () => {
-    const def: AgentDefinition = { ...BASE_DEF, tools: { deny: [] } };
-    const base = new ToolRegistry<BuiltinToolContext>();
-    BuiltinTools.register(base);
-    const filtered = AgentTools.resolveRegistry(base, def);
-    assert.deepEqual(filtered.list().sort(), vfsRegistryNames().sort());
-  });
+    it("empty deny matches default (all tools)", () => {
+        const def: AgentDefinition = { ...BASE_DEF, tools: { deny: [] } };
+        const base = new ToolRegistry<BuiltinToolContext>();
+        BuiltinTools.register(base);
+        const filtered = AgentTools.resolveRegistry(base, def);
+        assert.deepEqual(filtered.list().sort(), vfsRegistryNames().sort());
+    });
 
-  it("A10: allow read-only rejects fs with NOT_FOUND", async () => {
-    const def: AgentDefinition = {
-      ...BASE_DEF,
-      tools: { allow: ["read", "grep"] },
-    };
-    const base = new ToolRegistry<BuiltinToolContext>();
-    BuiltinTools.register(base);
-    const filtered = AgentTools.resolveRegistry(base, def);
-    const runner = new ToolRunner(filtered);
+    it("A10: allow read-only rejects fs with NOT_FOUND", async () => {
+        const def: AgentDefinition = {
+            ...BASE_DEF,
+            tools: { allow: ["read", "grep"] },
+        };
+        const base = new ToolRegistry<BuiltinToolContext>();
+        BuiltinTools.register(base);
+        const filtered = AgentTools.resolveRegistry(base, def);
+        const runner = new ToolRunner(filtered);
 
-    await rejectsErr(
-      runner.call("fs", { command: "mv /a /b" }, {} as BuiltinToolContext),
-      (e: unknown) => assert.ok(AppErrorOps.is(e, "TOOL_NOT_FOUND"))
-    );
-  });
+        await rejectsErr(
+            runner.call("fs", { command: "mv /a /b" }, {} as BuiltinToolContext),
+            (e: unknown) => assert.ok(AppErrorOps.is(e, "TOOL_NOT_FOUND"))
+        );
+    });
 
-  // T-SK7a：skill 可配置（allow / deny 校验通过，deny 后运行时 registry 不含它）
-  it("T-SK7a: skill 在 allow / deny 名单中均校验通过", () => {
-    // allow 名单含 skill：校验通过
-    assert.equal(AgentToolPolicyValidator.validate({ allow: ["skill", "read"] }, registryNames).ok, true);
-    // deny 名单含 skill：校验同样通过
-    assert.equal(AgentToolPolicyValidator.validate({ deny: ["skill"] }, registryNames).ok, true);
-    // 未知名 + skill 仍报错（skill 不是白名单里的例外）
-    expectPolicyError(AgentToolPolicyValidator.validate({ allow: ["skill", "vfs.nope"] }, registryNames));
-  });
+    // T-SK7a：skill 可配置（allow / deny 校验通过，deny 后运行时 registry 不含它）
+    it("T-SK7a: skill 在 allow / deny 名单中均校验通过", () => {
+        // allow 名单含 skill：校验通过
+        assert.equal(AgentToolPolicyValidator.validate({ allow: ["skill", "read"] }, registryNames).ok, true);
+        // deny 名单含 skill：校验同样通过
+        assert.equal(AgentToolPolicyValidator.validate({ deny: ["skill"] }, registryNames).ok, true);
+        // 未知名 + skill 仍报错（skill 不是白名单里的例外）
+        expectPolicyError(AgentToolPolicyValidator.validate({ allow: ["skill", "vfs.nope"] }, registryNames));
+    });
 
-  it("T-SK7a: deny skill 后运行时 resolve 产物不含 skill（其余工具不受影响）", () => {
-    const def: AgentDefinition = {
-      ...BASE_DEF,
-      tools: { deny: ["skill"] },
-    };
-    const base = new ToolRegistry<BuiltinToolContext>();
-    BuiltinTools.register(base);
-    const filtered = AgentTools.resolveRegistry(base, def);
-    assert.ok(!filtered.list().includes("skill"));
-    assert.ok(filtered.list().includes("read"));
-    assert.ok(filtered.list().includes("task"));
-    assert.equal(filtered.list().length, vfsRegistryNames().length - 1);
-    // LLM 侧定义也不暴露（toolsFromRegistry 只遍历 resolve 后的 registry）
-    assert.ok(!ToolDefinitions.fromRegistry(filtered, mockToolCtx).some((t) => t.name === "skill"));
-    // TODO(Step 10)：deny 后 skillsIndex 置空的 D4 联动在提示词预算侧验证；
-    // `$` 引用不受影响（注入全文不依赖工具），属后续步骤验收。
-  });
+    it("T-SK7a: deny skill 后运行时 resolve 产物不含 skill（其余工具不受影响）", () => {
+        const def: AgentDefinition = {
+            ...BASE_DEF,
+            tools: { deny: ["skill"] },
+        };
+        const base = new ToolRegistry<BuiltinToolContext>();
+        BuiltinTools.register(base);
+        const filtered = AgentTools.resolveRegistry(base, def);
+        assert.ok(!filtered.list().includes("skill"));
+        assert.ok(filtered.list().includes("read"));
+        assert.ok(filtered.list().includes("task"));
+        assert.equal(filtered.list().length, vfsRegistryNames().length - 1);
+        // LLM 侧定义也不暴露（toolsFromRegistry 只遍历 resolve 后的 registry）
+        assert.ok(!ToolDefinitions.fromRegistry(filtered, mockToolCtx).some((t) => t.name === "skill"));
+        // TODO(Step 10)：deny 后 skillsIndex 置空的 D4 联动在提示词预算侧验证；
+        // `$` 引用不受影响（注入全文不依赖工具），属后续步骤验收。
+    });
 
-  // T-SK13：技能能力总开关（prompts.skillsEnabled）
-  it("T-SK13: skillsEnabled=false 强制移除 skill 工具（即便 allow 名单含它）；缺省/true 保留", () => {
-    const def: AgentDefinition = {
-      ...BASE_DEF,
-      prompts: { ...BASE_DEF.prompts, skillsEnabled: false },
-      tools: { allow: ["skill", "read"] },
-    };
-    const base = new ToolRegistry<BuiltinToolContext>();
-    BuiltinTools.register(base);
-    const filtered = AgentTools.resolveRegistry(base, def);
-    assert.ok(!filtered.list().includes("skill"));
-    assert.ok(filtered.list().includes("read"));
+    // T-SK13：技能能力总开关（prompts.skillsEnabled）
+    it("T-SK13: skillsEnabled=false 强制移除 skill 工具（即便 allow 名单含它）；缺省/true 保留", () => {
+        const def: AgentDefinition = {
+            ...BASE_DEF,
+            prompts: { ...BASE_DEF.prompts, skillsEnabled: false },
+            tools: { allow: ["skill", "read"] },
+        };
+        const base = new ToolRegistry<BuiltinToolContext>();
+        BuiltinTools.register(base);
+        const filtered = AgentTools.resolveRegistry(base, def);
+        assert.ok(!filtered.list().includes("skill"));
+        assert.ok(filtered.list().includes("read"));
 
-    // 缺省（字段未写）与显式 true 均保留
-    const defDefault: AgentDefinition = { ...BASE_DEF, tools: { allow: ["skill"] } };
-    assert.ok(AgentTools.resolveRegistry(base, defDefault).list().includes("skill"));
-    const defOn: AgentDefinition = {
-      ...BASE_DEF,
-      prompts: { ...BASE_DEF.prompts, skillsEnabled: true },
-      tools: { allow: ["skill"] },
-    };
-    assert.ok(AgentTools.resolveRegistry(base, defOn).list().includes("skill"));
-  });
+        // 缺省（字段未写）与显式 true 均保留
+        const defDefault: AgentDefinition = { ...BASE_DEF, tools: { allow: ["skill"] } };
+        assert.ok(AgentTools.resolveRegistry(base, defDefault).list().includes("skill"));
+        const defOn: AgentDefinition = {
+            ...BASE_DEF,
+            prompts: { ...BASE_DEF.prompts, skillsEnabled: true },
+            tools: { allow: ["skill"] },
+        };
+        assert.ok(AgentTools.resolveRegistry(base, defOn).list().includes("skill"));
+    });
 
-  it("T-SK7a: allow 仅 skill 时 registry 只剩它", () => {
-    const def: AgentDefinition = {
-      ...BASE_DEF,
-      tools: { allow: ["skill"] },
-    };
-    const base = new ToolRegistry<BuiltinToolContext>();
-    BuiltinTools.register(base);
-    const filtered = AgentTools.resolveRegistry(base, def);
-    assert.deepEqual(filtered.list(), ["skill"]);
-  });
+    it("T-SK7a: allow 仅 skill 时 registry 只剩它", () => {
+        const def: AgentDefinition = {
+            ...BASE_DEF,
+            tools: { allow: ["skill"] },
+        };
+        const base = new ToolRegistry<BuiltinToolContext>();
+        BuiltinTools.register(base);
+        const filtered = AgentTools.resolveRegistry(base, def);
+        assert.deepEqual(filtered.list(), ["skill"]);
+    });
 
-  // T-AG4：agent 管理工具的摘除与策略路径（对应 PRD 验收 7）
-  it("T-AG4: mode 为 subagent 或 depth>=2 的注册表不含 agent（与 task 同分支摘除）", () => {
-    const base = new ToolRegistry<BuiltinToolContext>();
-    BuiltinTools.register(base);
+    // T-AG4：agent 管理工具的摘除与策略路径（对应 PRD 验收 7）
+    it("T-AG4: mode 为 subagent 或 depth>=2 的注册表不含 agent（与 task 同分支摘除）", () => {
+        const base = new ToolRegistry<BuiltinToolContext>();
+        BuiltinTools.register(base);
 
-    // 子 agent（mode === "subagent"）：task / agent 均强制移除
-    const subDef: AgentDefinition = { ...BASE_DEF, mode: "subagent" };
-    const sub = AgentTools.resolveRegistry(base, subDef);
-    assert.ok(!sub.list().includes("agent"));
-    assert.ok(!sub.list().includes("task"));
-    assert.ok(sub.list().includes("read"));
-    // LLM 侧定义也不暴露（toolsFromRegistry 只遍历 resolve 后的 registry）
-    assert.ok(!ToolDefinitions.fromRegistry(sub, mockToolCtx).some((t) => t.name === "agent"));
+        // 子 agent（mode === "subagent"）：task / agent 均强制移除
+        const subDef: AgentDefinition = { ...BASE_DEF, mode: "subagent" };
+        const sub = AgentTools.resolveRegistry(base, subDef);
+        assert.ok(!sub.list().includes("agent"));
+        assert.ok(!sub.list().includes("task"));
+        assert.ok(sub.list().includes("read"));
+        // LLM 侧定义也不暴露（toolsFromRegistry 只遍历 resolve 后的 registry）
+        assert.ok(!ToolDefinitions.fromRegistry(sub, mockToolCtx).some((t) => t.name === "agent"));
 
-    // 孙 agent（depth >= 2，递归上限双保险）：即使 allow 显式含 agent 也移除
-    const grandDef: AgentDefinition = {
-      ...BASE_DEF,
-      tools: { allow: ["agent", "read"] },
-    };
-    const grand = AgentTools.resolveRegistry(base, grandDef, { depth: 2 });
-    assert.ok(!grand.list().includes("agent"));
-    assert.ok(!grand.list().includes("task"));
-    assert.ok(grand.list().includes("read"));
+        // 孙 agent（depth >= 2，递归上限双保险）：即使 allow 显式含 agent 也移除
+        const grandDef: AgentDefinition = {
+            ...BASE_DEF,
+            tools: { allow: ["agent", "read"] },
+        };
+        const grand = AgentTools.resolveRegistry(base, grandDef, { depth: 2 });
+        assert.ok(!grand.list().includes("agent"));
+        assert.ok(!grand.list().includes("task"));
+        assert.ok(grand.list().includes("read"));
 
-    // 主 agent（depth=0、非 subagent）保留 agent
-    const main = AgentTools.resolveRegistry(base, BASE_DEF);
-    assert.ok(main.list().includes("agent"));
-  });
+        // 主 agent（depth=0、非 subagent）保留 agent
+        const main = AgentTools.resolveRegistry(base, BASE_DEF);
+        assert.ok(main.list().includes("agent"));
+    });
 
-  it("T-AG4: deny 含 agent → 摘除；allow 显式含 agent → 保留（主 agent 策略路径）", () => {
-    const base = new ToolRegistry<BuiltinToolContext>();
-    BuiltinTools.register(base);
+    it("T-AG4: deny 含 agent → 摘除；allow 显式含 agent → 保留（主 agent 策略路径）", () => {
+        const base = new ToolRegistry<BuiltinToolContext>();
+        BuiltinTools.register(base);
 
-    // deny 名单校验通过（agent 是合法策略名）
-    assert.equal(AgentToolPolicyValidator.validate({ deny: ["agent"] }, registryNames).ok, true);
-    const denied = AgentTools.resolveRegistry(base, { ...BASE_DEF, tools: { deny: ["agent"] } });
-    assert.ok(!denied.list().includes("agent"));
-    assert.equal(denied.list().length, vfsRegistryNames().length - 1);
+        // deny 名单校验通过（agent 是合法策略名）
+        assert.equal(AgentToolPolicyValidator.validate({ deny: ["agent"] }, registryNames).ok, true);
+        const denied = AgentTools.resolveRegistry(base, { ...BASE_DEF, tools: { deny: ["agent"] } });
+        assert.ok(!denied.list().includes("agent"));
+        assert.equal(denied.list().length, vfsRegistryNames().length - 1);
 
-    // allow 名单校验通过，且主 agent 显式 allow 含 agent 时保留
-    assert.equal(AgentToolPolicyValidator.validate({ allow: ["agent", "read"] }, registryNames).ok, true);
-    const allowed = AgentTools.resolveRegistry(base, { ...BASE_DEF, tools: { allow: ["agent", "read"] } });
-    assert.deepEqual(allowed.list().sort(), ["agent", "read"]);
-  });
+        // allow 名单校验通过，且主 agent 显式 allow 含 agent 时保留
+        assert.equal(AgentToolPolicyValidator.validate({ allow: ["agent", "read"] }, registryNames).ok, true);
+        const allowed = AgentTools.resolveRegistry(base, { ...BASE_DEF, tools: { allow: ["agent", "read"] } });
+        assert.deepEqual(allowed.list().sort(), ["agent", "read"]);
+    });
 });

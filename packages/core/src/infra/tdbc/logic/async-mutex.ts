@@ -8,15 +8,15 @@
 
 /** 每个 {@link AsyncMutex.run} 都等前一个任务 settle 后才开始。 */
 export class AsyncMutex {
-  private tail: Promise<void> = Promise.resolve();
+    private tail: Promise<void> = Promise.resolve();
 
-  /** 入队 `fn` 并返回它的结果。 */
-  run<T>(fn: () => T | Promise<T>): Promise<T> {
-    const result = this.tail.then(() => fn());
-    this.tail = result.then(
-      () => undefined,
-      () => undefined,
-    );
-    return result;
-  }
+    /** 入队 `fn` 并返回它的结果。 */
+    run<T>(fn: () => T | Promise<T>): Promise<T> {
+        const result = this.tail.then(() => fn());
+        this.tail = result.then(
+            () => undefined,
+            () => undefined,
+        );
+        return result;
+    }
 }

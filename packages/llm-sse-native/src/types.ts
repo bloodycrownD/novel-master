@@ -6,27 +6,27 @@
 
 /** LlmSseHeaders 事件载荷：响应头到达（status 已知，流继续）。 */
 export interface LlmSseHeadersEvent {
-  readonly requestId: string;
-  readonly status: number;
-  readonly contentType: string | null;
+    readonly requestId: string;
+    readonly status: number;
+    readonly contentType: string | null;
 }
 
 /** LlmSseChunk 事件载荷：native 合批（100ms | 64K 字符先到者，阈值按 UTF-16 字符计）后的文本批。 */
 export interface LlmSseChunkEvent {
-  readonly requestId: string;
-  readonly text: string;
+    readonly requestId: string;
+    readonly text: string;
 }
 
 /** LlmSseDone 事件载荷：响应体搬运完毕。 */
 export interface LlmSseDoneEvent {
-  readonly requestId: string;
+    readonly requestId: string;
 }
 
 /** LlmSseError 事件载荷：kind 语义——network 连接/读失败、timeout callTimeout（读超时已退役，仅防御性文案路径）、http 状态错误。 */
 export interface LlmSseErrorEvent {
-  readonly requestId: string;
-  readonly kind: "network" | "timeout" | "http";
-  readonly message: string;
+    readonly requestId: string;
+    readonly kind: "network" | "timeout" | "http";
+    readonly message: string;
 }
 
 /** native 事件名常量（与 Kotlin 侧 LlmSseModule companion 对齐）。 */
@@ -52,42 +52,42 @@ export const LLM_SSE_DEFAULT_CALL_TIMEOUT_MS = 600_000;
  * 生产实现包 NativeEventEmitter；测试注入 fake 即可直测 wrapper 逻辑。
  */
 export interface LlmSseEventSink {
-  addListener(name: string, listener: (event: unknown) => void): () => void;
+    addListener(name: string, listener: (event: unknown) => void): () => void;
 }
 
 /** Kotlin LlmSseNative 模块的 typed 形状（NativeModules interop）。 */
 export interface LlmSseNativeModule {
-  sseConnect(
-    requestId: string,
-    url: string,
-    headersKv: string[],
-    body: string,
-    readTimeoutMs: number,
-    callTimeoutMs: number,
-  ): void;
-  sseAbort(requestId: string): void;
-  /**
+    sseConnect(
+        requestId: string,
+        url: string,
+        headersKv: string[],
+        body: string,
+        readTimeoutMs: number,
+        callTimeoutMs: number,
+    ): void;
+    sseAbort(requestId: string): void;
+    /**
    * 非流式请求-响应。`requestId` 只是取消路由键（JS 侧生成，与流式路径的
    * requestId 各自独立命名空间），不影响请求/响应内容。
    */
-  request(
-    requestId: string,
-    method: "GET" | "POST",
-    url: string,
-    headersKv: string[],
-    body: string | null,
-    callTimeoutMs: number,
-  ): Promise<{ status: number; contentType: string | null; body: string }>;
-  /**
+    request(
+        requestId: string,
+        method: "GET" | "POST",
+        url: string,
+        headersKv: string[],
+        body: string | null,
+        callTimeoutMs: number,
+    ): Promise<{ status: number; contentType: string | null; body: string }>;
+    /**
    * 取消进行中的 `request`：native 侧 `Call.cancel()` 真断连，原 promise 以
    * `code: "abort"` reject；`requestId` 不存在（已结束/从未发起）静默 no-op。
    */
-  requestAbort(requestId: string): void;
+    requestAbort(requestId: string): void;
 }
 
 /** bridge = native 模块 + 事件通道（transport 的全部环境依赖，测试注入点）。 */
 export interface LlmSseNativeBridge extends LlmSseNativeModule {
-  readonly events: LlmSseEventSink;
+    readonly events: LlmSseEventSink;
 }
 
 /**
@@ -99,25 +99,25 @@ export interface LlmSseNativeBridge extends LlmSseNativeModule {
  * `opts.nativeTimeouts` 为本包扩展位（core port 不携带时用 native 默认值）。
  */
 export interface SseTransport {
-  post(
-    url: string,
-    init: RequestInit,
-    onChunk: (chunk: string) => void,
-    opts?: {
-      providerId?: string;
-      signal?: AbortSignal;
-      logTag?: string;
-      /**
+    post(
+        url: string,
+        init: RequestInit,
+        onChunk: (chunk: string) => void,
+        opts?: {
+            providerId?: string;
+            signal?: AbortSignal;
+            logTag?: string;
+            /**
        * core 下发的整调用预算（毫秒，= `SSE_WHOLE_CALL_TIMEOUT_MS` 600_000）；
        * 存在时覆盖 `nativeTimeouts.callMs`，缺省传 -1 由 Kotlin 默认 600s 兜底。
        */
-      wholeCallTimeoutMs?: number;
-      /**
+            wholeCallTimeoutMs?: number;
+            /**
        * native 超时覆盖（毫秒；不传用 native 默认）。
        * `callMs` 为整调用预算（缺省 600s）；`readMs` 已退役——读超时恒禁用，
        * 仅保留接口兼容与错误文案位（同 Kotlin `sseConnect` 的入参）。
        */
-      nativeTimeouts?: { readMs?: number; callMs?: number };
-    },
-  ): Promise<{ status: number; contentType: string | null }>;
+            nativeTimeouts?: { readMs?: number; callMs?: number };
+        },
+    ): Promise<{ status: number; contentType: string | null }>;
 }

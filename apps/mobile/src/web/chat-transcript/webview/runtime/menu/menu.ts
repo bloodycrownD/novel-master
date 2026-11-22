@@ -1,15 +1,16 @@
 import {MENU_OPEN_GRACE_MS} from '@web/shared/constants';
 import {ViewSlot} from '@web/shared/view-slot';
 import {
-  AnchoredMenuPlacement,
-  type AnchoredMenuLayout,
+    AnchoredMenuPlacement,
+    type AnchoredMenuLayout,
 } from '../../../../../webview-host/chat-transcript/anchored-menu-layout';
 import {state} from '../state/state';
+import {Labels} from '../../ui/labels';
 import type {
-  MenuAnchor,
-  MenuItem,
-  MessageRow,
-  TranscriptRow,
+    MenuAnchor,
+    MenuItem,
+    MessageRow,
+    TranscriptRow,
 } from '../state/state';
 import {post} from '../bridge';
 
@@ -21,9 +22,9 @@ import {post} from '../bridge';
  * P0-3：完整 MenuOverlay 由 main 注册到 #menu-portal；本文件只持有实现引用，不 import ui / 不 preact.render。
  */
 type MenuOverlayViewProps = {
-  messageId: string;
-  items: MenuItem[];
-  anchor: MenuAnchor;
+    messageId: string;
+    items: MenuItem[];
+    anchor: MenuAnchor;
 };
 
 /** 菜单触发元素（⋯ 按钮等）：只用于命中的工具卡判定。 */
@@ -46,186 +47,186 @@ export type ContextMenuLayout = AnchoredMenuLayout;
  * 本文件只做 DOM 取值（window.innerWidth / layout viewport 高度）后委托。
  */
 export const Menu = {
-  computeWidth: (items: MenuItem[]): number => {
-    return AnchoredMenuPlacement.computeAnchoredMenuWidth(items, window.innerWidth);
-  },
+    computeWidth: (items: MenuItem[]): number => {
+        return AnchoredMenuPlacement.computeAnchoredMenuWidth(items, window.innerWidth);
+    },
 
-  viewportHeight: (): number => {
-    // position:fixed menus share the WebView layout viewport (not #scroller scroll box).
-    const doc = document.documentElement;
-    return doc.clientHeight || window.innerHeight;
-  },
+    viewportHeight: (): number => {
+        // position:fixed menus share the WebView layout viewport (not #scroller scroll box).
+        const doc = document.documentElement;
+        return doc.clientHeight || window.innerHeight;
+    },
 
-  // nm style 要求签名单行；三参签名超过 prettier 默认宽度，用忽略标记保留单行。
-  // prettier-ignore
-  layout: (anchor: MenuAnchor, contentHeight: number, menuWidth: number): ContextMenuLayout => {
-    const vw = window.innerWidth;
-    const vh = Menu.viewportHeight();
-    return AnchoredMenuPlacement.layoutAnchoredMenuForHeight(anchor, contentHeight, menuWidth, vw, vh);
-  },
-
-  findMessageRow: (messageId: string): MessageRow | null => {
-    for (let i = 0; i < state.rows.length; i++) {
-      const row = state.rows[i];
-      if (
-        row.kind === 'message' &&
-        (row.id === messageId || row.messageId === messageId)
-      ) {
-        return row;
-      }
-    }
-    return null;
-  },
-
-  buildItems: (row: TranscriptRow, hit: HitEl): MenuItem[] => {
-    const items: MenuItem[] = [];
-    if ('text' in row && row.text) items.push({label: '编辑', action: 'edit'});
-    items.push({label: '复制', action: 'copy'});
-    const hitElement = hit as Element | null;
-    const inTool = !!hitElement?.closest?.('.tool-card, .tool-group-item');
-    const isUser = row.kind === 'message' && row.role === 'user';
-    if (isUser && !inTool) items.push({label: '置位', action: 'set-floor'});
-    items.push({label: '分叉', action: 'fork'});
-    items.push({label: '回滚', action: 'rollback', danger: true});
-    return items;
-  },
-
-  suppressNativeText: (event: Event): void => {
-    event.preventDefault();
-  },
-
-  attachNativeTextBlock: (): void => {
-    if (state.menuNativeTextBlockHandler) return;
-    state.menuNativeTextBlockHandler = function (event: Event) {
-      const menuEl = document.getElementById('context-menu');
-      const backdrop = document.getElementById('menu-backdrop');
-      const target = event.target as Element | null;
-      if (!menuEl || !target || !target.closest) return;
-      if (menuEl.contains(target) || (backdrop && backdrop.contains(target))) {
-        Menu.suppressNativeText(event);
-      }
-    };
-    // 单源契约：监听器直接挂 state.menuNativeTextBlockHandler（attach/detach 对称）。
+    // nm style 要求签名单行；三参签名超过 prettier 默认宽度，用忽略标记保留单行。
     // prettier-ignore
-    document.addEventListener('contextmenu', state.menuNativeTextBlockHandler, true);
-    // prettier-ignore
-    document.addEventListener('selectstart', state.menuNativeTextBlockHandler, true);
-  },
+    layout: (anchor: MenuAnchor, contentHeight: number, menuWidth: number): ContextMenuLayout => {
+        const vw = window.innerWidth;
+        const vh = Menu.viewportHeight();
+        return AnchoredMenuPlacement.layoutAnchoredMenuForHeight(anchor, contentHeight, menuWidth, vw, vh);
+    },
 
-  detachNativeTextBlock: (): void => {
-    if (!state.menuNativeTextBlockHandler) return;
-    // prettier-ignore
-    document.removeEventListener('contextmenu', state.menuNativeTextBlockHandler, true);
-    // prettier-ignore
-    document.removeEventListener('selectstart', state.menuNativeTextBlockHandler, true);
-    state.menuNativeTextBlockHandler = null;
-    document.body.classList.remove('menu-open');
-  },
-
-  close: (notifyHost?: boolean): void => {
-    if (!state.menu) return;
-    state.menu = null;
-    state.menuOpenedAt = 0;
-    Menu.detachNativeTextBlock();
-    if (state.menuOverlayHandler) {
-      document.removeEventListener('click', state.menuOverlayHandler, true);
-      document.removeEventListener('touchend', state.menuOverlayHandler, true);
-      state.menuOverlayHandler = null;
-    }
-    // 经注册卸载（render(null, #menu-portal)）；禁止裸 .remove() 甩掉 Preact 根
-    contextMenuViewSlot.invoke(null);
-    if (notifyHost !== false) post('menuClosed', {});
-  },
-
-  handleOverlayEvent: (event: Event): void => {
-    if (!state.menu) return;
-    const target = event.target as Element | null;
-    if (!target || !target.closest) return;
-    const menuEl = document.getElementById('context-menu');
-    if (menuEl && menuEl.contains(target)) {
-      const actionEl = target.closest('[data-action="menu-action"]');
-      if (actionEl) {
-        if (event.type === 'touchend') event.preventDefault();
-        const messageId = actionEl.getAttribute('data-message-id');
-        const menuAction = actionEl.getAttribute('data-menu-action');
-        Menu.close(true);
-        if (messageId && menuAction) {
-          post('messageMenuAction', {
-            messageId: messageId,
-            action: menuAction,
-          });
+    findMessageRow: (messageId: string): MessageRow | null => {
+        for (let i = 0; i < state.rows.length; i++) {
+            const row = state.rows[i];
+            if (
+                row.kind === 'message' &&
+                (row.id === messageId || row.messageId === messageId)
+            ) {
+                return row;
+            }
         }
-      }
-      return;
-    }
-    const rowEl = target.closest('.row.message');
-    if (
-      rowEl &&
-      event.type === 'touchend' &&
-      state.menuOpenedAt &&
-      Date.now() - state.menuOpenedAt < MENU_OPEN_GRACE_MS
-    ) {
-      return;
-    }
-    // Backdrop lives on document.body outside #rows — capture dismiss here.
-    Menu.close(true);
-  },
+        return null;
+    },
 
-  /**
+    buildItems: (row: TranscriptRow, hit: HitEl): MenuItem[] => {
+        const items: MenuItem[] = [];
+        if ('text' in row && row.text) items.push({label: Labels.uiText(state.labels, 'ui.transcript.menu.edit'), action: 'edit'});
+        items.push({label: Labels.uiText(state.labels, 'ui.transcript.menu.copy'), action: 'copy'});
+        const hitElement = hit as Element | null;
+        const inTool = !!hitElement?.closest?.('.tool-card, .tool-group-item');
+        const isUser = row.kind === 'message' && row.role === 'user';
+        if (isUser && !inTool) items.push({label: Labels.uiText(state.labels, 'ui.transcript.menu.set_floor'), action: 'set-floor'});
+        items.push({label: Labels.uiText(state.labels, 'ui.transcript.menu.fork'), action: 'fork'});
+        items.push({label: Labels.uiText(state.labels, 'ui.transcript.menu.rollback'), action: 'rollback', danger: true});
+        return items;
+    },
+
+    suppressNativeText: (event: Event): void => {
+        event.preventDefault();
+    },
+
+    attachNativeTextBlock: (): void => {
+        if (state.menuNativeTextBlockHandler) return;
+        state.menuNativeTextBlockHandler = function (event: Event) {
+            const menuEl = document.getElementById('context-menu');
+            const backdrop = document.getElementById('menu-backdrop');
+            const target = event.target as Element | null;
+            if (!menuEl || !target || !target.closest) return;
+            if (menuEl.contains(target) || (backdrop && backdrop.contains(target))) {
+                Menu.suppressNativeText(event);
+            }
+        };
+        // 单源契约：监听器直接挂 state.menuNativeTextBlockHandler（attach/detach 对称）。
+        // prettier-ignore
+        document.addEventListener('contextmenu', state.menuNativeTextBlockHandler, true);
+        // prettier-ignore
+        document.addEventListener('selectstart', state.menuNativeTextBlockHandler, true);
+    },
+
+    detachNativeTextBlock: (): void => {
+        if (!state.menuNativeTextBlockHandler) return;
+        // prettier-ignore
+        document.removeEventListener('contextmenu', state.menuNativeTextBlockHandler, true);
+        // prettier-ignore
+        document.removeEventListener('selectstart', state.menuNativeTextBlockHandler, true);
+        state.menuNativeTextBlockHandler = null;
+        document.body.classList.remove('menu-open');
+    },
+
+    close: (notifyHost?: boolean): void => {
+        if (!state.menu) return;
+        state.menu = null;
+        state.menuOpenedAt = 0;
+        Menu.detachNativeTextBlock();
+        if (state.menuOverlayHandler) {
+            document.removeEventListener('click', state.menuOverlayHandler, true);
+            document.removeEventListener('touchend', state.menuOverlayHandler, true);
+            state.menuOverlayHandler = null;
+        }
+        // 经注册卸载（render(null, #menu-portal)）；禁止裸 .remove() 甩掉 Preact 根
+        contextMenuViewSlot.invoke(null);
+        if (notifyHost !== false) post('menuClosed', {});
+    },
+
+    handleOverlayEvent: (event: Event): void => {
+        if (!state.menu) return;
+        const target = event.target as Element | null;
+        if (!target || !target.closest) return;
+        const menuEl = document.getElementById('context-menu');
+        if (menuEl && menuEl.contains(target)) {
+            const actionEl = target.closest('[data-action="menu-action"]');
+            if (actionEl) {
+                if (event.type === 'touchend') event.preventDefault();
+                const messageId = actionEl.getAttribute('data-message-id');
+                const menuAction = actionEl.getAttribute('data-menu-action');
+                Menu.close(true);
+                if (messageId && menuAction) {
+                    post('messageMenuAction', {
+                        messageId: messageId,
+                        action: menuAction,
+                    });
+                }
+            }
+            return;
+        }
+        const rowEl = target.closest('.row.message');
+        if (
+            rowEl &&
+            event.type === 'touchend' &&
+            state.menuOpenedAt &&
+            Date.now() - state.menuOpenedAt < MENU_OPEN_GRACE_MS
+        ) {
+            return;
+        }
+        // Backdrop lives on document.body outside #rows — capture dismiss here.
+        Menu.close(true);
+    },
+
+    /**
    * 上下文菜单门面：已注册 MenuOverlay 刷新 + overlay 监听。
    * 壳 DOM 由 main → #menu-portal；P1-4 measure/layout 在 MenuOverlay useLayoutEffect。
    * 本函数不含 JSX / 不 createElement 挂 body；开/关与 row-logic 对称走视图槽 `invoke`。
    */
-  render: (): void => {
-    if (!state.menu) return;
-    const menu = state.menu;
-    if (
-      !contextMenuViewSlot.invoke({
-        messageId: menu.messageId,
-        items: menu.items,
-        anchor: menu.anchor,
-      })
-    ) {
-      return;
-    }
-    document.body.classList.add('menu-open');
-    Menu.attachNativeTextBlock();
-    state.menuOverlayHandler = Menu.handleOverlayEvent;
-    document.addEventListener('click', state.menuOverlayHandler, true);
-    document.addEventListener('touchend', state.menuOverlayHandler, true);
-  },
+    render: (): void => {
+        if (!state.menu) return;
+        const menu = state.menu;
+        if (
+            !contextMenuViewSlot.invoke({
+                messageId: menu.messageId,
+                items: menu.items,
+                anchor: menu.anchor,
+            })
+        ) {
+            return;
+        }
+        document.body.classList.add('menu-open');
+        Menu.attachNativeTextBlock();
+        state.menuOverlayHandler = Menu.handleOverlayEvent;
+        document.addEventListener('click', state.menuOverlayHandler, true);
+        document.addEventListener('touchend', state.menuOverlayHandler, true);
+    },
 
-  /**
+    /**
    * 钉死入口：⋯ 点击传入按钮 `getBoundingClientRect()`（或等价 MenuAnchor）。
    * 不再依赖长按触摸点。
    */
-  // nm style 要求签名单行；三参签名超过 prettier 默认宽度，用忽略标记保留单行。
-  // prettier-ignore
-  openFromAnchor: (messageId: string, rect: MenuAnchor, hitEl: HitEl = null): void => {
-    if (state.flags.menuDisabled) return;
-    const row = Menu.findMessageRow(messageId);
-    if (!row) return;
-    // 菜单动作与 data-message-id 一律用 DB id：流式行的行 id 是 streamId，
-    // DB 接管后 messageId 才是宿主动作（回滚/分叉/置位）的唯一落点（C28）。
-    const dbId = row.messageId ?? row.id;
-    const anchor: MenuAnchor = {
-      x: rect.x,
-      y: rect.y,
-      width: rect.width,
-      height: rect.height,
-    };
-    const pageX = anchor.x + anchor.width / 2;
-    const pageY = anchor.y + anchor.height / 2;
-    post('openMessageMenu', {messageId: dbId, pageX: pageX, pageY: pageY});
-    post('menuOpened', {});
-    state.menu = {
-      messageId: dbId,
-      pageX: pageX,
-      pageY: pageY,
-      anchor: anchor,
-      items: Menu.buildItems(row, hitEl),
-    };
-    state.menuOpenedAt = Date.now();
-    Menu.render();
-  },
+    // nm style 要求签名单行；三参签名超过 prettier 默认宽度，用忽略标记保留单行。
+    // prettier-ignore
+    openFromAnchor: (messageId: string, rect: MenuAnchor, hitEl: HitEl = null): void => {
+        if (state.flags.menuDisabled) return;
+        const row = Menu.findMessageRow(messageId);
+        if (!row) return;
+        // 菜单动作与 data-message-id 一律用 DB id：流式行的行 id 是 streamId，
+        // DB 接管后 messageId 才是宿主动作（回滚/分叉/置位）的唯一落点（C28）。
+        const dbId = row.messageId ?? row.id;
+        const anchor: MenuAnchor = {
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: rect.height,
+        };
+        const pageX = anchor.x + anchor.width / 2;
+        const pageY = anchor.y + anchor.height / 2;
+        post('openMessageMenu', {messageId: dbId, pageX: pageX, pageY: pageY});
+        post('menuOpened', {});
+        state.menu = {
+            messageId: dbId,
+            pageX: pageX,
+            pageY: pageY,
+            anchor: anchor,
+            items: Menu.buildItems(row, hitEl),
+        };
+        state.menuOpenedAt = Date.now();
+        Menu.render();
+    },
 } as const;

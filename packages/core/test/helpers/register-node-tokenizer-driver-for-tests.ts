@@ -14,11 +14,11 @@ import {  NODE_DRIVER_NAME  } from "../../../tokenizer-driver-node/src/register.
 
 /** Registers the Node driver for tests; clears any prior drivers first. */
 export function registerNodeTokenizerDriverForTests(assetsRoot?: string): void {
-  TokenizerRegistry.clear();
-  const root = assetsRoot ?? NodeTokenizerLoader.defaultAssetsRoot();
-  NodeTokenizerLoader.set(NodeTokenizerLoader.create(root));
-  TokenizerRegistry.register({
-    name: NODE_DRIVER_NAME,
-    countPromptLlmInput: PromptLlmInputCounter.count,
-  });
+    TokenizerRegistry.clear();
+    const root = assetsRoot ?? NodeTokenizerLoader.defaultAssetsRoot();
+    NodeTokenizerLoader.set(NodeTokenizerLoader.create(root));
+    TokenizerRegistry.register({
+        name: NODE_DRIVER_NAME,
+        countPromptLlmInput: PromptLlmInputCounter.count,
+    });
 }

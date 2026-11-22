@@ -12,14 +12,16 @@
  * 轻量的「补偿式回滚」约定：调用方按业务顺序注册 `execute` + `rollback`，
  * 由协调器在失败时按注册逆序触发回滚，把已经落地的副作用尽量收回去。
  *
- * 注意哦，这不是真正的 ACID 事务——回滚本身也可能失败。回滚失败时我们会把原始错误
- * 透传出去，同时把回滚阶段的错误聚合到 `errors` 字段里挂上去，方便上层日志/告警。
+ * 注意哦，这不是真正的 ACID 事务——回滚本身也可能失败。回滚失败时 `run()` 返回
+ * `INFRA_ROLLBACK_DEGRADED`（根因挂 `cause`、回滚失败清单进 details），上层据此分级告警
+ * （error-matrix-final R1：异常哨兵 CoordinatedWriteRollbackError 已退役，全函数纯 Result）。
  *
  * @module service/coordinated-write
  */
 
-import { Result } from "@/errors/either.js";
-import { AppError } from "@/errors/app-error.js";
+import {assert} from "@/common/assert.js";
+import {Result} from "@/errors/either.js";
+import {AppError} from "@/errors/app-error.js";
 
 /**
  * 单个写步骤。
@@ -27,37 +29,52 @@ import { AppError } from "@/errors/app-error.js";
  * `execute` 是正向动作；`rollback` 是它的补偿动作，由协调器在失败时按注册逆序调用。
  * 名字 `name` 只用于错误信息可读性，不参与调度逻辑。
  *
- * 已知失败走返回值（四期门⑦）：`execute` / `rollback` 收 `Result`，Err 即失败
- * 并触发逆序补偿；未知异常仍可抛，由 run() 的 catch 同口收编。
+ * 失败走返回值：`execute` / `rollback` 收 `Result`，Err 即失败并触发逆序补偿；
+ * 未知异常也允许抛（平台漏出），由 run() 的 catch 回滚后统一转 `INFRA_UNEXPECTED_ERROR`。
  */
 interface WriteStep {
-  /** 步骤名，仅用于错误上下文，便于排查。 */
-  name: string;
-  /** 正向执行。任一 `execute` 返回 Err 即视为整组失败。 */
-  execute: () => Promise<Result<void, AppError>>;
-  /** 补偿动作。失败时由协调器逆序调用，应当尽量幂等。 */
-  rollback: () => Promise<Result<void, AppError>>;
+    /** 步骤名，仅用于错误上下文，便于排查。 */
+    name: string;
+    /** 正向执行。任一 `execute` 返回 Err 即视为整组失败。 */
+    execute: () => Promise<Result<void, AppError>>;
+    /** 补偿动作。失败时由协调器逆序调用，应当尽量幂等。 */
+    rollback: () => Promise<Result<void, AppError>>;
 }
 
 /**
- * 回滚阶段本身抛错时抛出的聚合错误。
- *
- * 原始失败原因放在 `cause`；回滚阶段收集到的错误通过 `rollbackErrors` 暴露给上层，
- * 这样既不掩盖第一次的根因，又不会把回滚失败悄悄吃掉。
+ * 逆序回滚已执行步骤：单步回滚失败不中断后续回滚、错误聚合；回滚阶段有失败时
+ * 返回 `INFRA_ROLLBACK_DEGRADED`（根因挂 `cause`、清单进 details）；未知根因
+ * （非 AppError）返回 `INFRA_UNEXPECTED_ERROR`（cause 透传）。
  */
-class CoordinatedWriteRollbackError extends Error {
-  /** 回滚阶段（按逆序）收集到的错误，可能与 `cause` 一一对应，也可能为空。 */
-  readonly rollbackErrors: ReadonlyArray<{ step: string; error: unknown }>;
-
-  constructor(cause: unknown, rollbackErrors: ReadonlyArray<{ step: string; error: unknown }>) {
-    const causeMessage = cause instanceof Error ? cause.message : String(cause);
-    const rolledBackNames = rollbackErrors.map((entry) => entry.step).join(", ");
-    super(`CoordinatedWrite 在回滚阶段再次失败（原始原因：${causeMessage}；回滚失败步骤：${rolledBackNames || "<无>"}）`);
-    this.name = "CoordinatedWriteRollbackError";
-    this.cause = cause;
-    this.rollbackErrors = rollbackErrors;
-  }
-}
+const rollbackExecuted = async (executed: readonly WriteStep[], from: number, rootCause: unknown): Promise<Result<void, AppError>> => {
+    const rollbackErrors: { step: string; error: unknown }[] = [];
+    // 按注册逆序回滚已经成功执行的步骤。
+    for (let i = from; i >= 0; i--) {
+        const step = executed[i];
+        if (!step) continue;
+        try {
+            const back = await step.rollback();
+            if (!back.ok) {
+                // 单步回滚失败不中断后续回滚，聚合起来统一上报。
+                rollbackErrors.push({step: step.name, error: back.error});
+            }
+        } catch (err) {
+            rollbackErrors.push({step: step.name, error: err});
+        }
+    }
+    // 回滚完成后系统状态已变（部分步骤已撤销），此时转 Result 是对现状的诚实
+    // 标记而非吞并（error-matrix-final §一.2）。
+    if (rollbackErrors.length > 0) {
+        const causeText = rootCause instanceof Error ? rootCause.message : String(rootCause);
+        const steps = rollbackErrors.map((entry) => entry.step).join(", ") || "<无>";
+        return Result.err(new AppError("INFRA_ROLLBACK_DEGRADED", {causeText, steps, rollbackErrors}, {cause: rootCause}));
+    }
+    // 未知异常（非 AppError）：不塞业务 key，以 INFRA_UNEXPECTED_ERROR + cause 显式标记未知。
+    if (!(rootCause instanceof AppError)) {
+        return Result.err(new AppError("INFRA_UNEXPECTED_ERROR", {}, {cause: rootCause}));
+    }
+    return Result.err(rootCause);
+};
 
 /**
  * 协调式写：注册步骤 + 失败时按逆序回滚。
@@ -84,72 +101,45 @@ class CoordinatedWriteRollbackError extends Error {
  *   习惯性漏写补偿逻辑；
  * - 回滚阶段是「尽力而为」，单个步骤回滚失败不会中断后续步骤的回滚——尽量把已落
  *   地的副作用都收回来，比中途停下更安全；
- * - 回滚整体失败时，会抛 `CoordinatedWriteRollbackError`，原始根因挂在 `cause` 上。
+ * - 回滚整体失败时返回 `INFRA_ROLLBACK_DEGRADED`，原始根因挂在 `cause` 上、清单进 details。
  */
 export class CoordinatedWrite {
-  private readonly steps: WriteStep[] = [];
+    private readonly steps: WriteStep[] = [];
 
-  /** 注册一个步骤，返回 `this` 以便链式调用。 */
-  register(step: WriteStep): this {
-    if (!step || typeof step.execute !== "function") {
-      throw new TypeError(`CoordinatedWrite.register: 步骤 ${step?.name ?? "<匿名>"} 缺少 execute`);
+    /** 注册一个步骤，返回 `this` 以便链式调用。 */
+    register(step: WriteStep): this {
+        // 编程错误（API 误用）走 assert——error-matrix-final R1，TypeError 形态退役。
+        assert(step && typeof step.execute === "function", `CoordinatedWrite.register: 步骤 ${step?.name ?? "<匿名>"} 缺少 execute`);
+        assert(typeof step.rollback === "function", `CoordinatedWrite.register: 步骤 ${step.name} 缺少 rollback`);
+        this.steps.push(step);
+        return this;
     }
-    if (typeof step.rollback !== "function") {
-      throw new TypeError(`CoordinatedWrite.register: 步骤 ${step.name} 缺少 rollback`);
-    }
-    this.steps.push(step);
-    return this;
-  }
 
-  /**
-   * 按注册顺序执行所有步骤。
-   *
-   * 任一 `execute` 失败（Err 或抛错）时，协调器会：
-   *   1. 记下原始失败作为根因；
-   *   2. 对「已经成功执行过」的步骤按注册逆序调用 `rollback`；
-   *   3. 回滚阶段的错误会被聚合，不会中断后续步骤的回滚；
-   *   4. 若回滚阶段出现任何失败，抛 `CoordinatedWriteRollbackError`（根因挂在
-   *      `cause`）；否则已知的步骤失败沿 `Result.err` 原样返回（四期门⑦）。
-   */
-  async run(): Promise<Result<void, AppError>> {
-    const executed: WriteStep[] = [];
-    const rollbackExecuted = async (from: number, rootCause: unknown): Promise<Result<void, AppError>> => {
-      const rollbackErrors: { step: string; error: unknown }[] = [];
-      // 按注册逆序回滚已经成功执行的步骤。
-      for (let i = from; i >= 0; i--) {
-        const step = executed[i];
-        if (!step) continue;
+    /**
+     * 按注册顺序执行所有步骤。
+     *
+     * 任一 `execute` 失败（Err 或抛错）时，协调器会：
+     *   1. 记下原始失败作为根因；
+     *   2. 对「已经成功执行过」的步骤按注册逆序调用 `rollback`；
+     *   3. 回滚阶段的错误会被聚合，不会中断后续步骤的回滚；
+     *   4. 若回滚阶段出现任何失败，返回 `INFRA_ROLLBACK_DEGRADED`（根因挂 `cause`、
+     *      清单进 details）；否则已知的步骤失败沿 `Result.err` 原样返回；根因是未知
+     *      异常（非 AppError）时返回 `INFRA_UNEXPECTED_ERROR`（cause 透传，不伪装成
+     *      业务失败——error-matrix-final 矩阵：未知也走返回值）。
+     */
+    async run(): Promise<Result<void, AppError>> {
+        const executed: WriteStep[] = [];
         try {
-          const back = await step.rollback();
-          if (!back.ok) {
-            // 单步回滚失败不中断后续回滚，聚合起来统一上报。
-            rollbackErrors.push({ step: step.name, error: back.error });
-          }
-        } catch (err) {
-          rollbackErrors.push({ step: step.name, error: err });
+            for (const step of this.steps) {
+                const outcome = await step.execute();
+                if (!outcome.ok) {
+                    return rollbackExecuted(executed, executed.length - 1, outcome.error);
+                }
+                executed.push(step);
+            }
+        } catch (rootCause) {
+            return rollbackExecuted(executed, executed.length - 1, rootCause);
         }
-      }
-      if (rollbackErrors.length > 0) {
-        throw new CoordinatedWriteRollbackError(rootCause, rollbackErrors);
-      }
-      // 未知异常（非 AppError）不塞 Result——按转码矩阵「未知 throw」行走异常通道。
-      if (!(rootCause instanceof AppError)) {
-        throw rootCause;
-      }
-      return Result.err(rootCause);
-    };
-
-    try {
-      for (const step of this.steps) {
-        const outcome = await step.execute();
-        if (!outcome.ok) {
-          return rollbackExecuted(executed.length - 1, outcome.error);
-        }
-        executed.push(step);
-      }
-    } catch (rootCause) {
-      return rollbackExecuted(executed.length - 1, rootCause);
+        return Result.ok(undefined);
     }
-    return Result.ok(undefined);
-  }
 }

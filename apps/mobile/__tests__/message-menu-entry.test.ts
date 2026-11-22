@@ -18,39 +18,42 @@ import {state} from '../src/web/chat-transcript/webview/runtime/state/state';
 const root = join(__dirname, '..');
 
 function readSrc(...parts: string[]): string {
-  return readFileSync(join(root, ...parts), 'utf8');
+    return readFileSync(join(root, ...parts), 'utf8');
 }
 
 type PostedEnvelope = {
-  v: number;
-  type: string;
-  payload: Record<string, unknown>;
+    v: number;
+    type: string;
+    payload: Record<string, unknown>;
 };
 
 /** 捕获上行信封（@web/shared/post 出口为 fake window.ReactNativeWebView）。 */
 function postedEnvelopes(): PostedEnvelope[] {
-  const bridge = (
-    window as unknown as {
-      ReactNativeWebView?: {postMessage: (msg: string) => void};
-    }
-  ).ReactNativeWebView;
-  if (!bridge) return [];
-  return (bridge.postMessage as unknown as jest.Mock).mock.calls.map(call =>
-    JSON.parse(call[0] as string),
-  );
+    const bridge = (
+        window as unknown as {
+            ReactNativeWebView?: {postMessage: (msg: string) => void};
+        }
+    ).ReactNativeWebView;
+    if (!bridge) return [];
+    return (bridge.postMessage as unknown as jest.Mock).mock.calls.map(call =>
+        JSON.parse(call[0] as string),
+    );
 }
 
 describe('message menu entry (T-MN1 / T-MN2)', () => {
-  it('T-MN1: Web buildMenuItems 集合仍为编辑/复制/置位(user)/分叉/回滚', () => {
-    const menu = readSrc(
-      'src/web/chat-transcript/webview/runtime/menu/menu.ts',
-    );
-    expect(menu).toContain("label: '编辑'");
-    expect(menu).toContain("label: '复制'");
-    expect(menu).toContain("label: '置位'");
-    expect(menu).toContain("label: '分叉'");
-    expect(menu).toContain("label: '回滚'");
-    expect(menu).not.toMatch(/label:\s*['"]隐藏/);
+    // R6 波 4a：文案随 labels 桥接线改为锁键名取值形态（断言意图不变：仍是
+    // 钉住编辑/复制/置位/分叉/回滚五个菜单项与动作集合）。
+    it('T-MN1: Web buildMenuItems 集合仍为编辑/复制/置位(user)/分叉/回滚', () => {
+        const menu = readSrc(
+            'src/web/chat-transcript/webview/runtime/menu/menu.ts',
+        );
+        expect(menu).toContain("'ui.transcript.menu.edit'");
+        expect(menu).toContain("'ui.transcript.menu.copy'");
+        expect(menu).toContain("'ui.transcript.menu.set_floor'");
+        expect(menu).toContain("'ui.transcript.menu.fork'");
+        expect(menu).toContain("'ui.transcript.menu.rollback'");
+        expect(menu).toContain('Labels.uiText(state.labels');
+        expect(menu).not.toMatch(/label:\s*['"]隐藏/);
     expect(menu).not.toMatch(/label:\s*['"]删除/);
   });
 
@@ -67,8 +70,8 @@ describe('message menu entry (T-MN1 / T-MN2)', () => {
     expect(messageRow).toContain('message-menu-btn');
     expect(messageRow).toContain('message-menu-row');
     expect(messageRow).toContain('message-role-label');
-    expect(messageRow).toContain('用户');
-    expect(messageRow).toContain('助手');
+    expect(messageRow).toContain("'ui.transcript.role.user'");
+    expect(messageRow).toContain("'ui.transcript.role.assistant'");
     expect(messageRow).toContain('Menu.openFromAnchor');
     expect(messageRow).toContain('getBoundingClientRect');
     expect(messageRow).not.toContain('message-menu-toolbar');

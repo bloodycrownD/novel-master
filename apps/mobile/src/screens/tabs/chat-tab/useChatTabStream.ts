@@ -18,32 +18,32 @@ import type {ChatTranscriptScrollSnapshot} from '@/components/chat/ChatTranscrip
 import {ChatTranscriptScrollCache} from '@/services/chat-transcript-scroll-cache';
 
 type UseChatTabScrollCacheParams = {
-  projectId: string | undefined;
-  sessionId: string | undefined;
+    projectId: string | undefined;
+    sessionId: string | undefined;
 };
 
 export function useChatTabScrollCache({projectId, sessionId}: UseChatTabScrollCacheParams) {
-  const chatScrollKey = projectId != null && sessionId != null ? ChatTranscriptScrollCache.key(projectId, sessionId) : null;
-  // 唯一读源 = v2 transcript 缓存；normalize 是读侧最后一道 v2-only 闸门
-  // （写入侧已按 schemaVersion 拦过一次，这里挡住的是「缓存被别处污染」的兜底）。
-  const restoredTranscriptScroll = chatScrollKey != null ? ChatTranscriptScrollCache.normalize(ChatTranscriptScrollCache.get(chatScrollKey)) : undefined;
+    const chatScrollKey = projectId != null && sessionId != null ? ChatTranscriptScrollCache.key(projectId, sessionId) : null;
+    // 唯一读源 = v2 transcript 缓存；normalize 是读侧最后一道 v2-only 闸门
+    // （写入侧已按 schemaVersion 拦过一次，这里挡住的是「缓存被别处污染」的兜底）。
+    const restoredTranscriptScroll = chatScrollKey != null ? ChatTranscriptScrollCache.normalize(ChatTranscriptScrollCache.get(chatScrollKey)) : undefined;
 
-  const defaultChatScrollToBottom = chatScrollKey != null && restoredTranscriptScroll == null;
+    const defaultChatScrollToBottom = chatScrollKey != null && restoredTranscriptScroll == null;
 
-  const handleChatScrollSnapshot = useCallback(
-    (snap: ChatTranscriptScrollSnapshot) => {
-      if (chatScrollKey == null) {
-        return;
-      }
-      ChatTranscriptScrollCache.set(chatScrollKey, snap);
-    },
-    [chatScrollKey],
-  );
+    const handleChatScrollSnapshot = useCallback(
+        (snap: ChatTranscriptScrollSnapshot) => {
+            if (chatScrollKey == null) {
+                return;
+            }
+            ChatTranscriptScrollCache.set(chatScrollKey, snap);
+        },
+        [chatScrollKey],
+    );
 
-  return {
-    chatScrollKey,
-    restoredTranscriptScroll,
-    defaultChatScrollToBottom,
-    handleChatScrollSnapshot,
-  };
+    return {
+        chatScrollKey,
+        restoredTranscriptScroll,
+        defaultChatScrollToBottom,
+        handleChatScrollSnapshot,
+    };
 }

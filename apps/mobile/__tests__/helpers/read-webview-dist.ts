@@ -7,18 +7,18 @@ import path from 'node:path';
 const distRoot = path.join(__dirname, '../../webview-dist');
 
 export function readWebViewDistFile(
-  pkg:
-    | 'rich-document'
-    | 'code-editor'
-    | 'composer-input'
-    | 'chat-transcript',
-  file: 'index.html' | 'app.js' | 'app.css',
+    pkg:
+        | 'rich-document'
+        | 'code-editor'
+        | 'composer-input'
+        | 'chat-transcript',
+    file: 'index.html' | 'app.js' | 'app.css',
 ): string {
-  const abs = path.join(distRoot, pkg, file);
-  if (!fs.existsSync(abs)) {
-    throw new Error(
-      `缺少 webview-dist 产物: ${abs}（请先 npm run build:webview）`,
-    );
-  }
-  return fs.readFileSync(abs, 'utf8');
+    const abs = path.join(distRoot, pkg, file);
+    if (!fs.existsSync(abs)) {
+        throw new Error(
+            `缺少 webview-dist 产物: ${abs}（请先 npm run build:webview）`,
+        );
+    }
+    return fs.readFileSync(abs, 'utf8');
 }

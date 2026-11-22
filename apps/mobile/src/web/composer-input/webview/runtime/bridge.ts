@@ -16,43 +16,43 @@ import {ComposerEditor} from './editor';
 export const post = Post.bound(BRIDGE_V);
 
 export namespace ComposerBridge {
-  function payloadOf(msg: {payload?: Record<string, unknown>}): Record<string, unknown> {
-    return msg.payload ?? {};
-  }
-
-  export function handle(raw: unknown): void {
-    const msg = HostMessageChannel.match(raw, BRIDGE_V);
-    if (!msg) {
-      return;
+    function payloadOf(msg: {payload?: Record<string, unknown>}): Record<string, unknown> {
+        return msg.payload ?? {};
     }
 
-    switch (msg.type) {
-      case 'init':
-        ComposerEditor.applyInit(payloadOf(msg) as Partial<InitPayload>);
-        return;
-      case 'themeUpdate':
-        ComposerEditor.applyTheme(payloadOf(msg).theme as ComposerTheme | undefined);
-        return;
-      case 'setText': {
-        const payload = payloadOf(msg);
-        const text = String(payload.text ?? '');
-        const start = typeof payload.selectionStart === 'number' ? payload.selectionStart : undefined;
-        const end = typeof payload.selectionEnd === 'number' ? payload.selectionEnd : undefined;
-        ComposerEditor.applyText(text, start, end);
-        return;
-      }
-      case 'setSelection':
-        ComposerEditor.applySelection(Number(payloadOf(msg).start ?? 0), Number(payloadOf(msg).end ?? 0));
-        return;
-      case 'setDisabled':
-        ComposerEditor.applyDisabled(payloadOf(msg).disabled === true);
-        return;
-      case 'blur':
-        ComposerEditor.blur();
-        return;
-      default:
-        // 未知 type：协议内不存在的消息（含其它管线遗留的死消息）丢弃
-        return;
+    export function handle(raw: unknown): void {
+        const msg = HostMessageChannel.match(raw, BRIDGE_V);
+        if (!msg) {
+            return;
+        }
+
+        switch (msg.type) {
+            case 'init':
+                ComposerEditor.applyInit(payloadOf(msg) as Partial<InitPayload>);
+                return;
+            case 'themeUpdate':
+                ComposerEditor.applyTheme(payloadOf(msg).theme as ComposerTheme | undefined);
+                return;
+            case 'setText': {
+                const payload = payloadOf(msg);
+                const text = String(payload.text ?? '');
+                const start = typeof payload.selectionStart === 'number' ? payload.selectionStart : undefined;
+                const end = typeof payload.selectionEnd === 'number' ? payload.selectionEnd : undefined;
+                ComposerEditor.applyText(text, start, end);
+                return;
+            }
+            case 'setSelection':
+                ComposerEditor.applySelection(Number(payloadOf(msg).start ?? 0), Number(payloadOf(msg).end ?? 0));
+                return;
+            case 'setDisabled':
+                ComposerEditor.applyDisabled(payloadOf(msg).disabled === true);
+                return;
+            case 'blur':
+                ComposerEditor.blur();
+                return;
+            default:
+                // 未知 type：协议内不存在的消息（含其它管线遗留的死消息）丢弃
+                return;
+        }
     }
-  }
 }

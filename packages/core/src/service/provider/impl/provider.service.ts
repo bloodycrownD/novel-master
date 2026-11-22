@@ -21,302 +21,302 @@ import { HttpUtil } from "@/infra/llm-protocol/logic/http-util.js";
 import type { CreateProviderInput, EditProviderPatch, ProviderListItem, ProviderService } from "../provider.port.js";
 
 interface DefaultProviderServiceDeps {
-  readonly providers: ProviderRepository;
-  readonly suggestions: ModelSuggestionRepository;
-  readonly savedModels: SavedModelRepository;
-  readonly secretStore: SecretStore;
-  /**
+    readonly providers: ProviderRepository;
+    readonly suggestions: ModelSuggestionRepository;
+    readonly savedModels: SavedModelRepository;
+    readonly secretStore: SecretStore;
+    /**
    * 仅供 `delete` 的 in-use 拒绝用（`SavedModelReferences.find` 的首参）。
    *
    * ⚠️ **不得**改走 `providerModels` 反向注入来拿：`ProviderModelService` 已持有
    * `providers`，反向注入会成循环 import。`conn` 由工厂直接传，链路现成。
    */
-  readonly conn: TdbcConnection;
+    readonly conn: TdbcConnection;
 }
 
 function requireNonEmptyDisplayName(raw: string, providerId?: string): Result<string, AppError> {
-  const trimmed = raw.trim();
-  if (trimmed === "") {
-    return Result.err(new AppError("PROVIDER_INVALID_ARGUMENT", { descriptor: { key: "error.provider.display_name_required" }, ...(providerId != null ? { providerId } : {}) }));
-  }
-  return Result.ok(trimmed);
+    const trimmed = raw.trim();
+    if (trimmed === "") {
+        return Result.err(new AppError("PROVIDER_INVALID_ARGUMENT", { descriptor: { key: "error.provider.display_name_required" }, ...(providerId != null ? { providerId } : {}) }));
+    }
+    return Result.ok(trimmed);
 }
 
 /** Provider 配置服务。 */
 export class DefaultProviderService implements ProviderService {
-  constructor(private readonly deps: DefaultProviderServiceDeps) {}
+    constructor(private readonly deps: DefaultProviderServiceDeps) {}
 
-  async list(): Promise<Result<ProviderListItem[], AppError>> {
-    // 已知失败走返回值（六期门⑦）：storage 失败收 Result.err，决定权交给上层。
-    const rows = await this.deps.providers.list();
-    if (!rows.ok) return Result.err(rows.error);
-    const { secretStore } = this.deps;
-    const items = await Promise.all(rows.value.map(async (p): Promise<ProviderListItem> => ({ ...p, apiKeyStatus: (await ProviderApiKey.isConfigured(p, secretStore)) ? "set" : "not set" })));
-    return Result.ok(items);
-  }
-
-  async get(id: string): Promise<Result<LlmProvider, AppError>> {
-    const p = await this.deps.providers.findById(id);
-    if (!p.ok) return Result.err(p.error);
-    if (p.value == null) {
-      return Result.err(new AppError("PROVIDER_NOT_FOUND", { detail: `Provider not found: ${id}`, providerId: id }));
-    }
-    return Result.ok(p.value);
-  }
-
-  async create(input: CreateProviderInput): Promise<Result<LlmProvider, AppError>> {
-    const name = requireNonEmptyDisplayName(input.displayName);
-    if (!name.ok) return Result.err(name.error);
-    const displayName = name.value;
-    const id = Random.uuid();
-    const now = Date.now();
-    const secretRef = input.apiKey ? ProviderModel.apiKeyRef(id) : null;
-    const provider: LlmProvider = {
-      id,
-      builtinKey: null,
-      protocol: input.protocol,
-      baseUrl: HttpUtil.normalizeBaseUrl(input.baseUrl),
-      displayName,
-      secretRef,
-      headers: input.headers ?? {},
-      bodyParams: input.bodyParams ?? {},
-      isBuiltin: false,
-      createdAtMs: now,
-      updatedAtMs: now,
-    };
-
-    // S-1：secretStore.set → providers.insert 这条跨资源写链走 CoordinatedWrite。
-    // 中间步骤失败时逆序补偿：先删 provider 行，再删 secret，避免留半套凭据。
-    const write = new CoordinatedWrite();
-    if (input.apiKey) {
-      const ref = secretRef!;
-      write.register({
-        name: "set-secret",
-        execute: async () => {
-          await this.deps.secretStore.set(ref, input.apiKey!);
-          return Result.ok(undefined);
-        },
-        rollback: async () => {
-          if (await this.deps.secretStore.has(ref)) {
-            await this.deps.secretStore.delete(ref);
-          }
-          return Result.ok(undefined);
-        },
-      });
-    }
-    write.register({
-      name: "insert-provider",
-      execute: async () => {
-        await this.deps.providers.insert(provider);
-        return Result.ok(undefined);
-      },
-      rollback: async () => {
-        await this.deps.providers.delete(id);
-        return Result.ok(undefined);
-      },
-    });
-    const ran = await write.run();
-    if (!ran.ok) return Result.err(ran.error);
-    return Result.ok(provider);
-  }
-
-  async edit(id: string, patch: EditProviderPatch): Promise<Result<LlmProvider, AppError>> {
-    const got = await this.get(id);
-    if (!got.ok) return Result.err(got.error);
-    const provider = got.value;
-    if (provider.isBuiltin && patch.protocol !== undefined) {
-      return Result.err(new AppError("PROVIDER_BUILTIN_PROVIDER", { detail: `Cannot change protocol of built-in provider: ${id}`, providerId: id }));
+    async list(): Promise<Result<ProviderListItem[], AppError>> {
+        // 已知失败走返回值（六期门⑦）：storage 失败收 Result.err，决定权交给上层。
+        const rows = await this.deps.providers.list();
+        if (!rows.ok) return Result.err(rows.error);
+        const { secretStore } = this.deps;
+        const items = await Promise.all(rows.value.map(async (p): Promise<ProviderListItem> => ({ ...p, apiKeyStatus: (await ProviderApiKey.isConfigured(p, secretStore)) ? "set" : "not set" })));
+        return Result.ok(items);
     }
 
-    // 先捕获原始 secret 明文与 ref，用于回滚时精确恢复（secretStore 没有事务，
-    // 只能在应用层用「读到旧值 → 失败时写回」来补偿）。
-    const originalSecretRef = ProviderModel.resolveApiKeySecretRef(provider);
-    const originalSecretValue = await this.deps.secretStore.get(originalSecretRef);
-
-    let secretRef = provider.secretRef;
-    let secretOp: "set" | "delete" | "noop" = "noop";
-    let newSecretValue: string | null = null;
-    if (patch.apiKey !== undefined) {
-      if (patch.apiKey === "") {
-        secretOp = "delete";
-        secretRef = null;
-      } else {
-        secretOp = "set";
-        secretRef = ProviderModel.apiKeyRef(id);
-        newSecretValue = patch.apiKey;
-      }
-    }
-
-    const displayNameResult = patch.displayName !== undefined ? requireNonEmptyDisplayName(patch.displayName, id) : Result.ok(provider.displayName);
-    if (!displayNameResult.ok) return Result.err(displayNameResult.error);
-    const displayName = displayNameResult.value;
-    const updated: LlmProvider = {
-      ...provider,
-      protocol: patch.protocol ?? provider.protocol,
-      baseUrl: patch.baseUrl ? HttpUtil.normalizeBaseUrl(patch.baseUrl) : provider.baseUrl,
-      displayName,
-      headers: patch.headers ?? provider.headers,
-      bodyParams: patch.bodyParams ?? provider.bodyParams,
-      secretRef,
-      updatedAtMs: Date.now(),
-    };
-
-    // S-1：secretStore 写 → providers.update 走 CoordinatedWrite。
-    // secret 回滚靠上面捕获的原始明文；providers 回滚靠 update 回原始行。
-    const write = new CoordinatedWrite();
-    if (secretOp !== "noop") {
-      write.register({
-        name: "write-secret",
-        execute: async () => {
-          if (secretOp === "delete") {
-            if (await this.deps.secretStore.has(originalSecretRef)) {
-              await this.deps.secretStore.delete(originalSecretRef);
-            }
-          } else {
-            await this.deps.secretStore.set(secretRef!, newSecretValue!);
-          }
-          return Result.ok(undefined);
-        },
-        rollback: async () => {
-          if (originalSecretValue != null) {
-            await this.deps.secretStore.set(originalSecretRef, originalSecretValue);
-          } else if (secretOp === "set") {
-            // 原本没有 secret：删掉新写的，避免留孤儿凭据。
-            if (await this.deps.secretStore.has(secretRef!)) {
-              await this.deps.secretStore.delete(secretRef!);
-            }
-          }
-          return Result.ok(undefined);
-        },
-      });
-    }
-    write.register({
-      name: "update-provider",
-      execute: async () => {
-        await this.deps.providers.update(updated);
-        return Result.ok(undefined);
-      },
-      rollback: async () => {
-        await this.deps.providers.update(provider);
-        return Result.ok(undefined);
-      },
-    });
-    const ran = await write.run();
-    if (!ran.ok) return Result.err(ran.error);
-    return Result.ok(updated);
-  }
-
-  async delete(id: string): Promise<Result<void, AppError>> {
-    const got = await this.get(id);
-    if (!got.ok) return Result.err(got.error);
-    const provider = got.value;
-    if (provider.isBuiltin) {
-      return Result.err(new AppError("PROVIDER_BUILTIN_PROVIDER", { detail: `Cannot delete built-in provider: ${id}`, providerId: id }));
-    }
-
-    // S-1：五步顺序写跨 suggestions / savedModels / providers / secretStore 四个域。
-    // 先把待删数据快照下来，失败时逆序恢复，保证不留半套。
-    const ref = ProviderModel.resolveApiKeySecretRef(provider);
-    const listedSuggestions = await this.deps.suggestions.listByProvider(id);
-    if (!listedSuggestions.ok) return Result.err(listedSuggestions.error);
-    const suggestions = listedSuggestions.value;
-    const listedSavedModels = await this.deps.savedModels.listByProvider(id);
-    if (!listedSavedModels.ok) return Result.err(listedSavedModels.error);
-    const savedModels = listedSavedModels.value;
-    const secretValue = await this.deps.secretStore.get(ref);
-
-    // S-D 前置拒绝（**在 CoordinatedWrite 之外**）：本路径走
-    // `savedModels.deleteByProvider(id)` **批量抹掉**该 provider 的全部已保存模型，
-    // 完全不经过 `ProviderModelService.deleteSaved` 的 in-use 守卫 ⇒ 即便那条守卫
-    // 补全了，这条路依然能静默清空被引用的模型。拒绝发生在任何删除动作之前，
-    // 因此不破坏既有五步 CoordinatedWrite 的 rollback 配对。
-    for (const m of savedModels) {
-      const refs = await SavedModelReferences.find(this.deps.conn, m.id);
-      // ⚠️ `currentModelId` 是**软指针**，不是内容引用。真实契约分两半，缺一不可：
-      //   ① 【本处】把它从 blockingRefs 里滤掉——把它当硬引用会把这层既有契约打死，
-      //      provider 只要是当前模型就永远删不掉。真正必须前置拒绝的内容引用只有
-      //      agent_definition / chat_project / chat_session 三类。
-      //   ② 【调用方】三个调用方都在 **delete 之前**读一次 currentModelId 并按
-      //      `saved.providerId === id` 算好 clearCurrentModel，**delete 成功返回之后**
-      //      才 resetCurrentModelId（currentProviderId 同理）：
-      //        - apps/cli/src/provider/commands.ts `delete` 分支
-      //        - apps/desktop/src/main/ipc/handlers/providers.ts `handleProvidersDelete`
-      //        - apps/mobile/src/screens/stack/ProvidersScreen.tsx `deleteProviderOne`
-      //      顺序不可换：delete 会级联抹掉本 provider 名下的 saved model 行，
-      //      之后再 getSavedById 恒为 null ⇒ reset 永不执行 ⇒ currentModelId 悬空
-      //      固化进新会话的 agent_config_json，发消息才抛 INVALID_SAVED_MODEL_ID。
-      //
-      // ⚠️⚠️ 本过滤**依赖三个调用方的 delete 前置判定顺序**——服务层自己不清理这条软
-      // 指针，全靠调用方兜。改动任一调用方（新增第四个端、或调整上述顺序）**必须**
-      // 同步复核另外两端，否则软指针悬空会静默复发。
-      const blockingRefs = refs.filter((r) => r !== "currentModelId");
-      if (blockingRefs.length > 0) {
-        // 写死复用 SAVED_MODEL_IN_USE、**不新造 PROVIDER_IN_USE**：
-        // 码表里没有后者（写了会编译不过）；
-        // `formatIpcError` 按 instanceof 类分派后原样透传 err.code，
-        // 前端零 SAVED_MODEL_IN_USE 命中 ⇒ 没有需要同步的映射表，
-        // 新造码只会让前端拿不到已处理的文案。
-        const descriptor = { key: "error.provider.saved_model_in_use", params: { model_name: m.modelName, blocking_refs: blockingRefs.join("、") } } as const;
-        return Result.err(new AppError("PROVIDER_SAVED_MODEL_IN_USE", { descriptor, providerId: id }));
-      }
-    }
-
-    const write = new CoordinatedWrite();
-    write.register({
-      name: "delete-suggestions",
-      execute: async () => {
-        const deleted = await this.deps.suggestions.deleteByProvider(id);
-        if (!deleted.ok) return deleted;
-        return Result.ok(undefined);
-      },
-      rollback: async () => {
-        for (const s of suggestions) {
-          await this.deps.suggestions.upsert(s);
+    async get(id: string): Promise<Result<LlmProvider, AppError>> {
+        const p = await this.deps.providers.findById(id);
+        if (!p.ok) return Result.err(p.error);
+        if (p.value == null) {
+            return Result.err(new AppError("PROVIDER_NOT_FOUND", { detail: `Provider not found: ${id}`, providerId: id }));
         }
-        return Result.ok(undefined);
-      },
-    });
-    write.register({
-      name: "delete-saved-models",
-      execute: async () => {
-        await this.deps.savedModels.deleteByProvider(id);
-        return Result.ok(undefined);
-      },
-      rollback: async () => {
+        return Result.ok(p.value);
+    }
+
+    async create(input: CreateProviderInput): Promise<Result<LlmProvider, AppError>> {
+        const name = requireNonEmptyDisplayName(input.displayName);
+        if (!name.ok) return Result.err(name.error);
+        const displayName = name.value;
+        const id = Random.uuid();
+        const now = Date.now();
+        const secretRef = input.apiKey ? ProviderModel.apiKeyRef(id) : null;
+        const provider: LlmProvider = {
+            id,
+            builtinKey: null,
+            protocol: input.protocol,
+            baseUrl: HttpUtil.normalizeBaseUrl(input.baseUrl),
+            displayName,
+            secretRef,
+            headers: input.headers ?? {},
+            bodyParams: input.bodyParams ?? {},
+            isBuiltin: false,
+            createdAtMs: now,
+            updatedAtMs: now,
+        };
+
+        // S-1：secretStore.set → providers.insert 这条跨资源写链走 CoordinatedWrite。
+        // 中间步骤失败时逆序补偿：先删 provider 行，再删 secret，避免留半套凭据。
+        const write = new CoordinatedWrite();
+        if (input.apiKey) {
+            const ref = secretRef!;
+            write.register({
+                name: "set-secret",
+                execute: async () => {
+                    await this.deps.secretStore.set(ref, input.apiKey!);
+                    return Result.ok(undefined);
+                },
+                rollback: async () => {
+                    if (await this.deps.secretStore.has(ref)) {
+                        await this.deps.secretStore.delete(ref);
+                    }
+                    return Result.ok(undefined);
+                },
+            });
+        }
+        write.register({
+            name: "insert-provider",
+            execute: async () => {
+                await this.deps.providers.insert(provider);
+                return Result.ok(undefined);
+            },
+            rollback: async () => {
+                await this.deps.providers.delete(id);
+                return Result.ok(undefined);
+            },
+        });
+        const ran = await write.run();
+        if (!ran.ok) return Result.err(ran.error);
+        return Result.ok(provider);
+    }
+
+    async edit(id: string, patch: EditProviderPatch): Promise<Result<LlmProvider, AppError>> {
+        const got = await this.get(id);
+        if (!got.ok) return Result.err(got.error);
+        const provider = got.value;
+        if (provider.isBuiltin && patch.protocol !== undefined) {
+            return Result.err(new AppError("PROVIDER_BUILTIN_PROVIDER", { detail: `Cannot change protocol of built-in provider: ${id}`, providerId: id }));
+        }
+
+        // 先捕获原始 secret 明文与 ref，用于回滚时精确恢复（secretStore 没有事务，
+        // 只能在应用层用「读到旧值 → 失败时写回」来补偿）。
+        const originalSecretRef = ProviderModel.resolveApiKeySecretRef(provider);
+        const originalSecretValue = await this.deps.secretStore.get(originalSecretRef);
+
+        let secretRef = provider.secretRef;
+        let secretOp: "set" | "delete" | "noop" = "noop";
+        let newSecretValue: string | null = null;
+        if (patch.apiKey !== undefined) {
+            if (patch.apiKey === "") {
+                secretOp = "delete";
+                secretRef = null;
+            } else {
+                secretOp = "set";
+                secretRef = ProviderModel.apiKeyRef(id);
+                newSecretValue = patch.apiKey;
+            }
+        }
+
+        const displayNameResult = patch.displayName !== undefined ? requireNonEmptyDisplayName(patch.displayName, id) : Result.ok(provider.displayName);
+        if (!displayNameResult.ok) return Result.err(displayNameResult.error);
+        const displayName = displayNameResult.value;
+        const updated: LlmProvider = {
+            ...provider,
+            protocol: patch.protocol ?? provider.protocol,
+            baseUrl: patch.baseUrl ? HttpUtil.normalizeBaseUrl(patch.baseUrl) : provider.baseUrl,
+            displayName,
+            headers: patch.headers ?? provider.headers,
+            bodyParams: patch.bodyParams ?? provider.bodyParams,
+            secretRef,
+            updatedAtMs: Date.now(),
+        };
+
+        // S-1：secretStore 写 → providers.update 走 CoordinatedWrite。
+        // secret 回滚靠上面捕获的原始明文；providers 回滚靠 update 回原始行。
+        const write = new CoordinatedWrite();
+        if (secretOp !== "noop") {
+            write.register({
+                name: "write-secret",
+                execute: async () => {
+                    if (secretOp === "delete") {
+                        if (await this.deps.secretStore.has(originalSecretRef)) {
+                            await this.deps.secretStore.delete(originalSecretRef);
+                        }
+                    } else {
+                        await this.deps.secretStore.set(secretRef!, newSecretValue!);
+                    }
+                    return Result.ok(undefined);
+                },
+                rollback: async () => {
+                    if (originalSecretValue != null) {
+                        await this.deps.secretStore.set(originalSecretRef, originalSecretValue);
+                    } else if (secretOp === "set") {
+                        // 原本没有 secret：删掉新写的，避免留孤儿凭据。
+                        if (await this.deps.secretStore.has(secretRef!)) {
+                            await this.deps.secretStore.delete(secretRef!);
+                        }
+                    }
+                    return Result.ok(undefined);
+                },
+            });
+        }
+        write.register({
+            name: "update-provider",
+            execute: async () => {
+                await this.deps.providers.update(updated);
+                return Result.ok(undefined);
+            },
+            rollback: async () => {
+                await this.deps.providers.update(provider);
+                return Result.ok(undefined);
+            },
+        });
+        const ran = await write.run();
+        if (!ran.ok) return Result.err(ran.error);
+        return Result.ok(updated);
+    }
+
+    async delete(id: string): Promise<Result<void, AppError>> {
+        const got = await this.get(id);
+        if (!got.ok) return Result.err(got.error);
+        const provider = got.value;
+        if (provider.isBuiltin) {
+            return Result.err(new AppError("PROVIDER_BUILTIN_PROVIDER", { detail: `Cannot delete built-in provider: ${id}`, providerId: id }));
+        }
+
+        // S-1：五步顺序写跨 suggestions / savedModels / providers / secretStore 四个域。
+        // 先把待删数据快照下来，失败时逆序恢复，保证不留半套。
+        const ref = ProviderModel.resolveApiKeySecretRef(provider);
+        const listedSuggestions = await this.deps.suggestions.listByProvider(id);
+        if (!listedSuggestions.ok) return Result.err(listedSuggestions.error);
+        const suggestions = listedSuggestions.value;
+        const listedSavedModels = await this.deps.savedModels.listByProvider(id);
+        if (!listedSavedModels.ok) return Result.err(listedSavedModels.error);
+        const savedModels = listedSavedModels.value;
+        const secretValue = await this.deps.secretStore.get(ref);
+
+        // S-D 前置拒绝（**在 CoordinatedWrite 之外**）：本路径走
+        // `savedModels.deleteByProvider(id)` **批量抹掉**该 provider 的全部已保存模型，
+        // 完全不经过 `ProviderModelService.deleteSaved` 的 in-use 守卫 ⇒ 即便那条守卫
+        // 补全了，这条路依然能静默清空被引用的模型。拒绝发生在任何删除动作之前，
+        // 因此不破坏既有五步 CoordinatedWrite 的 rollback 配对。
         for (const m of savedModels) {
-          await this.deps.savedModels.insert(m);
+            const refs = await SavedModelReferences.find(this.deps.conn, m.id);
+            // ⚠️ `currentModelId` 是**软指针**，不是内容引用。真实契约分两半，缺一不可：
+            //   ① 【本处】把它从 blockingRefs 里滤掉——把它当硬引用会把这层既有契约打死，
+            //      provider 只要是当前模型就永远删不掉。真正必须前置拒绝的内容引用只有
+            //      agent_definition / chat_project / chat_session 三类。
+            //   ② 【调用方】三个调用方都在 **delete 之前**读一次 currentModelId 并按
+            //      `saved.providerId === id` 算好 clearCurrentModel，**delete 成功返回之后**
+            //      才 resetCurrentModelId（currentProviderId 同理）：
+            //        - apps/cli/src/provider/commands.ts `delete` 分支
+            //        - apps/desktop/src/main/ipc/handlers/providers.ts `handleProvidersDelete`
+            //        - apps/mobile/src/screens/stack/ProvidersScreen.tsx `deleteProviderOne`
+            //      顺序不可换：delete 会级联抹掉本 provider 名下的 saved model 行，
+            //      之后再 getSavedById 恒为 null ⇒ reset 永不执行 ⇒ currentModelId 悬空
+            //      固化进新会话的 agent_config_json，发消息才抛 INVALID_SAVED_MODEL_ID。
+            //
+            // ⚠️⚠️ 本过滤**依赖三个调用方的 delete 前置判定顺序**——服务层自己不清理这条软
+            // 指针，全靠调用方兜。改动任一调用方（新增第四个端、或调整上述顺序）**必须**
+            // 同步复核另外两端，否则软指针悬空会静默复发。
+            const blockingRefs = refs.filter((r) => r !== "currentModelId");
+            if (blockingRefs.length > 0) {
+                // 写死复用 SAVED_MODEL_IN_USE、**不新造 PROVIDER_IN_USE**：
+                // 码表里没有后者（写了会编译不过）；
+                // `formatIpcError` 按 instanceof 类分派后原样透传 err.code，
+                // 前端零 SAVED_MODEL_IN_USE 命中 ⇒ 没有需要同步的映射表，
+                // 新造码只会让前端拿不到已处理的文案。
+                const descriptor = { key: "error.provider.saved_model_in_use", params: { model_name: m.modelName, blocking_refs: blockingRefs.join("、") } } as const;
+                return Result.err(new AppError("PROVIDER_SAVED_MODEL_IN_USE", { descriptor, providerId: id }));
+            }
         }
+
+        const write = new CoordinatedWrite();
+        write.register({
+            name: "delete-suggestions",
+            execute: async () => {
+                const deleted = await this.deps.suggestions.deleteByProvider(id);
+                if (!deleted.ok) return deleted;
+                return Result.ok(undefined);
+            },
+            rollback: async () => {
+                for (const s of suggestions) {
+                    await this.deps.suggestions.upsert(s);
+                }
+                return Result.ok(undefined);
+            },
+        });
+        write.register({
+            name: "delete-saved-models",
+            execute: async () => {
+                await this.deps.savedModels.deleteByProvider(id);
+                return Result.ok(undefined);
+            },
+            rollback: async () => {
+                for (const m of savedModels) {
+                    await this.deps.savedModels.insert(m);
+                }
+                return Result.ok(undefined);
+            },
+        });
+        write.register({
+            name: "delete-provider",
+            execute: async () => {
+                await this.deps.providers.delete(id);
+                return Result.ok(undefined);
+            },
+            rollback: async () => {
+                await this.deps.providers.insert(provider);
+                return Result.ok(undefined);
+            },
+        });
+        write.register({
+            name: "delete-secret",
+            execute: async () => {
+                if (await this.deps.secretStore.has(ref)) {
+                    await this.deps.secretStore.delete(ref);
+                }
+                return Result.ok(undefined);
+            },
+            rollback: async () => {
+                if (secretValue != null) {
+                    await this.deps.secretStore.set(ref, secretValue);
+                }
+                return Result.ok(undefined);
+            },
+        });
+        const ran = await write.run();
+        if (!ran.ok) return Result.err(ran.error);
         return Result.ok(undefined);
-      },
-    });
-    write.register({
-      name: "delete-provider",
-      execute: async () => {
-        await this.deps.providers.delete(id);
-        return Result.ok(undefined);
-      },
-      rollback: async () => {
-        await this.deps.providers.insert(provider);
-        return Result.ok(undefined);
-      },
-    });
-    write.register({
-      name: "delete-secret",
-      execute: async () => {
-        if (await this.deps.secretStore.has(ref)) {
-          await this.deps.secretStore.delete(ref);
-        }
-        return Result.ok(undefined);
-      },
-      rollback: async () => {
-        if (secretValue != null) {
-          await this.deps.secretStore.set(ref, secretValue);
-        }
-        return Result.ok(undefined);
-      },
-    });
-    const ran = await write.run();
-    if (!ran.ok) return Result.err(ran.error);
-    return Result.ok(undefined);
-  }
+    }
 }

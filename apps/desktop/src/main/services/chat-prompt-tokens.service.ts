@@ -10,12 +10,11 @@
  * r3-dt-align（对齐 mobile 四层防护）：本文件的整串级重活（build 装配、resolve
  * 计数）与发送链共享 main 进程的单事件循环与单 SQLite 连接，mobile 真机实锤过
  * 它把 POST 派发从 +1.2s 拖到 +19.6s。desktop 侧四层落点：
- * ① 判活源 {@link isDesktopSessionRunInFlight}（core abortRegistry，单向 import）；
+ * ① 判活源 {@link Agent.isDesktopSessionRunInFlight}（core abortRegistry，单向 import）；
  * ② run 在途抑制（读口入口 + 后台暖机排程两处判活）+ **null 哨兵**返回契约；
  * ③ build 分段弃权（SessionPromptInputService.buildAdapter 的 shouldBail）与 resolve 段
- *   弃权（错误通道迁移二期起 core 读口沿 Outcome.cancelled/replaced 返回，
- *   读口就地转抛 build 同款哨兵）——两类都由 {@link isChipBailError} 收口，
- *   **绝不进 fallback**；
+ *   弃权（core 读口沿 Outcome.cancelled/replaced 返回）——两类都沿 **null 哨兵返回值**
+ *   收口（error-matrix-final R3：异常哨兵退役），**绝不进 fallback**；
  * ④ run 终态后补推一次读口（走防抖入口，与抽屉自发那次合并，见文件末尾注册处）。
  *
  * r3-cache-3：第二相投递改为「直接推暖机手里已有的精确档」，不再「补读一次现值」
@@ -26,7 +25,6 @@
  * @module services/chat-prompt-tokens
  */
 import { app } from "electron";
-import { ChatPromptBuildBailedError } from "@novel-master/core";
 import type { ChatMessageData } from "@novel-master/core/chat";
 import { MessageBodyText } from "@novel-master/core/prompt";
 import { type AppError } from "@novel-master/core/errors";
@@ -35,10 +33,10 @@ import { TokenFormat } from "@novel-master/core/common";
 
 import { TokenCounterMode } from "@novel-master/core/provider";
 import {
-  PromptLlmInputCount,
-  PromptTokens,
-  serializePromptLlmInput,
-  type TokenCounterRegistry,
+    PromptLlmInputCount,
+    PromptTokens,
+    serializePromptLlmInput,
+    type TokenCounterRegistry,
 } from "@novel-master/core/tokenizer";
 import { EncodingCache } from "@novel-master/tokenizer-driver-node";
 import { LogFactory } from "@novel-master/core/log";
@@ -53,17 +51,16 @@ const log = LogFactory.create("desktop.chat-prompt-tokens");
 
 // 传给计数分叉的参数：计数必需的三项 + rawMessages（cache miss 时回填用）。
 type CountArgs = Pick<SessionPromptInputBundle, "layout" | "ctx" | "rawMessages"> & {
-  savedModelId: string;
+    savedModelId: string;
 };
 type CountResult = {
-  tokenCount: number;
-  estimated: boolean;
-  counterKind: string;
-  contextWindow: number | undefined;
-  source: "api" | "local";
+    tokenCount: number;
+    estimated: boolean;
+    counterKind: string;
+    contextWindow: number | undefined;
+    source: "api" | "local";
 };
-type CountFn = (args: CountArgs) => Promise<Result<CountResult, AppError>>;
-type StatsResult = Result<PromptChatTokenStatsResponse, AppError>;
+type CountFn = (args: CountArgs) => Promise<Result<CountResult | null, AppError>>;
 type NullableStatsResult = Result<PromptChatTokenStatsResponse | null, AppError>;
 
 /**
@@ -74,12 +71,12 @@ type NullableStatsResult = Result<PromptChatTokenStatsResponse | null, AppError>
  * 模型是否已变」的唯一比对基准，也得一并带过来。
  */
 type PrecisePushMaterial = {
-  /** 暖机当时 resolve 用的 savedModelId（= 当轮 `params.savedModelId`）。 */
-  readonly savedModelId: string;
-  readonly tokenCount: number;
-  readonly estimated: boolean;
-  readonly counterKind: string;
-  readonly source: "api" | "local";
+    /** 暖机当时 resolve 用的 savedModelId（= 当轮 `params.savedModelId`）。 */
+    readonly savedModelId: string;
+    readonly tokenCount: number;
+    readonly estimated: boolean;
+    readonly counterKind: string;
+    readonly source: "api" | "local";
 };
 
 /**
@@ -100,13 +97,13 @@ const CHAT_PROMPT_TOKEN_DEBOUNCE_MS = 300;
  * - `scope`：记录最后一次触发的 scope，trailing 到期按最新触发执行。
  */
 type ChatPromptTokenDebounceSlot = {
-  timer: ReturnType<typeof setTimeout> | null;
-  deferred: {
-    promise: Promise<Result<PromptChatTokenStatsResponse | null, AppError>>;
-    resolve: (value: Promise<Result<PromptChatTokenStatsResponse | null, AppError>>) => void;
-  } | null;
-  running: Promise<Result<PromptChatTokenStatsResponse | null, AppError>> | null;
-  scope: SessionPromptScope;
+    timer: ReturnType<typeof setTimeout> | null;
+    deferred: {
+        promise: Promise<Result<PromptChatTokenStatsResponse | null, AppError>>;
+        resolve: (value: Promise<Result<PromptChatTokenStatsResponse | null, AppError>>) => void;
+    } | null;
+    running: Promise<Result<PromptChatTokenStatsResponse | null, AppError>> | null;
+    scope: SessionPromptScope;
 };
 
 const chatPromptTokenDebounceSlots = new Map<string, ChatPromptTokenDebounceSlot>();
@@ -130,19 +127,7 @@ const chatPromptTokenDebounceExecCounts = new Map<string, number>();
 const readWarmInflight = new Set<string>();
 
 export namespace ChatPromptTokensService {
-  /**
-   * chip 读口中途弃权的哨兵错误判定：build 段（ChatPromptBuildBailedError，
-   * desktop 侧本地抛）。resolve 段自错误通道迁移二期起不再抛哨兵——core 读口
-   * 沿 Outcome.cancelled/replaced 返回，调用点就地转抛本哨兵后仍由本判定收口。
-   * 各调用点都必须收成 **null 哨兵**——漏任何一处，弃权错误都会逃逸进
-   * {@link loadResilient} 的兜底分支，而兜底是「完整 build +
-   * 启发式计数」的重活，正是要消灭的那一趟。与 mobile 的 isChipBailError 同款口径。
-   */
-  function isChipBailError(error: unknown): boolean {
-    return error instanceof ChatPromptBuildBailedError;
-  }
-
-  /**
+    /**
    * 兜底口径的 token 数：真 cl100k 计数优先，编码表建不起来才退回字符折算。
    *
    * 为什么不直接用 `runtime.tokenCounters.heuristic.countText`：那个 port 的实现就是
@@ -160,15 +145,15 @@ export namespace ChatPromptTokensService {
    * 建表**（实测 185~248ms，期间事件循环阻塞、IPC 排队）——只是这笔开销从此被精确档
    * 一并复用，不再是双命名空间时代的「各建各的」。
    */
-  function countFallbackTokens(runtime: DesktopNovelMasterRuntime, serialized: string): number {
-    const real = EncodingCache.countText(serialized);
-    if (real != null) {
-      return real;
+    function countFallbackTokens(runtime: DesktopNovelMasterRuntime, serialized: string): number {
+        const real = EncodingCache.countText(serialized);
+        if (real != null) {
+            return real;
+        }
+        return runtime.tokenCounters.heuristic.countText(serialized);
     }
-    return runtime.tokenCounters.heuristic.countText(serialized);
-  }
 
-  /**
+    /**
    * 注入真分词器版 heuristic 计数器的 registry 视图（不改动 runtime 上的原对象）。
    *
    * ⚠️ **禁令：不得用对象展开（浅拷贝 `{ ...base }` 那种写法）去复制
@@ -182,102 +167,114 @@ export namespace ChatPromptTokensService {
    * 一旦 core 那条兜底开始调 `forVendorModel(...)`，这里就会抛
    * `forVendorModel is not a function`——而这是 desktop 的**最后一道兜底**，抛错就没有下一层了。
    */
-  // nm-style: keep-local — chat-prompt-tokens.test 直引断言兜底计数器装配形态；内联会破坏测试锁名。
-  export function withRealFallbackCounter(runtime: DesktopNovelMasterRuntime): TokenCounterRegistry {
-    const base = runtime.tokenCounters;
-    return {
-      // `getTokenizerOverride` 虽是自有属性（构造函数里赋值），但它是**外部函数值**：
-      // 搬成新对象的自有属性后 `this` 会指向新对象而不是原实例，所以必须 `.bind(base)`。
-      getTokenizerOverride: base.getTokenizerOverride?.bind(base),
-      forSavedModel: (id, o) => base.forSavedModel(id, o),
-      forVendorModel: (id, o) => base.forVendorModel(id, o),
-      // 把 countFallbackTokens 包成 `TokenCounter` 适配器：core 的
-      // `PromptLlmInputCount.countHeuristicOnly`（异常兜底路径）只认 `registry.heuristic`
-      // 这个**同步 port**，而 core 本身不该依赖任何分词器实现。读数口径变真，
-      // 其余行为（counterKind 仍为 `heuristic`、`estimated: true`）完全不变。
-      heuristic: {
-        // 仍然自称 heuristic：这层跑的 cl100k 对当前模型**未必**是其家族 tokenizer，
-        // 上游据此继续按「估算」处理（压缩阈值会乘 0.85 安全系数）。
-        kind: "heuristic",
-        countText: (text: string) => countFallbackTokens(runtime, text),
-        // 拼成一整串再计数：按消息逐条计数会丢掉相邻消息之间的合并，拼接口径与
-        // 序列化提示词时「合成一串再数」一致。
-        countMessages: (messages: readonly ChatMessageData[]) => countFallbackTokens(runtime, messages.map((m) => MessageBodyText.fromBlocks(m.content.blocks)).join("\n\n")),
-      },
-    };
-  }
+    // nm-style: keep-local — chat-prompt-tokens.test 直引断言兜底计数器装配形态；内联会破坏测试锁名。
+    export function withRealFallbackCounter(runtime: DesktopNovelMasterRuntime): TokenCounterRegistry {
+        const base = runtime.tokenCounters;
+        return {
+            // `getTokenizerOverride` 虽是自有属性（构造函数里赋值），但它是**外部函数值**：
+            // 搬成新对象的自有属性后 `this` 会指向新对象而不是原实例，所以必须 `.bind(base)`。
+            getTokenizerOverride: base.getTokenizerOverride?.bind(base),
+            forSavedModel: (id, o) => base.forSavedModel(id, o),
+            forVendorModel: (id, o) => base.forVendorModel(id, o),
+            // 把 countFallbackTokens 包成 `TokenCounter` 适配器：core 的
+            // `PromptLlmInputCount.countHeuristicOnly`（异常兜底路径）只认 `registry.heuristic`
+            // 这个**同步 port**，而 core 本身不该依赖任何分词器实现。读数口径变真，
+            // 其余行为（counterKind 仍为 `heuristic`、`estimated: true`）完全不变。
+            heuristic: {
+                // 仍然自称 heuristic：这层跑的 cl100k 对当前模型**未必**是其家族 tokenizer，
+                // 上游据此继续按「估算」处理（压缩阈值会乘 0.85 安全系数）。
+                kind: "heuristic",
+                countText: (text: string) => countFallbackTokens(runtime, text),
+                // 拼成一整串再计数：按消息逐条计数会丢掉相邻消息之间的合并，拼接口径与
+                // 序列化提示词时「合成一串再数」一致。
+                countMessages: (messages: readonly ChatMessageData[]) => countFallbackTokens(runtime, messages.map((m) => MessageBodyText.fromBlocks(m.content.blocks)).join("\n\n")),
+            },
+        };
+    }
 
-  /**
+    /** buildTokenStats 的参数对象（>4 参签名收口）：计数字段同对象，字段名即文档。 */
+    type BuildTokenStatsParams = {
+        readonly tokenCount: number;
+        readonly estimated: boolean;
+        readonly counterKind: string;
+        readonly contextWindow: number | undefined;
+        readonly source: "api" | "local";
+    };
+
+    /**
    * 统计响应装配：main 在产出时把完整 label 拼好（core 的
    * {@link TokenFormat.sourceBadge} + {@link TokenFormat.contextUsageLabel} 单源），
    * renderer 纯渲染 `stats.label`，不再本地拼装（X1：renderer 不能 import core）。
    */
-  function buildTokenStats(tokenCount: number, estimated: boolean, counterKind: string, contextWindow: number | undefined, source: "api" | "local"): PromptChatTokenStatsResponse {
-    const pct = contextWindow != null && contextWindow > 0 ? Math.min(999, Math.round((tokenCount / contextWindow) * 100)) : undefined;
-    const badge = TokenFormat.sourceBadge(source, counterKind, estimated);
-    const label = TokenFormat.contextUsageLabel(tokenCount, contextWindow, badge);
-    return {
-      tokenCount,
-      contextWindow,
-      pct,
-      estimated,
-      counterKind,
-      source,
-      label,
-    };
-  }
-
-  // 主路径与 fallback 的公共骨架：负责构造输入、读取 sessionConfig、解析 savedModelId，
-  // 以及 savedModelId 缺失时的 heuristic 早退。只有真正调用 token counter 的部分通过 countFn 分叉。
-  //
-  // `shouldBail`（r3-dt-align 第 2/3 层）：读口两条路径（首帧、后台暖机）传「run 在途」
-  // 判据进来，让 build 的分段检查点与 resolve 的整串级检查点都有观察点；fallback
-  // 不传（它只在真异常后跑，见 loadFallback 注释）。
-  //
-  // 错误通道迁移四期：已知失败沿 `Result` 上行（build 装配失败 / sessionConfig 读
-  // 失败 / countFn 已知失败），由 resilient 统一收口降级；弃权哨兵
-  // ChatPromptBuildBailedError 与未知异常仍走 throw 通道。
-  async function computeStats(runtime: DesktopNovelMasterRuntime, scope: SessionPromptScope, countFn: CountFn, shouldBail?: () => boolean): Promise<StatsResult> {
-    const built = await SessionPromptInputService.buildAdapter(runtime, scope, undefined, shouldBail != null ? { shouldBail } : undefined);
-    if (!built.ok) return Result.err(built.error);
-    const { definition, layout, ctx, rawMessages } = built.value;
-
-    // 弃权检查点（build/resolve 关键边界，r3-dt-align 第 2 层）：build 的分段 bail 只
-    // 管得到 build 段内部，最后一段 bail 到 resolve 派发之间还夹着
-    // getSessionAgentConfig、模型解析、TokenCounterMode.resolveForModel 三次
-    // IO——run 起步的窗口正落在这里。命中即由上层 catch 收成 null 哨兵（保留旧标签），
-    // 绝不放行到 resolve。
-    if (shouldBail?.() === true) {
-      throw new ChatPromptBuildBailedError();
+    function buildTokenStats(p: BuildTokenStatsParams): PromptChatTokenStatsResponse {
+        const { tokenCount, estimated, counterKind, contextWindow, source } = p;
+        const pct = contextWindow != null && contextWindow > 0 ? Math.min(999, Math.round((tokenCount / contextWindow) * 100)) : undefined;
+        const badge = TokenFormat.sourceBadge(source, counterKind, estimated);
+        const label = TokenFormat.contextUsageLabel(tokenCount, contextWindow, badge);
+        return {
+            tokenCount,
+            contextWindow,
+            pct,
+            estimated,
+            counterKind,
+            source,
+            label,
+        };
     }
 
-    // workspace 层已移除：模型解析链为 agent pin → session.modelId。
-    const sessionConfig = await runtime.sessions.getSessionAgentConfig(scope.sessionId);
-    // 已知失败沿 Result 上行，resilient 收口降级（错误通道迁移四期）。
-    if (!sessionConfig.ok) return Result.err(sessionConfig.error);
-    const savedModelId = definition.model ?? sessionConfig.value.modelId;
+    // 主路径与 fallback 的公共骨架：负责构造输入、读取 sessionConfig、解析 savedModelId，
+    // 以及 savedModelId 缺失时的 heuristic 早退。只有真正调用 token counter 的部分通过 countFn 分叉。
+    //
+    // `shouldBail`（r3-dt-align 第 2/3 层）：读口两条路径（首帧、后台暖机）传「run 在途」
+    // 判据进来，让 build 的分段检查点与 resolve 的整串级检查点都有观察点；fallback
+    // 不传（它只在真异常后跑，见 loadFallback 注释）。
+    //
+    // 错误通道迁移四期：已知失败沿 `Result` 上行（build 装配失败 / sessionConfig 读
+    // 失败 / countFn 已知失败），由 resilient 统一收口降级；弃权（run 在途）返回
+    // Result.ok(null)——弃权是数据不是错误（error-matrix-final R3）。
+    async function computeStats(runtime: DesktopNovelMasterRuntime, scope: SessionPromptScope, countFn: CountFn, shouldBail?: () => boolean): Promise<NullableStatsResult> {
+        const built = await SessionPromptInputService.buildAdapter(runtime, scope, undefined, shouldBail != null ? { shouldBail } : undefined);
+        if (!built.ok) return Result.err(built.error);
+        if (built.value == null) return Result.ok(null);
+        const { definition, layout, ctx, rawMessages } = built.value;
 
-    if (!savedModelId) {
-      // 此处恒不拼 tools（UI 读口拿不到定义，`session-prompt-input` 不产 tools）：
-      // 口径差是已登记收窄（见 ③ spec `:46`），不要以为拼了就是全量。
-      // 压缩评估路径由 agent-runner 传 tools，那是真口径（取舍说明见
-      // `serializeToolsForTokenCount` 头注释）。
-      const serialized = await serializePromptLlmInput(layout, ctx);
-      if (!serialized.ok) return Result.err(serialized.error);
-      // 无模型可用 → 只能按默认编码估算。仍然走真分词器（cl100k）而不是字符折算：
-      // 「预估」标签与 counterKind 语义不变，变的是读数——折算对中文低估八成，而这
-      // 正是最需要保守估计的一条路径。
-      const count = countFallbackTokens(runtime, serialized.value);
-      return Result.ok(buildTokenStats(count, true, "heuristic", undefined, "local"));
+        // 弃权检查点（build/resolve 关键边界，r3-dt-align 第 2 层）：build 的分段 bail 只
+        // 管得到 build 段内部，最后一段 bail 到 resolve 派发之间还夹着
+        // getSessionAgentConfig、模型解析、TokenCounterMode.resolveForModel 三次
+        // IO——run 起步的窗口正落在这里。命中即返回 null 哨兵（保留旧标签），
+        // 绝不放行到 resolve（error-matrix-final R3）。
+        if (shouldBail?.() === true) {
+            return Result.ok(null);
+        }
+
+        // workspace 层已移除：模型解析链为 agent pin → session.modelId。
+        const sessionConfig = await runtime.sessions.getSessionAgentConfig(scope.sessionId);
+        // 已知失败沿 Result 上行，resilient 收口降级（错误通道迁移四期）。
+        if (!sessionConfig.ok) return Result.err(sessionConfig.error);
+        const savedModelId = definition.model ?? sessionConfig.value.modelId;
+
+        if (!savedModelId) {
+            // 此处恒不拼 tools（UI 读口拿不到定义，`session-prompt-input` 不产 tools）：
+            // 口径差是已登记收窄（见 ③ spec `:46`），不要以为拼了就是全量。
+            // 压缩评估路径由 agent-runner 传 tools，那是真口径（取舍说明见
+            // `serializeToolsForTokenCount` 头注释）。
+            const serialized = await serializePromptLlmInput(layout, ctx);
+            if (!serialized.ok) return Result.err(serialized.error);
+            // 无模型可用 → 只能按默认编码估算。仍然走真分词器（cl100k）而不是字符折算：
+            // 「预估」标签与 counterKind 语义不变，变的是读数——折算对中文低估八成，而这
+            // 正是最需要保守估计的一条路径。
+            const count = countFallbackTokens(runtime, serialized.value);
+            return Result.ok(buildTokenStats({ tokenCount: count, estimated: true, counterKind: "heuristic", contextWindow: undefined, source: "local" }));
+        }
+
+        const counted = await countFn({ layout, ctx, savedModelId, rawMessages });
+        if (!counted.ok) return Result.err(counted.error);
+        if (counted.value == null) return Result.ok(null);
+        const { tokenCount, estimated, counterKind, contextWindow, source } = counted.value;
+        return Result.ok(buildTokenStats({ tokenCount, estimated, counterKind, contextWindow, source }));
     }
 
-    const counted = await countFn({ layout, ctx, savedModelId, rawMessages });
-    if (!counted.ok) return Result.err(counted.error);
-    const { tokenCount, estimated, counterKind, contextWindow, source } = counted.value;
-    return Result.ok(buildTokenStats(tokenCount, estimated, counterKind, contextWindow, source));
-  }
-
-  /**
+    /**
    * 判断「暖机算完之后，会话模型还是不是暖机时那一个」。
    *
    * 判据（cr-fix-spec-r3 r3-cache-3）：比对暖机用的 savedModelId 与**当下**解析
@@ -289,20 +286,20 @@ export namespace ChatPromptTokensService {
    * 比对不上（读失败、agent 不存在、无可用模型）一律返回 false：宁可信「变了」
    * 去补读一次，也不让旧模型的精确标签闪进 UI。
    */
-  async function isPreciseWarmStillCurrent(runtime: DesktopNovelMasterRuntime, scope: SessionPromptScope, warmSavedModelId: string): Promise<boolean> {
-    try {
-      const sessionConfig = await runtime.sessions.getSessionAgentConfig(scope.sessionId);
-      // 读失败（已知失败）与 registry.get 失败同判：宁可信「变了」去补读一次。
-      if (!sessionConfig.ok) return false;
-      const definition = await runtime.agentRegistry.get(sessionConfig.value.agentId);
-      if (!definition.ok) return false;
-      return (definition.value.model ?? sessionConfig.value.modelId) === warmSavedModelId;
-    } catch {
-      return false;
+    async function isPreciseWarmStillCurrent(runtime: DesktopNovelMasterRuntime, scope: SessionPromptScope, warmSavedModelId: string): Promise<boolean> {
+        try {
+            const sessionConfig = await runtime.sessions.getSessionAgentConfig(scope.sessionId);
+            // 读失败（已知失败）与 registry.get 失败同判：宁可信「变了」去补读一次。
+            if (!sessionConfig.ok) return false;
+            const definition = await runtime.agentRegistry.get(sessionConfig.value.agentId);
+            if (!definition.ok) return false;
+            return (definition.value.model ?? sessionConfig.value.modelId) === warmSavedModelId;
+        } catch {
+            return false;
+        }
     }
-  }
 
-  /**
+    /**
    * 两阶段第二相的投递：把暖机**手里已有的**精确档直接推给 renderer
    * （cr-fix-spec-r3 r3-cache-3）。
    *
@@ -320,50 +317,139 @@ export namespace ChatPromptTokensService {
    *    档，但闸不能省——将来若有人把估算档也递进来，少了这道闸就会用
    *    `gpt ≈` 盖掉 chip 上已有的 `gpt =`。
    */
-  async function pushPreciseStatsIfReady(runtime: DesktopNovelMasterRuntime, scope: SessionPromptScope, warm: PrecisePushMaterial): Promise<void> {
-    if (warm.estimated) {
-      return;
-    }
-    if (!(await isPreciseWarmStillCurrent(runtime, scope, warm.savedModelId))) {
-      // 暖机期间切了模型：手里的精确读数属于旧模型，直接推会让旧标签闪进 UI。
-      // 按当下模型补读一次；拿到 null（run 在途被抑制/中途弃权）或已知失败
-      // （四期沿 Result 上行）就如实不推，开发期留一条与暖机链同款的告警。
-      const reread = await loadNow(runtime, scope, { armPreciseWarm: false });
-      if (!reread.ok) {
-        if (!app.isPackaged) {
-          log.warn("prompt token precise warm-up failed", { error: reread.error });
+    async function pushPreciseStatsIfReady(runtime: DesktopNovelMasterRuntime, scope: SessionPromptScope, warm: PrecisePushMaterial): Promise<void> {
+        if (warm.estimated) {
+            return;
         }
-        return;
-      }
-      const stats = reread.value;
-      if (stats == null || stats.estimated) {
-        return;
-      }
-      PromptChatTokenUpdatedForwarder.notify({
-        sessionId: scope.sessionId,
-        stats,
-      });
-      return;
+        if (!(await isPreciseWarmStillCurrent(runtime, scope, warm.savedModelId))) {
+            // 暖机期间切了模型：手里的精确读数属于旧模型，直接推会让旧标签闪进 UI。
+            // 按当下模型补读一次；拿到 null（run 在途被抑制/中途弃权）或已知失败
+            // （四期沿 Result 上行）就如实不推，开发期留一条与暖机链同款的告警。
+            const reread = await loadNow(runtime, scope, { armPreciseWarm: false });
+            if (!reread.ok) {
+                if (!app.isPackaged) {
+                    log.warn("prompt token precise warm-up failed", { error: reread.error });
+                }
+                return;
+            }
+            const stats = reread.value;
+            if (stats == null || stats.estimated) {
+                return;
+            }
+            PromptChatTokenUpdatedForwarder.notify({
+                sessionId: scope.sessionId,
+                stats,
+            });
+            return;
+        }
+        // 模型没变 ⇒ 手里这份就是当下的精确读数，直接装配推送。
+        // contextWindow 是轻查询（模型元信息一行），与主路径里那次同款。
+        const cw = await runtime.providerModels.getContextWindow(warm.savedModelId);
+        if (!cw.ok) {
+            // 推送失败只丢「这次升级」（错误通道迁移七期：原沿 throw 进上层 .catch
+            // 的非弃权分支，收口同款——开发期留痕，不影响 chip 既有标签）。
+            if (!app.isPackaged) {
+                log.warn("prompt token precise warm-up failed", { error: cw.error });
+            }
+            return;
+        }
+        const contextWindow = cw.value;
+        PromptChatTokenUpdatedForwarder.notify({
+            sessionId: scope.sessionId,
+            stats: buildTokenStats({ tokenCount: warm.tokenCount, estimated: warm.estimated, counterKind: warm.counterKind, contextWindow: contextWindow ?? undefined, source: warm.source }),
+        });
     }
-    // 模型没变 ⇒ 手里这份就是当下的精确读数，直接装配推送。
-    // contextWindow 是轻查询（模型元信息一行），与主路径里那次同款。
-    const cw = await runtime.providerModels.getContextWindow(warm.savedModelId);
-    if (!cw.ok) {
-      // 推送失败只丢「这次升级」（错误通道迁移七期：原沿 throw 进上层 .catch
-      // 的非弃权分支，收口同款——开发期留痕，不影响 chip 既有标签）。
-      if (!app.isPackaged) {
-        log.warn("prompt token precise warm-up failed", { error: cw.error });
-      }
-      return;
-    }
-    const contextWindow = cw.value;
-    PromptChatTokenUpdatedForwarder.notify({
-      sessionId: scope.sessionId,
-      stats: buildTokenStats(warm.tokenCount, warm.estimated, warm.counterKind, contextWindow ?? undefined, warm.source),
-    });
-  }
 
-  /**
+    /** resolve 读口的弃权判据（错误通道迁移二期）：run 在途即本轮读数被在途 run 取代，收成 replaced。 */
+    function bailInterrupt(runtime: DesktopNovelMasterRuntime, scope: SessionPromptScope): Interrupt | null {
+        return Agent.isDesktopSessionRunInFlight(runtime, scope.sessionId) ? { kind: "replaced" } : null;
+    }
+
+    /** 「完整口径」resolve 一跳：首帧 resolve 与紧随其后的后台暖机复用同一份 params（口径漂移会让暖过的缓存没人命中）。 */
+    async function countWithWarm(runtime: DesktopNovelMasterRuntime, scope: SessionPromptScope, armPreciseWarm: boolean, args: CountArgs): Promise<Result<CountResult | null, AppError>> {
+        const { layout, ctx, savedModelId } = args;
+        // 一次「完整口径」resolve 所需的 params 组装（tokenizerOverride / registry /
+        // savedModels 三件套）：首帧 resolve 与紧随其后的后台暖机**复用同一份 params**
+        // （暖机不重新组装）——口径漂移（比如漏传 `tokenizerOverride`）会让 L1 写入的
+        // scope 键对不上，暖过的缓存没人命中，升级推送「偶发失效」。
+        const mode = await TokenCounterMode.resolveForModel(runtime.providerModels, savedModelId);
+        // 已知失败沿 Result 上行（错误通道迁移七期），由 countFn 的 Result 通道收口。
+        if (!mode.ok) return Result.err(mode.error);
+        const params = { layout, ctx, savedModelId, registry: runtime.tokenCounters, tokenizerOverride: mode.value, savedModels: runtime.savedModelRepo };
+        // 直接 resolve（历史上的 cache miss 回填步骤已废弃：置位/压缩后旧值不准，
+        // 统一走本地 tokenizer 重算）。compaction trigger 不走这里，行为不变。
+        // 传 sessionKkv：命中上次 completed run 落库的 API 占用（含跨重启），
+        // 与压缩评估同一读口、同一口径。
+        const outcome = await PromptTokens.resolve(scope.sessionId, args.rawMessages, params, { sessionKkv: runtime.sessionKkv, preferEstimate: true, shouldBail: () => bailInterrupt(runtime, scope) });
+        if (outcome.kind === "failed") {
+            // core 读口的已知失败（现无产出路径）：沿 Result 上行（错误通道迁移
+            // 四期），不吞成弃权，由 resilient 收口降级。
+            return Result.err(outcome.error);
+        }
+        if (outcome.kind !== "completed") {
+            // 中途弃权（run 起步）：沿 countFn 的 null 通道收口（error-matrix-final R3），
+            // computeStats 返回 null，绝不进 fallback。
+            return Result.ok(null);
+        }
+        const result = outcome.value;
+        if (
+            armPreciseWarm &&
+            result.source === "local" &&
+            result.estimated &&
+            !readWarmInflight.has(scope.sessionId) &&
+            // run 在途不排暖机：后台暖机是整串级重活（家族真分词器 + L1 写入），
+            // 与发送链抢同一条 SQLite 连接。run 结束后那次补推（agent.ts 终态钩子）
+            // 会把这一轮补上，彼时无竞争。
+            !Agent.isDesktopSessionRunInFlight(runtime, scope.sessionId)
+        ) {
+            readWarmInflight.add(scope.sessionId);
+            void PromptTokens.resolve(scope.sessionId, args.rawMessages, params, { sessionKkv: runtime.sessionKkv, shouldBail: () => bailInterrupt(runtime, scope) })
+                .then(async (precise) => {
+                    if (precise.kind !== "completed") {
+                        // 中途弃权（run 起步，错误通道迁移二期沿返回值到达）：没有更
+                        // 准的读数可推，静默收场。
+                        return;
+                    }
+                    // 暖机没拿到比估算更好的档（该家族只有近似档 / 编码表建不起来）
+                    // → 没有更准的读数可推，chip 停在 `gpt ≈` 才是如实。
+                    if (precise.value.estimated) {
+                        return;
+                    }
+                    // r3-cache-3：直接推这份精确档（不补读、不重跑 build）；
+                    // 只有「暖机期间模型已变」才在 push 内部补读一次。
+                    await pushPreciseStatsIfReady(runtime, scope, {
+                        savedModelId,
+                        tokenCount: precise.value.tokenCount,
+                        estimated: precise.value.estimated,
+                        counterKind: precise.value.counterKind,
+                        source: precise.value.source,
+                    });
+                })
+                .catch((error: unknown) => {
+                    // 暖机/推送失败只丢「这次升级」，不影响正确性；但完全静默会让
+                    // chip 永停估算档且无从排查（cr-fix-spec-r2 full/I-1）——开发期
+                    // 留痕与首帧失败同款。
+                    if (!app.isPackaged) {
+                        log.warn("prompt token precise warm-up failed", { error });
+                    }
+                })
+                .finally(() => readWarmInflight.delete(scope.sessionId));
+        }
+        const cw = await runtime.providerModels.getContextWindow(savedModelId);
+        // 已知失败沿 countFn 的 Result 通道上行（错误通道迁移七期）：resilient
+        // 收到 Err 仍走 fallback，与旧「throw → catch → fallback」同一终点。
+        if (!cw.ok) return Result.err(cw.error);
+        const contextWindow = cw.value;
+        return Result.ok({
+            tokenCount: result.tokenCount,
+            estimated: result.estimated,
+            counterKind: result.counterKind,
+            contextWindow: contextWindow ?? undefined,
+            source: result.source,
+        });
+    }
+
+    /**
    * 真正执行底层计算的一跳（原 `loadChatPromptTokenStats` 函数体）。
    *
    * 对外入口 {@link load} 已套防抖；本函数只被防抖执行链
@@ -384,142 +470,51 @@ export namespace ChatPromptTokensService {
    * 放在公开入口，补推会把自己判成在途、当场掐掉，chip 就永远停在旧读数。
    * 防抖的 300ms trailing 天然跨过这个窗口：判活执行时 run 早已收尾。
    */
-  async function loadNow(runtime: DesktopNovelMasterRuntime, scope: SessionPromptScope, options?: { readonly armPreciseWarm?: boolean }): Promise<NullableStatsResult> {
-    const armPreciseWarm = options?.armPreciseWarm ?? true;
-    // 一次成型、整条链共用：build 分段检查点、build/resolve 边界、resolve 内部
-    // 整串级检查点、后台暖机的排程判断，全看这一条判据（与 mobile 同款口径）。
-    const shouldBail = (): boolean => Agent.isDesktopSessionRunInFlight(runtime, scope.sessionId);
-    // resolve 读口的弃权判据（错误通道迁移二期）：core 读口不再抛哨兵、改收
-    // Interrupt——run 在途即本轮读数被在途 run 取代，收成 replaced。
-    const bailInterrupt = (): Interrupt | null => (shouldBail() ? { kind: "replaced" } : null);
-    if (shouldBail()) {
-      // 在途即跳过本轮：进得去也停不下才是真问题（mobile 实锤过 build 把
-      // POST 派发从 +1.2s 拖到 +19.6s），所以这里连输入装配都不起步。
-      return Result.ok(null);
-    }
-    const countFn = async (args: CountArgs): Promise<Result<CountResult, AppError>> => {
-      const { layout, ctx, savedModelId } = args;
-      // 一次「完整口径」resolve 所需的 params 组装（tokenizerOverride / registry /
-      // savedModels 三件套）：首帧 resolve 与紧随其后的后台暖机**复用同一份 params**
-      // （暖机不重新组装）——口径漂移（比如漏传 `tokenizerOverride`）会让 L1 写入的
-      // scope 键对不上，暖过的缓存没人命中，升级推送「偶发失效」。
-      const mode = await TokenCounterMode.resolveForModel(runtime.providerModels, savedModelId);
-      // 已知失败沿 Result 上行（错误通道迁移七期），由 countFn 的 Result 通道收口。
-      if (!mode.ok) return Result.err(mode.error);
-      const params = { layout, ctx, savedModelId, registry: runtime.tokenCounters, tokenizerOverride: mode.value, savedModels: runtime.savedModelRepo };
-      // 直接 resolve（历史上的 cache miss 回填步骤已废弃：置位/压缩后旧值不准，
-      // 统一走本地 tokenizer 重算）。compaction trigger 不走这里，行为不变。
-      // 传 sessionKkv：命中上次 completed run 落库的 API 占用（含跨重启），
-      // 与压缩评估同一读口、同一口径。
-      const outcome = await PromptTokens.resolve(scope.sessionId, args.rawMessages, params, { sessionKkv: runtime.sessionKkv, preferEstimate: true, shouldBail: bailInterrupt });
-      if (outcome.kind === "failed") {
-        // core 读口的已知失败（现无产出路径）：沿 Result 上行（错误通道迁移
-        // 四期），不吞成弃权，由 resilient 收口降级。
-        return Result.err(outcome.error);
-      }
-      if (outcome.kind !== "completed") {
-        // 中途弃权（run 起步）：core 不再抛哨兵，转抛本地 bail 哨兵——既有
-        // isChipBailError catch 收成 null，绝不进 fallback。
-        throw new ChatPromptBuildBailedError();
-      }
-      const result = outcome.value;
-      if (
-        armPreciseWarm &&
-        result.source === "local" &&
-        result.estimated &&
-        !readWarmInflight.has(scope.sessionId) &&
-        // run 在途不排暖机：后台暖机是整串级重活（家族真分词器 + L1 写入），
-        // 与发送链抢同一条 SQLite 连接。run 结束后那次补推（agent.ts 终态钩子）
-        // 会把这一轮补上，彼时无竞争。
-        !shouldBail()
-      ) {
-        readWarmInflight.add(scope.sessionId);
-        void PromptTokens.resolve(scope.sessionId, args.rawMessages, params, { sessionKkv: runtime.sessionKkv, shouldBail: bailInterrupt })
-          .then(async (precise) => {
-            if (precise.kind !== "completed") {
-              // 中途弃权（run 起步，错误通道迁移二期沿返回值到达）：没有更
-              // 准的读数可推，静默收场。
-              return;
-            }
-            // 暖机没拿到比估算更好的档（该家族只有近似档 / 编码表建不起来）
-            // → 没有更准的读数可推，chip 停在 `gpt ≈` 才是如实。
-            if (precise.value.estimated) {
-              return;
-            }
-            // r3-cache-3：直接推这份精确档（不补读、不重跑 build）；
-            // 只有「暖机期间模型已变」才在 push 内部补读一次。
-            await pushPreciseStatsIfReady(runtime, scope, {
-              savedModelId,
-              tokenCount: precise.value.tokenCount,
-              estimated: precise.value.estimated,
-              counterKind: precise.value.counterKind,
-              source: precise.value.source,
-            });
-          })
-          .catch((error: unknown) => {
-            if (isChipBailError(error)) {
-              // 中途弃权（run 起步）：静默收场，不留失败痕迹。
-              return;
-            }
-            // 暖机/推送失败只丢「这次升级」，不影响正确性；但完全静默会让
-            // chip 永停估算档且无从排查（cr-fix-spec-r2 full/I-1）——开发期
-            // 留痕与首帧失败同款。
-            if (!app.isPackaged) {
-              log.warn("prompt token precise warm-up failed", { error });
-            }
-          })
-          .finally(() => readWarmInflight.delete(scope.sessionId));
-      }
-      const cw = await runtime.providerModels.getContextWindow(savedModelId);
-      // 已知失败沿 countFn 的 Result 通道上行（错误通道迁移七期）：resilient
-      // 收到 Err 仍走 fallback，与旧「throw → catch → fallback」同一终点。
-      if (!cw.ok) return Result.err(cw.error);
-      const contextWindow = cw.value;
-      return Result.ok({
-        tokenCount: result.tokenCount,
-        estimated: result.estimated,
-        counterKind: result.counterKind,
-        contextWindow: contextWindow ?? undefined,
-        source: result.source,
-      });
-    };
-    return computeStats(runtime, scope, countFn, shouldBail);
-  }
-
-  function scheduleTrailing(runtime: DesktopNovelMasterRuntime, key: string, slot: ChatPromptTokenDebounceSlot): void {
-    if (slot.timer != null) {
-      clearTimeout(slot.timer);
-    }
-    slot.timer = setTimeout(() => {
-      slot.timer = null;
-      // 计时到期：取走窗口内 caller 共享的 deferred（可能为 null——那是「在途
-      // 期间新触发」安排的追赶轮，无等待者也要执行，新数据才算到位）。
-      const deferred = slot.deferred;
-      slot.deferred = null;
-      const previousRun = slot.running;
-      const run = (previousRun ? previousRun.catch(() => undefined) : Promise.resolve()).then(() => {
-        chatPromptTokenDebounceExecCounts.set(key, (chatPromptTokenDebounceExecCounts.get(key) ?? 0) + 1);
-        return loadNow(runtime, slot.scope);
-      });
-      slot.running = run;
-      const settle = () => {
-        if (slot.running === run) {
-          slot.running = null;
+    async function loadNow(runtime: DesktopNovelMasterRuntime, scope: SessionPromptScope, options?: { readonly armPreciseWarm?: boolean }): Promise<NullableStatsResult> {
+        const armPreciseWarm = options?.armPreciseWarm ?? true;
+        if (Agent.isDesktopSessionRunInFlight(runtime, scope.sessionId)) {
+            // 在途即跳过本轮：进得去也停不下才是真问题（mobile 实锤过 build 把
+            // POST 派发从 +1.2s 拖到 +19.6s），所以这里连输入装配都不起步。
+            return Result.ok(null);
         }
-      };
-      run.then(settle, settle);
-      // 兜底 handler：无 caller 的追赶轮 rejection 不会变 unhandled；有 caller
-      // 时多挂一个 handler 不影响失败向 caller 的原样传播（resilient 接住走 fallback）。
-      run.catch(() => undefined);
-      if (deferred != null) {
-        // caller 的 promise 直接接到本轮执行上（resolve 扁平化；失败原样传播，
-        // 由 resilient 包装接住走 fallback）。
-        deferred.resolve(run);
-      }
-    }, CHAT_PROMPT_TOKEN_DEBOUNCE_MS);
-  }
+        return computeStats(runtime, scope, (args) => countWithWarm(runtime, scope, armPreciseWarm, args), () => Agent.isDesktopSessionRunInFlight(runtime, scope.sessionId));
+    }
 
-  /**
+    function scheduleTrailing(runtime: DesktopNovelMasterRuntime, key: string, slot: ChatPromptTokenDebounceSlot): void {
+        if (slot.timer != null) {
+            clearTimeout(slot.timer);
+        }
+        slot.timer = setTimeout(() => {
+            slot.timer = null;
+            // 计时到期：取走窗口内 caller 共享的 deferred（可能为 null——那是「在途
+            // 期间新触发」安排的追赶轮，无等待者也要执行，新数据才算到位）。
+            const deferred = slot.deferred;
+            slot.deferred = null;
+            const previousRun = slot.running;
+            const run = (previousRun ? previousRun.catch(() => undefined) : Promise.resolve()).then(() => {
+                chatPromptTokenDebounceExecCounts.set(key, (chatPromptTokenDebounceExecCounts.get(key) ?? 0) + 1);
+                return loadNow(runtime, slot.scope);
+            });
+            slot.running = run;
+            // nm-style: keep-closure — slot 已是对象槽（timer/deferred/running），settle 只做 running===run 才清的 CAS；4 行单调用点，提升后 run.then 需双 wrapper，净收益为负。
+            const settle = () => {
+                if (slot.running === run) {
+                    slot.running = null;
+                }
+            };
+            run.then(settle, settle);
+            // 兜底 handler：无 caller 的追赶轮 rejection 不会变 unhandled；有 caller
+            // 时多挂一个 handler 不影响失败向 caller 的原样传播（resilient 接住走 fallback）。
+            run.catch(() => undefined);
+            if (deferred != null) {
+                // caller 的 promise 直接接到本轮执行上（resolve 扁平化；失败原样传播，
+                // 由 resilient 包装接住走 fallback）。
+                deferred.resolve(run);
+            }
+        }, CHAT_PROMPT_TOKEN_DEBOUNCE_MS);
+    }
+
+    /**
    * token 统计读口（IPC 并发语义保持）：按 sessionId 做 300ms trailing
    * debounce + 同参在途 Promise 合并。
    *
@@ -533,77 +528,77 @@ export namespace ChatPromptTokensService {
    * 收场**（不清空、不显示占位），语义与 mobile 的空串哨兵一一对应；已知失败沿
    * `Result.err` 上行（错误通道迁移四期），弃权哨兵与未知异常仍走 rejection 通道。
    */
-  export function load(runtime: DesktopNovelMasterRuntime, scope: SessionPromptScope): Promise<Result<PromptChatTokenStatsResponse | null, AppError>> {
-    const key = scope.sessionId;
-    let slot = chatPromptTokenDebounceSlots.get(key);
-    if (slot == null) {
-      slot = { timer: null, deferred: null, running: null, scope };
-      chatPromptTokenDebounceSlots.set(key, slot);
+    export function load(runtime: DesktopNovelMasterRuntime, scope: SessionPromptScope): Promise<Result<PromptChatTokenStatsResponse | null, AppError>> {
+        const key = scope.sessionId;
+        let slot = chatPromptTokenDebounceSlots.get(key);
+        if (slot == null) {
+            slot = { timer: null, deferred: null, running: null, scope };
+            chatPromptTokenDebounceSlots.set(key, slot);
+        }
+        slot.scope = scope;
+        if (slot.running != null) {
+            // 在途复用：并发请求直接挂正在跑的这一轮；追赶轮保证新触发最终被计算。
+            scheduleTrailing(runtime, key, slot);
+            return slot.running;
+        }
+        if (slot.deferred == null) {
+            let resolve!: (value: Promise<Result<PromptChatTokenStatsResponse | null, AppError>>) => void;
+            const promise = new Promise<Result<PromptChatTokenStatsResponse | null, AppError>>((res) => {
+                resolve = res;
+            });
+            slot.deferred = { promise, resolve };
+        }
+        scheduleTrailing(runtime, key, slot);
+        return slot.deferred.promise;
     }
-    slot.scope = scope;
-    if (slot.running != null) {
-      // 在途复用：并发请求直接挂正在跑的这一轮；追赶轮保证新触发最终被计算。
-      scheduleTrailing(runtime, key, slot);
-      return slot.running;
-    }
-    if (slot.deferred == null) {
-      let resolve!: (value: Promise<Result<PromptChatTokenStatsResponse | null, AppError>>) => void;
-      const promise = new Promise<Result<PromptChatTokenStatsResponse | null, AppError>>((res) => {
-        resolve = res;
-      });
-      slot.deferred = { promise, resolve };
-    }
-    scheduleTrailing(runtime, key, slot);
-    return slot.deferred.promise;
-  }
 
-  /** 测试钩子：清空防抖槽与执行计数（用例间隔离，防跨用例串扰）。 */
-  export function resetDebounceForTests(): void {
-    for (const slot of chatPromptTokenDebounceSlots.values()) {
-      if (slot.timer != null) {
-        clearTimeout(slot.timer);
-      }
+    /** 测试钩子：清空防抖槽与执行计数（用例间隔离，防跨用例串扰）。 */
+    export function resetDebounceForTests(): void {
+        for (const slot of chatPromptTokenDebounceSlots.values()) {
+            if (slot.timer != null) {
+                clearTimeout(slot.timer);
+            }
+        }
+        chatPromptTokenDebounceSlots.clear();
+        chatPromptTokenDebounceExecCounts.clear();
     }
-    chatPromptTokenDebounceSlots.clear();
-    chatPromptTokenDebounceExecCounts.clear();
-  }
 
-  /** 测试钩子：读取某 sessionId 的底层计算执行次数。 */
-  export function debounceExecCountForTests(sessionId: string): number {
-    return chatPromptTokenDebounceExecCounts.get(sessionId) ?? 0;
-  }
+    /** 测试钩子：读取某 sessionId 的底层计算执行次数。 */
+    export function debounceExecCountForTests(sessionId: string): number {
+        return chatPromptTokenDebounceExecCounts.get(sessionId) ?? 0;
+    }
 
-  /**
+    /**
    * 异常兜底：主路径（真 tokenizer / API 占用）抛异常时的降级读数。
    *
    * 仍然用 core 的 `PromptLlmInputCount.countHeuristicOnly`（序列化 + 家族解析口径不重复
    * 造轮子），但传入的 registry 里的 `heuristic` 计数器已换成**真 cl100k 适配器**，
    * 所以这条路径的读数也不再是字符折算。
    */
-  async function loadFallback(runtime: DesktopNovelMasterRuntime, scope: SessionPromptScope): Promise<Result<PromptChatTokenStatsResponse, AppError>> {
-    // fallback 自身的 build 失败沿 Result 上行：resilient 原样透传给 IPC handler
-    // （与旧链路「fallback 再抛 → handler catch」同一终点、同一载荷）。
-    return computeStats(runtime, scope, async (args) => {
-      const { layout, ctx, savedModelId } = args;
-      const result = await PromptLlmInputCount.countHeuristicOnly({ layout, ctx, savedModelId, registry: withRealFallbackCounter(runtime), savedModels: runtime.savedModelRepo });
-      if (!result.ok) return Result.err(result.error);
+    async function loadFallback(runtime: DesktopNovelMasterRuntime, scope: SessionPromptScope): Promise<NullableStatsResult> {
+        // fallback 自身的 build 失败沿 Result 上行：resilient 原样透传给 IPC handler
+        // （与旧链路「fallback 再抛 → handler catch」同一终点、同一载荷）。
+        return computeStats(runtime, scope, async (args) => {
+            const { layout, ctx, savedModelId } = args;
+            const result = await PromptLlmInputCount.countHeuristicOnly({ layout, ctx, savedModelId, registry: withRealFallbackCounter(runtime), savedModels: runtime.savedModelRepo });
+            if (!result.ok) return Result.err(result.error);
 
-      // contextWindow 读失败（已知失败）按缺省收（错误通道迁移七期，与旧
-      // throw→catch 同口径：fallback 的读数主体不受模型元信息缺失影响）。
-      const cw = await runtime.providerModels.getContextWindow(savedModelId);
-      const contextWindow: number | undefined = cw.ok ? cw.value ?? undefined : undefined;
+            // contextWindow 读失败（已知失败）按缺省收（错误通道迁移七期，与旧
+            // throw→catch 同口径：fallback 的读数主体不受模型元信息缺失影响）。
+            const cw = await runtime.providerModels.getContextWindow(savedModelId);
+            const contextWindow: number | undefined = cw.ok ? cw.value ?? undefined : undefined;
 
-      return Result.ok({
-        tokenCount: result.value.tokenCount,
-        estimated: result.value.estimated,
-        counterKind: result.value.counterKind,
-        contextWindow,
-        source: "local",
-      });
-    });
-  }
+            return Result.ok({
+                tokenCount: result.value.tokenCount,
+                estimated: result.value.estimated,
+                counterKind: result.value.counterKind,
+                contextWindow,
+                source: "local",
+            });
+        });
+    }
 
-  /**
+    /**
    * IPC 读口入口：主路径失败时的降级读数。
    *
    * **两类中途弃权错误（build 段 / resolve 段）绝不进本函数**（r3-dt-align 第 2
@@ -611,23 +606,22 @@ export namespace ChatPromptTokensService {
    * ——弃权错误一旦漏到这里，不仅没省下任何算力，还白跑一次全量装配。所以先判哨兵
    * 错误直接回 null（保留旧标签），只有真异常才降级。与 mobile 侧同款防陷阱注释。
    */
-  // nm-style: keep-local — chat-prompt-tokens-run-suppression.test 直引断言降级读数（3 个调用点）；内联会破坏测试锁名。
-  export async function loadResilient(runtime: DesktopNovelMasterRuntime, scope: SessionPromptScope): Promise<Result<PromptChatTokenStatsResponse | null, AppError>> {
-    try {
-      const r = await load(runtime, scope);
-      // 已知失败沿 Result 到达（错误通道迁移四期）：与旧「throw → catch → fallback」
-      // 同路径降级，fallback 自身的失败再原样透传给 IPC handler。
-      if (!r.ok) return loadFallback(runtime, scope);
-      return r;
-    } catch (error) {
-      if (isChipBailError(error)) {
-        return Result.ok(null);
-      }
-      return loadFallback(runtime, scope);
+    // nm-style: keep-local — chat-prompt-tokens-run-suppression.test 直引断言降级读数（3 个调用点）；内联会破坏测试锁名。
+    export async function loadResilient(runtime: DesktopNovelMasterRuntime, scope: SessionPromptScope): Promise<Result<PromptChatTokenStatsResponse | null, AppError>> {
+        try {
+            const r = await load(runtime, scope);
+            // 已知失败沿 Result 到达（错误通道迁移四期）：与旧「throw → catch → fallback」
+            // 同路径降级，fallback 自身的失败再原样透传给 IPC handler。
+            if (!r.ok) return loadFallback(runtime, scope);
+            return r;
+        } catch (error) {
+            // 弃权不再走异常通道（error-matrix-final R3：computeStats 返回 null 哨兵），
+            // 本 catch 只兜未知异常 → fallback 降级。
+            return loadFallback(runtime, scope);
+        }
     }
-  }
 
-  /**
+    /**
    * run 终态后的读口补跑（r3-dt-align 第 4 层，注册进 agent.ts 的终态钩子）。
    *
    * 走的是**防抖入口** `load`：它自带首帧估算 + 后台暖 +
@@ -637,35 +631,33 @@ export namespace ChatPromptTokensService {
    * 失败只丢这一拍：绝不让 chip 补刷的异常变成终态事件的噪声（agent.ts 侧还有
    * 一层 try/catch 兜底）。
    */
-  Agent.setRunFinishedTokenStatsRefresh((payload) => {
-    let pending: Promise<Result<PromptChatTokenStatsResponse | null, AppError>>;
-    try {
-      const runtime = DesktopRuntimeSingleton.getOrThrow();
-      pending = load(runtime, {
-        projectId: payload.projectId,
-        sessionId: payload.sessionId,
-      });
-    } catch {
-      // runtime 尚未 bootstrap（极早期窗口）时没有读口可补，如实跳过。
-      return;
-    }
-    void pending.then(
-      (r) => {
-        // 已知失败沿 Result 到达（错误通道迁移四期）：与旧 rejection 同款留痕。
-        if (!r.ok && !app.isPackaged) {
-          log.warn("prompt token post-run refresh failed", { error: r.error });
+    Agent.setRunFinishedTokenStatsRefresh((payload) => {
+        let pending: Promise<Result<PromptChatTokenStatsResponse | null, AppError>>;
+        try {
+            const runtime = DesktopRuntimeSingleton.getOrThrow();
+            pending = load(runtime, {
+                projectId: payload.projectId,
+                sessionId: payload.sessionId,
+            });
+        } catch {
+            // runtime 尚未 bootstrap（极早期窗口）时没有读口可补，如实跳过。
+            return;
         }
-      },
-      (error: unknown) => {
-        if (isChipBailError(error)) {
-          return;
-        }
-        if (!app.isPackaged) {
-          log.warn("prompt token post-run refresh failed", { error });
-        }
-      }
-    );
-  });
+        void pending.then(
+            (r) => {
+                // 已知失败沿 Result 到达（错误通道迁移四期）：与旧 rejection 同款留痕。
+                if (!r.ok && !app.isPackaged) {
+                    log.warn("prompt token post-run refresh failed", { error: r.error });
+                }
+            },
+            (error: unknown) => {
+                // 弃权已沿 null 哨兵返回值到达（error-matrix-final R3），rejection 只剩未知异常。
+                if (!app.isPackaged) {
+                    log.warn("prompt token post-run refresh failed", { error });
+                }
+            }
+        );
+    });
 }
 
 // 此前的 deprecated 链（loadChatPromptTokenLabelResilient + formatChatTokenStatsLabel）

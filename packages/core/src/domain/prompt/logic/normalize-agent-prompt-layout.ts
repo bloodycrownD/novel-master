@@ -9,21 +9,21 @@ import type { PersistTextPromptBlock } from "../model/agent-prompt-layout.js";
 import { AgentPromptLayout } from "../model/agent-prompt-layout.js";
 
 export const AgentPromptLayoutNormalize = {
-  /**
+    /**
    * 从 wire persist map 丢弃 `type:worktree` 条目（**不**据此设 workplace）。
    */
-  stripLegacyWorktreeBlocksFromPersistMap(persist: Record<string, unknown>): Record<string, unknown> {
-    const filtered: Record<string, unknown> = {};
-    for (const [name, item] of Object.entries(persist)) {
-      if (item != null && typeof item === "object" && !Array.isArray(item) && (item as { type?: unknown }).type === "worktree") {
-        continue;
-      }
-      filtered[name] = item;
-    }
-    return filtered;
-  },
+    stripLegacyWorktreeBlocksFromPersistMap(persist: Record<string, unknown>): Record<string, unknown> {
+        const filtered: Record<string, unknown> = {};
+        for (const [name, item] of Object.entries(persist)) {
+            if (item != null && typeof item === "object" && !Array.isArray(item) && (item as { type?: unknown }).type === "worktree") {
+                continue;
+            }
+            filtered[name] = item;
+        }
+        return filtered;
+    },
 
-  /**
+    /**
    * 运行期穷举断言：normalize 是否逐字段保值（wave-e H2 Step 2）。
    *
    * **为什么不按「与实际 spread 集合对账」的字面写法实现**：运行期导不出「实际 spread 集合」，
@@ -34,23 +34,23 @@ export const AgentPromptLayoutNormalize = {
    *
    * 供测试与生产双用；失败即抛 `Error`（不 exit），由调用方决定怎么报。
    */
-  assertNormalizeCoversAllFields(): void {
-    const normalized = AgentPromptLayoutNormalize.normalizeDomain({
-      ...NORMALIZE_FIELD_SENTINELS,
-      persist: [],
-      dynamic: [],
-    });
-    const missed: NormalizedOptionalField[] = [];
-    for (const field of Object.keys(NORMALIZED_OPTIONAL_FIELDS) as NormalizedOptionalField[]) {
-      // ⚠️ 用 !== 而非 in：某字段被「写了但值不对」（如 skillsEnabled 写成 === true）同样要红。
-      if (normalized[field] !== NORMALIZE_FIELD_SENTINELS[field]) {
-        missed.push(field);
-      }
-    }
-    assert(missed.length === 0, `[invariant] AgentPromptLayoutNormalize.normalizeDomain 白名单漏字段：${missed.join("、")}。` + `NORMALIZED_OPTIONAL_FIELDS 声明了这些字段，但 normalize 没有原样回吐哨兵值 —— ` + `多半是对应的条件 spread 被删了，或分支条件写反（如 skillsEnabled 写成 === true）。`);
-  },
+    assertNormalizeCoversAllFields(): void {
+        const normalized = AgentPromptLayoutNormalize.normalizeDomain({
+            ...NORMALIZE_FIELD_SENTINELS,
+            persist: [],
+            dynamic: [],
+        });
+        const missed: NormalizedOptionalField[] = [];
+        for (const field of Object.keys(NORMALIZED_OPTIONAL_FIELDS) as NormalizedOptionalField[]) {
+            // ⚠️ 用 !== 而非 in：某字段被「写了但值不对」（如 skillsEnabled 写成 === true）同样要红。
+            if (normalized[field] !== NORMALIZE_FIELD_SENTINELS[field]) {
+                missed.push(field);
+            }
+        }
+        assert(missed.length === 0, `[invariant] AgentPromptLayoutNormalize.normalizeDomain 白名单漏字段：${missed.join("、")}。` + `NORMALIZED_OPTIONAL_FIELDS 声明了这些字段，但 normalize 没有原样回吐哨兵值 —— ` + `多半是对应的条件 spread 被删了，或分支条件写反（如 skillsEnabled 写成 === true）。`);
+    },
 
-  /**
+    /**
    * 域 layout 归一化：persist 仅 text；保留非空 `workplace` string（勿压成 boolean）；丢弃旧 worktree 块。
    *
    * ⚠️ 本函数的返回对象由**显式白名单逐字段重建**，因此白名单必须覆盖
@@ -64,24 +64,24 @@ export const AgentPromptLayoutNormalize = {
    * 而 `skillsEnabled` 用 `=== false`（缺省 = 开，仅显式 false 表示关闭，
    * 见 `agent-definition.schema.ts`）——写成 `=== true` 会把用户已关闭的技能能力过滤掉。
    */
-  normalizeDomain(layout: AgentPromptLayout): AgentPromptLayout {
-    const persist = layout.persist.filter((block): block is PersistTextPromptBlock => (block as { type?: string }).type === "text");
-    return {
-      ...(layout.system != null && layout.system.trim() !== "" ? { system: layout.system } : {}),
-      ...(layout.persistEnabled === true ? { persistEnabled: true } : {}),
-      ...(layout.dynamicEnabled === true ? { dynamicEnabled: true } : {}),
-      ...(AgentPromptLayout.hasWorkplace(layout) ? { workplace: layout.workplace } : {}),
-      ...(AgentPromptLayout.hasCustomAttach(layout) ? { customAttach: layout.customAttach } : {}),
-      ...(layout.skillsEnabled === false ? { skillsEnabled: false } : {}),
-      // 与 AgentPromptLayoutValidate.validateFromMaps 逐字对齐：`skillsEnabled` 是「缺省 = 开」。
-      ...(() => {
-        const prefixRaw = layout.skillsPrefix;
-        return typeof prefixRaw === "string" && prefixRaw.trim().length > 0 ? { skillsPrefix: prefixRaw } : {};
-      })(),
-      persist,
-      dynamic: [...layout.dynamic],
-    };
-  },
+    normalizeDomain(layout: AgentPromptLayout): AgentPromptLayout {
+        const persist = layout.persist.filter((block): block is PersistTextPromptBlock => (block as { type?: string }).type === "text");
+        return {
+            ...(layout.system != null && layout.system.trim() !== "" ? { system: layout.system } : {}),
+            ...(layout.persistEnabled === true ? { persistEnabled: true } : {}),
+            ...(layout.dynamicEnabled === true ? { dynamicEnabled: true } : {}),
+            ...(AgentPromptLayout.hasWorkplace(layout) ? { workplace: layout.workplace } : {}),
+            ...(AgentPromptLayout.hasCustomAttach(layout) ? { customAttach: layout.customAttach } : {}),
+            ...(layout.skillsEnabled === false ? { skillsEnabled: false } : {}),
+            // 与 AgentPromptLayoutValidate.validateFromMaps 逐字对齐：`skillsEnabled` 是「缺省 = 开」。
+            ...(() => {
+                const prefixRaw = layout.skillsPrefix;
+                return typeof prefixRaw === "string" && prefixRaw.trim().length > 0 ? { skillsPrefix: prefixRaw } : {};
+            })(),
+            persist,
+            dynamic: [...layout.dynamic],
+        };
+    },
 } as const;
 
 /**
@@ -100,13 +100,13 @@ export const AgentPromptLayoutNormalize = {
  * ⚠️ 值全写 `null`：本表只表达「键集合」，不表达取值；取值由 {@link NORMALIZE_FIELD_SENTINELS} 负责。
  */
 export const NORMALIZED_OPTIONAL_FIELDS = {
-  system: null,
-  persistEnabled: null,
-  dynamicEnabled: null,
-  workplace: null,
-  customAttach: null,
-  skillsEnabled: null,
-  skillsPrefix: null,
+    system: null,
+    persistEnabled: null,
+    dynamicEnabled: null,
+    workplace: null,
+    customAttach: null,
+    skillsEnabled: null,
+    skillsPrefix: null,
 } satisfies Record<Exclude<keyof AgentPromptLayout, "persist" | "dynamic">, null>;
 
 /** {@link NORMALIZED_OPTIONAL_FIELDS} 的键类型（编译期与上面那张表同源，不会漂移）。 */
@@ -121,11 +121,11 @@ export type NormalizedOptionalField = keyof typeof NORMALIZED_OPTIONAL_FIELDS;
  * ⚠️ 两张表是**分开的**（一张只管键、一张只管值），所以测试里有一条断言专查它们键集是否一致。
  */
 export const NORMALIZE_FIELD_SENTINELS = {
-  system: "__sentinel__system",
-  persistEnabled: true,
-  dynamicEnabled: true,
-  workplace: "__sentinel__workplace",
-  customAttach: "__sentinel__customAttach",
-  skillsEnabled: false,
-  skillsPrefix: "__sentinel__skillsPrefix",
+    system: "__sentinel__system",
+    persistEnabled: true,
+    dynamicEnabled: true,
+    workplace: "__sentinel__workplace",
+    customAttach: "__sentinel__customAttach",
+    skillsEnabled: false,
+    skillsPrefix: "__sentinel__skillsPrefix",
 } satisfies Record<NormalizedOptionalField, Exclude<AgentPromptLayout[NormalizedOptionalField], undefined>>;

@@ -9,276 +9,276 @@ import TestRenderer, {act} from 'react-test-renderer';
 const mockShowToast = jest.fn();
 
 jest.mock('@react-navigation/native', () => ({
-  useFocusEffect: () => undefined,
-  useIsFocused: () => true,
+    useFocusEffect: () => undefined,
+    useIsFocused: () => true,
 }));
 
 jest.mock('../src/theme/ThemeProvider', () => ({
-  useTheme: () => ({
-    tokens: {
-      background: '#000',
-      surface: '#111',
-      surfaceElevated: '#111',
-      border: '#222',
-      borderLight: '#222',
-      text: '#fff',
-      textSecondary: '#ccc',
-      textTertiary: '#777',
-      primary: '#08f',
-      danger: '#f00',
-    },
-  }),
+    useTheme: () => ({
+        tokens: {
+            background: '#000',
+            surface: '#111',
+            surfaceElevated: '#111',
+            border: '#222',
+            borderLight: '#222',
+            text: '#fff',
+            textSecondary: '#ccc',
+            textTertiary: '#777',
+            primary: '#08f',
+            danger: '#f00',
+        },
+    }),
 }));
 
 jest.mock('../src/hooks/useDismissOverlaysOnBlur', () => ({
-  useDismissOverlaysOnBlur: () => undefined,
+    useDismissOverlaysOnBlur: () => undefined,
 }));
 
 jest.mock('../src/components/chrome/ToastHost', () => ({
-  useToast: () => ({showToast: mockShowToast}),
+    useToast: () => ({showToast: mockShowToast}),
 }));
 
 jest.mock('../src/errors/toast-message', () => {
-  const legacy = {
-  toastMessage: (_title: string, err: unknown) =>
-    err instanceof Error ? err.message : String(err),
+    const legacy = {
+    toastMessage: (_title: string, err: unknown) =>
+        err instanceof Error ? err.message : String(err),
 };
-  return {...legacy, ToastMessage: {toast: legacy.toastMessage}};
+    return {...legacy, ToastMessage: {toast: legacy.toastMessage}};
 });
 
 jest.mock('../src/services/vfs-operations.service', () => {
-  const legacy = {
-  createVfsDirectory: jest.fn(),
-  createVfsFile: jest.fn(),
-  deleteScopedVfsEntry: jest.fn(),
-  renameVfsDirectory: jest.fn(),
-  renameVfsFile: jest.fn(),
-  sessionCreateVfsDirectory: jest.fn(),
-  sessionCreateVfsFile: jest.fn(),
-  sessionRenameVfsDirectory: jest.fn(),
-  sessionRenameVfsFile: jest.fn(),
+    const legacy = {
+    createVfsDirectory: jest.fn(),
+    createVfsFile: jest.fn(),
+    deleteScopedVfsEntry: jest.fn(),
+    renameVfsDirectory: jest.fn(),
+    renameVfsFile: jest.fn(),
+    sessionCreateVfsDirectory: jest.fn(),
+    sessionCreateVfsFile: jest.fn(),
+    sessionRenameVfsDirectory: jest.fn(),
+    sessionRenameVfsFile: jest.fn(),
 };
-  return {...legacy, VfsOperationsService: {deleteScopedEntry: legacy.deleteScopedVfsEntry, sessionCreateFile: legacy.sessionCreateVfsFile, sessionCreateDirectory: legacy.sessionCreateVfsDirectory, sessionRenameFile: legacy.sessionRenameVfsFile, sessionRenameFile: legacy.sessionRenameVfsDirectory}};
+    return {...legacy, VfsOperationsService: {deleteScopedEntry: legacy.deleteScopedVfsEntry, sessionCreateFile: legacy.sessionCreateVfsFile, sessionCreateDirectory: legacy.sessionCreateVfsDirectory, sessionRenameFile: legacy.sessionRenameVfsFile, sessionRenameFile: legacy.sessionRenameVfsDirectory}};
 });
 
 jest.mock('../src/services/workplace-operations.service', () => {
-  const actual = jest.requireActual(
-    '../src/services/workplace-operations.service',
-  ) as typeof import('../src/services/workplace-operations.service');
-  return {
-    ...actual,
-    batchSetDirRulesEnabled: jest.fn(),
-    cycleFileInclusion: jest.fn(),
-    migrateWorkplaceDirRename: jest.fn(),
-    toggleDirRuleEnabled: jest.fn(),
-  };
+    const actual = jest.requireActual(
+        '../src/services/workplace-operations.service',
+    ) as typeof import('../src/services/workplace-operations.service');
+    return {
+        ...actual,
+        batchSetDirRulesEnabled: jest.fn(),
+        cycleFileInclusion: jest.fn(),
+        migrateWorkplaceDirRename: jest.fn(),
+        toggleDirRuleEnabled: jest.fn(),
+    };
 });
 
 const mockMenuOpenCount = {opened: 0};
 
 jest.mock('../src/components/sheet/BottomSheetMenu', () => ({
-  BottomSheetMenu: ({
-    items,
-  }: {
-    visible: boolean;
-    onSelect: (action: string) => void;
-    items: {action: string}[];
-  }) => {
-    // 不看 visible：只按 items 内容计数——readOnly 下三张 sheet（行菜单 /
-    // more 菜单 / 导入形式选择）都必须 items 全空，任何一张漏网都会被记上。
-    if (items.length > 0) {
-      mockMenuOpenCount.opened += 1;
-    }
-    return null;
-  },
+    BottomSheetMenu: ({
+        items,
+    }: {
+        visible: boolean;
+        onSelect: (action: string) => void;
+        items: {action: string}[];
+    }) => {
+        // 不看 visible：只按 items 内容计数——readOnly 下三张 sheet（行菜单 /
+        // more 菜单 / 导入形式选择）都必须 items 全空，任何一张漏网都会被记上。
+        if (items.length > 0) {
+            mockMenuOpenCount.opened += 1;
+        }
+        return null;
+    },
 }));
 
 jest.mock('../src/components/sheet/DirectoryRuleSheet', () => ({
-  DirectoryRuleSheet: () => null,
+    DirectoryRuleSheet: () => null,
 }));
 
 jest.mock('../src/components/prompt/TemplatePullButton', () => ({
-  TemplatePullButton: () => null,
+    TemplatePullButton: () => null,
 }));
 
 jest.mock('../src/services/vfs-zip.service', () => {
-  const legacy = {
-  exportVfsZip: jest.fn(),
-  importVfsZip: jest.fn(),
+    const legacy = {
+    exportVfsZip: jest.fn(),
+    importVfsZip: jest.fn(),
 };
-  return {...legacy, VfsZipService: {exportZip: legacy.exportVfsZip, importZip: legacy.importVfsZip}};
+    return {...legacy, VfsZipService: {exportZip: legacy.exportVfsZip, importZip: legacy.importVfsZip}};
 });
 
 jest.mock('../src/services/vfs-character-card.service', () => {
-  const legacy = {
-  importCharacterCard: jest.fn(),
+    const legacy = {
+    importCharacterCard: jest.fn(),
 };
-  return {...legacy, VfsCharacterCardService: {import: legacy.importCharacterCard}};
+    return {...legacy, VfsCharacterCardService: {import: legacy.importCharacterCard}};
 });
 
 // Step 5 起组件直接 import 单文件导入导出服务（picker / 另存面板，测试里 mock）。
 jest.mock('../src/services/vfs-single-file.service', () => {
-  const legacy = {
-  exportVfsSingleFile: jest.fn(),
-  importVfsSingleFile: jest.fn(),
+    const legacy = {
+    exportVfsSingleFile: jest.fn(),
+    importVfsSingleFile: jest.fn(),
 };
-  return {...legacy, VfsSingleFileService: {exportFile: legacy.exportVfsSingleFile, importFile: legacy.importVfsSingleFile}};
+    return {...legacy, VfsSingleFileService: {exportFile: legacy.exportVfsSingleFile, importFile: legacy.importVfsSingleFile}};
 });
 
 jest.mock('../src/services/user-vfs-turn-execute.service', () => {
-  const legacy = {
-  refreshComposerStatusAfterUserVfsOps: jest.fn(),
+    const legacy = {
+    refreshComposerStatusAfterUserVfsOps: jest.fn(),
 };
-  return {...legacy, UserVfsTurnExecuteService: {refreshComposerStatus: legacy.refreshComposerStatusAfterUserVfsOps}};
+    return {...legacy, UserVfsTurnExecuteService: {refreshComposerStatus: legacy.refreshComposerStatusAfterUserVfsOps}};
 });
 
 jest.mock('../src/services/workplace-rule-delta-draft.service', () => {
-  const legacy = {
-  refreshRuleSnapshotAfterRuleChange: jest.fn(),
+    const legacy = {
+    refreshRuleSnapshotAfterRuleChange: jest.fn(),
 };
-  return {...legacy, WorkplaceRuleDeltaDraftService: {refreshRuleSnapshot: legacy.refreshRuleSnapshotAfterRuleChange}};
+    return {...legacy, WorkplaceRuleDeltaDraftService: {refreshRuleSnapshot: legacy.refreshRuleSnapshotAfterRuleChange}};
 });
 
 jest.mock('../src/hooks/useAndroidModalKeyboardAvoid', () => ({
-  useAndroidModalKeyboardAvoid: () => ({}),
+    useAndroidModalKeyboardAvoid: () => ({}),
 }));
 
 const mockRuntime = {
-  workplace: jest.fn(),
-  sessionKkv: {
-    clearSession: jest.fn(async () => undefined),
-    listKeys: jest.fn(async () => []),
-  },
+    workplace: jest.fn(),
+    sessionKkv: {
+        clearSession: jest.fn(async () => undefined),
+        listKeys: jest.fn(async () => []),
+    },
 };
 
 jest.mock('../src/hooks/useRuntime', () => ({
-  useRuntime: () => mockRuntime,
+    useRuntime: () => mockRuntime,
 }));
 
 const {VfsFileManager} =
-  require('../src/components/vfs/VfsFileManager') as typeof import('../src/components/vfs/VfsFileManager');
+    require('../src/components/vfs/VfsFileManager') as typeof import('../src/components/vfs/VfsFileManager');
 
 // 物理树根目录形态：虚拟目录 + 全局文件（list 为唯一数据源，workplace 不传）。
 const list = jest.fn(async () => ({
-  ok: true as const,
-  value: [
-    {path: '/projects', kind: 'directory' as const},
-    {path: '/template', kind: 'directory' as const},
-    {path: '/meta', kind: 'directory' as const},
-    {path: '/readme.md', kind: 'file' as const},
-  ],
+    ok: true as const,
+    value: [
+        {path: '/projects', kind: 'directory' as const},
+        {path: '/template', kind: 'directory' as const},
+        {path: '/meta', kind: 'directory' as const},
+        {path: '/readme.md', kind: 'file' as const},
+    ],
 }));
 
 const onOpenFile = jest.fn();
 
 function flushPromises(): Promise<void> {
-  return new Promise(resolve => setImmediate(resolve));
+    return new Promise(resolve => setImmediate(resolve));
 }
 
 function renderManager(readOnly: boolean) {
-  return (
-    <VfsFileManager
-      scope={{kind: 'global'}}
-      vfs={{list} as never}
-      rootPath="/"
-      readOnly={readOnly}
-      onOpenFile={onOpenFile}
-    />
-  );
+    return (
+        <VfsFileManager
+            scope={{kind: 'global'}}
+            vfs={{list} as never}
+            rootPath="/"
+            readOnly={readOnly}
+            onOpenFile={onOpenFile}
+        />
+    );
 }
 
 function findOptionalByTestId(
-  root: TestRenderer.ReactTestInstance,
-  testID: string,
+    root: TestRenderer.ReactTestInstance,
+    testID: string,
 ): TestRenderer.ReactTestInstance | undefined {
-  try {
-    return root.findByProps({testID});
-  } catch {
-    return undefined;
-  }
+    try {
+        return root.findByProps({testID});
+    } catch {
+        return undefined;
+    }
 }
 
 describe('T-PB3: VfsFileManager readOnly 模式（全局文件浏览器）', () => {
-  let tree: TestRenderer.ReactTestRenderer | undefined;
+    let tree: TestRenderer.ReactTestRenderer | undefined;
 
-  beforeEach(() => {
-    list.mockClear();
-    onOpenFile.mockClear();
-    mockShowToast.mockClear();
-    mockMenuOpenCount.opened = 0;
-    list.mockResolvedValue({
-      ok: true,
-      value: [
-        {path: '/projects', kind: 'directory' as const},
-        {path: '/template', kind: 'directory' as const},
-        {path: '/meta', kind: 'directory' as const},
-        {path: '/readme.md', kind: 'file' as const},
-      ],
-    });
-  });
-
-  afterEach(() => {
-    if (tree != null) {
-      act(() => {
-        tree!.unmount();
-      });
-    }
-    tree = undefined;
-  });
-
-  it('readOnly：无「更多」菜单与行菜单入口，长按不进批量', async () => {
-    await act(async () => {
-      tree = TestRenderer.create(renderManager(true));
-      await flushPromises();
+    beforeEach(() => {
+        list.mockClear();
+        onOpenFile.mockClear();
+        mockShowToast.mockClear();
+        mockMenuOpenCount.opened = 0;
+        list.mockResolvedValue({
+            ok: true,
+            value: [
+                {path: '/projects', kind: 'directory' as const},
+                {path: '/template', kind: 'directory' as const},
+                {path: '/meta', kind: 'directory' as const},
+                {path: '/readme.md', kind: 'file' as const},
+            ],
+        });
     });
 
-    expect(findOptionalByTestId(tree!.root, 'vfs-more-action')).toBeUndefined();
-    expect(
-      findOptionalByTestId(tree!.root, 'vfs-row-menu-readme.md'),
-    ).toBeUndefined();
-    expect(
-      findOptionalByTestId(tree!.root, 'vfs-row-menu-template'),
-    ).toBeUndefined();
-
-    // 长按不挂监听（不进入批量多选）。
-    const fileItem = tree!.root.findByProps({
-      testID: 'vfs-row-item-readme.md',
-    });
-    expect(fileItem.props.onLongPress).toBeUndefined();
-    // 三张 sheet 的 items 全空（T-MM3：新增的导入形式 sheet 也要守住）。
-    expect(mockMenuOpenCount.opened).toBe(0);
-  });
-
-  it('readOnly：点文件走 onOpenFile（进只读预览），点目录可逐级导航', async () => {
-    await act(async () => {
-      tree = TestRenderer.create(renderManager(true));
-      await flushPromises();
+    afterEach(() => {
+        if (tree != null) {
+            act(() => {
+                tree!.unmount();
+            });
+        }
+        tree = undefined;
     });
 
-    await act(async () => {
-      tree!.root
-        .findByProps({testID: 'vfs-row-item-readme.md'})
-        .props.onPress();
-      await flushPromises();
-    });
-    expect(onOpenFile).toHaveBeenCalledWith('/readme.md');
+    it('readOnly：无「更多」菜单与行菜单入口，长按不进批量', async () => {
+        await act(async () => {
+            tree = TestRenderer.create(renderManager(true));
+            await flushPromises();
+        });
 
-    await act(async () => {
-      tree!.root.findByProps({testID: 'vfs-row-item-template'}).props.onPress();
-      await flushPromises();
-    });
-    expect(list).toHaveBeenCalledWith('/template');
-  });
+        expect(findOptionalByTestId(tree!.root, 'vfs-more-action')).toBeUndefined();
+        expect(
+            findOptionalByTestId(tree!.root, 'vfs-row-menu-readme.md'),
+        ).toBeUndefined();
+        expect(
+            findOptionalByTestId(tree!.root, 'vfs-row-menu-template'),
+        ).toBeUndefined();
 
-  it('红线：默认（不传 readOnly）「更多」与行菜单入口仍在', async () => {
-    await act(async () => {
-      tree = TestRenderer.create(renderManager(false));
-      await flushPromises();
+        // 长按不挂监听（不进入批量多选）。
+        const fileItem = tree!.root.findByProps({
+            testID: 'vfs-row-item-readme.md',
+        });
+        expect(fileItem.props.onLongPress).toBeUndefined();
+        // 三张 sheet 的 items 全空（T-MM3：新增的导入形式 sheet 也要守住）。
+        expect(mockMenuOpenCount.opened).toBe(0);
     });
 
-    expect(findOptionalByTestId(tree!.root, 'vfs-more-action')).toBeDefined();
-    expect(
-      findOptionalByTestId(tree!.root, 'vfs-row-menu-readme.md'),
-    ).toBeDefined();
-  });
+    it('readOnly：点文件走 onOpenFile（进只读预览），点目录可逐级导航', async () => {
+        await act(async () => {
+            tree = TestRenderer.create(renderManager(true));
+            await flushPromises();
+        });
+
+        await act(async () => {
+            tree!.root
+                .findByProps({testID: 'vfs-row-item-readme.md'})
+                .props.onPress();
+            await flushPromises();
+        });
+        expect(onOpenFile).toHaveBeenCalledWith('/readme.md');
+
+        await act(async () => {
+            tree!.root.findByProps({testID: 'vfs-row-item-template'}).props.onPress();
+            await flushPromises();
+        });
+        expect(list).toHaveBeenCalledWith('/template');
+    });
+
+    it('红线：默认（不传 readOnly）「更多」与行菜单入口仍在', async () => {
+        await act(async () => {
+            tree = TestRenderer.create(renderManager(false));
+            await flushPromises();
+        });
+
+        expect(findOptionalByTestId(tree!.root, 'vfs-more-action')).toBeDefined();
+        expect(
+            findOptionalByTestId(tree!.root, 'vfs-row-menu-readme.md'),
+        ).toBeDefined();
+    });
 });

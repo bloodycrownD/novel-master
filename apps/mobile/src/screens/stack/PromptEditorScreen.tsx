@@ -46,6 +46,7 @@ import {SkillPicker} from '../../components/skills/SkillPicker';
 import {composerToolBtnStyle} from '../../components/chat/composer-toolbar-style';
 import {useNovelMaster} from '../../runtime/novel-master-context';
 import {useTheme} from '../../theme/ThemeProvider';
+import {coreT} from '../../i18n/core';
 
 /** 伪路径以 .md 结尾：编辑器按 markdown 高亮，预览走 markdown 渲染管线。 */
 const PROMPT_EDITOR_PATH = 'prompt.md';
@@ -56,51 +57,45 @@ const PROMPT_EDITOR_PATH = 'prompt.md';
  */
 const COMPOSER_EDITOR_PATH = 'composer.md';
 
-/**
- * 页内 toolbar 标题缺省值（仅 form 变体用；composer 变体不渲染 toolbar，
- * 它的「编辑消息」走导航栏标题）。
- */
-const DEFAULT_FORM_TITLE = '提示词';
-
 type PromptEditorRoute = RouteProp<RootStackParamList, 'PromptEditor'>;
 
 export function PromptEditorScreen() {
-  const {tokens} = useTheme();
-  const {showToast} = useToast();
-  const route = useRoute<PromptEditorRoute>();
-  const {title, initialText, variant = 'form', projectId, sessionId, tokenRanges: initialTokenRanges} = route.params;
-  const isComposer = variant === 'composer';
-  // 屏级 override：自动带 ownerRouteKey，转场期间不泄漏到相邻屏 header。
-  const setStackOverride = useStackOverrideSetter();
-  // 回调走模块级存取（路由参数必须可序列化）：挂载时读走并清空，
-  // 未消费即离开时不残留旧回调。composer 变体在卸载时消费（退出即回填）。
-  const onSavedRef = useRef<PromptEditorOnSaved | null>(promptEditorOnSavedSlot.take());
-  // 屏内草稿 + 已保存基线（照 FileEditorScreen 的 content/savedContent 对）：
-  // form 保存只回填调用方并推进基线，不离开页面；composer 无基线消费方。
-  const [draft, setDraft] = useState(initialText);
-  const [savedDraft, setSavedDraft] = useState(initialText);
-  /** 当拍草稿镜像：插入链与卸载回填（effect 不重挂）共用的同步读取点。 */
-  const draftRef = useRef(draft);
-  draftRef.current = draft;
-  // 编辑/预览切换（照 FileEditorScreen）：入口按钮叫「全屏编辑」，
-  // 进屏默认编辑态；预览渲染当前草稿。
-  const [previewMode, setPreviewMode] = useState(false);
-  const [previewRenderKind, setPreviewRenderKind] = useState<PreviewRenderKind>('markdown');
-  const codeEditorRef = useRef<CodeEditorWebViewHandle>(null);
+    const {tokens} = useTheme();
+    const {showToast} = useToast();
+    const route = useRoute<PromptEditorRoute>();
+    const {title, initialText, variant = 'form', projectId, sessionId, tokenRanges: initialTokenRanges} = route.params;
+    const isComposer = variant === 'composer';
+    // 屏级 override：自动带 ownerRouteKey，转场期间不泄漏到相邻屏 header。
+    const setStackOverride = useStackOverrideSetter();
+    // 回调走模块级存取（路由参数必须可序列化）：挂载时读走并清空，
+    // 未消费即离开时不残留旧回调。composer 变体在卸载时消费（退出即回填）。
+    const onSavedRef = useRef<PromptEditorOnSaved | null>(promptEditorOnSavedSlot.take());
+    // 屏内草稿 + 已保存基线（照 FileEditorScreen 的 content/savedContent 对）：
+    // form 保存只回填调用方并推进基线，不离开页面；composer 无基线消费方。
+    const [draft, setDraft] = useState(initialText);
+    const [savedDraft, setSavedDraft] = useState(initialText);
+    /** 当拍草稿镜像：插入链与卸载回填（effect 不重挂）共用的同步读取点。 */
+    const draftRef = useRef(draft);
+    draftRef.current = draft;
+    // 编辑/预览切换（照 FileEditorScreen）：入口按钮叫「全屏编辑」，
+    // 进屏默认编辑态；预览渲染当前草稿。
+    const [previewMode, setPreviewMode] = useState(false);
+    const [previewRenderKind, setPreviewRenderKind] = useState<PreviewRenderKind>('markdown');
+    const codeEditorRef = useRef<CodeEditorWebViewHandle>(null);
 
-  /* ---- composer 变体的 tag 插入链（选择器；form 变体不参与） ---- */
-  const {runtime} = useNovelMaster();
-  /** 光标（`@`/`$` 半截查询识别用；来自 web 选区上报）。
+    /* ---- composer 变体的 tag 插入链（选择器；form 变体不参与） ---- */
+    const {runtime} = useNovelMaster();
+    /** 光标（`@`/`$` 半截查询识别用；来自 web 选区上报）。
    * 初值＝文末：进全屏不点正文直接插 token 时落在末尾（与 web 侧 mount 默认
    * 选区成对——CM 挂载不触发 selectionChange，RN 侧若停在 0 会插到整篇开头）。 */
-  const [cursor, setCursor] = useState(() => (isComposer ? (initialText ?? '').length : 0));
-  /**
+    const [cursor, setCursor] = useState(() => (isComposer ? (initialText ?? '').length : 0));
+    /**
    * 最近一次选区的右缘（D11 删除锚的取值基准）：只在选区回调与命令式写入
    * 落位时显式推进，不随渲染从 `cursor` state 回灌——state 存的是 start
    * （活跃查询判定用），非折叠选区时两者不同。
    */
-  const selectionEndRef = useRef(cursor);
-  /**
+    const selectionEndRef = useRef(cursor);
+    /**
    * 编辑前光标快照（D11 删除锚，全屏侧）。
    *
    * web 侧 CodeMirror 的选区上报与文本变更走两条消息：选区在 update listener
@@ -111,27 +106,27 @@ export function PromptEditorScreen() {
    * 读到的就是变更前光标；纯点选没有后续变更，下一次上报会自然把它推进到
    * 最新位置（打字事务自带一遍选区上报）。
    */
-  const prevCursorRef = useRef<number | null>(null);
-  const [skillPickerOpen, setSkillPickerOpen] = useState(false);
-  const [pathPickerOpen, setPathPickerOpen] = useState(false);
+    const prevCursorRef = useRef<number | null>(null);
+    const [skillPickerOpen, setSkillPickerOpen] = useState(false);
+    const [pathPickerOpen, setPathPickerOpen] = useState(false);
 
-  /** 选择器可用（按钮 disabled 与 Picker 挂载共用判据）：composer 变体、路由
+    /** 选择器可用（按钮 disabled 与 Picker 挂载共用判据）：composer 变体、路由
    * 带齐 scope 且 runtime 就绪（选择器内部走 useRuntime 会抛——未就绪时静默
    * 降级，旧调用方缺参同理）。 */
-  const canOpenPicker = isComposer && projectId != null && sessionId != null && runtime != null;
-  /** 活跃的 `@`/`$` 半截查询：Picker 确认时从查询起点替换到光标（不残留半截）。 */
-  const activeAt = canOpenPicker ? composerAtPath.detectQuery(draft, cursor) : null;
-  const activeSkill = canOpenPicker ? composerAtPath.detectQuery(draft, cursor, '$') : null;
+    const canOpenPicker = isComposer && projectId != null && sessionId != null && runtime != null;
+    /** 活跃的 `@`/`$` 半截查询：Picker 确认时从查询起点替换到光标（不残留半截）。 */
+    const activeAt = canOpenPicker ? composerAtPath.detectQuery(draft, cursor) : null;
+    const activeSkill = canOpenPicker ? composerAtPath.detectQuery(draft, cursor, '$') : null;
 
-  /**
+    /**
    * 全屏侧的确认胶囊区间：进入全屏时路由带入的草稿 `tokenRanges`（ChatTabScreen
    * 透传）+ 本次会话内新插入的胶囊。守卫与 dock 同口径
    * （`queryWithinConfirmedRange` 共享纯函数）：chip 零空格插入后光标贴 token
    * 右缘，不守的话第二次确认会把上一颗整颗替换。
    */
-  const confirmedRangesRef = useRef<readonly ComposerDraftTokenRange[]>(initialTokenRanges ?? []);
+    const confirmedRangesRef = useRef<readonly ComposerDraftTokenRange[]>(initialTokenRanges ?? []);
 
-  /**
+    /**
    * 确认区间推进（全屏版 `advanceTokenRanges`）：先按文本差分 remap 旧区间
    * （用户在编辑器里打字/删除时区间随正文走），再拼接本次插入登记的新区间。
    * 守卫读到的区间必须始终对应当前正文，否则删改后的陈旧区间会误判/漏判。
@@ -140,226 +135,226 @@ export function PromptEditorScreen() {
    * `prevCursor` 是编辑前光标（D11 删除锚）：全屏内删相邻胶囊左颗时，靠它
    * 反推真实删除段，幸存区间才不会被子差分对齐误摘——与 dock 语义一致。
    */
-  const advanceConfirmedRanges = useCallback((prevText: string, nextText: string, inserted: readonly ComposerDraftTokenRange[] = [], nextCursor?: number, prevCursor?: number) => {
-    const remapped = TokenRanges.remapTokenRanges(prevText, nextText, confirmedRangesRef.current, nextCursor, prevCursor);
-    confirmedRangesRef.current = inserted.length > 0 ? [...remapped, ...inserted].sort((a, b) => a.start - b.start) : remapped;
-  }, []);
+    const advanceConfirmedRanges = useCallback((prevText: string, nextText: string, inserted: readonly ComposerDraftTokenRange[] = [], nextCursor?: number, prevCursor?: number) => {
+        const remapped = TokenRanges.remapTokenRanges({prev: prevText, next: nextText, ranges: confirmedRangesRef.current, nextCursor, prevCursor});
+        confirmedRangesRef.current = inserted.length > 0 ? [...remapped, ...inserted].sort((a, b) => a.start - b.start) : remapped;
+    }, []);
 
-  /** 编辑器打字/删除：草稿与确认区间一起推进（programmatic setText 无回声）。 */
-  const handleDraftChange = useCallback(
-    (nextText: string) => {
-      // D11 删除锚：编辑前光标（选区上报的上一拍，见 prevCursorRef 注释）。
-      advanceConfirmedRanges(draftRef.current, nextText, undefined, undefined, prevCursorRef.current ?? undefined);
-      draftRef.current = nextText;
-      setDraft(nextText);
-    },
-    [advanceConfirmedRanges],
-  );
+    /** 编辑器打字/删除：草稿与确认区间一起推进（programmatic setText 无回声）。 */
+    const handleDraftChange = useCallback(
+        (nextText: string) => {
+            // D11 删除锚：编辑前光标（选区上报的上一拍，见 prevCursorRef 注释）。
+            advanceConfirmedRanges(draftRef.current, nextText, undefined, undefined, prevCursorRef.current ?? undefined);
+            draftRef.current = nextText;
+            setDraft(nextText);
+        },
+        [advanceConfirmedRanges],
+    );
 
-  /** 提交 token 插入：web 一次写入 + 光标落位，本地草稿/光标/区间同步推进。 */
-  const commitDraft = useCallback(
-    (next: ComposerTokenInsertion) => {
-      advanceConfirmedRanges(draftRef.current, next.text, next.tokenRanges, next.cursor);
-      draftRef.current = next.text;
-      codeEditorRef.current?.setText(next.text, {
-        start: next.cursor,
-        end: next.cursor,
-      });
-      setDraft(next.text);
-      setCursor(next.cursor);
-      // 命令式写入的落位同步进镜像（与 dock 的 controller 同款）：下一次
-      // 打字事件读到的「编辑前光标」不能沿用插入前的旧选区。
-      selectionEndRef.current = next.cursor;
-      prevCursorRef.current = next.cursor;
-    },
-    [advanceConfirmedRanges],
-  );
+    /** 提交 token 插入：web 一次写入 + 光标落位，本地草稿/光标/区间同步推进。 */
+    const commitDraft = useCallback(
+        (next: ComposerTokenInsertion) => {
+            advanceConfirmedRanges(draftRef.current, next.text, next.tokenRanges, next.cursor);
+            draftRef.current = next.text;
+            codeEditorRef.current?.setText(next.text, {
+                start: next.cursor,
+                end: next.cursor,
+            });
+            setDraft(next.text);
+            setCursor(next.cursor);
+            // 命令式写入的落位同步进镜像（与 dock 的 controller 同款）：下一次
+            // 打字事件读到的「编辑前光标」不能沿用插入前的旧选区。
+            selectionEndRef.current = next.cursor;
+            prevCursorRef.current = next.cursor;
+        },
+        [advanceConfirmedRanges],
+    );
 
-  /** SkillPicker 单选：从光标（或活跃 `$` 查询）处插入 `$技能名$` token。 */
-  const insertSkillToken = useCallback(
-    (skillName: string) => {
-      // 有未完成 $… 时从 $ 起替换到光标，避免残留半截查询；但整段落进已确认
-      // 胶囊的查询是成品胶囊（光标贴其尾部），纯插入不替换。
-      const replaceStart = activeSkill != null && !ComposerTokenInsert.queryWithinConfirmedRange(confirmedRangesRef.current, activeSkill.start, cursor) ? activeSkill.start : cursor;
-      commitDraft(ComposerTokenInsert.buildTokenInsertion(draft, cursor, replaceStart, `$${skillName}$`));
-    },
-    [activeSkill, cursor, draft, commitDraft],
-  );
+    /** SkillPicker 单选：从光标（或活跃 `$` 查询）处插入 `$技能名$` token。 */
+    const insertSkillToken = useCallback(
+        (skillName: string) => {
+            // 有未完成 $… 时从 $ 起替换到光标，避免残留半截查询；但整段落进已确认
+            // 胶囊的查询是成品胶囊（光标贴其尾部），纯插入不替换。
+            const replaceStart = activeSkill != null && !ComposerTokenInsert.queryWithinConfirmedRange(confirmedRangesRef.current, activeSkill.start, cursor) ? activeSkill.start : cursor;
+            commitDraft(ComposerTokenInsert.buildTokenInsertion(draft, cursor, replaceStart, `$${skillName}$`));
+        },
+        [activeSkill, cursor, draft, commitDraft],
+    );
 
-  /**
+    /**
    * FileReferencePicker 多选：`@path@` token 零分隔空格直插（chip 口径）。
    * picker 交上来的是裸 `@path`（它被 VfsMoveDirPicker 复用），尾 `@` 在本方法补。
    */
-  const insertPathTokens = useCallback(
-    (pathTokens: readonly string[]) => {
-      if (pathTokens.length === 0) {
-        return;
-      }
-      const replaceStart = activeAt != null && !ComposerTokenInsert.queryWithinConfirmedRange(confirmedRangesRef.current, activeAt.start, cursor) ? activeAt.start : cursor;
-      // picker 交上来的是裸 `@path`：终止符在 composer 侧补（picker 与目录移动共用）
-      const insertTokens = pathTokens.map(token => `${token}@`);
-      const insertion = ComposerTokenInsert.buildTokenInsertion(draft, cursor, replaceStart, insertTokens);
-      commitDraft(insertion);
-    },
-    [activeAt, cursor, draft, commitDraft],
-  );
+    const insertPathTokens = useCallback(
+        (pathTokens: readonly string[]) => {
+            if (pathTokens.length === 0) {
+                return;
+            }
+            const replaceStart = activeAt != null && !ComposerTokenInsert.queryWithinConfirmedRange(confirmedRangesRef.current, activeAt.start, cursor) ? activeAt.start : cursor;
+            // picker 交上来的是裸 `@path`：终止符在 composer 侧补（picker 与目录移动共用）
+            const insertTokens = pathTokens.map(token => `${token}@`);
+            const insertion = ComposerTokenInsert.buildTokenInsertion(draft, cursor, replaceStart, insertTokens);
+            commitDraft(insertion);
+        },
+        [activeAt, cursor, draft, commitDraft],
+    );
 
-  const handleSelectionChange = useCallback((selection: {start: number; end: number}) => {
-    // 快照上一拍选区右缘再推进镜像（D11 删除锚，与 controller 的
-    // `onSelectionChange` 同口径——选区删除后光标落起点，右缘才贴着删除段）：
-    // web 侧选区上报先于文本变更（见 prevCursorRef 注释），change 到达时
-    // 这里留着的就是编辑前光标。
-    prevCursorRef.current = selectionEndRef.current;
-    selectionEndRef.current = selection.end;
-    setCursor(selection.start);
-  }, []);
+    const handleSelectionChange = useCallback((selection: {start: number; end: number}) => {
+        // 快照上一拍选区右缘再推进镜像（D11 删除锚，与 controller 的
+        // `onSelectionChange` 同口径——选区删除后光标落起点，右缘才贴着删除段）：
+        // web 侧选区上报先于文本变更（见 prevCursorRef 注释），change 到达时
+        // 这里留着的就是编辑前光标。
+        prevCursorRef.current = selectionEndRef.current;
+        selectionEndRef.current = selection.end;
+        setCursor(selection.start);
+    }, []);
 
-  const isDirty = draft !== savedDraft;
-  // composer 变体不拦退出：文本退出即回填，没有「丢掉改动」这回事。
-  useUnsavedGuard(!isComposer && isDirty);
+    const isDirty = draft !== savedDraft;
+    // composer 变体不拦退出：文本退出即回填，没有「丢掉改动」这回事。
+    useUnsavedGuard(!isComposer && isDirty);
 
-  // 退出即回填（composer）：卸载点覆盖 header 返回与手势返回两条路。
-  // 用 ref 取当拍草稿，effect 不随每次输入重挂（否则会中途提前回填）。
-  useEffect(() => {
-    if (!isComposer) {
-      return undefined;
-    }
-    return () => {
-      onSavedRef.current?.(draftRef.current);
-      onSavedRef.current = null;
-    };
-  }, [isComposer]);
-
-  // 路由 title 参数可覆盖 header 静态标题（仿 ProviderDetail 的 stackOverride 用法）。
-  useEffect(() => {
-    if (!title) {
-      return;
-    }
-    setStackOverride({title});
-    return () => setStackOverride(undefined);
-  }, [title, setStackOverride]);
-
-  const togglePreview = useCallback(() => {
-    setPreviewMode(prev => {
-      // 离开编辑态时收起编辑器焦点与软键盘（照 FileEditorScreen 的 dismissEditor）。
-      if (!prev) {
-        codeEditorRef.current?.blur();
-        Keyboard.dismiss();
-      }
-      return !prev;
-    });
-  }, []);
-
-  // 保存（照 FileEditorScreen handleSave 的可保存条件）：编辑态且有改动才生效。
-  // 无 VFS 写入：发 onSaved 回调 + 推进基线 + toast，停留在当前态。仅 form 变体。
-  const handleSave = useCallback(() => {
-    if (previewMode || !isDirty) {
-      return;
-    }
-    onSavedRef.current?.(draft);
-    setSavedDraft(draft);
-    showToast('已保存');
-  }, [previewMode, isDirty, draft, showToast]);
-
-  // 预览态无软键盘，直接铺开；编辑态键盘抬升/裁切分支由 EditorScreenShell 统一处理。
-  return (
-    <>
-      <EditorScreenShell
-        tokens={tokens}
-        toolbarBorderColor={tokens.borderLight}
-        save={
-          isComposer
-            ? undefined
-            : {
-                testID: 'prompt-editor-save',
-                accessibilityLabel: '保存',
-                label: '保存',
-                disabled: previewMode || !isDirty,
-                onPress: handleSave,
-              }
+    // 退出即回填（composer）：卸载点覆盖 header 返回与手势返回两条路。
+    // 用 ref 取当拍草稿，effect 不随每次输入重挂（否则会中途提前回填）。
+    useEffect(() => {
+        if (!isComposer) {
+            return undefined;
         }
-        /* composer 变体不传 title：页内 toolbar 整行不渲染——导航栏已经有「编辑消息」
-           （route.params.title → stackOverride），页内再居中写一个就是两个标题叠着。 */
-        title={isComposer ? undefined : isDirty ? '未保存' : title ?? DEFAULT_FORM_TITLE}
-        titleDanger={!isComposer && isDirty}
-        /* composer 变体是**纯编辑态**（用户定案：输入框全屏只要编辑，不要预览）：
-           不传 toggle / segmented / preview，shell 只渲染编辑器。 */
-        toggle={
-          isComposer
-            ? undefined
-            : {
-                testID: 'prompt-editor-toggle',
-                accessibilityLabel: previewMode ? '编辑' : '预览',
-                previewMode,
-                onPress: togglePreview,
-              }
+        return () => {
+            onSavedRef.current?.(draftRef.current);
+            onSavedRef.current = null;
+        };
+    }, [isComposer]);
+
+    // 路由 title 参数可覆盖 header 静态标题（仿 ProviderDetail 的 stackOverride 用法）。
+    useEffect(() => {
+        if (!title) {
+            return;
         }
-        segmented={
-          isComposer
-            ? undefined
-            : {
-                options: [
-                  {value: 'markdown', label: 'Markdown'},
-                  {value: 'txt', label: '文本'},
-                ],
-                value: previewRenderKind,
-                onChange: setPreviewRenderKind,
-              }
+        setStackOverride({title});
+        return () => setStackOverride(undefined);
+    }, [title, setStackOverride]);
+
+    const togglePreview = useCallback(() => {
+        setPreviewMode(prev => {
+            // 离开编辑态时收起编辑器焦点与软键盘（照 FileEditorScreen 的 dismissEditor）。
+            if (!prev) {
+                codeEditorRef.current?.blur();
+                Keyboard.dismiss();
+            }
+            return !prev;
+        });
+    }, []);
+
+    // 保存（照 FileEditorScreen handleSave 的可保存条件）：编辑态且有改动才生效。
+    // 无 VFS 写入：发 onSaved 回调 + 推进基线 + toast，停留在当前态。仅 form 变体。
+    const handleSave = useCallback(() => {
+        if (previewMode || !isDirty) {
+            return;
         }
-        previewMode={isComposer ? false : previewMode}
-        preview={isComposer ? undefined : <FileMarkdownPreview path={PROMPT_EDITOR_PATH} content={draft} tokens={tokens} previewFill renderKind={previewRenderKind} />}
-        editor={
-          isComposer ? (
-            <View style={styles.composerWrap}>
-              <CodeEditorWebView ref={codeEditorRef} value={draft} path={COMPOSER_EDITOR_PATH} onChange={handleDraftChange} onSelectionChange={handleSelectionChange} />
-              {/* 底排动作行：@ / $ 同款 36 圆钮（与 ChatComposer 工具栏同源单一样式） */}
-              <View style={[styles.actionRow, {borderTopColor: tokens.border}]}>
-                <Pressable
-                  testID="composer-editor-at-btn"
-                  onPress={() => setPathPickerOpen(true)}
-                  disabled={!canOpenPicker}
-                  style={[composerToolBtnStyle, {borderColor: tokens.border}]}
-                  accessibilityLabel="引用文件"
-                >
-                  <Text style={{color: tokens.textSecondary, fontSize: 16}}>@</Text>
-                </Pressable>
-                <Pressable
-                  testID="composer-editor-skill-btn"
-                  onPress={() => setSkillPickerOpen(true)}
-                  disabled={!canOpenPicker}
-                  style={[composerToolBtnStyle, {borderColor: tokens.border}]}
-                  accessibilityLabel="引用技能"
-                >
-                  <Text style={{color: tokens.textSecondary, fontSize: 16}}>$</Text>
-                </Pressable>
-              </View>
-            </View>
-          ) : (
-            <CodeEditorWebView ref={codeEditorRef} value={draft} path={PROMPT_EDITOR_PATH} onChange={setDraft} />
-          )
-        }
-      />
-      {/* 挂载判据与按钮 disabled 同源（canOpenPicker）：选择器内部走
-          useRuntime()，未就绪渲染即抛——缺 scope / runtime 时静默降级不挂载。 */}
-      {canOpenPicker ? (
+        onSavedRef.current?.(draft);
+        setSavedDraft(draft);
+showToast(coreT({key: "ui.common.saved"}));
+    }, [previewMode, isDirty, draft, showToast]);
+
+    // 预览态无软键盘，直接铺开；编辑态键盘抬升/裁切分支由 EditorScreenShell 统一处理。
+    return (
         <>
-          <FileReferencePicker visible={pathPickerOpen} projectId={projectId} sessionId={sessionId} onClose={() => setPathPickerOpen(false)} onConfirm={insertPathTokens} />
-          <SkillPicker visible={skillPickerOpen} projectId={projectId} onClose={() => setSkillPickerOpen(false)} onConfirm={insertSkillToken} />
+            <EditorScreenShell
+                tokens={tokens}
+                toolbarBorderColor={tokens.borderLight}
+                save={
+                    isComposer
+                        ? undefined
+                        : {
+                                testID: 'prompt-editor-save',
+                                accessibilityLabel: coreT({key: "ui.common.save"}),
+                                label: coreT({key: "ui.common.save"}),
+                                disabled: previewMode || !isDirty,
+                                onPress: handleSave,
+                            }
+                }
+                /* composer 变体不传 title：页内 toolbar 整行不渲染——导航栏已经有「编辑消息」
+           （route.params.title → stackOverride），页内再居中写一个就是两个标题叠着。 */
+                title={isComposer ? undefined : isDirty ? coreT({key: "ui.common.unsaved_title"}) : title ?? coreT({key: "ui.chat.tab_prompt"})}
+                titleDanger={!isComposer && isDirty}
+                /* composer 变体是**纯编辑态**（用户定案：输入框全屏只要编辑，不要预览）：
+           不传 toggle / segmented / preview，shell 只渲染编辑器。 */
+                toggle={
+                    isComposer
+                        ? undefined
+                        : {
+                                testID: 'prompt-editor-toggle',
+                                accessibilityLabel: previewMode ? coreT({key: "ui.common.edit"}) : coreT({key: "ui.common.preview"}),
+                                previewMode,
+                                onPress: togglePreview,
+                            }
+                }
+                segmented={
+                    isComposer
+                        ? undefined
+                        : {
+                                options: [
+                                    {value: 'markdown', label: 'Markdown'},
+                                    {value: 'txt', label: coreT({key: "ui.common.text"})},
+                                ],
+                                value: previewRenderKind,
+                                onChange: setPreviewRenderKind,
+                            }
+                }
+                previewMode={isComposer ? false : previewMode}
+                preview={isComposer ? undefined : <FileMarkdownPreview path={PROMPT_EDITOR_PATH} content={draft} tokens={tokens} previewFill renderKind={previewRenderKind} />}
+                editor={
+                    isComposer ? (
+                        <View style={styles.composerWrap}>
+                            <CodeEditorWebView ref={codeEditorRef} value={draft} path={COMPOSER_EDITOR_PATH} onChange={handleDraftChange} onSelectionChange={handleSelectionChange} />
+                            {/* 底排动作行：@ / $ 同款 36 圆钮（与 ChatComposer 工具栏同源单一样式） */}
+                            <View style={[styles.actionRow, {borderTopColor: tokens.border}]}>
+                                <Pressable
+                                    testID="composer-editor-at-btn"
+                                    onPress={() => setPathPickerOpen(true)}
+                                    disabled={!canOpenPicker}
+                                    style={[composerToolBtnStyle, {borderColor: tokens.border}]}
+                                    accessibilityLabel={coreT({key: "ui.chat.reference_files"})}
+                                >
+                                    <Text style={{color: tokens.textSecondary, fontSize: 16}}>@</Text>
+                                </Pressable>
+                                <Pressable
+                                    testID="composer-editor-skill-btn"
+                                    onPress={() => setSkillPickerOpen(true)}
+                                    disabled={!canOpenPicker}
+                                    style={[composerToolBtnStyle, {borderColor: tokens.border}]}
+                                    accessibilityLabel={coreT({key: "ui.chat.reference_skills"})}
+                                >
+                                    <Text style={{color: tokens.textSecondary, fontSize: 16}}>$</Text>
+                                </Pressable>
+                            </View>
+                        </View>
+                    ) : (
+                        <CodeEditorWebView ref={codeEditorRef} value={draft} path={PROMPT_EDITOR_PATH} onChange={setDraft} />
+                    )
+                }
+            />
+            {/* 挂载判据与按钮 disabled 同源（canOpenPicker）：选择器内部走
+          useRuntime()，未就绪渲染即抛——缺 scope / runtime 时静默降级不挂载。 */}
+            {canOpenPicker ? (
+                <>
+                    <FileReferencePicker visible={pathPickerOpen} projectId={projectId} sessionId={sessionId} onClose={() => setPathPickerOpen(false)} onConfirm={insertPathTokens} />
+                    <SkillPicker visible={skillPickerOpen} projectId={projectId} onClose={() => setSkillPickerOpen(false)} onConfirm={insertSkillToken} />
+                </>
+            ) : null}
         </>
-      ) : null}
-    </>
-  );
+    );
 }
 
 const styles = StyleSheet.create({
-  composerWrap: {flex: 1, minHeight: 0},
-  actionRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
+    composerWrap: {flex: 1, minHeight: 0},
+    actionRow: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        alignItems: 'center',
+        gap: 8,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderTopWidth: StyleSheet.hairlineWidth,
+    },
 });

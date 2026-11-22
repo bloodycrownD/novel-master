@@ -32,9 +32,9 @@ export const TRANSCRIPT_RUNTIME_BRIDGE_V = BRIDGE_V;
 
 /** v2 信封的最小形状（本层校验只依赖 `v` / `type`，payload 原样透传）。 */
 type HostEnvelopeV2 = {
-  readonly v?: unknown;
-  readonly type?: unknown;
-  readonly payload?: unknown;
+    readonly v?: unknown;
+    readonly type?: unknown;
+    readonly payload?: unknown;
 };
 
 /**
@@ -47,30 +47,30 @@ type HostEnvelopeV2 = {
  * - payload 原样透传——重打信封只换 v 号，语义内容零改动。
  */
 export const HostDowntranslate = {
-  raw: (raw: unknown): void => {
-    let parsed: unknown = raw;
-    if (typeof raw === 'string') {
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
-        return;
-      }
-    }
-    if (parsed == null || typeof parsed !== 'object') {
-      return;
-    }
-    const env = parsed as HostEnvelopeV2;
-    if (
-      typeof env.v !== 'number' ||
-      env.v !== TRANSCRIPT_ENTRY_BRIDGE_V ||
-      typeof env.type !== 'string'
-    ) {
-      return;
-    }
-    Bridge.handleHostMessage({
-      v: TRANSCRIPT_RUNTIME_BRIDGE_V,
-      type: env.type,
-      payload: env.payload,
-    });
-  },
+    raw: (raw: unknown): void => {
+        let parsed: unknown = raw;
+        if (typeof raw === 'string') {
+            try {
+                parsed = JSON.parse(raw);
+            } catch {
+                return;
+            }
+        }
+        if (parsed == null || typeof parsed !== 'object') {
+            return;
+        }
+        const env = parsed as HostEnvelopeV2;
+        if (
+            typeof env.v !== 'number' ||
+            env.v !== TRANSCRIPT_ENTRY_BRIDGE_V ||
+            typeof env.type !== 'string'
+        ) {
+            return;
+        }
+        Bridge.handleHostMessage({
+            v: TRANSCRIPT_RUNTIME_BRIDGE_V,
+            type: env.type,
+            payload: env.payload,
+        });
+    },
 } as const;

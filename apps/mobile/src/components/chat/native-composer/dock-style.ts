@@ -31,13 +31,13 @@
  * T-NC10 样式相等断言守住零漂移。
  */
 export const composerInputMetrics = {
-  fontSize: 16,
-  lineHeight: 22,
-  paddingH: 4,
-  paddingV: 6,
-  minHeight: 56,
-  /** 5 行封顶 = paddingV×2 + lineHeight×5 = 12 + 110。 */
-  maxHeight: 122,
+    fontSize: 16,
+    lineHeight: 22,
+    paddingH: 4,
+    paddingV: 6,
+    minHeight: 56,
+    /** 5 行封顶 = paddingV×2 + lineHeight×5 = 12 + 110。 */
+    maxHeight: 122,
 } as const;
 
 /**
@@ -49,10 +49,10 @@ export const composerInputMetrics = {
  * 高约 24（lineHeight 22 + paddingV 2），8 为半高强圆角、药丸观感明确）。
  */
 export const composerTokenCapsule = {
-  borderRadius: 8,
-  paddingHorizontal: 4,
-  paddingTop: 1,
-  paddingBottom: 1,
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    paddingTop: 1,
+    paddingBottom: 1,
 } as const;
 
 import {StyleSheet} from 'react-native';
@@ -94,9 +94,9 @@ export const DOCK_PADDING_BASE = 8;
  * 的自判问题，但传参形态保持与 composerState.keyboardUp 同源。
  */
 export namespace DockStyle {
-  export function resolveDockBottomPadding(keyboardUp: boolean, safeAreaBottom: number, base: number = DOCK_PADDING_BASE): number {
-    return keyboardUp ? 0 : Math.max(base, safeAreaBottom);
-  }
+    export function resolveDockBottomPadding(keyboardUp: boolean, safeAreaBottom: number, base: number = DOCK_PADDING_BASE): number {
+        return keyboardUp ? 0 : Math.max(base, safeAreaBottom);
+    }
 }
 
 /**
@@ -106,48 +106,48 @@ export namespace DockStyle {
  * 文本行 / toolbar 行与发送钮。
  */
 export const composerDockStyles = StyleSheet.create({
-  dock: {
-    flexShrink: 0,
-    // 实底由主题 background 注入；盖住转录区溢出，键盘顶起时不透出
-    paddingHorizontal: 12,
-    paddingTop: 4,
-    paddingBottom: 8,
-  },
-  box: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingTop: 4,
-    paddingBottom: 6,
-  },
-  /** 输入区壳（现网 .dock__box 内 .dock__input-area 的等价物）。 */
-  inputArea: {
-    position: 'relative',
-  },
-  hintRow: {
-    marginBottom: 6,
-  },
-  hintText: {
-    fontSize: 14,
-  },
-  error: {
-    marginBottom: 6,
-    fontSize: 13,
-  },
-  toolbar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-    gap: 8,
-  },
-  toolbarSpacer: {
-    flex: 1,
-  },
-  sendBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+    dock: {
+        flexShrink: 0,
+        // 实底由主题 background 注入；盖住转录区溢出，键盘顶起时不透出
+        paddingHorizontal: 12,
+        paddingTop: 4,
+        paddingBottom: 8,
+    },
+    box: {
+        borderWidth: StyleSheet.hairlineWidth,
+        borderRadius: 12,
+        paddingHorizontal: 8,
+        paddingTop: 4,
+        paddingBottom: 6,
+    },
+    /** 输入区壳（现网 .dock__box 内 .dock__input-area 的等价物）。 */
+    inputArea: {
+        position: 'relative',
+    },
+    hintRow: {
+        marginBottom: 6,
+    },
+    hintText: {
+        fontSize: 14,
+    },
+    error: {
+        marginBottom: 6,
+        fontSize: 13,
+    },
+    toolbar: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 4,
+        gap: 8,
+    },
+    toolbarSpacer: {
+        flex: 1,
+    },
+    sendBtn: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
 });

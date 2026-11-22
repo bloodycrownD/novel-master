@@ -22,45 +22,47 @@
 
 /** 进程级忙碌旗：`> 0` 即忙碌；`release` 钳到 0，多释放不产生负计数。 */
 interface BusyFlag {
-  /** 是否有调用方正处在互斥窗口内。 */
-  isBusy(): boolean;
-  /** 计数 +1（与 `release` 严格配对使用）。 */
-  acquire(): void;
-  /** 计数 -1，下限 0（多释放不会把后续 acquire 提前抵消）。 */
-  release(): void;
-  /** 兼容旧布尔置位形态：true = acquire、false = release。 */
-  set(busy: boolean): void;
-  /** 测试用：复位计数。 */
-  resetForTest(): void;
+    /** 是否有调用方正处在互斥窗口内。 */
+    isBusy(): boolean;
+    /** 计数 +1（与 `release` 严格配对使用）。 */
+    acquire(): void;
+    /** 计数 -1，下限 0（多释放不会把后续 acquire 提前抵消）。 */
+    release(): void;
+    /** 兼容旧布尔置位形态：true = acquire、false = release。 */
+    set(busy: boolean): void;
+    /** 测试用：复位计数。 */
+    resetForTest(): void;
 }
 
 export const Concurrency = {
-  /** 进程级忙碌旗工厂：`> 0` 即忙碌；`release` 钳到 0，多释放不产生负计数。 */
-  createBusyFlag(): BusyFlag {
-    let count = 0;
-    const acquire = () => {
-      count += 1;
-    };
-    const release = () => {
-      count = Math.max(0, count - 1);
-    };
-    return {
-      isBusy: () => count > 0,
-      acquire,
-      release,
-      set: (busy) => (busy ? acquire() : release()),
-      resetForTest: () => {
-        count = 0;
-      },
-    };
-  },
+    /** 进程级忙碌旗工厂：`> 0` 即忙碌；`release` 钳到 0，多释放不产生负计数。 */
+    createBusyFlag(): BusyFlag {
+        let count = 0;
+        // nm-style: keep-closure — count 是 BusyFlag 实例的隐藏计数状态（闭包生命周期=实例生命周期）；提升模块级会把 count 全局化破坏三端多实例语义，转 this-方法会把 count 暴露在公共 handle 上破坏封装。
+        const acquire = () => {
+            count += 1;
+        };
+        // nm-style: keep-closure — 与 acquire 同为 count 的互补动词（同一隐藏状态的严格配对），捕获集完全重叠但不构成可合并。
+        const release = () => {
+            count = Math.max(0, count - 1);
+        };
+        return {
+            isBusy: () => count > 0,
+            acquire,
+            release,
+            set: (busy) => (busy ? acquire() : release()),
+            resetForTest: () => {
+                count = 0;
+            },
+        };
+    },
 
-  /**
+    /**
    * 片与片之间的事件循环让步（排一个 `setTimeout(0)` 宏任务）。
    *
    * RULE：让步**只能落在片与片之间，绝不能落在事务回调内部**（事务内语句须同步执行）。
    */
-  yieldToEventLoop(): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, 0));
-  },
+    yieldToEventLoop(): Promise<void> {
+        return new Promise((resolve) => setTimeout(resolve, 0));
+    },
 } as const;

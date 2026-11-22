@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  workplace_file_rule 表的 SQL mapper（DDL 见 resources/sql/schema/workplace.sql）。
+
+  结构约定（与 chat-message.mapper.xml 样板一致）：
+  - 语句 id 与 SqliteWorkplaceRepository 方法同名（camelCase）；列清单走
+    <sql id> 片段 + <include ref> 展开，生成物里每条语句都是完整字面量。
+  - 单条 upsert 用命名占位符，batch 版本走位置占位符 ?（表驱动 batch 接口要求），
+    两者共享 insertColumns 片段。
+-->
+<mapper namespace="workplace_file_rule">
+
+  <sql id="selectColumns">scope_key, logical_path, inclusion_mode</sql>
+
+  <sql id="insertColumns">(scope_key, logical_path, inclusion_mode)</sql>
+
+  <insert id="upsertFileRule">
+    INSERT INTO workplace_file_rule <include ref="insertColumns"/>
+    VALUES (#{scopeKey}, #{logicalPath}, #{inclusionMode})
+    ON CONFLICT(scope_key, logical_path) DO UPDATE
+    SET inclusion_mode = excluded.inclusion_mode
+  </insert>
+
+  <!-- 3 个位置占位符与 insertColumns 列顺序一一对应（conn.batch 逐行绑定）。 -->
+  <insert id="batchUpsertFileRules">
+    INSERT INTO workplace_file_rule <include ref="insertColumns"/>
+    VALUES (?, ?, ?)
+    ON CONFLICT(scope_key, logical_path) DO UPDATE
+    SET inclusion_mode = excluded.inclusion_mode
+  </insert>
+
+  <delete id="deleteScope">
+    DELETE
+    FROM workplace_file_rule
+    WHERE scope_key = #{scopeKey}
+  </delete>
+
+  <select id="listFileRules">
+    SELECT <include ref="selectColumns"/>
+    FROM workplace_file_rule
+    WHERE scope_key = #{scopeKey}
+  </select>
+
+  <select id="findFileRule">
+    SELECT <include ref="selectColumns"/>
+    FROM workplace_file_rule
+    WHERE scope_key = #{scopeKey} AND logical_path = #{logicalPath}
+  </select>
+
+  <delete id="deleteRulesUnderLogicalPrefix">
+    DELETE
+    FROM workplace_file_rule
+    WHERE scope_key = #{scopeKey} AND (logical_path = #{path} OR logical_path LIKE #{childPattern} ESCAPE '\\')
+  </delete>
+
+  <!-- 一条 UPDATE：精确匹配自身（替换为 newBase）或子路径（拼接 newBase + 剩余部分）。 -->
+  <update id="renameRulesUnderLogicalPrefix">
+    UPDATE workplace_file_rule
+    SET logical_path = CASE WHEN logical_path = #{oldBase} THEN #{newBase} ELSE #{newBase} || substr(logical_path,
+    length(#{oldBase}) + 1) END
+    WHERE scope_key = #{scopeKey} AND (logical_path = #{oldBase} OR logical_path LIKE #{childPattern} ESCAPE '\\')
+  </update>
+
+</mapper>

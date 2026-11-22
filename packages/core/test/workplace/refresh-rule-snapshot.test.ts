@@ -14,35 +14,35 @@ import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix
 novelMasterTestFixture();
 
 describe("RuleSnapshot.refresh(T-CR2)", () => {
-  it("T-CR2/T-CR8: evaluate→写 canon；file_cache 域空（新规则保存不靠 chip）", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.write("/note.md", "hello");
-    const wt = WorkplaceServiceFactory.create(ctx.conn, {
-      kind: "session",
-      projectId: project.id,
-      sessionId: session.id,
+    it("T-CR2/T-CR8: evaluate→写 canon；file_cache 域空（新规则保存不靠 chip）", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        const vfs = ctx.sessionVfs(project.id, session.id);
+        await vfs.write("/note.md", "hello");
+        const wt = WorkplaceServiceFactory.create(ctx.conn, {
+            kind: "session",
+            projectId: project.id,
+            sessionId: session.id,
+        });
+        await wt.setFileRule({ logicalPath: "/note.md", inclusionMode: "show" });
+
+        // 预填 file_cache，确认 refresh 会清空
+        await sk.set(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", "/note.md"), JSON.stringify({ body: "stale", mtimeMs: 1 }));
+
+        await RuleSnapshot.refresh(session.id, {
+            sessionKkv: sk,
+            workplace: wt,
+        });
+
+        const raw = unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY));
+        assert.ok(raw != null && raw !== "");
+        const entries = RuleSnapshotCodec.parseJson(raw!);
+        assert.ok(entries.ok);
+        assert.ok(entries.value.some((e) => e.path === "/note.md"));
+
+        const cacheKeys = await sk.listKeys(session.id, SESSION_KKV_DOMAIN_FILE_CACHE);
+        assert.deepEqual(cacheKeys, []);
     });
-    await wt.setFileRule({ logicalPath: "/note.md", inclusionMode: "show" });
-
-    // 预填 file_cache，确认 refresh 会清空
-    await sk.set(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", "/note.md"), JSON.stringify({ body: "stale", mtimeMs: 1 }));
-
-    await RuleSnapshot.refresh(session.id, {
-      sessionKkv: sk,
-      workplace: wt,
-    });
-
-    const raw = unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY));
-    assert.ok(raw != null && raw !== "");
-    const entries = RuleSnapshotCodec.parseJson(raw!);
-    assert.ok(entries.ok);
-    assert.ok(entries.value.some((e) => e.path === "/note.md"));
-
-    const cacheKeys = await sk.listKeys(session.id, SESSION_KKV_DOMAIN_FILE_CACHE);
-    assert.deepEqual(cacheKeys, []);
-  });
 });

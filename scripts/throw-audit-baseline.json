@@ -1,42 +1,36 @@
 {
   "note": "throw-audit 基线（p26 R3）。站点键 = 文件 + throw 语句空白归一原文；disposition：ALLOWED（白名单三类）/ BOUNDARY（合法边界转码，理由必填）/ KEEP（nm-throw: keep 存量）/ UNTRIAGED（定性不了的欠账——gate 不拦但报告显数）。gate 拦矩阵判 VIOLATION/VIOLATION-B/BOUNDARY 且未登记的站点；重建：nm-style throw-audit --write-baseline。",
   "toolVersion": "0.1.0",
-  "generatedAt": "2026-11-20T15:35:02.495Z",
+  "generatedAt": "2026-11-22T01:55:53.355Z",
   "includeTests": false,
   "sites": {
-    "apps/desktop/renderer/features/settings/SettingsViews.tsx#throw new Error(\"自定义参数必须是 JSON 对象\");": {
+    "apps/desktop/renderer/features/workspace/workspace-actions.ts#throw new Error(picked.error.message || coreT({key: \"ui.vfs.pick_file_failed\"}));": {
       "form": "T4",
-      "line": 1349,
-      "disposition": "UNTRIAGED",
-      "reason": ""
-    },
-    "apps/desktop/renderer/features/workspace/workspace-actions.ts#throw new Error(picked.error.message || \"选择文件失败\");": {
-      "form": "T4",
-      "line": 266,
+      "line": 228,
       "disposition": "KEEP",
       "reason": "renderer 侧 IpcResult 解包边界（线格式无 Result 通道），抛给上层 try/catch"
     },
-    "apps/desktop/renderer/features/workspace/workspace-actions.ts#throw new Error(result.error.message || \"导入失败\");": {
+    "apps/desktop/renderer/features/workspace/workspace-actions.ts#throw new Error(result.error.message || coreT({key: \"ui.common.import_failed\"}));": {
       "form": "T4",
-      "line": 311,
+      "line": 269,
       "disposition": "KEEP",
       "reason": "renderer 侧 IpcResult 解包边界"
     },
-    "apps/desktop/renderer/features/workspace/workspace-actions.ts#throw new Error(\"导入未完成\");": {
+    "apps/desktop/renderer/features/workspace/workspace-actions.ts#throw new Error(coreT({key: \"ui.vfs.import_incomplete\"}));": {
       "form": "T4",
-      "line": 316,
+      "line": 274,
       "disposition": "KEEP",
       "reason": "两段式协议不变量破坏（带 overwriteConfirmed 仍回 needs_confirm），属不可达分支。"
     },
-    "apps/desktop/renderer/features/workspace/workspace-actions.ts#throw new Error(single.error.message || \"导出失败\");": {
+    "apps/desktop/renderer/features/workspace/workspace-actions.ts#throw new Error(single.error.message || coreT({key: \"ui.common.export_failed\"}));": {
       "form": "T4",
-      "line": 347,
+      "line": 302,
       "disposition": "KEEP",
       "reason": "renderer 侧 IpcResult 解包边界"
     },
-    "apps/desktop/renderer/features/workspace/workspace-actions.ts#throw new Error(zip.error.message || \"导出失败\");": {
+    "apps/desktop/renderer/features/workspace/workspace-actions.ts#throw new Error(zip.error.message || coreT({key: \"ui.common.export_failed\"}));": {
       "form": "T4",
-      "line": 356,
+      "line": 311,
       "disposition": "KEEP",
       "reason": "renderer 侧 IpcResult 解包边界"
     },
@@ -48,27 +42,27 @@
     },
     "apps/desktop/renderer/main.tsx#throw new Error(\"Missing #root element\");": {
       "form": "T4",
-      "line": 8,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+      "line": 9,
+      "disposition": "KEEP",
+      "reason": "进程入口装配不变量：index.html 缺 #root 属宿主装配错误，启动期无 Result 通道可返回。"
     },
     "apps/desktop/renderer/providers/NovelMasterProvider.tsx#throw new Error(\"useNovelMaster must be used within NovelMasterProvider\");": {
       "form": "T4",
-      "line": 158,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+      "line": 152,
+      "disposition": "KEEP",
+      "reason": "Provider 外调用 hook 属编程错误；渲染期同步返回值无 Result 通道（desktop/mobile 7 处 hook 守卫同族同判）"
     },
     "apps/desktop/renderer/providers/ShellNavProvider.tsx#throw new Error(\"useShellNav must be used within ShellNavProvider\");": {
       "form": "T4",
-      "line": 1001,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+      "line": 985,
+      "disposition": "KEEP",
+      "reason": "Provider 外调用 hook 属编程错误；渲染期同步返回值无 Result 通道（desktop/mobile 7 处 hook 守卫同族同判）"
     },
     "apps/desktop/renderer/providers/ThemeProvider.tsx#throw new Error(\"useTheme must be used within ThemeProvider\");": {
       "form": "T4",
-      "line": 84,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+      "line": 85,
+      "disposition": "KEEP",
+      "reason": "Provider 外调用 hook 属编程错误；渲染期同步返回值无 Result 通道（desktop/mobile 7 处 hook 守卫同族同判）"
     },
     "apps/desktop/renderer/shims/node-crypto.ts#throw new Error(\"crypto.randomUUID is unavailable in this environment\");": {
       "form": "T4",
@@ -82,153 +76,105 @@
       "disposition": "KEEP",
       "reason": "unwrap 是 renderer 侧 IpcResult 解包边界，与 toIpcResult 互为反向"
     },
-    "apps/desktop/src/main/ipc/handlers/agent-registry.ts#throw def.error;": {
-      "form": "T1",
-      "line": 221,
-      "disposition": "BOUNDARY",
-      "reason": "IPC handler 边界（总纲 §五7b）：registry 依赖只有 throw 通道，handler 同函数 catch 转 IpcResult 线格式。"
-    },
-    "apps/desktop/src/main/ipc/handlers/app-info.ts#throw new Error(\"runUpdateCheck not configured for tests\");": {
-      "form": "T4",
-      "line": 61,
-      "disposition": "KEEP",
-      "reason": "测试 seam 未配置属编程错误（用例忘了覆盖），必须显式炸掉而不是静默给默认值。"
-    },
     "apps/desktop/src/main/ipc/handlers/app-info.ts#throw new Error(\"openExternal not configured for tests\");": {
       "form": "T4",
-      "line": 67,
+      "line": 72,
       "disposition": "KEEP",
       "reason": "测试 seam 未配置属编程错误（用例忘了覆盖），必须显式炸掉而不是静默给默认值。"
     },
-    "apps/desktop/src/main/ipc/handlers/cloud-sync.ts#throw new Error(`${err.message}（服务商配置未能恢复，请检查模型服务商设置）`);": {
-      "form": "T4",
-      "line": 166,
+    "apps/desktop/src/main/ipc/handlers/messages.ts#throw AbortError.create();": {
+      "form": "T2",
+      "line": 217,
       "disposition": "KEEP",
-      "reason": "库已换代但服务商配置表未恢复属故障态不变量，Outcome 的 failed 表达不了「库已变但重建未完成」。"
+      "reason": "缺理由：nm-throw: keep 注释未带理由，须补"
+    },
+    "apps/desktop/src/main/ipc/handlers/messages.ts#throw forked.error;": {
+      "form": "T1",
+      "line": 219,
+      "disposition": "KEEP",
+      "reason": "缺理由：nm-throw: keep 注释未带理由，须补"
+    },
+    "apps/desktop/src/main/ipc/run-scope.ts#throw AbortError.create();": {
+      "form": "T2",
+      "line": 99,
+      "disposition": "KEEP",
+      "reason": "缺理由：nm-throw: keep 注释未带理由，须补"
     },
     "apps/desktop/src/main/runtime/desktop-runtime-singleton.ts#throw new Error(\"Desktop runtime not initialized\");": {
       "form": "T4",
-      "line": 40,
+      "line": 45,
       "disposition": "KEEP",
       "reason": "同步访问器的不变量：调用方契约保证 bootstrap 已完成（名字即契约），未初始化属编程错误。"
     },
-    "apps/desktop/src/main/services/cloud-sync.service.ts#throw new AppError(\"CLOUD_SYNC_AUTH\", { detail: \"云存储凭据无效或权限不足\" }, { cause: error });": {
-      "form": "T3",
-      "line": 124,
-      "disposition": "UNTRIAGED",
-      "reason": ""
-    },
-    "apps/desktop/src/main/services/cloud-sync.service.ts#throw new AppError(\"CLOUD_SYNC_NETWORK\", { detail: \"无法连接云存储，请检查网络与 Endpoint\" }, { cause: error });": {
-      "form": "T3",
-      "line": 127,
-      "disposition": "UNTRIAGED",
-      "reason": ""
-    },
-    "apps/desktop/src/main/services/cloud-sync.service.ts#throw new AppError(\"CLOUD_SYNC_NETWORK\", { detail: message }, { cause: error });": {
-      "form": "T3",
-      "line": 129,
-      "disposition": "UNTRIAGED",
-      "reason": ""
-    },
-    "apps/desktop/src/main/services/db-backup.service.ts#throw new AppError(\"INFRA_UNEXPECTED_ERROR\", { detail: `数据库导入失败且回滚失败，回滚副本保留在 ${bakPath}：${Errors.text(rollbackError)}` }, { cause: [error, rollbackError] });": {
-      "form": "T3",
-      "line": 168,
-      "disposition": "UNTRIAGED",
-      "reason": ""
-    },
-    "apps/desktop/src/main/services/vfs-batch.service.ts#throw new Error(\"拖出图标无效\");": {
-      "form": "T4",
-      "line": 76,
-      "disposition": "KEEP",
-      "reason": "固定 1×1 PNG 解码失败属平台不变量破坏（nativeImage 异常），用户无纠正路径。"
-    },
-    "apps/desktop/src/main/services/vfs-batch.service.ts#throw new Error(`拒绝清理非 staging 路径: ${stagingRoot}`);": {
-      "form": "T4",
-      "line": 105,
-      "disposition": "KEEP",
-      "reason": "安全护栏，参数越界说明调用方写错，不能让清理继续"
-    },
-    "apps/desktop/src/main/services/vfs-batch.service.ts#throw new Error(\"导出物化失败：无顶层条目\");": {
-      "form": "T4",
-      "line": 166,
-      "disposition": "KEEP",
-      "reason": "不可达分支：本函数早段已挡掉 files 与 mkdirPaths 皆空的情况，topNames 必非空，命中即不变量破坏。"
-    },
     "apps/mobile/src/components/agent/AgentList.tsx#throw def.error;": {
       "form": "T1",
-      "line": 410,
-      "disposition": "BOUNDARY",
-      "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
-    },
-    "apps/mobile/src/components/chat/useChatComposerController.ts#throw new Error('运行时尚未就绪，请稍后重试');": {
-      "form": "T4",
-      "line": 533,
-      "disposition": "BOUNDARY",
+      "line": 412,
+      "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
     "apps/mobile/src/components/chrome/ToastHost.tsx#throw new Error('useToast must be used within ToastHost');": {
       "form": "T4",
-      "line": 39,
-      "disposition": "BOUNDARY",
+      "line": 40,
+      "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
     "apps/mobile/src/components/provider/FetchModelsSheet.tsx#throw fetched.error;": {
       "form": "T1",
-      "line": 71,
-      "disposition": "BOUNDARY",
+      "line": 73,
+      "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
     "apps/mobile/src/components/provider/FetchModelsSheet.tsx#throw suggestions.error;": {
       "form": "T1",
-      "line": 73,
-      "disposition": "BOUNDARY",
+      "line": 76,
+      "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
     "apps/mobile/src/components/provider/FetchModelsSheet.tsx#throw savedModel.error;": {
       "form": "T1",
-      "line": 109,
-      "disposition": "BOUNDARY",
+      "line": 113,
+      "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
     "apps/mobile/src/components/provider/ProviderForm.tsx#throw new Error('Headers 必须是 JSON 对象');": {
       "form": "T4",
-      "line": 57,
-      "disposition": "BOUNDARY",
+      "line": 59,
+      "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
     "apps/mobile/src/components/provider/ProviderForm.tsx#throw new Error(`Header ${key} 必须是字符串`);": {
       "form": "T4",
-      "line": 62,
-      "disposition": "BOUNDARY",
+      "line": 65,
+      "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
     "apps/mobile/src/components/provider/ProviderForm.tsx#throw new Error('自定义参数必须是 JSON 对象');": {
       "form": "T4",
-      "line": 80,
-      "disposition": "BOUNDARY",
+      "line": 84,
+      "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
-    "apps/mobile/src/components/provider/ProviderForm.tsx#throw new Error('请填写服务商名称与 baseUrl');": {
+    "apps/mobile/src/components/provider/ProviderForm.tsx#throw new Error(coreT({key: \"ui.provider.name_baseurl_required\"}));": {
       "form": "T4",
-      "line": 90,
-      "disposition": "BOUNDARY",
+      "line": 95,
+      "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
-    "apps/mobile/src/components/provider/ProviderForm.tsx#throw new Error('请填写 API Key');": {
+    "apps/mobile/src/components/provider/ProviderForm.tsx#throw new Error(coreT({key: \"ui.provider.api_key_required\"}));": {
       "form": "T4",
-      "line": 93,
-      "disposition": "BOUNDARY",
+      "line": 99,
+      "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
-    "apps/mobile/src/components/provider/ProviderForm.tsx#throw new Error('请至少修改一项');": {
+    "apps/mobile/src/components/provider/ProviderForm.tsx#throw new Error(coreT({key: \"ui.provider.change_required\"}));": {
       "form": "T4",
-      "line": 134,
-      "disposition": "BOUNDARY",
+      "line": 141,
+      "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
     "apps/mobile/src/db/db-file-path.ts#throw new Error('无法定位应用数据库目录');": {
       "form": "T4",
-      "line": 37,
+      "line": 40,
       "disposition": "KEEP",
       "reason": "平台边界：设备未返回可用的数据库根目录，同步路径解析无失败位"
     },
@@ -240,15 +186,15 @@
     },
     "apps/mobile/src/navigation/ChatTabNavContext.tsx#throw new Error('useChatTabNavigation 须在 ChatTabNavigationProvider 内使用');": {
       "form": "T4",
-      "line": 47,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+      "line": 48,
+      "disposition": "KEEP",
+      "reason": "Provider 外调用 hook 属编程错误；渲染期同步返回值无 Result 通道（desktop/mobile 7 处 hook 守卫同族同判）；严格版即刻意的强不变量入口（另有 Optional 弱版本并存）。"
     },
     "apps/mobile/src/navigation/HeaderContext.tsx#throw new Error('useHeaderContext requires HeaderProvider');": {
       "form": "T4",
-      "line": 53,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+      "line": 54,
+      "disposition": "KEEP",
+      "reason": "Provider 外调用 hook 属编程错误；渲染期同步返回值无 Result 通道（desktop/mobile 7 处 hook 守卫同族同判）"
     },
     "apps/mobile/src/runtime/mobile-sksp.ts#throw new Error(`当前平台（${platform}）暂不支持加密存储驱动`);": {
       "form": "T4",
@@ -258,171 +204,177 @@
     },
     "apps/mobile/src/runtime/novel-master-context.tsx#throw new Error('useNovelMaster must be used within NovelMasterProvider');": {
       "form": "T4",
-      "line": 418,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+      "line": 424,
+      "disposition": "KEEP",
+      "reason": "Provider 外调用 hook 属编程错误；渲染期同步返回值无 Result 通道（desktop/mobile 7 处 hook 守卫同族同判）"
     },
     "apps/mobile/src/screens/stack/FileEditorScreen.tsx#throw new Error('缺少 projectId');": {
       "form": "T4",
-      "line": 89,
-      "disposition": "BOUNDARY",
+      "line": 91,
+      "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
     "apps/mobile/src/screens/stack/FileEditorScreen.tsx#throw new Error('缺少 projectId 或 sessionId');": {
       "form": "T4",
-      "line": 94,
-      "disposition": "BOUNDARY",
+      "line": 97,
+      "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
     "apps/mobile/src/screens/stack/FileEditorScreen.tsx#throw new Error('缺少 skillRef');": {
       "form": "T4",
-      "line": 100,
-      "disposition": "BOUNDARY",
+      "line": 104,
+      "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
     "apps/mobile/src/screens/stack/FileEditorScreen.tsx#throw new Error('项目域技能缺少 projectId');": {
       "form": "T4",
-      "line": 106,
-      "disposition": "BOUNDARY",
+      "line": 111,
+      "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
     "apps/mobile/src/screens/stack/ModelSamplingScreen.tsx#throw got.error;": {
       "form": "T1",
-      "line": 76,
-      "disposition": "BOUNDARY",
+      "line": 77,
+      "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
     "apps/mobile/src/screens/stack/ModelSamplingScreen.tsx#throw gotProvider.error;": {
       "form": "T1",
-      "line": 83,
-      "disposition": "BOUNDARY",
+      "line": 85,
+      "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
     "apps/mobile/src/screens/stack/ModelSamplingScreen.tsx#throw updated.error;": {
       "form": "T1",
-      "line": 163,
-      "disposition": "BOUNDARY",
+      "line": 168,
+      "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
     "apps/mobile/src/screens/stack/ModelSamplingScreen.tsx#throw stored.error;": {
       "form": "T1",
-      "line": 146,
-      "disposition": "BOUNDARY",
+      "line": 150,
+      "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
     "apps/mobile/src/screens/stack/ModelSamplingScreen.tsx#throw cleared.error;": {
       "form": "T1",
-      "line": 165,
-      "disposition": "BOUNDARY",
+      "line": 171,
+      "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
     "apps/mobile/src/screens/stack/ProviderDetailScreen.tsx#throw got.error;": {
       "form": "T1",
-      "line": 344,
-      "disposition": "BOUNDARY",
+      "line": 352,
+      "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
     "apps/mobile/src/screens/stack/ProviderDetailScreen.tsx#throw saved.error;": {
       "form": "T1",
-      "line": 85,
-      "disposition": "BOUNDARY",
+      "line": 88,
+      "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
     "apps/mobile/src/screens/stack/ProviderDetailScreen.tsx#throw savedModel.error;": {
       "form": "T1",
-      "line": 128,
-      "disposition": "BOUNDARY",
+      "line": 132,
+      "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
     "apps/mobile/src/screens/stack/ProviderDetailScreen.tsx#throw deleted.error;": {
       "form": "T1",
-      "line": 136,
-      "disposition": "BOUNDARY",
+      "line": 141,
+      "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
     "apps/mobile/src/screens/stack/ProviderDetailScreen.tsx#throw renamed.error;": {
       "form": "T1",
-      "line": 176,
-      "disposition": "BOUNDARY",
+      "line": 182,
+      "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
     "apps/mobile/src/screens/stack/ProviderDetailScreen.tsx#throw listed.error;": {
       "form": "T1",
-      "line": 347,
-      "disposition": "BOUNDARY",
+      "line": 356,
+      "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
     "apps/mobile/src/screens/stack/ProvidersScreen.tsx#throw listed.error;": {
       "form": "T1",
-      "line": 51,
-      "disposition": "BOUNDARY",
+      "line": 53,
+      "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
     "apps/mobile/src/screens/stack/ProvidersScreen.tsx#throw saved.error;": {
       "form": "T1",
-      "line": 56,
-      "disposition": "BOUNDARY",
+      "line": 59,
+      "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
     "apps/mobile/src/screens/stack/SearchEngineDetailScreen.tsx#throw nextConfig.error;": {
       "form": "T1",
       "line": 161,
-      "disposition": "BOUNDARY",
+      "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
     "apps/mobile/src/screens/stack/SearchEnginesScreen.tsx#throw config.error;": {
       "form": "T1",
       "line": 90,
-      "disposition": "BOUNDARY",
+      "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
     "apps/mobile/src/screens/stack/SkillDetailScreen.tsx#throw list.error;": {
       "form": "T1",
-      "line": 44,
-      "disposition": "BOUNDARY",
+      "line": 46,
+      "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
     "apps/mobile/src/screens/stack/SkillPanelScreen.tsx#throw list.error;": {
       "form": "T1",
-      "line": 68,
-      "disposition": "BOUNDARY",
+      "line": 69,
+      "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
     "apps/mobile/src/screens/stack/SkillsSettingsScreen.tsx#throw globalList.error;": {
       "form": "T1",
-      "line": 93,
-      "disposition": "BOUNDARY",
+      "line": 94,
+      "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
     "apps/mobile/src/screens/stack/SkillsSettingsScreen.tsx#throw list.error;": {
       "form": "T1",
-      "line": 98,
-      "disposition": "BOUNDARY",
+      "line": 100,
+      "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
     "apps/mobile/src/screens/stack/SubagentSessionScreen.tsx#throw read.error;": {
       "form": "T1",
-      "line": 110,
-      "disposition": "BOUNDARY",
+      "line": 111,
+      "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
     "apps/mobile/src/screens/stack/TokenUsageStatsScreen.tsx#throw providerListResult.error;": {
       "form": "T1",
-      "line": 233,
-      "disposition": "BOUNDARY",
+      "line": 235,
+      "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
     "apps/mobile/src/screens/tabs/chat-tab/ChatTabProvider.tsx#throw new Error('useChatTabContext 须在 ChatTabProvider 内使用');": {
       "form": "T4",
-      "line": 181,
-      "disposition": "BOUNDARY",
+      "line": 182,
+      "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
-    "apps/mobile/src/services/db-backup.service.ts#throw new AppError('INFRA_UNEXPECTED_ERROR', {detail: rollbackFailureDetail}, {cause: [error, rollbackError]});": {
-      "form": "T3",
-      "line": 141,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+    "apps/mobile/src/services/cloud-sync.service.ts#throw AbortError.create();": {
+      "form": "T2",
+      "line": 464,
+      "disposition": "ALLOWED",
+      "reason": "白名单自动判定（control-signal）"
+    },
+    "apps/mobile/src/services/db-backup.service.ts#throw AbortError.create();": {
+      "form": "T2",
+      "line": 221,
+      "disposition": "KEEP",
+      "reason": "缺理由：nm-throw: keep 注释未带理由，须补"
     },
     "apps/mobile/src/services/document-io.ts#throw new Error(result.error);": {
       "form": "T4",
@@ -432,39 +384,39 @@
     },
     "apps/mobile/src/services/llm-native-fetch-shim.ts#throw new Error(`llm-native-fetch 仅支持 GET/POST 非流式请求（收到 ${method}）`);": {
       "form": "T4",
-      "line": 192,
+      "line": 197,
       "disposition": "KEEP",
       "reason": "native bridge fetch 适配层：fetch 形状契约以 reject 报错（测试钉 'GET/POST' 拒绝）"
     },
     "apps/mobile/src/services/llm-native-fetch-shim.ts#throw new Error(`llm-native-fetch 仅支持 string body（收到 ${typeof rawBody}）`);": {
       "form": "T4",
-      "line": 201,
+      "line": 206,
       "disposition": "KEEP",
       "reason": "native bridge fetch 适配层：fetch 形状契约以 reject 报错"
     },
     "apps/mobile/src/services/rn-file-io.ts#throw new AppError('INFRA_UNSUPPORTED_PLATFORM', {detail: 'react-native-blob-util.fs unavailable'});": {
       "form": "T3",
       "line": 45,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+      "disposition": "KEEP",
+      "reason": "native bridge 依赖装配边界：react-native-blob-util.fs 未注入属平台能力缺失（同 LlmSseNative/sksp keep 族先例）；返回值即 fs 模块，Result 化会毒化全部调用点。"
     },
     "apps/mobile/src/services/vfs-character-card.service.ts#throw check.error;": {
       "form": "T1",
-      "line": 24,
-      "disposition": "BOUNDARY",
+      "line": 25,
+      "disposition": "KEEP",
       "reason": "校验槽位回调（总纲 §五7e，zod preprocess 同款例外）：DocumentIo assertFileName 槽位契约只认 throw；Result 边界在 CharacterCardDocumentPick。"
     },
     "apps/mobile/src/services/yaml-shared.ts#throw check.error;": {
       "form": "T1",
-      "line": 53,
-      "disposition": "BOUNDARY",
+      "line": 54,
+      "disposition": "KEEP",
       "reason": "校验槽位回调（总纲 §五7e，zod preprocess 同款例外）：DocumentIo assertFileName 槽位契约只认 throw；Result 边界在 YamlDocumentPick。"
     },
     "apps/mobile/src/theme/ThemeProvider.tsx#throw new Error('useTheme must be used within ThemeProvider');": {
       "form": "T4",
-      "line": 96,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+      "line": 97,
+      "disposition": "KEEP",
+      "reason": "Provider 外调用 hook 属编程错误；渲染期同步返回值无 Result 通道（desktop/mobile 7 处 hook 守卫同族同判）"
     },
     "apps/mobile/src/web/chat-transcript/webview/runtime/util/vfs-tool-path.ts#throw new Error('invalid path');": {
       "form": "T4",
@@ -480,13 +432,13 @@
     },
     "apps/mobile/src/webview-host/typed-message-bridge.ts#throw new Error(versionError);": {
       "form": "T4",
-      "line": 38,
+      "line": 30,
       "disposition": "KEEP",
       "reason": "webview bridge 边界：坏信封由宿主 onMessage catch 后静默丢弃"
     },
     "apps/mobile/src/webview-host/typed-message-bridge.ts#throw new Error(shapeError);": {
       "form": "T4",
-      "line": 42,
+      "line": 34,
       "disposition": "KEEP",
       "reason": "webview bridge 边界：坏信封由宿主 onMessage catch 后静默丢弃"
     },
@@ -514,29 +466,17 @@
       "disposition": "KEEP",
       "reason": "平台边界：仅 android/ios 有 WebView 资产布局，同步 API 无失败位"
     },
-    "apps/mobile/test-utils/react-native-webview-mock.tsx#throw new Error(`WebView mock 未找到域「${domain}」的实例`);": {
-      "form": "T4",
-      "line": 113,
-      "disposition": "UNTRIAGED",
-      "reason": ""
-    },
     "packages/cloud-sync-driver-s3/src/create-s3-object-storage.ts#throw new Error(`S3 GetObject 未返回 ETag: ${key}`);": {
       "form": "T4",
-      "line": 87,
+      "line": 88,
       "disposition": "KEEP",
       "reason": "S3 第三方 SDK 边界：GetObject 响应缺 ETag 属服务端异常，由上层基础设施错误收口。"
     },
     "packages/cloud-sync-driver-s3/src/create-s3-object-storage.ts#throw new Error(`S3 GetObject 未返回 Body: ${key}`);": {
       "form": "T4",
-      "line": 92,
+      "line": 93,
       "disposition": "KEEP",
       "reason": "S3 第三方 SDK 边界：GetObject 响应缺 Body 属服务端异常，由上层基础设施错误收口。"
-    },
-    "packages/cloud-sync-driver-s3/src/create-s3-object-storage.ts#throw new Error(`S3 PutObject 未返回 ETag: ${key}`);": {
-      "form": "T4",
-      "line": 126,
-      "disposition": "KEEP",
-      "reason": "S3 第三方 SDK 边界：PutObject 响应缺 ETag 属服务端异常，由上层基础设施错误收口。"
     },
     "packages/core/src/common/update-check.ts#throw new Error(`无法解析版本标签: ${tagName}`);": {
       "form": "T4",
@@ -592,41 +532,47 @@
       "disposition": "KEEP",
       "reason": "e2e 专用短路钩子，刻意走 reject 模拟「更新检查失败」错误态；update-check 属 infra 适配层。"
     },
+    "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts#throw AbortError.create();": {
+      "form": "T2",
+      "line": 392,
+      "disposition": "KEEP",
+      "reason": "缺理由：nm-throw: keep 注释未带理由，须补"
+    },
     "packages/core/src/domain/message-checkpoint/logic/truncate-tail-in-transaction.ts#throw tailRead.error;": {
       "form": "T1",
       "line": 60,
       "disposition": "ALLOWED",
       "reason": "白名单自动判定（transaction）"
     },
-    "packages/core/src/domain/tool/logic/tool-registry.ts#throw new AppError(\"TOOL_CONFLICT\", {toolName: tool.name, detail: `Tool already registered: ${tool.name}`});": {
-      "form": "T3",
-      "line": 26,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+    "packages/core/src/domain/message-checkpoint/logic/truncate-tail-in-transaction.ts#throw AbortError.create();": {
+      "form": "T2",
+      "line": 62,
+      "disposition": "ALLOWED",
+      "reason": "白名单自动判定（transaction）"
     },
     "packages/core/src/domain/vfs/content-store/impl/sqlite-vfs-content-store.ts#throw new AppError(\"VFS_CONTENT_BLOB_MISSING\", { detail: `vfs_content_blob 缺失且无可回退明文: ${contentHash}`, contentHash });": {
       "form": "T3",
-      "line": 273,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+      "line": 283,
+      "disposition": "KEEP",
+      "reason": "blob 缺失且无回退明文=数据受损域失败；消费方均在事务回调内（restore-path 持 tx、vfs-tree-copy replaceSubtree/Outcome 边界转 createAbortError、seed 链），抛错即回滚，service 边界 unwrapTxDomainError 收进 Result.err。"
     },
     "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts#throw new AppError(\"VFS_NOT_FOUND\", { path: oldBase, detail: `Path not found: ${oldBase}` });": {
       "form": "T3",
-      "line": 682,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+      "line": 689,
+      "disposition": "KEEP",
+      "reason": "幽灵路径按既定设计抛错回滚：唯一消费链 renamePrefix（revision-aware-vfs）注释明言 repo 抛 VFS_NOT_FOUND，边界已 unwrapTxDomainError 转 Err。"
     },
     "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.ts#throw new AppError(\"VFS_NOT_FOUND\", { detail: `Revision not found: entry ${entryId}@${version}`, entryId, version });": {
       "form": "T3",
-      "line": 271,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+      "line": 278,
+      "disposition": "KEEP",
+      "reason": "守护 T-RB-REF-MISSING 不变量（ref_count 不得悬空）：adjustRefCount delta>0 命中 0 行即单条缺失；消费方 RevisionRefCount.adjust 链全部落在事务回调内，抛错回滚 + service 边界转码。"
     },
     "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.ts#throw new AppError(\"VFS_NOT_FOUND\", { detail: `Revision not found: entry ${first.entryId}@${first.version} （共 ${missing.length} 条缺失）`, missing });": {
       "form": "T3",
-      "line": 297,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+      "line": 306,
+      "disposition": "KEEP",
+      "reason": "同 adjustRefCount：batchAdjustRefCountWithDelta 批量 +1 前置存在性校验，守护 T-RB-REF-MISSING 不变量；事务回调内抛错回滚 + service 边界转码。"
     },
     "packages/core/src/errors/either.ts#throw new Error(\"Result.revive 收到非 Result 线上形态：调用方对载荷的形状断言不成立\");": {
       "form": "T4",
@@ -640,7 +586,7 @@
       "disposition": "KEEP",
       "reason": "码表外 code 属不变量破坏，返回 undefined 会让错误格式化静默走兜底"
     },
-    "packages/core/src/i18n/catalog.ts#throw new Error(\"[parseCoreCatalog] 根节点必须是对象映射（error / label 两棵子树）\");": {
+    "packages/core/src/i18n/catalog.ts#throw new Error(\"[parseCoreCatalog] 根节点必须是对象映射（error / label / ui 三棵子树）\");": {
       "form": "T4",
       "line": 25,
       "disposition": "KEEP",
@@ -652,7 +598,7 @@
       "disposition": "KEEP",
       "reason": "catalog 结构不变量：构建期内嵌资源写坏即打包错误，非用户可触发失败。"
     },
-    "packages/core/src/i18n/catalog.ts#throw new Error(`[parseCoreCatalog] key 不匹配 keyRule（^(error|label)\\\\.域.名字段，全小写 snake_case，3-5 段）：${key}`);": {
+    "packages/core/src/i18n/catalog.ts#throw new Error(`[parseCoreCatalog] key 不匹配 keyRule（^(error|label|ui)\\\\.域.名字段，全小写 snake_case，3-5 段）：${key}`);": {
       "form": "T4",
       "line": 48,
       "disposition": "KEEP",
@@ -664,76 +610,82 @@
       "disposition": "KEEP",
       "reason": "catalog 结构不变量：构建期内嵌资源写坏即打包错误，非用户可触发失败。"
     },
+    "packages/core/src/infra/cloud-sync/impl/cloud-sync-coordinator.ts#throw AbortError.create();": {
+      "form": "T2",
+      "line": 237,
+      "disposition": "KEEP",
+      "reason": "缺理由：nm-throw: keep 注释未带理由，须补"
+    },
     "packages/core/src/infra/db-backup/provider-table-snapshot.ts#throw validation.error;": {
       "form": "T1",
-      "line": 87,
-      "disposition": "BOUNDARY",
+      "line": 89,
+      "disposition": "KEEP",
       "reason": "写库边界契约（总纲 §五7d）：restore 对外「任意行非法则抛 AppError（DB_BACKUP_*）」，调用方按 catch 收口。"
     },
     "packages/core/src/infra/llm-protocol/impl/anthropic.adapter.ts#throw fetched.error;": {
       "form": "T1",
-      "line": 98,
-      "disposition": "ALLOWED",
+      "line": 100,
+      "disposition": "KEEP",
       "reason": "llm-protocol port 出口（总纲 §五例外 5）：port 契约无失败位，ProviderError 走 throw 通道供 retry 按 catch+code 分派。"
     },
     "packages/core/src/infra/llm-protocol/impl/gemini.adapter.ts#throw fetched.error;": {
       "form": "T1",
-      "line": 75,
-      "disposition": "ALLOWED",
+      "line": 77,
+      "disposition": "KEEP",
       "reason": "llm-protocol port 出口（总纲 §五例外 5）：port 契约无失败位，ProviderError 走 throw 通道供 retry 按 catch+code 分派。"
     },
     "packages/core/src/infra/llm-protocol/impl/gemini.adapter.ts#throw mapped.error;": {
       "form": "T1",
-      "line": 89,
-      "disposition": "ALLOWED",
+      "line": 92,
+      "disposition": "KEEP",
       "reason": "llm-protocol port 出口（总纲 §五例外 5）：port 契约无失败位，ProviderError 走 throw 通道供 retry 按 catch+code 分派。"
     },
     "packages/core/src/infra/llm-protocol/impl/gemini.adapter.ts#throw parts.error;": {
       "form": "T1",
-      "line": 93,
-      "disposition": "ALLOWED",
+      "line": 97,
+      "disposition": "KEEP",
       "reason": "llm-protocol port 出口（总纲 §五例外 5）：port 契约无失败位，ProviderError 走 throw 通道供 retry 按 catch+code 分派。"
     },
     "packages/core/src/infra/llm-protocol/impl/openai.adapter.ts#throw fetched.error;": {
       "form": "T1",
-      "line": 102,
-      "disposition": "ALLOWED",
+      "line": 106,
+      "disposition": "KEEP",
       "reason": "llm-protocol port 出口（总纲 §五例外 5）：port 契约无失败位，ProviderError 走 throw 通道供 retry 按 catch+code 分派。"
     },
     "packages/core/src/infra/llm-protocol/impl/openai.adapter.ts#throw userText.error;": {
       "form": "T1",
-      "line": 43,
-      "disposition": "ALLOWED",
+      "line": 45,
+      "disposition": "KEEP",
       "reason": "llm-protocol port 出口（总纲 §五例外 5）：port 契约无失败位，ProviderError 走 throw 通道供 retry 按 catch+code 分派。"
     },
     "packages/core/src/infra/llm-protocol/impl/openai.adapter.ts#throw mapped.error;": {
       "form": "T1",
-      "line": 122,
-      "disposition": "ALLOWED",
+      "line": 127,
+      "disposition": "KEEP",
       "reason": "llm-protocol port 出口（总纲 §五例外 5）：port 契约无失败位，ProviderError 走 throw 通道供 retry 按 catch+code 分派。"
     },
     "packages/core/src/infra/llm-protocol/impl/openai.adapter.ts#throw content.error;": {
       "form": "T1",
-      "line": 126,
-      "disposition": "ALLOWED",
+      "line": 132,
+      "disposition": "KEEP",
       "reason": "llm-protocol port 出口（总纲 §五例外 5）：port 契约无失败位，ProviderError 走 throw 通道供 retry 按 catch+code 分派。"
     },
     "packages/core/src/infra/llm-protocol/logic/anthropic-sse-parser.ts#throw asserted.error;": {
       "form": "T1",
-      "line": 277,
-      "disposition": "ALLOWED",
+      "line": 280,
+      "disposition": "KEEP",
       "reason": "llm-protocol port 出口（总纲 §五例外 5）：port 契约无失败位，ProviderError 走 throw 通道供 retry 按 catch+code 分派。"
     },
     "packages/core/src/infra/llm-protocol/logic/gemini-sse-parser.ts#throw asserted.error;": {
       "form": "T1",
-      "line": 253,
-      "disposition": "ALLOWED",
+      "line": 256,
+      "disposition": "KEEP",
       "reason": "llm-protocol port 出口（总纲 §五例外 5）：port 契约无失败位，ProviderError 走 throw 通道供 retry 按 catch+code 分派。"
     },
     "packages/core/src/infra/llm-protocol/logic/openai-sse-parser.ts#throw asserted.error;": {
       "form": "T1",
-      "line": 84,
-      "disposition": "ALLOWED",
+      "line": 87,
+      "disposition": "KEEP",
       "reason": "llm-protocol port 出口（总纲 §五例外 5）：port 契约无失败位，ProviderError 走 throw 通道供 retry 按 catch+code 分派。"
     },
     "packages/core/src/infra/sksp/logic/aes-gcm.ts#throw new Error(\"ciphertext too short\");": {
@@ -756,32 +708,32 @@
     },
     "packages/core/src/service/agent/impl/chat-agent-session.ts#throw read.error;": {
       "form": "T1",
-      "line": 48,
-      "disposition": "BOUNDARY",
+      "line": 49,
+      "disposition": "KEEP",
       "reason": "AgentSession.list port 契约（总纲 §五7c）：已知失败抛出交 agent-runner 主 catch 收口；list 消费点在 runner 步进循环内，Result 化只会把 unwrap-throw 挪进 runner。"
     },
     "packages/core/src/service/agent/logic/assemble-agent-runner-deps.ts#throw read.error;": {
       "form": "T1",
-      "line": 69,
-      "disposition": "BOUNDARY",
+      "line": 70,
+      "disposition": "KEEP",
       "reason": "AgentSession.list 同款契约（总纲 §五7c）：listVisibleSessionMessages dep 与 chat-agent-session 是同一契约两端。"
     },
     "packages/core/src/service/agent/logic/run-agent-turn.ts#throw result.error;": {
       "form": "T1",
-      "line": 396,
-      "disposition": "BOUNDARY",
+      "line": 439,
+      "disposition": "KEEP",
       "reason": "runner 收口漏斗（总纲 §五7a）：throw 喂同函数 catch 的统一收口——FAILED('') 补发 + onRunFailed 记账，直接 return 会跳过终态事件；mapResolveError 是 desktop rejection 契约的 OrThrow 边界。"
     },
     "packages/core/src/service/agent/logic/run-agent-turn.ts#throw new AppError(\"AGENT_MESSAGE_EMPTY\");": {
       "form": "T3",
-      "line": 601,
-      "disposition": "BOUNDARY",
+      "line": 647,
+      "disposition": "KEEP",
       "reason": "runner 收口漏斗（总纲 §五7a）：throw 喂同函数 catch 的统一收口——FAILED('') 补发 + onRunFailed 记账，直接 return 会跳过终态事件；mapResolveError 是 desktop rejection 契约的 OrThrow 边界。"
     },
     "packages/core/src/service/agent/logic/run-agent-turn.ts#throw tailRead.error;": {
       "form": "T1",
-      "line": 591,
-      "disposition": "BOUNDARY",
+      "line": 636,
+      "disposition": "KEEP",
       "reason": "runner 收口漏斗（总纲 §五7a）：throw 喂同函数 catch 的统一收口——FAILED('') 补发 + onRunFailed 记账，直接 return 会跳过终态事件；mapResolveError 是 desktop rejection 契约的 OrThrow 边界。"
     },
     "packages/core/src/service/chat/impl/message.service.ts#throw new AppError(\"CHAT_NOT_FOUND\", { detail: `message not found: ${id}`, kind: \"message\", id, messageId: id });": {
@@ -798,13 +750,19 @@
     },
     "packages/core/src/service/chat/impl/message.service.ts#throw vfsCopied.error;": {
       "form": "T1",
-      "line": 314,
+      "line": 315,
+      "disposition": "ALLOWED",
+      "reason": "白名单自动判定（transaction）"
+    },
+    "packages/core/src/service/chat/impl/message.service.ts#throw AbortError.create();": {
+      "form": "T2",
+      "line": 333,
       "disposition": "ALLOWED",
       "reason": "白名单自动判定（transaction）"
     },
     "packages/core/src/service/chat/impl/message.service.ts#throw inserted.error;": {
       "form": "T1",
-      "line": 331,
+      "line": 332,
       "disposition": "ALLOWED",
       "reason": "白名单自动判定（transaction）"
     },
@@ -816,43 +774,49 @@
     },
     "packages/core/src/service/chat/impl/session.service.ts#throw new AppError(\"CHAT_NOT_FOUND\", { detail: `session not found: ${session.id}`, kind: \"session\", id: session.id });": {
       "form": "T3",
-      "line": 209,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+      "line": 223,
+      "disposition": "KEEP",
+      "reason": "事务回调内必须靠抛错回滚——改 return 会在「子树已删、根删失败」时提交半删事务；delete() 边界已补 unwrapTxDomainError 收进 Result.err（p27 R1 修复）。"
     },
     "packages/core/src/service/chat/impl/session.service.ts#throw vfsCopied.error;": {
       "form": "T1",
-      "line": 348,
+      "line": 363,
+      "disposition": "ALLOWED",
+      "reason": "白名单自动判定（transaction）"
+    },
+    "packages/core/src/service/chat/impl/session.service.ts#throw AbortError.create();": {
+      "form": "T2",
+      "line": 367,
       "disposition": "ALLOWED",
       "reason": "白名单自动判定（transaction）"
     },
     "packages/core/src/service/chat/impl/session.service.ts#throw inserted.error;": {
       "form": "T1",
-      "line": 351,
+      "line": 366,
       "disposition": "ALLOWED",
       "reason": "白名单自动判定（transaction）"
     },
     "packages/core/src/service/message-checkpoint/impl/message-rollback.service.ts#throw new AppError(\"SESSION_FS_ROLLBACK_CONFLICT\", { descriptor: { key: \"error.session_fs.rollback_conflict\", params: { expected_message_count: plan.messageCountSnapshot, actual_message_count: currentCount } }, expectedMessageCount: plan.messageCountSnapshot, actualMessageCount: currentCount, sessionId, messageId: anchorMessageId, });": {
       "form": "T3",
-      "line": 182,
+      "line": 181,
       "disposition": "ALLOWED",
       "reason": "白名单自动判定（transaction）"
     },
     "packages/core/src/service/message-checkpoint/impl/message-rollback.service.ts#throw new AppError(\"SESSION_FS_ROLLBACK_CONFLICT\", { descriptor: { key: \"error.session_fs.rollback_conflict\", params: { expected_message_count: plan.fileTreeFingerprint.length, actual_message_count: currentFingerprint.length } }, expectedMessageCount: plan.fileTreeFingerprint.length, actualMessageCount: currentFingerprint.length, sessionId, messageId: anchorMessageId, });": {
       "form": "T3",
-      "line": 200,
+      "line": 199,
       "disposition": "ALLOWED",
       "reason": "白名单自动判定（transaction）"
     },
     "packages/core/src/service/message-checkpoint/impl/message-rollback.service.ts#throw new AppError(\"SESSION_FS_ROLLBACK_VFS_RESTORE_FAILED\", { descriptor: { key: \"error.session_fs.vfs_restore_failed\", params: { detail } }, sessionId, messageId: anchorMessageId });": {
       "form": "T3",
-      "line": 221,
+      "line": 220,
       "disposition": "ALLOWED",
       "reason": "白名单自动判定（transaction）"
     },
     "packages/core/src/service/message-checkpoint/impl/message-rollback.service.ts#throw new AppError(\"SESSION_FS_ROLLBACK_TAIL_DRIFT\", { descriptor: { key: \"error.session_fs.rollback_tail_drift\", params: { expected_message_count: plan.tailMessageIds.length, actual_message_count: actualTailIds.length } }, expectedMessageCount: plan.tailMessageIds.length, actualMessageCount: actualTailIds.length, sessionId, messageId: anchorMessageId, });": {
       "form": "T3",
-      "line": 235,
+      "line": 234,
       "disposition": "ALLOWED",
       "reason": "白名单自动判定（transaction）"
     },
@@ -874,41 +838,41 @@
       "disposition": "ALLOWED",
       "reason": "白名单自动判定（transaction）"
     },
-    "packages/core/src/service/vfs/impl/character-card-import.service.ts#throw new AppError(\"VFS_CHARACTER_CARD_INVALID_PATH\", { detail: `character card target path is a file, not a directory: ${directoryPath}` });": {
+    "packages/core/src/service/vfs/impl/character-card-import.service.ts#throw new AppError(\"VFS_CHARACTER_CARD_INVALID_PATH\", {detail: `character card target path is a file, not a directory: ${directoryPath}`});": {
       "form": "T3",
-      "line": 177,
-      "disposition": "ALLOWED",
-      "reason": "白名单自动判定（transaction）"
+      "line": 194,
+      "disposition": "KEEP",
+      "reason": "平台强制 P2：事务回调内抛错驱动整体回滚；外层 catch 把 AppError 原形收进 Result.err。"
     },
     "packages/core/src/service/vfs/impl/character-card-import.service.ts#throw new Error(\"test import failure\");": {
       "form": "T4",
-      "line": 210,
+      "line": 227,
       "disposition": "KEEP",
       "reason": "测试故障注入点：调用方按 \"test import failure\" 原文案直供抛回（用例断言该 message），非业务错误。"
     },
     "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts#throw new AppError(\"VFS_NOT_FOUND\", { path: normalized, detail: `Path not found: ${normalized}` });": {
       "form": "T3",
-      "line": 120,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+      "line": 112,
+      "disposition": "KEEP",
+      "reason": "事务回调内失败靠抛错回滚（总纲 §五例外 2）；方法边界已 unwrapTxDomainError 收进 Err（RB4b 教训）。（非递归删根不存在）"
     },
     "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts#throw new AppError(\"VFS_NOT_FOUND\", { path: normalized, detail: `cannot resetHeadToVersion: entry missing for ${normalized}` });": {
       "form": "T3",
-      "line": 173,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+      "line": 166,
+      "disposition": "KEEP",
+      "reason": "事务回调内失败靠抛错回滚（总纲 §五例外 2）；方法边界已 unwrapTxDomainError 收进 Err（RB4b 教训）。（entry 缺失）"
     },
     "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts#throw new AppError(\"VFS_NOT_FOUND\", { path: normalized, detail: `cannot resetHeadToVersion: revision missing or deleted for ${normalized}@${version}` });": {
       "form": "T3",
-      "line": 179,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+      "line": 173,
+      "disposition": "KEEP",
+      "reason": "事务回调内失败靠抛错回滚（总纲 §五例外 2）；方法边界已 unwrapTxDomainError 收进 Err（RB4b 教训）（revision 缺失/已删）"
     },
     "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts#throw new AppError(\"VFS_NOT_FOUND\", { path: normalized, detail: `cannot resetHeadToVersion: active revision has no content for ${normalized}@${version}` });": {
       "form": "T3",
-      "line": 182,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+      "line": 177,
+      "disposition": "KEEP",
+      "reason": "事务回调内失败靠抛错回滚（总纲 §五例外 2）；方法边界已 unwrapTxDomainError 收进 Err（RB4b 教训）（active revision 无内容）"
     },
     "packages/core/src/service/vfs/impl/vfs-batch-io.service.ts#throw new AppError(\"VFS_NOT_A_DIRECTORY\", { detail: `path is a file, not a directory: ${dirLogical}`, path: dirLogical });": {
       "form": "T3",
@@ -924,13 +888,13 @@
     },
     "packages/core/src/service/vfs/impl/vfs-zip-io.service.ts#throw new AppError(\"VFS_NOT_A_DIRECTORY\", { path: logical, detail: `Not a directory: ${logical}` });": {
       "form": "T3",
-      "line": 67,
-      "disposition": "UNTRIAGED",
-      "reason": ""
+      "line": 69,
+      "disposition": "KEEP",
+      "reason": "只在 import 段 B0 的 conn.transaction 回调内调用，失败靠抛错回滚（函数 doc 明言）；import 外层 catch 收口，方法内 unwrapOrRollback 同款形态。"
     },
     "packages/core/src/service/vfs/impl/vfs-zip-io.service.ts#throw new Error(\"test import failure\");": {
       "form": "T4",
-      "line": 212,
+      "line": 214,
       "disposition": "KEEP",
       "reason": "测试故障注入点：调用方按 \"test import failure\" 原文案直供抛回（用例断言该 message），非业务错误。"
     },
@@ -948,7 +912,7 @@
     },
     "packages/sksp-windows/src/dpapi.ts#throw new Error(\"DPAPI platform not supported\");": {
       "form": "T4",
-      "line": 64,
+      "line": 70,
       "disposition": "KEEP",
       "reason": "OS 加密平台边界：DPAPI 能力探测失败，随即由 SkspError 收口。"
     },
@@ -960,45 +924,21 @@
     },
     "packages/tdbc-driver-op-sqlite/src/impl/op-sqlite-dynamic.adapter.ts#throw new Error(\"@op-engineering/op-sqlite 导出缺失（需要 open）\");": {
       "form": "T4",
-      "line": 19,
+      "line": 21,
       "disposition": "KEEP",
       "reason": "第三方驱动模块契约边界：op-sqlite 导出缺失属依赖装配失败。"
     },
     "packages/tdbc-driver-op-sqlite/src/impl/op-sqlite-dynamic.adapter.ts#throw new Error(\"@op-engineering/op-sqlite 未安装或加载失败。请将其安装为 peer 依赖并重新构建原生应用。\", { cause },);": {
       "form": "T4",
-      "line": 24,
+      "line": 26,
       "disposition": "KEEP",
       "reason": "第三方驱动加载边界：op-sqlite 未安装/加载失败，交装配层处理。"
-    },
-    "packages/tdbc-driver-op-sqlite/src/impl/op-sqlite-dynamic.adapter.ts#throw new Error(\"Adapter not open\");": {
-      "form": "T4",
-      "line": 70,
-      "disposition": "KEEP",
-      "reason": "驱动层 API 误用不变量：未 open 即调用属编程错误。"
-    },
-    "packages/tdbc-driver-op-sqlite/src/impl/op-sqlite.adapter.ts#throw new Error(\"op-sqlite adapter is not open\");": {
-      "form": "T4",
-      "line": 132,
-      "disposition": "KEEP",
-      "reason": "驱动层 API 误用不变量：未 open 即调用属编程错误。"
     },
     "packages/tokenizer-driver-node/src/impl/tiktoken-token-counter.ts#throw new Error(`tiktoken encoding unavailable: ${tiktokenModel}`);": {
       "form": "T4",
       "line": 24,
       "disposition": "KEEP",
       "reason": "tiktoken 第三方编码表加载边界：拿不到表按契约抛给驱动层降级。"
-    },
-    "packages/tokenizer-driver-node/src/node-tokenizer-loader.ts#throw new Error(\"Node tokenizer loader not installed. Call TokenizerNodeRegister.register() first.\");": {
-      "form": "T4",
-      "line": 47,
-      "disposition": "KEEP",
-      "reason": "驱动装配不变量：未注册 loader 即调用属编程错误。"
-    },
-    "tools/nm-style/src/lib/symbols.ts#throw new Error(\"nm-style: symbol 不属于本索引\");": {
-      "form": "T4",
-      "line": 678,
-      "disposition": "UNTRIAGED",
-      "reason": ""
     }
   }
 }

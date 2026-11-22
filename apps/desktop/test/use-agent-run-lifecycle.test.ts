@@ -4,32 +4,32 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, it } from "node:test";
 import { PENDING_RUN_ID, RunLifecycle } from "@shared/logic/agent";
 import {
-  useAgentRunLifecycle,
-  type AgentRunLifecycle,
+    useAgentRunLifecycle,
+    type AgentRunLifecycle,
 } from "@/hooks/useAgentRunLifecycle";
 
 describe("RunLifecycle.shouldAccept", () => {
-  it("activeRunId 为空时拒绝", () => {
-    assert.equal(RunLifecycle.shouldAccept(null, "run-1"), false);
-    assert.equal(RunLifecycle.shouldAccept(null, undefined), false);
-  });
+    it("activeRunId 为空时拒绝", () => {
+        assert.equal(RunLifecycle.shouldAccept(null, "run-1"), false);
+        assert.equal(RunLifecycle.shouldAccept(null, undefined), false);
+    });
 
-  it("runId 为空时拒绝（非 PENDING 态）", () => {
-    assert.equal(RunLifecycle.shouldAccept("run-1", undefined), false);
-    assert.equal(RunLifecycle.shouldAccept("run-1", ""), false);
-  });
+    it("runId 为空时拒绝（非 PENDING 态）", () => {
+        assert.equal(RunLifecycle.shouldAccept("run-1", undefined), false);
+        assert.equal(RunLifecycle.shouldAccept("run-1", ""), false);
+    });
 
-  it("runId 匹配时接受", () => {
-    assert.equal(RunLifecycle.shouldAccept("run-a", "run-a"), true);
-  });
+    it("runId 匹配时接受", () => {
+        assert.equal(RunLifecycle.shouldAccept("run-a", "run-a"), true);
+    });
 
-  it("stale runId 不匹配时拒绝", () => {
-    assert.equal(RunLifecycle.shouldAccept("run-a", "run-b"), false);
-  });
+    it("stale runId 不匹配时拒绝", () => {
+        assert.equal(RunLifecycle.shouldAccept("run-a", "run-b"), false);
+    });
 
-  it("abort 后保留 activeRunId 时 RUN_FINISHED 仍可 accept", () => {
-    assert.equal(RunLifecycle.shouldAccept("run-abort", "run-abort"), true);
-  });
+    it("abort 后保留 activeRunId 时 RUN_FINISHED 仍可 accept", () => {
+        assert.equal(RunLifecycle.shouldAccept("run-abort", "run-abort"), true);
+    });
 });
 
 /**
@@ -40,232 +40,232 @@ describe("RunLifecycle.shouldAccept", () => {
  * 不放行 ⇒ uiRunning 永久 true、abort 冻结永久挂起（「发送后立刻停止」按钮卡死）。
  */
 describe("RunLifecycle.shouldAccept 前奏终态放行（r3-run-1）", () => {
-  it("PENDING 态接受空串终态", () => {
-    assert.equal(RunLifecycle.shouldAccept(PENDING_RUN_ID, ""), true);
-  });
+    it("PENDING 态接受空串终态", () => {
+        assert.equal(RunLifecycle.shouldAccept(PENDING_RUN_ID, ""), true);
+    });
 
-  it("PENDING 态不接受 null / undefined runId", () => {
-    assert.equal(RunLifecycle.shouldAccept(PENDING_RUN_ID, undefined), false);
-    assert.equal(RunLifecycle.shouldAccept(PENDING_RUN_ID, null), false);
-  });
+    it("PENDING 态不接受 null / undefined runId", () => {
+        assert.equal(RunLifecycle.shouldAccept(PENDING_RUN_ID, undefined), false);
+        assert.equal(RunLifecycle.shouldAccept(PENDING_RUN_ID, null), false);
+    });
 
-  it("空串终态不放宽到其他 activeRunId（含 null）", () => {
-    assert.equal(RunLifecycle.shouldAccept(null, ""), false);
-    assert.equal(RunLifecycle.shouldAccept("run-1", ""), false);
-  });
+    it("空串终态不放宽到其他 activeRunId（含 null）", () => {
+        assert.equal(RunLifecycle.shouldAccept(null, ""), false);
+        assert.equal(RunLifecycle.shouldAccept("run-1", ""), false);
+    });
 
-  it("PENDING 哨兵不是真实 runId：真实事件不因哨兵而放行", () => {
-    // RUN_STARTED 到达后 activeRunId 被真实 runId 覆盖；这里只确认哨兵
-    // 与真实 runId 互不匹配（防有人把 PENDING_RUN_ID 当成 runId 上报）。
-    assert.equal(RunLifecycle.shouldAccept(PENDING_RUN_ID, "run-1"), false);
-    assert.notEqual(PENDING_RUN_ID, "");
-  });
+    it("PENDING 哨兵不是真实 runId：真实事件不因哨兵而放行", () => {
+        // RUN_STARTED 到达后 activeRunId 被真实 runId 覆盖；这里只确认哨兵
+        // 与真实 runId 互不匹配（防有人把 PENDING_RUN_ID 当成 runId 上报）。
+        assert.equal(RunLifecycle.shouldAccept(PENDING_RUN_ID, "run-1"), false);
+        assert.notEqual(PENDING_RUN_ID, "");
+    });
 });
 
 describe("RunLifecycle.shouldIgnoreStale", () => {
-  it("abort 后 uiRunning=false 时忽略 RUN_STARTED（保留 activeRunId 亦然）", () => {
-    assert.equal(RunLifecycle.shouldIgnoreStale(false, null), true);
-    assert.equal(RunLifecycle.shouldIgnoreStale(false, "run-1"), true);
-  });
+    it("abort 后 uiRunning=false 时忽略 RUN_STARTED（保留 activeRunId 亦然）", () => {
+        assert.equal(RunLifecycle.shouldIgnoreStale(false, null), true);
+        assert.equal(RunLifecycle.shouldIgnoreStale(false, "run-1"), true);
+    });
 
-  it("beginUiRun 窗口内 uiRunning=true 时接受 RUN_STARTED", () => {
-    assert.equal(RunLifecycle.shouldIgnoreStale(true, null), false);
-    assert.equal(RunLifecycle.shouldIgnoreStale(true, "run-1"), false);
-  });
+    it("beginUiRun 窗口内 uiRunning=true 时接受 RUN_STARTED", () => {
+        assert.equal(RunLifecycle.shouldIgnoreStale(true, null), false);
+        assert.equal(RunLifecycle.shouldIgnoreStale(true, "run-1"), false);
+    });
 });
 
 describe("RunLifecycle.shouldApply", () => {
-  it("uiRunning=false 时禁止 reload", () => {
-    assert.equal(
-      RunLifecycle.shouldApply(false, null),
-      RunLifecycle.shouldReload(false),
-    );
-    assert.equal(RunLifecycle.shouldApply(false, null), false);
-  });
+    it("uiRunning=false 时禁止 reload", () => {
+        assert.equal(
+            RunLifecycle.shouldApply(false, null),
+            RunLifecycle.shouldReload(false),
+        );
+        assert.equal(RunLifecycle.shouldApply(false, null), false);
+    });
 
-  it("uiRunning=true 且无 freeze 时允许 reload", () => {
-    assert.equal(RunLifecycle.shouldApply(true, null), true);
-  });
+    it("uiRunning=true 且无 freeze 时允许 reload", () => {
+        assert.equal(RunLifecycle.shouldApply(true, null), true);
+    });
 
-  it("freezeCount 非 null 时禁止一切增列表 reload", () => {
-    assert.equal(RunLifecycle.shouldApply(true, 3), false);
-    assert.equal(RunLifecycle.shouldApply(false, 3), false);
-  });
+    it("freezeCount 非 null 时禁止一切增列表 reload", () => {
+        assert.equal(RunLifecycle.shouldApply(true, 3), false);
+        assert.equal(RunLifecycle.shouldApply(false, 3), false);
+    });
 });
 
 describe("useAgentRunLifecycle transcriptFreezeCount (T-AC2-5)", () => {
-  function mountLifecycle(): AgentRunLifecycle {
-    const api: { current?: AgentRunLifecycle } = {};
+    function mountLifecycle(): AgentRunLifecycle {
+        const api: { current?: AgentRunLifecycle } = {};
 
-    function Harness() {
-      api.current = useAgentRunLifecycle();
-      return null;
+        function Harness() {
+            api.current = useAgentRunLifecycle();
+            return null;
+        }
+
+        renderToStaticMarkup(React.createElement(Harness));
+        assert.ok(api.current);
+        return api.current;
     }
 
-    renderToStaticMarkup(React.createElement(Harness));
-    assert.ok(api.current);
-    return api.current;
-  }
+    it("T-ARP-L1: abortUiRun 设 abortRetainPending 且 defer overlay clear", () => {
+        const lifecycle = mountLifecycle();
+        lifecycle.beginUiRun();
+        lifecycle.onRunStarted({
+            sessionId: "s1",
+            projectId: "p1",
+            runId: "run-1",
+        });
 
-  it("T-ARP-L1: abortUiRun 设 abortRetainPending 且 defer overlay clear", () => {
-    const lifecycle = mountLifecycle();
-    lifecycle.beginUiRun();
-    lifecycle.onRunStarted({
-      sessionId: "s1",
-      projectId: "p1",
-      runId: "run-1",
+        lifecycle.abortUiRun(5);
+
+        assert.equal(lifecycle.getUiRunning(), false);
+        assert.equal(lifecycle.getAbortRetainPending(), true);
     });
 
-    lifecycle.abortUiRun(5);
+    it("T-ARP-L4: getAbortRetainPending / clearAbortRetainPending；FINISHED 清 freeze", () => {
+        const lifecycle = mountLifecycle();
+        lifecycle.beginUiRun();
+        lifecycle.onRunStarted({
+            sessionId: "s1",
+            projectId: "p1",
+            runId: "run-1",
+        });
+        lifecycle.abortUiRun(4);
+        assert.equal(lifecycle.getAbortRetainPending(), true);
 
-    assert.equal(lifecycle.getUiRunning(), false);
-    assert.equal(lifecycle.getAbortRetainPending(), true);
-  });
+        lifecycle.clearAbortRetainPending();
+        assert.equal(lifecycle.getAbortRetainPending(), false);
 
-  it("T-ARP-L4: getAbortRetainPending / clearAbortRetainPending；FINISHED 清 freeze", () => {
-    const lifecycle = mountLifecycle();
-    lifecycle.beginUiRun();
-    lifecycle.onRunStarted({
-      sessionId: "s1",
-      projectId: "p1",
-      runId: "run-1",
+        lifecycle.abortUiRun(3);
+        assert.equal(lifecycle.getAbortRetainPending(), true);
+        assert.equal(lifecycle.getTranscriptFreezeCount(), 3);
+
+        lifecycle.onRunFinished({
+            sessionId: "s1",
+            projectId: "p1",
+            runId: "run-1",
+            stopReason: "cancelled",
+        });
+        assert.equal(lifecycle.getTranscriptFreezeCount(), null);
+        // FINISHED 不自动清 abortRetainPending（由 retain reload 或 fallback 负责）
+        assert.equal(lifecycle.getAbortRetainPending(), true);
     });
-    lifecycle.abortUiRun(4);
-    assert.equal(lifecycle.getAbortRetainPending(), true);
 
-    lifecycle.clearAbortRetainPending();
-    assert.equal(lifecycle.getAbortRetainPending(), false);
+    it("T-ARP-L4: beginUiRun / resetUiForSessionChange 清 abortRetainPending", () => {
+        const lifecycle = mountLifecycle();
+        lifecycle.beginUiRun();
+        lifecycle.onRunStarted({
+            sessionId: "s1",
+            projectId: "p1",
+            runId: "run-1",
+        });
+        lifecycle.abortUiRun(6);
+        assert.equal(lifecycle.getAbortRetainPending(), true);
 
-    lifecycle.abortUiRun(3);
-    assert.equal(lifecycle.getAbortRetainPending(), true);
-    assert.equal(lifecycle.getTranscriptFreezeCount(), 3);
+        lifecycle.beginUiRun();
+        assert.equal(lifecycle.getAbortRetainPending(), false);
 
-    lifecycle.onRunFinished({
-      sessionId: "s1",
-      projectId: "p1",
-      runId: "run-1",
-      stopReason: "cancelled",
+        lifecycle.onRunStarted({
+            sessionId: "s1",
+            projectId: "p1",
+            runId: "run-2",
+        });
+        lifecycle.abortUiRun(1);
+        lifecycle.resetUiForSessionChange();
+        assert.equal(lifecycle.getAbortRetainPending(), false);
     });
-    assert.equal(lifecycle.getTranscriptFreezeCount(), null);
-    // FINISHED 不自动清 abortRetainPending（由 retain reload 或 fallback 负责）
-    assert.equal(lifecycle.getAbortRetainPending(), true);
-  });
 
-  it("T-ARP-L4: beginUiRun / resetUiForSessionChange 清 abortRetainPending", () => {
-    const lifecycle = mountLifecycle();
-    lifecycle.beginUiRun();
-    lifecycle.onRunStarted({
-      sessionId: "s1",
-      projectId: "p1",
-      runId: "run-1",
+    it("abortUiRun(freezeAt) 设置 freezeCount 且 getUiRunning 同步为 false", () => {
+        const lifecycle = mountLifecycle();
+        lifecycle.beginUiRun();
+        lifecycle.onRunStarted({
+            sessionId: "s1",
+            projectId: "p1",
+            runId: "run-1",
+        });
+        assert.equal(lifecycle.getUiRunning(), true);
+
+        lifecycle.abortUiRun(5);
+
+        assert.equal(lifecycle.getUiRunning(), false);
+        assert.equal(lifecycle.getTranscriptFreezeCount(), 5);
+        assert.equal(lifecycle.acceptRunEvent("run-1"), true);
     });
-    lifecycle.abortUiRun(6);
-    assert.equal(lifecycle.getAbortRetainPending(), true);
 
-    lifecycle.beginUiRun();
-    assert.equal(lifecycle.getAbortRetainPending(), false);
+    it("RUN_FINISHED accept 后清空 freezeCount", () => {
+        const lifecycle = mountLifecycle();
+        lifecycle.beginUiRun();
+        lifecycle.onRunStarted({
+            sessionId: "s1",
+            projectId: "p1",
+            runId: "run-1",
+        });
+        lifecycle.abortUiRun(4);
+        assert.equal(lifecycle.getTranscriptFreezeCount(), 4);
 
-    lifecycle.onRunStarted({
-      sessionId: "s1",
-      projectId: "p1",
-      runId: "run-2",
+        const accepted = lifecycle.onRunFinished({
+            sessionId: "s1",
+            projectId: "p1",
+            runId: "run-1",
+            stopReason: "cancelled",
+        });
+        assert.equal(accepted, true);
+
+        assert.equal(lifecycle.getTranscriptFreezeCount(), null);
+        assert.equal(lifecycle.acceptRunEvent("run-1"), false);
     });
-    lifecycle.abortUiRun(1);
-    lifecycle.resetUiForSessionChange();
-    assert.equal(lifecycle.getAbortRetainPending(), false);
-  });
 
-  it("abortUiRun(freezeAt) 设置 freezeCount 且 getUiRunning 同步为 false", () => {
-    const lifecycle = mountLifecycle();
-    lifecycle.beginUiRun();
-    lifecycle.onRunStarted({
-      sessionId: "s1",
-      projectId: "p1",
-      runId: "run-1",
+    it("RUN_FAILED accept 后清空 freezeCount", () => {
+        const lifecycle = mountLifecycle();
+        lifecycle.beginUiRun();
+        lifecycle.onRunStarted({
+            sessionId: "s1",
+            projectId: "p1",
+            runId: "run-1",
+        });
+        lifecycle.abortUiRun(2);
+
+        const accepted = lifecycle.onRunFailed({
+            sessionId: "s1",
+            projectId: "p1",
+            runId: "run-1",
+            error: "boom",
+        });
+        assert.equal(accepted, true);
+
+        assert.equal(lifecycle.getTranscriptFreezeCount(), null);
     });
-    assert.equal(lifecycle.getUiRunning(), true);
 
-    lifecycle.abortUiRun(5);
+    it("resetUiForSessionChange 清空 freezeCount", () => {
+        const lifecycle = mountLifecycle();
+        lifecycle.beginUiRun();
+        lifecycle.onRunStarted({
+            sessionId: "s1",
+            projectId: "p1",
+            runId: "run-1",
+        });
+        lifecycle.abortUiRun(7);
+        lifecycle.resetUiForSessionChange();
 
-    assert.equal(lifecycle.getUiRunning(), false);
-    assert.equal(lifecycle.getTranscriptFreezeCount(), 5);
-    assert.equal(lifecycle.acceptRunEvent("run-1"), true);
-  });
-
-  it("RUN_FINISHED accept 后清空 freezeCount", () => {
-    const lifecycle = mountLifecycle();
-    lifecycle.beginUiRun();
-    lifecycle.onRunStarted({
-      sessionId: "s1",
-      projectId: "p1",
-      runId: "run-1",
+        assert.equal(lifecycle.getTranscriptFreezeCount(), null);
+        assert.equal(lifecycle.getUiRunning(), false);
+        assert.equal(lifecycle.acceptRunEvent("run-1"), false);
     });
-    lifecycle.abortUiRun(4);
-    assert.equal(lifecycle.getTranscriptFreezeCount(), 4);
 
-    const accepted = lifecycle.onRunFinished({
-      sessionId: "s1",
-      projectId: "p1",
-      runId: "run-1",
-      stopReason: "cancelled",
+    it("beginUiRun 清空 freezeCount（新 run 前解除 abort 快照）", () => {
+        const lifecycle = mountLifecycle();
+        lifecycle.beginUiRun();
+        lifecycle.onRunStarted({
+            sessionId: "s1",
+            projectId: "p1",
+            runId: "run-1",
+        });
+        lifecycle.abortUiRun(6);
+        lifecycle.beginUiRun();
+
+        assert.equal(lifecycle.getTranscriptFreezeCount(), null);
+        assert.equal(lifecycle.getUiRunning(), true);
     });
-    assert.equal(accepted, true);
-
-    assert.equal(lifecycle.getTranscriptFreezeCount(), null);
-    assert.equal(lifecycle.acceptRunEvent("run-1"), false);
-  });
-
-  it("RUN_FAILED accept 后清空 freezeCount", () => {
-    const lifecycle = mountLifecycle();
-    lifecycle.beginUiRun();
-    lifecycle.onRunStarted({
-      sessionId: "s1",
-      projectId: "p1",
-      runId: "run-1",
-    });
-    lifecycle.abortUiRun(2);
-
-    const accepted = lifecycle.onRunFailed({
-      sessionId: "s1",
-      projectId: "p1",
-      runId: "run-1",
-      error: "boom",
-    });
-    assert.equal(accepted, true);
-
-    assert.equal(lifecycle.getTranscriptFreezeCount(), null);
-  });
-
-  it("resetUiForSessionChange 清空 freezeCount", () => {
-    const lifecycle = mountLifecycle();
-    lifecycle.beginUiRun();
-    lifecycle.onRunStarted({
-      sessionId: "s1",
-      projectId: "p1",
-      runId: "run-1",
-    });
-    lifecycle.abortUiRun(7);
-    lifecycle.resetUiForSessionChange();
-
-    assert.equal(lifecycle.getTranscriptFreezeCount(), null);
-    assert.equal(lifecycle.getUiRunning(), false);
-    assert.equal(lifecycle.acceptRunEvent("run-1"), false);
-  });
-
-  it("beginUiRun 清空 freezeCount（新 run 前解除 abort 快照）", () => {
-    const lifecycle = mountLifecycle();
-    lifecycle.beginUiRun();
-    lifecycle.onRunStarted({
-      sessionId: "s1",
-      projectId: "p1",
-      runId: "run-1",
-    });
-    lifecycle.abortUiRun(6);
-    lifecycle.beginUiRun();
-
-    assert.equal(lifecycle.getTranscriptFreezeCount(), null);
-    assert.equal(lifecycle.getUiRunning(), true);
-  });
 });
 
 /**
@@ -275,103 +275,103 @@ describe("useAgentRunLifecycle transcriptFreezeCount (T-AC2-5)", () => {
  * RunLifecycle.shouldAccept 拒收空串终态，uiRunning 会永远停在 true。
  */
 describe("useAgentRunLifecycle 前奏终态收口（r3-run-1）", () => {
-  function mountLifecycle(): AgentRunLifecycle {
-    const api: { current?: AgentRunLifecycle } = {};
+    function mountLifecycle(): AgentRunLifecycle {
+        const api: { current?: AgentRunLifecycle } = {};
 
-    function Harness() {
-      api.current = useAgentRunLifecycle();
-      return null;
+        function Harness() {
+            api.current = useAgentRunLifecycle();
+            return null;
+        }
+
+        renderToStaticMarkup(React.createElement(Harness));
+        assert.ok(api.current);
+        return api.current;
     }
 
-    renderToStaticMarkup(React.createElement(Harness));
-    assert.ok(api.current);
-    return api.current;
-  }
+    it("T-PENDING-1: beginUiRun 后未收 STARTED，FINISHED('') 也能收口", () => {
+        const lifecycle = mountLifecycle();
+        lifecycle.beginUiRun();
+        assert.equal(lifecycle.getUiRunning(), true);
+        // 前奏期 core 一个事件都不发，这里直接收终态。
+        assert.equal(lifecycle.acceptRunEvent(""), true);
 
-  it("T-PENDING-1: beginUiRun 后未收 STARTED，FINISHED('') 也能收口", () => {
-    const lifecycle = mountLifecycle();
-    lifecycle.beginUiRun();
-    assert.equal(lifecycle.getUiRunning(), true);
-    // 前奏期 core 一个事件都不发，这里直接收终态。
-    assert.equal(lifecycle.acceptRunEvent(""), true);
+        const accepted = lifecycle.onRunFinished({
+            sessionId: "s1",
+            projectId: "p1",
+            runId: "",
+            stopReason: "cancelled",
+            vfsMutated: false,
+        });
 
-    const accepted = lifecycle.onRunFinished({
-      sessionId: "s1",
-      projectId: "p1",
-      runId: "",
-      stopReason: "cancelled",
-      vfsMutated: false,
+        assert.equal(accepted, true, "前奏 FINISHED('') 必须被 accept");
+        assert.equal(lifecycle.getUiRunning(), false, "uiRunning 必须解锁");
+        assert.equal(lifecycle.getTranscriptFreezeCount(), null);
     });
 
-    assert.equal(accepted, true, "前奏 FINISHED('') 必须被 accept");
-    assert.equal(lifecycle.getUiRunning(), false, "uiRunning 必须解锁");
-    assert.equal(lifecycle.getTranscriptFreezeCount(), null);
-  });
+    it("T-PENDING-2: FAILED('') 同样收口（composer 解锁的另一半）", () => {
+        const lifecycle = mountLifecycle();
+        lifecycle.beginUiRun();
 
-  it("T-PENDING-2: FAILED('') 同样收口（composer 解锁的另一半）", () => {
-    const lifecycle = mountLifecycle();
-    lifecycle.beginUiRun();
+        const accepted = lifecycle.onRunFailed({
+            sessionId: "s1",
+            projectId: "p1",
+            runId: "",
+            error: "前奏炸了",
+        });
 
-    const accepted = lifecycle.onRunFailed({
-      sessionId: "s1",
-      projectId: "p1",
-      runId: "",
-      error: "前奏炸了",
+        assert.equal(accepted, true);
+        assert.equal(lifecycle.getUiRunning(), false);
     });
 
-    assert.equal(accepted, true);
-    assert.equal(lifecycle.getUiRunning(), false);
-  });
+    it("T-PENDING-3: 「发送→立刻停止」后收 FINISHED('')，freeze 被清", () => {
+        const lifecycle = mountLifecycle();
+        lifecycle.beginUiRun();
+        // 用户在 core 还在前奏时按了停止：abort 快照先行（uiRunning=false、freeze!=null）。
+        lifecycle.abortUiRun(5);
+        assert.equal(lifecycle.getAbortRetainPending(), true);
 
-  it("T-PENDING-3: 「发送→立刻停止」后收 FINISHED('')，freeze 被清", () => {
-    const lifecycle = mountLifecycle();
-    lifecycle.beginUiRun();
-    // 用户在 core 还在前奏时按了停止：abort 快照先行（uiRunning=false、freeze!=null）。
-    lifecycle.abortUiRun(5);
-    assert.equal(lifecycle.getAbortRetainPending(), true);
+        const accepted = lifecycle.onRunFinished({
+            sessionId: "s1",
+            projectId: "p1",
+            runId: "",
+            stopReason: "cancelled",
+            vfsMutated: false,
+        });
 
-    const accepted = lifecycle.onRunFinished({
-      sessionId: "s1",
-      projectId: "p1",
-      runId: "",
-      stopReason: "cancelled",
-      vfsMutated: false,
+        assert.equal(accepted, true);
+        assert.equal(lifecycle.getUiRunning(), false);
+        assert.equal(
+            lifecycle.getTranscriptFreezeCount(),
+            null,
+            "freeze 必须清，否则面板永久冻在前奏那一刻",
+        );
     });
 
-    assert.equal(accepted, true);
-    assert.equal(lifecycle.getUiRunning(), false);
-    assert.equal(
-      lifecycle.getTranscriptFreezeCount(),
-      null,
-      "freeze 必须清，否则面板永久冻在前奏那一刻",
-    );
-  });
+    it("T-PENDING-4: 真实 RUN_STARTED 覆盖 PENDING 哨兵，后续按真实 runId 匹配", () => {
+        const lifecycle = mountLifecycle();
+        lifecycle.beginUiRun();
+        lifecycle.onRunStarted({
+            sessionId: "s1",
+            projectId: "p1",
+            runId: "run-real",
+        });
 
-  it("T-PENDING-4: 真实 RUN_STARTED 覆盖 PENDING 哨兵，后续按真实 runId 匹配", () => {
-    const lifecycle = mountLifecycle();
-    lifecycle.beginUiRun();
-    lifecycle.onRunStarted({
-      sessionId: "s1",
-      projectId: "p1",
-      runId: "run-real",
+        assert.equal(lifecycle.acceptRunEvent("run-real"), true);
+        assert.equal(
+            lifecycle.acceptRunEvent(""),
+            false,
+            "STARTED 已到之后空串终态不该再被放行（那是上一轮的迟到事件）",
+        );
     });
 
-    assert.equal(lifecycle.acceptRunEvent("run-real"), true);
-    assert.equal(
-      lifecycle.acceptRunEvent(""),
-      false,
-      "STARTED 已到之后空串终态不该再被放行（那是上一轮的迟到事件）",
-    );
-  });
-
-  it("T-PENDING-5: resetUiForSessionChange 后空串终态不再放行", () => {
-    const lifecycle = mountLifecycle();
-    lifecycle.beginUiRun();
-    lifecycle.resetUiForSessionChange();
-    assert.equal(
-      lifecycle.acceptRunEvent(""),
-      false,
-      "切会话后 activeRunId 归 null，前奏终态不得被误 accept",
-    );
-  });
+    it("T-PENDING-5: resetUiForSessionChange 后空串终态不再放行", () => {
+        const lifecycle = mountLifecycle();
+        lifecycle.beginUiRun();
+        lifecycle.resetUiForSessionChange();
+        assert.equal(
+            lifecycle.acceptRunEvent(""),
+            false,
+            "切会话后 activeRunId 归 null，前奏终态不得被误 accept",
+        );
+    });
 });

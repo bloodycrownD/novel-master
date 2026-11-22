@@ -15,20 +15,20 @@ import {join} from 'node:path';
 
 /** 本轮改动文件（相对 apps/mobile）；缺一个都会让扫描面缩水。 */
 const CHANGED_FILES = [
-  'src/components/chat/ChatConversationBridge.ts',
-  'src/components/chat/ChatConversationWebView.tsx',
-  'src/components/chat/ChatTranscriptBridge.ts',
-  'src/components/chat/ChatTranscriptWebViewHandle.ts',
-  'src/components/chat/message-blocks.ts',
-  'src/components/chat/chat-conversation-update-plan.ts',
-  'src/components/chat/transcript-stream-projection.ts',
-  'src/components/chat/transcript-labels.ts',
-  'src/services/session-stream-unit.ts',
-  'src/services/session-stream-unit-manager.service.ts',
-  'src/services/session-stream-webview-adapter.ts',
-  'src/screens/tabs/chat-tab/ChatTabProvider.tsx',
-  'src/screens/tabs/chat-tab/ChatConversationPanel.tsx',
-  'src/screens/stack/SubagentSessionScreen.tsx',
+    'src/components/chat/ChatConversationBridge.ts',
+    'src/components/chat/ChatConversationWebView.tsx',
+    'src/components/chat/ChatTranscriptBridge.ts',
+    'src/components/chat/ChatTranscriptWebViewHandle.ts',
+    'src/components/chat/message-blocks.ts',
+    'src/components/chat/chat-conversation-update-plan.ts',
+    'src/components/chat/transcript-stream-projection.ts',
+    'src/components/chat/transcript-labels.ts',
+    'src/services/session-stream-unit.ts',
+    'src/services/session-stream-unit-manager.service.ts',
+    'src/services/session-stream-webview-adapter.ts',
+    'src/screens/tabs/chat-tab/ChatTabProvider.tsx',
+    'src/screens/tabs/chat-tab/ChatConversationPanel.tsx',
+    'src/screens/stack/SubagentSessionScreen.tsx',
 ];
 
 /** 裸 console 调用（注释先行剥掉，避免文档里的示例命中）。 */
@@ -36,14 +36,14 @@ const RAW_CONSOLE = /console\.(log|info|warn|error|debug|trace)\s*\(/;
 
 /** 只留代码行：整块注释与行注释都剥掉。 */
 function stripComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
 }
 
 describe('本轮改动文件零裸 console（spec C31）', () => {
-  for (const file of CHANGED_FILES) {
-    it(`${file} 不含裸 console 调用`, () => {
-      const source = readFileSync(join(__dirname, '..', file), 'utf8');
-      expect(stripComments(source)).not.toMatch(RAW_CONSOLE);
-    });
-  }
+    for (const file of CHANGED_FILES) {
+        it(`${file} 不含裸 console 调用`, () => {
+            const source = readFileSync(join(__dirname, '..', file), 'utf8');
+            expect(stripComments(source)).not.toMatch(RAW_CONSOLE);
+        });
+    }
 });

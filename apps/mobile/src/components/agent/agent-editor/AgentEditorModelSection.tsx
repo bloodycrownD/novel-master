@@ -4,45 +4,47 @@
  */
 import React from 'react';
 
+import {coreT} from '@/i18n/core';
+
 import {FormField} from '../../form/FormField';
 import {FormSectionCard} from '../../form/FormSectionCard';
 import {FormSelectField} from '../../form/FormSelectField';
 import {type AgentEditorTokens} from './agent-editor-types';
 
 type Props = {
-  tokens: AgentEditorTokens;
-  value: string;
-  onChange: (id: string) => void;
-  options: Array<{value: string; label: string; subtitle?: string}>;
-  /** 只读态（内置智能体详情）：下拉禁点并灰显。 */
-  readOnly?: boolean;
+    tokens: AgentEditorTokens;
+    value: string;
+    onChange: (id: string) => void;
+    options: Array<{value: string; label: string; subtitle?: string}>;
+    /** 只读态（内置智能体详情）：下拉禁点并灰显。 */
+    readOnly?: boolean;
 };
 
 export function AgentEditorModelSection({
-  tokens,
-  value,
-  onChange,
-  options,
-  readOnly = false,
+    tokens,
+    value,
+    onChange,
+    options,
+    readOnly = false,
 }: Props) {
-  return (
-    <FormSectionCard title="模型" tokens={tokens}>
-      <FormField
-        label="专属模型"
-        tokens={tokens}
-        hint="默认(跟随) 表示使用会话操作抽屉 / 我的里设置的当前模型。"
-      >
-        <FormSelectField
-          tokens={tokens}
-          value={value}
-          onChange={onChange}
-          options={options}
-          sheetTitle="选择专属模型"
-          placeholder="默认(跟随)"
-          emptyLabel="请先在「服务商」页添加模型"
-          disabled={readOnly}
-        />
-      </FormField>
-    </FormSectionCard>
-  );
+    return (
+        <FormSectionCard title={coreT({key: "ui.common.model"})} tokens={tokens}>
+            <FormField
+                label={coreT({key: "ui.agent.model_dedicated"})}
+                tokens={tokens}
+                hint={coreT({key: "ui.agent.model_follow_hint"})}
+            >
+                <FormSelectField
+                    tokens={tokens}
+                    value={value}
+                    onChange={onChange}
+                    options={options}
+                    sheetTitle={coreT({key: "ui.agent.model_picker_title"})}
+                    placeholder={coreT({key: "ui.agent.model_follow_option"})}
+                    emptyLabel={coreT({key: "ui.agent.no_models_hint"})}
+                    disabled={readOnly}
+                />
+            </FormField>
+        </FormSectionCard>
+    );
 }

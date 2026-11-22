@@ -43,10 +43,10 @@ type Ctx = Awaited<ReturnType<typeof openSqlCountingNovelMasterTestConnection>>;
 let ctx: Ctx;
 
 before(async () => {
-  ctx = await openSqlCountingNovelMasterTestConnection();
+    ctx = await openSqlCountingNovelMasterTestConnection();
 });
 after(async () => {
-  await ctx.conn.close();
+    await ctx.conn.close();
 });
 
 // ---------------------------------------------------------------------------
@@ -54,8 +54,8 @@ after(async () => {
 // ---------------------------------------------------------------------------
 
 interface SqlTrace {
-  readonly sql: string;
-  readonly inTx: boolean;
+    readonly sql: string;
+    readonly inTx: boolean;
 }
 
 /**
@@ -69,74 +69,74 @@ interface SqlTrace {
  * BEGIN/COMMIT 不经 `conn.execute` 发出，探针记不到事务边界。
  */
 function installTxWindowProbe(conn: TdbcConnection): {
-  readonly trace: readonly SqlTrace[];
-  /** 调用瞬间是否正处在 `conn.transaction` 回调窗口内。 */
-  readonly inTx: () => boolean;
-  restore: () => void;
+    readonly trace: readonly SqlTrace[];
+    /** 调用瞬间是否正处在 `conn.transaction` 回调窗口内。 */
+    readonly inTx: () => boolean;
+    restore: () => void;
 } {
-  const trace: SqlTrace[] = [];
-  let depth = 0;
-  const self = conn as unknown as Record<string, unknown>;
-  const origExecute = conn.execute.bind(conn);
-  const origQuery = conn.query.bind(conn);
-  const origBatch = conn.batch.bind(conn);
-  const origTransaction = conn.transaction.bind(conn);
+    const trace: SqlTrace[] = [];
+    let depth = 0;
+    const self = conn as unknown as Record<string, unknown>;
+    const origExecute = conn.execute.bind(conn);
+    const origQuery = conn.query.bind(conn);
+    const origBatch = conn.batch.bind(conn);
+    const origTransaction = conn.transaction.bind(conn);
 
-  const record = (sql: string): void => {
-    trace.push({ sql, inTx: depth > 0 });
-  };
+    const record = (sql: string): void => {
+        trace.push({ sql, inTx: depth > 0 });
+    };
 
-  const wrapTx = (tx: TdbcConnection): TdbcConnection => ({
-    execute: (sql, parameters) => {
-      record(sql);
-      return tx.execute(sql, parameters);
-    },
-    query: <R extends Row = Row>(sql: string, parameters?: readonly unknown[]) => {
-      record(sql);
-      return tx.query<R>(sql, parameters);
-    },
-    batch: (sql, parametersList) => {
-      record(sql);
-      return tx.batch(sql, parametersList);
-    },
-    transaction: <U>(fn: (nested: TdbcConnection) => Promise<U>) =>
-      tx.transaction(fn),
-    close: () => tx.close(),
-  });
-
-  self.execute = (sql: string, p?: readonly unknown[]) => {
-    record(sql);
-    return origExecute(sql, p);
-  };
-  self.query = (sql: string, p?: readonly unknown[]) => {
-    record(sql);
-    return origQuery(sql, p);
-  };
-  self.batch = (sql: string, pl: readonly (readonly unknown[])[]) => {
-    record(sql);
-    return origBatch(sql, pl);
-  };
-  self.transaction = async <T>(fn: (tx: TdbcConnection) => Promise<T>): Promise<T> =>
-    origTransaction(async (tx) => {
-      depth += 1;
-      try {
-        return await fn(wrapTx(tx));
-      } finally {
-        depth -= 1;
-      }
+    const wrapTx = (tx: TdbcConnection): TdbcConnection => ({
+        execute: (sql, parameters) => {
+            record(sql);
+            return tx.execute(sql, parameters);
+        },
+        query: <R extends Row = Row>(sql: string, parameters?: readonly unknown[]) => {
+            record(sql);
+            return tx.query<R>(sql, parameters);
+        },
+        batch: (sql, parametersList) => {
+            record(sql);
+            return tx.batch(sql, parametersList);
+        },
+        transaction: <U>(fn: (nested: TdbcConnection) => Promise<U>) =>
+            tx.transaction(fn),
+        close: () => tx.close(),
     });
 
-  return {
-    trace,
-    inTx: () => depth > 0,
-    restore: () => {
-      // 这四个方法原本挂在原型上，删掉自有属性即回到原型实现。
-      delete self.execute;
-      delete self.query;
-      delete self.batch;
-      delete self.transaction;
-    },
-  };
+    self.execute = (sql: string, p?: readonly unknown[]) => {
+        record(sql);
+        return origExecute(sql, p);
+    };
+    self.query = (sql: string, p?: readonly unknown[]) => {
+        record(sql);
+        return origQuery(sql, p);
+    };
+    self.batch = (sql: string, pl: readonly (readonly unknown[])[]) => {
+        record(sql);
+        return origBatch(sql, pl);
+    };
+    self.transaction = async <T>(fn: (tx: TdbcConnection) => Promise<T>): Promise<T> =>
+        origTransaction(async (tx) => {
+            depth += 1;
+            try {
+                return await fn(wrapTx(tx));
+            } finally {
+                depth -= 1;
+            }
+        });
+
+    return {
+        trace,
+        inTx: () => depth > 0,
+        restore: () => {
+            // 这四个方法原本挂在原型上，删掉自有属性即回到原型实现。
+            delete self.execute;
+            delete self.query;
+            delete self.batch;
+            delete self.transaction;
+        },
+    };
 }
 
 // ---------------------------------------------------------------------------
@@ -144,36 +144,36 @@ function installTxWindowProbe(conn: TdbcConnection): {
 // ---------------------------------------------------------------------------
 
 interface ReadObservation {
-  readonly mouth: "listBySession" | "listBySessionUpToSeq";
-  readonly inTx: boolean;
+    readonly mouth: "listBySession" | "listBySessionUpToSeq";
+    readonly inTx: boolean;
 }
 
 /** 记录两个 21 列全量读口的调用点，以及调用瞬间是否落在事务回调窗口内。 */
 async function withFullReadProbe<T>(
-  isInTx: () => boolean,
-  fn: () => Promise<T>
+    isInTx: () => boolean,
+    fn: () => Promise<T>
 ): Promise<{ result: T; reads: readonly ReadObservation[] }> {
-  const proto = SqliteMessageRepository.prototype;
-  const origList = proto.listBySession;
-  const origUpTo = proto.listBySessionUpToSeq;
-  const reads: ReadObservation[] = [];
+    const proto = SqliteMessageRepository.prototype;
+    const origList = proto.listBySession;
+    const origUpTo = proto.listBySessionUpToSeq;
+    const reads: ReadObservation[] = [];
 
-  proto.listBySession = function patched(...args: never[]) {
-    reads.push({ mouth: "listBySession", inTx: isInTx() });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (origList as any).apply(this, args);
-  } as typeof origList;
-  proto.listBySessionUpToSeq = function patched(...args: never[]) {
-    reads.push({ mouth: "listBySessionUpToSeq", inTx: isInTx() });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (origUpTo as any).apply(this, args);
-  } as typeof origUpTo;
-  try {
-    return { result: await fn(), reads };
-  } finally {
-    proto.listBySession = origList;
-    proto.listBySessionUpToSeq = origUpTo;
-  }
+    proto.listBySession = function patched(...args: never[]) {
+        reads.push({ mouth: "listBySession", inTx: isInTx() });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return (origList as any).apply(this, args);
+    } as typeof origList;
+    proto.listBySessionUpToSeq = function patched(...args: never[]) {
+        reads.push({ mouth: "listBySessionUpToSeq", inTx: isInTx() });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return (origUpTo as any).apply(this, args);
+    } as typeof origUpTo;
+    try {
+        return { result: await fn(), reads };
+    } finally {
+        proto.listBySession = origList;
+        proto.listBySessionUpToSeq = origUpTo;
+    }
 }
 
 /**
@@ -186,29 +186,29 @@ async function withFullReadProbe<T>(
  * 「窗口外必须有」的防恒真断言会反咬一口。
  */
 function isFullMessageRead(sql: string): boolean {
-  const norm = sql.replace(/\s+/g, " ").toUpperCase();
-  return (
-    norm.includes("FROM CHAT_MESSAGE") &&
-    norm.includes("CONTENT_JSON") &&
-    norm.includes("CACHE_READ_TOKENS")
-  );
+    const norm = sql.replace(/\s+/g, " ").toUpperCase();
+    return (
+        norm.includes("FROM CHAT_MESSAGE") &&
+        norm.includes("CONTENT_JSON") &&
+        norm.includes("CACHE_READ_TOKENS")
+    );
 }
 
 /** 事务窗口内跑一次 fn，同时拿到读口观测与语句清单。 */
 async function observe<T>(
-  fn: () => Promise<T>
+    fn: () => Promise<T>
 ): Promise<{
-  result: T;
-  reads: readonly ReadObservation[];
-  trace: readonly SqlTrace[];
+    result: T;
+    reads: readonly ReadObservation[];
+    trace: readonly SqlTrace[];
 }> {
-  const probe = installTxWindowProbe(ctx.conn);
-  try {
-    const { result, reads } = await withFullReadProbe(probe.inTx, fn);
-    return { result, reads, trace: probe.trace };
-  } finally {
-    probe.restore();
-  }
+    const probe = installTxWindowProbe(ctx.conn);
+    try {
+        const { result, reads } = await withFullReadProbe(probe.inTx, fn);
+        return { result, reads, trace: probe.trace };
+    } finally {
+        probe.restore();
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -219,22 +219,22 @@ const MSG_COUNT = 6;
 
 /** 造一条带消息的会话；返回 session id 与最后一条消息 id。 */
 async function seedSession(prefix: string): Promise<{
-  projectId: string;
-  sessionId: string;
-  lastMessageId: string;
+    projectId: string;
+    sessionId: string;
+    lastMessageId: string;
 }> {
-  const project = unwrap(await ctx.projects.create(`P-${prefix}-${testIsolationSuffix()}`));
-  const session = unwrap(await ctx.sessions.create(project.id, `S-${testIsolationSuffix()}`));
-  let lastMessageId = "";
-  for (let i = 0; i < MSG_COUNT; i++) {
-    const m = unwrap(await ctx.messages.append(
-      session.id,
-      i % 2 === 0 ? "user" : "assistant",
-      TextBlocks.of(`${prefix}-m${i}`),
-    ));
-    lastMessageId = m.id;
-  }
-  return { projectId: project.id, sessionId: session.id, lastMessageId };
+    const project = unwrap(await ctx.projects.create(`P-${prefix}-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, `S-${testIsolationSuffix()}`));
+    let lastMessageId = "";
+    for (let i = 0; i < MSG_COUNT; i++) {
+        const m = unwrap(await ctx.messages.append(
+            session.id,
+            i % 2 === 0 ? "user" : "assistant",
+            TextBlocks.of(`${prefix}-m${i}`),
+        ));
+        lastMessageId = m.id;
+    }
+    return { projectId: project.id, sessionId: session.id, lastMessageId };
 }
 
 // ---------------------------------------------------------------------------
@@ -242,75 +242,76 @@ async function seedSession(prefix: string): Promise<{
 // ---------------------------------------------------------------------------
 
 describe("C2-3 C1: copy 事务内零全量读", () => {
-  it("T-COPY-0 探针自证：事务回调窗口内发起的全量读会被标成 inTx=true", async () => {
-    // 对照组：没有它，「copy 的读在事务外」可能只是因为探针窗口压根没开过
-    // （即恒真）。这里故意把同一个全量读口放进事务回调里跑一次。
-    const { sessionId } = await seedSession("c0");
-    const { reads } = await observe(() =>
-      ctx.conn.transaction(async (tx) => {
-        outcomeValue(await new SqliteMessageRepository(tx).listBySession(sessionId));
-        return null;
-      })
-    );
-    assert.deepEqual(
-      reads,
-      [{ mouth: "listBySession", inTx: true }],
-      "探针窗口必须真的会在事务内亮起来（否则 C1 是恒真断言）"
-    );
-  });
+    it("T-COPY-0 探针自证：事务回调窗口内发起的全量读会被标成 inTx=true", async () => {
+        // 对照组：没有它，「copy 的读在事务外」可能只是因为探针窗口压根没开过
+        // （即恒真）。这里故意把同一个全量读口放进事务回调里跑一次。
+        const { sessionId } = await seedSession("c0");
+        const { reads } = await observe(() =>
+            ctx.conn.transaction(async (tx) => {
+                outcomeValue(await new SqliteMessageRepository(tx).listBySession(sessionId));
+                return null;
+            })
+        );
+        assert.deepEqual(
+            reads,
+            [{ mouth: "listBySession", inTx: true }],
+            "探针窗口必须真的会在事务内亮起来（否则 C1 是恒真断言）"
+        );
+    });
 
-  it("T-COPY-1: listBySession 恰一次且发生在事务回调之外", async () => {
-    const { sessionId } = await seedSession("c1");
-    const { result: copied, reads } = await observe(() =>
-      ctx.sessions.copy(sessionId)
-    );
+    it("T-COPY-1: listBySession 恰一次且发生在事务回调之外", async () => {
+        const { sessionId } = await seedSession("c1");
+        const { result: copied, reads } = await observe(() =>
+            ctx.sessions.copy(sessionId)
+        );
 
-    const listReads = reads.filter((r) => r.mouth === "listBySession");
-    assert.equal(
-      listReads.length,
-      1,
-      `copy 应恰好做一次全量读，实际 ${JSON.stringify(reads)}`
-    );
-    assert.equal(
-      listReads[0]!.inTx,
-      false,
-      "listBySession 必须在 conn.transaction 回调之外（旧实现把它整段搬进事务）"
-    );
-    assert.notEqual(copied.id, sessionId);
-  });
+        const listReads = reads.filter((r) => r.mouth === "listBySession");
+        assert.equal(
+            listReads.length,
+            1,
+            `copy 应恰好做一次全量读，实际 ${JSON.stringify(reads)}`
+        );
+        assert.equal(
+            listReads[0]!.inTx,
+            false,
+            "listBySession 必须在 conn.transaction 回调之外（旧实现把它整段搬进事务）"
+        );
+        assert.notEqual(copied.id, sessionId);
+    });
 
-  it("T-COPY-2: 事务回调窗口内没有任何 chat_message 全列 SELECT", async () => {
-    const { sessionId } = await seedSession("c2");
-    const { trace } = await observe(() => ctx.sessions.copy(sessionId));
+    it("T-COPY-2: 事务回调窗口内没有任何 chat_message 全列 SELECT", async () => {
+        const { sessionId } = await seedSession("c2");
+        const { trace } = await observe(() => ctx.sessions.copy(sessionId));
 
-    const inTxFullReads = trace.filter(
-      (t) => t.inTx && isFullMessageRead(t.sql)
-    );
-    assert.deepEqual(
-      inTxFullReads.map((t) => t.sql.slice(0, 120)),
-      [],
-      "写事务内不得发出 21 列全量消息读（那正是 CS-11 的病灶）"
-    );
+        const inTxFullReads = trace.filter(
+            (t) => t.inTx && isFullMessageRead(t.sql)
+        );
+        assert.deepEqual(
+            inTxFullReads.map((t) => t.sql.slice(0, 120)),
+            [],
+            "写事务内不得发出 21 列全量消息读（那正是 CS-11 的病灶）"
+        );
 
-    // 窗口外必须有——否则本条退化成「压根没读」。
-    assert.ok(
-      trace.some((t) => !t.inTx && isFullMessageRead(t.sql)),
-      "事务外必须真的发出那次全量读（断言不是恒真）"
-    );
+        // 窗口外必须有——否则本条退化成「压根没读」。
+        assert.ok(
+            trace.some((t) => !t.inTx && isFullMessageRead(t.sql)),
+            "事务外必须真的发出那次全量读（断言不是恒真）"
+        );
 
-    // 事务内的消息相关语句只有写入面（batchInsert 的 INSERT / seed 的读口）。
-    const inTxChatStatements = trace.filter(
-      (t) => t.inTx && /CHAT_MESSAGE/i.test(t.sql)
-    );
-    assert.ok(inTxChatStatements.length > 0, "事务内必须有消息写入面");
-    for (const stmt of inTxChatStatements) {
-      const norm = stmt.sql.replace(/\s+/g, " ").toUpperCase();
-      assert.ok(
-        !norm.includes("CONTENT_ENCODING") || norm.startsWith("INSERT"),
-        `事务内不该出现带正文的读：${stmt.sql.slice(0, 120)}`
-      );
-    }
-  });
+        // 事务内的消息相关语句只有写入面（batchInsert 的 INSERT / seed 的读口）。
+        const inTxChatStatements = trace.filter(
+            (t) => t.inTx && /CHAT_MESSAGE/i.test(t.sql)
+        );
+        assert.ok(inTxChatStatements.length > 0, "事务内必须有消息写入面");
+        for (const stmt of inTxChatStatements) {
+            // SQL 常量重排多行后模板首部带换行，判断写入面前先 trim（语义不变）。
+            const norm = stmt.sql.replace(/\s+/g, " ").trim().toUpperCase();
+            assert.ok(
+                !norm.includes("CONTENT_ENCODING") || norm.startsWith("INSERT"),
+                `事务内不该出现带正文的读：${stmt.sql.slice(0, 120)}`
+            );
+        }
+    });
 });
 
 // ---------------------------------------------------------------------------
@@ -318,30 +319,30 @@ describe("C2-3 C1: copy 事务内零全量读", () => {
 // ---------------------------------------------------------------------------
 
 describe("C2-3 C2: copy 与 fork 的读/写顺序形状一致", () => {
-  it("T-COPY-3: copy 与 fork 都是「事务外读一次 → 事务内写」", async () => {
-    const copySeed = await seedSession("sym-copy");
-    const copyRun = await observe(() => ctx.sessions.copy(copySeed.sessionId));
-    const copyReads = copyRun.reads.filter((r) => r.mouth === "listBySession");
-    assert.equal(copyReads.length, 1, "copy：全量读恰一次");
-    assert.equal(copyReads[0]!.inTx, false, "copy：读在事务外");
+    it("T-COPY-3: copy 与 fork 都是「事务外读一次 → 事务内写」", async () => {
+        const copySeed = await seedSession("sym-copy");
+        const copyRun = await observe(() => ctx.sessions.copy(copySeed.sessionId));
+        const copyReads = copyRun.reads.filter((r) => r.mouth === "listBySession");
+        assert.equal(copyReads.length, 1, "copy：全量读恰一次");
+        assert.equal(copyReads[0]!.inTx, false, "copy：读在事务外");
 
-    const forkSeed = await seedSession("sym-fork");
-    const forkRun = await observe(() =>
-      ctx.messages.fork(forkSeed.sessionId, forkSeed.lastMessageId)
-    );
-    const forkReads = forkRun.reads.filter(
-      (r) => r.mouth === "listBySessionUpToSeq"
-    );
-    assert.equal(forkReads.length, 1, "fork：上界读恰一次");
-    assert.equal(forkReads[0]!.inTx, false, "fork：读在事务外");
+        const forkSeed = await seedSession("sym-fork");
+        const forkRun = await observe(() =>
+            ctx.messages.fork(forkSeed.sessionId, forkSeed.lastMessageId)
+        );
+        const forkReads = forkRun.reads.filter(
+            (r) => r.mouth === "listBySessionUpToSeq"
+        );
+        assert.equal(forkReads.length, 1, "fork：上界读恰一次");
+        assert.equal(forkReads[0]!.inTx, false, "fork：读在事务外");
 
-    // 形状对称：两者都恰好一次全量读、都发生在事务回调之外。
-    assert.deepEqual(
-      copyReads.map((r) => r.inTx),
-      forkReads.map((r) => r.inTx),
-      "copy 与 fork 的读位置必须一致（不对称就是漏网的病）"
-    );
-  });
+        // 形状对称：两者都恰好一次全量读、都发生在事务回调之外。
+        assert.deepEqual(
+            copyReads.map((r) => r.inTx),
+            forkReads.map((r) => r.inTx),
+            "copy 与 fork 的读位置必须一致（不对称就是漏网的病）"
+        );
+    });
 });
 
 // ---------------------------------------------------------------------------
@@ -349,126 +350,128 @@ describe("C2-3 C2: copy 与 fork 的读/写顺序形状一致", () => {
 // ---------------------------------------------------------------------------
 
 describe("C2-3 C3: copy 结果等价（含 hidden / attachments / usage）", () => {
-  it("T-COPY-4: 三类消息逐字段复制，两列恒 NULL", async () => {
-    const project = unwrap(await ctx.projects.create(
-      `P-c3-${testIsolationSuffix()}`
-    ));
-    const session = unwrap(await ctx.sessions.create(project.id, `S-${testIsolationSuffix()}`));
+    it("T-COPY-4: 三类消息逐字段复制，两列恒 NULL", async () => {
+        const project = unwrap(await ctx.projects.create(
+            `P-c3-${testIsolationSuffix()}`
+        ));
+        const session = unwrap(await ctx.sessions.create(project.id, `S-${testIsolationSuffix()}`));
 
-    // ① user + attachments
-    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("第一条"), {
-      attachments: [
-        {
-          name: "/notes/a.md",
-          source: "attach",
-          type: "text",
-          content: null,
-          path: "/notes/a.md",
-        },
-      ],
-    }));
-    // ② assistant + usage + provider 三件套 + raw
-    unwrap(await ctx.messages.append(
-      session.id,
-      "assistant",
-      TextBlocks.of("第二条"),
-      {
-        provider: "anthropic",
-        providerId: "prov-1",
-        modelName: "claude-x",
-        raw: { stop_reason: "end_turn" },
-        usage: {
-          promptTokens: 11,
-          completionTokens: 22,
-          totalTokens: 33,
-        },
-      }
-    ));
-    // ③ hidden 行（明文；V1' 后全库单形态明文读，布局内不再造压缩行）。
-    const m3 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("第三条")));
-    await ctx.conn.execute(
-      `UPDATE chat_message SET hidden = 1 WHERE id = ?`,
-      [m3.id]
-    );
+        // ① user + attachments
+        unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("第一条"), {
+            attachments: [
+                {
+                    name: "/notes/a.md",
+                    source: "attach",
+                    type: "text",
+                    content: null,
+                    path: "/notes/a.md",
+                },
+            ],
+        }));
+        // ② assistant + usage + provider 三件套 + raw
+        unwrap(await ctx.messages.append(
+            session.id,
+            "assistant",
+            TextBlocks.of("第二条"),
+            {
+                provider: "anthropic",
+                providerId: "prov-1",
+                modelName: "claude-x",
+                raw: { stop_reason: "end_turn" },
+                usage: {
+                    promptTokens: 11,
+                    completionTokens: 22,
+                    totalTokens: 33,
+                },
+            }
+        ));
+        // ③ hidden 行（明文；V1' 后全库单形态明文读，布局内不再造压缩行）。
+        const m3 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("第三条")));
+        await ctx.conn.execute(
+            `UPDATE chat_message SET hidden = 1 WHERE id = ?`,
+            [m3.id]
+        );
 
-    const copied = unwrap(await ctx.sessions.copy(session.id));
-    const source = outcomeValue(await ctx.messages.listBySession(session.id));
-    const target = outcomeValue(await ctx.messages.listBySession(copied.id));
-    assert.equal(target.length, 3, "三条一条不少");
+        const copied = unwrap(await ctx.sessions.copy(session.id));
+        const source = outcomeValue(await ctx.messages.listBySession(session.id));
+        const target = outcomeValue(await ctx.messages.listBySession(copied.id));
+        assert.equal(target.length, 3, "三条一条不少");
 
-    // 逐字段对拍：id / sessionId 换新，其余必须一致。
-    for (let i = 0; i < source.length; i++) {
-      const s = source[i]!;
-      const t = target[i]!;
-      const label = `seq=${s.seq}`;
-      assert.notEqual(t.id, s.id, `${label}: id 必须是新 UUID`);
-      assert.notEqual(t.sessionId, s.sessionId, `${label}: sessionId 必须换新`);
-      assert.equal(t.sessionId, copied.id, `${label}: 落到目标会话`);
-      assert.equal(t.seq, s.seq, `${label}: seq 一致`);
-      assert.equal(t.role, s.role, `${label}: role 一致`);
-      assert.equal(t.hidden, s.hidden, `${label}: hidden 一致（含 hidden 行）`);
-      assert.equal(t.provider, s.provider, `${label}: provider 一致`);
-      assert.equal(t.providerId, s.providerId, `${label}: providerId 一致`);
-      assert.equal(t.modelName, s.modelName, `${label}: modelName 一致`);
-      assert.deepEqual(t.raw, s.raw, `${label}: raw 一致`);
-      assert.deepEqual(t.attachments, s.attachments, `${label}: attachments 一致`);
-      assert.deepEqual(t.usage, s.usage, `${label}: usage 一致`);
-      assert.deepEqual(t.content, s.content, `${label}: content 一致`);
-    }
+        // 逐字段对拍：id / sessionId 换新，其余必须一致。
+        for (let i = 0; i < source.length; i++) {
+            const s = source[i]!;
+            const t = target[i]!;
+            const label = `seq=${s.seq}`;
+            assert.notEqual(t.id, s.id, `${label}: id 必须是新 UUID`);
+            assert.notEqual(t.sessionId, s.sessionId, `${label}: sessionId 必须换新`);
+            assert.equal(t.sessionId, copied.id, `${label}: 落到目标会话`);
+            assert.equal(t.seq, s.seq, `${label}: seq 一致`);
+            assert.equal(t.role, s.role, `${label}: role 一致`);
+            assert.equal(t.hidden, s.hidden, `${label}: hidden 一致（含 hidden 行）`);
+            assert.equal(t.provider, s.provider, `${label}: provider 一致`);
+            assert.equal(t.providerId, s.providerId, `${label}: providerId 一致`);
+            assert.equal(t.modelName, s.modelName, `${label}: modelName 一致`);
+            assert.deepEqual(t.raw, s.raw, `${label}: raw 一致`);
+            assert.deepEqual(t.attachments, s.attachments, `${label}: attachments 一致`);
+            assert.deepEqual(t.usage, s.usage, `${label}: usage 一致`);
+            assert.deepEqual(t.content, s.content, `${label}: content 一致`);
+        }
 
-    // hidden 逐条复核（deepEqual 之上再钉一次布尔列）。
-    assert.equal(target.find((m) => m.seq === 3)!.hidden, true);
-    assert.equal(target.find((m) => m.seq === 1)!.hidden, false);
+        // hidden 逐条复核（deepEqual 之上再钉一次布尔列）。
+        assert.equal(target.find((m) => m.seq === 3)!.hidden, true);
+        assert.equal(target.find((m) => m.seq === 1)!.hidden, false);
 
-    // 压缩两列：明文化正形态——副本行两列恒 NULL、正文落 content_json。
-    const copyRows = await ctx.conn.query<{
-      content_json: string;
-      content_encoding: string | null;
-      content_blob: Uint8Array | null;
-    }>(
-      `SELECT content_json, content_encoding, content_blob
-         FROM chat_message WHERE session_id = ? ORDER BY seq ASC`,
-      [copied.id]
-    );
-    assert.equal(copyRows.length, 3);
-    for (const row of copyRows) {
-      assert.equal(row.content_encoding, null, "副本行 content_encoding 恒 NULL");
-      assert.equal(row.content_blob, null, "副本行 content_blob 恒 NULL");
-      assert.ok(row.content_json.length > 0, "副本行正文落明文列");
-    }
-    // 第三条的明文正文与源一致。
-    assert.deepEqual(
-      JSON.parse(copyRows[2]!.content_json),
-      TextBlocks.of("第三条"),
-      "副本正文与源一致"
-    );
+        // 压缩两列：明文化正形态——副本行两列恒 NULL、正文落 content_json。
+        const copyRows = await ctx.conn.query<{
+            content_json: string;
+            content_encoding: string | null;
+            content_blob: Uint8Array | null;
+        }>(
+            `SELECT content_json, content_encoding, content_blob
+    FROM chat_message
+    WHERE session_id = ?
+    ORDER BY seq ASC`,
+            [copied.id]
+        );
+        assert.equal(copyRows.length, 3);
+        for (const row of copyRows) {
+            assert.equal(row.content_encoding, null, "副本行 content_encoding 恒 NULL");
+            assert.equal(row.content_blob, null, "副本行 content_blob 恒 NULL");
+            assert.ok(row.content_json.length > 0, "副本行正文落明文列");
+        }
+        // 第三条的明文正文与源一致。
+        assert.deepEqual(
+            JSON.parse(copyRows[2]!.content_json),
+            TextBlocks.of("第三条"),
+            "副本正文与源一致"
+        );
 
-    // 源行未被就地改写（copy 不得动源会话）。
-    const sourceRows = await ctx.conn.query<{ hidden: number }>(
-      `SELECT hidden FROM chat_message WHERE id = ?`,
-      [m3.id]
-    );
-    assert.equal(Number(sourceRows[0]!.hidden), 1, "源行保持原状（hidden 仍置）");
-  });
+        // 源行未被就地改写（copy 不得动源会话）。
+        const sourceRows = await ctx.conn.query<{ hidden: number }>(
+            `SELECT hidden FROM chat_message WHERE id = ?`,
+            [m3.id]
+        );
+        assert.equal(Number(sourceRows[0]!.hidden), 1, "源行保持原状（hidden 仍置）");
+    });
 
-  it("T-COPY-5: 空会话 copy 不抛，且不产生任何 chat_message 读", async () => {
-    const project = unwrap(await ctx.projects.create(`P-c3b-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const { result: copiedResult, reads, trace } = await observe(() =>
-      ctx.sessions.copy(session.id)
-    );
-    // 错误通道迁移二期：copy 走 Result 通道——解包后再取 session。
-    const copied = unwrap(copiedResult);
-    assert.ok(copied.id.length > 0);
-    assert.deepEqual(
-      reads.filter((r) => r.mouth === "listBySession"),
-      [{ mouth: "listBySession", inTx: false }],
-      "空会话也走一次事务外读（不得跳过读口直接开事务）"
-    );
-    assert.deepEqual(
-      trace.filter((t) => t.inTx && isFullMessageRead(t.sql)),
-      []
-    );
-    assert.deepEqual(outcomeValue(await ctx.messages.listBySession(copied.id)), []);
-  });
+    it("T-COPY-5: 空会话 copy 不抛，且不产生任何 chat_message 读", async () => {
+        const project = unwrap(await ctx.projects.create(`P-c3b-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const { result: copiedResult, reads, trace } = await observe(() =>
+            ctx.sessions.copy(session.id)
+        );
+        // 错误通道迁移二期：copy 走 Result 通道——解包后再取 session。
+        const copied = unwrap(copiedResult);
+        assert.ok(copied.id.length > 0);
+        assert.deepEqual(
+            reads.filter((r) => r.mouth === "listBySession"),
+            [{ mouth: "listBySession", inTx: false }],
+            "空会话也走一次事务外读（不得跳过读口直接开事务）"
+        );
+        assert.deepEqual(
+            trace.filter((t) => t.inTx && isFullMessageRead(t.sql)),
+            []
+        );
+        assert.deepEqual(outcomeValue(await ctx.messages.listBySession(copied.id)), []);
+    });
 });

@@ -20,98 +20,98 @@ novelMasterTestFixture();
 
 /** 收集 (label, detail) 的探针，返回标签数组视图。 */
 function collectProbe(): {
-  options: MessageRollbackServiceOptions;
-  labels: () => string[];
-  details: () => Array<Record<string, number | string> | undefined>;
+    options: MessageRollbackServiceOptions;
+    labels: () => string[];
+    details: () => Array<Record<string, number | string> | undefined>;
 } {
-  const labelList: string[] = [];
-  const detailList: Array<Record<string, number | string> | undefined> = [];
-  const probe: RollbackProbe = (label, detail) => {
-    labelList.push(label);
-    detailList.push(detail);
-  };
-  return {
-    options: { probe },
-    labels: () => labelList.slice(),
-    details: () => detailList.slice(),
-  };
+    const labelList: string[] = [];
+    const detailList: Array<Record<string, number | string> | undefined> = [];
+    const probe: RollbackProbe = (label, detail) => {
+        labelList.push(label);
+        detailList.push(detail);
+    };
+    return {
+        options: { probe },
+        labels: () => labelList.slice(),
+        details: () => detailList.slice(),
+    };
 }
 
 describe("rollback chain probe (T-R0)", () => {
-  it("T-R0: rewind 回滚全链探针可捕获 plan 拉取与事务各子步打点", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(
-      `P-tr0-${testIsolationSuffix()}`,
-    ));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
+    it("T-R0: rewind 回滚全链探针可捕获 plan 拉取与事务各子步打点", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(
+            `P-tr0-${testIsolationSuffix()}`,
+        ));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
 
-    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("hi")));
-    const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "bye" }],
-    }));
-    await svfs.write("/tr0.md", "v1", { versionCheck: false });
-    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
-    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("tail")));
+        unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("hi")));
+        const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "bye" }],
+        }));
+        await svfs.write("/tr0.md", "v1", { versionCheck: false });
+        unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
+        unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("tail")));
 
-    const collector = collectProbe();
-    const rollback = MessageCheckpointFactory.createRollback(ctx.conn, collector.options);
-    await rollback.rollbackToMessage(session.id, project.id, assistant1.id);
+        const collector = collectProbe();
+        const rollback = MessageCheckpointFactory.createRollback(ctx.conn, collector.options);
+        await rollback.rollbackToMessage(session.id, project.id, assistant1.id);
 
-    const labels = collector.labels();
-    // 链路骨架：入口 → plan 拉取 → 事务子步 → 提交 → 完成。
-    for (const expected of [
-      "rollback.begin",
-      "rollback.plan.messages",
-      "rollback.tx.begin",
-      "rollback.tx.count-check",
-      "rollback.tx.reconcile-done",
-      "rollback.tx.truncate-done",
-      "rollback.tx.commit",
-      "rollback.done",
-    ]) {
-      assert.ok(
-        labels.includes(expected),
-        `探针应捕获 ${expected}，实际收到：${labels.join(", ")}`,
-      );
-    }
+        const labels = collector.labels();
+        // 链路骨架：入口 → plan 拉取 → 事务子步 → 提交 → 完成。
+        for (const expected of [
+            "rollback.begin",
+            "rollback.plan.messages",
+            "rollback.tx.begin",
+            "rollback.tx.count-check",
+            "rollback.tx.reconcile-done",
+            "rollback.tx.truncate-done",
+            "rollback.tx.commit",
+            "rollback.done",
+        ]) {
+            assert.ok(
+                labels.includes(expected),
+                `探针应捕获 ${expected}，实际收到：${labels.join(", ")}`,
+            );
+        }
 
-    // plan 拉取打点携带行数与源 content 字节量（spec Step 1 度量口径）；
-    // Step 2 收窄后 rows 只计触发消息（clicked = assistant1，seq 含）起的
-    // 消息——本用例即 assistant1 + tail 两条，fromSeq 同时记录下界。
-    const planDetail = collector.details()[labels.indexOf("rollback.plan.messages")];
-    assert.equal(planDetail?.rows, 2);
-    assert.equal(planDetail?.fromSeq, assistant1.seq);
-    assert.equal(
-      typeof planDetail?.contentBytes,
-      "number",
-    );
-    assert.ok((planDetail?.contentBytes as number) > 0);
+        // plan 拉取打点携带行数与源 content 字节量（spec Step 1 度量口径）；
+        // Step 2 收窄后 rows 只计触发消息（clicked = assistant1，seq 含）起的
+        // 消息——本用例即 assistant1 + tail 两条，fromSeq 同时记录下界。
+        const planDetail = collector.details()[labels.indexOf("rollback.plan.messages")];
+        assert.equal(planDetail?.rows, 2);
+        assert.equal(planDetail?.fromSeq, assistant1.seq);
+        assert.equal(
+            typeof planDetail?.contentBytes,
+            "number",
+        );
+        assert.ok((planDetail?.contentBytes as number) > 0);
 
-    // 回滚语义不受探针影响（rewind 保留锚点，tail 截断）。
-    const left = outcomeValue(await ctx.messages.listBySession(session.id));
-    assert.equal(left.length, 2);
-  });
-
-  it("未注入探针（默认）时回滚行为零变化", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(
-      `P-tr0b-${testIsolationSuffix()}`,
-    ));
-    const session = unwrap(await ctx.sessions.create(project.id));
-
-    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("a")));
-    const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "b" }],
-    }));
-    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("c")));
-
-    // 不传 options（desktop/cli 形态）——不应抛错、行为与既有一致。
-    const rollback = MessageCheckpointFactory.createRollback(ctx.conn);
-    await rollback.rollbackToMessage(session.id, project.id, assistant1.id, {
-      skipVfsReconcile: true,
+        // 回滚语义不受探针影响（rewind 保留锚点，tail 截断）。
+        const left = outcomeValue(await ctx.messages.listBySession(session.id));
+        assert.equal(left.length, 2);
     });
-    const left = outcomeValue(await ctx.messages.listBySession(session.id));
-    assert.equal(left.length, 2);
-  });
+
+    it("未注入探针（默认）时回滚行为零变化", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(
+            `P-tr0b-${testIsolationSuffix()}`,
+        ));
+        const session = unwrap(await ctx.sessions.create(project.id));
+
+        unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("a")));
+        const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "b" }],
+        }));
+        unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("c")));
+
+        // 不传 options（desktop/cli 形态）——不应抛错、行为与既有一致。
+        const rollback = MessageCheckpointFactory.createRollback(ctx.conn);
+        await rollback.rollbackToMessage(session.id, project.id, assistant1.id, {
+            skipVfsReconcile: true,
+        });
+        const left = outcomeValue(await ctx.messages.listBySession(session.id));
+        assert.equal(left.length, 2);
+    });
 });

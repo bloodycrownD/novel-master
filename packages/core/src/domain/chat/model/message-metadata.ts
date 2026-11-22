@@ -23,28 +23,28 @@ export const VFS_SEMANTIC_KINDS: ReadonlySet<string> = new Set(Object.keys(VFS_S
 
 /** 写入 `ChatMessageData.raw.metadata` 的键结构。 */
 interface MessageMetadata {
-  /** 消息来源：`user` 表示用户侧 synthetic。 */
-  readonly source?: "user";
-  /** 行为主体：`user` 表示用户触发的 assistant synthetic。 */
-  readonly actor?: "user";
-  /** 是否为 synthetic 消息（非模型原生输出）。 */
-  readonly synthetic?: boolean;
-  /** synthetic 子类型。 */
-  readonly kind?: MessageMetadataKind;
-  /** 历史 U-A-U-A 中 assistant tool_use 是否已压缩 input（旧会话）。 */
-  readonly toolInputCompressed?: boolean;
+    /** 消息来源：`user` 表示用户侧 synthetic。 */
+    readonly source?: "user";
+    /** 行为主体：`user` 表示用户触发的 assistant synthetic。 */
+    readonly actor?: "user";
+    /** 是否为 synthetic 消息（非模型原生输出）。 */
+    readonly synthetic?: boolean;
+    /** synthetic 子类型。 */
+    readonly kind?: MessageMetadataKind;
+    /** 历史 U-A-U-A 中 assistant tool_use 是否已压缩 input（旧会话）。 */
+    readonly toolInputCompressed?: boolean;
 }
 
 export const MessageMetadata = {
-  /** 从 `raw` 对象读取 metadata（无则 undefined）。 */
-  read(raw: Record<string, unknown> | null | undefined): MessageMetadata | undefined {
-    if (raw == null) {
-      return undefined;
-    }
-    const meta = raw.metadata;
-    if (meta == null || typeof meta !== "object" || Array.isArray(meta)) {
-      return undefined;
-    }
-    return meta as MessageMetadata;
-  },
+    /** 从 `raw` 对象读取 metadata（无则 undefined）。 */
+    read(raw: Record<string, unknown> | null | undefined): MessageMetadata | undefined {
+        if (raw == null) {
+            return undefined;
+        }
+        const meta = raw.metadata;
+        if (meta == null || typeof meta !== "object" || Array.isArray(meta)) {
+            return undefined;
+        }
+        return meta as MessageMetadata;
+    },
 } as const;

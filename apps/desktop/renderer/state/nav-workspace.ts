@@ -4,41 +4,43 @@
  * @module state/nav-workspace
  */
 
+import { coreT } from "@shared/logic/core-i18n";
+
 export type NavViewId =
-  | "projects"
-  | "sessions"
-  | "conversation"
-  | "subagent-conversation";
+    | "projects"
+    | "sessions"
+    | "conversation"
+    | "subagent-conversation";
 
 export type WorkspaceScope = "session" | "chat" | "physical";
 
 const NAV_TO_WORKSPACE: Record<NavViewId, WorkspaceScope> = {
-  // projects 视图换只读物理树浏览器（跨域拼接视图；原 global 面板不再展示）
-  projects: "physical",
-  sessions: "session",
-  conversation: "chat",
-  // 子会话面板与父会话共享工作区（父 session VFS），
-  // chat scope + sessionId 即父 session（见 ShellNavProvider 的恒等映射）
-  "subagent-conversation": "chat",
+    // projects 视图换只读物理树浏览器（跨域拼接视图；原 global 面板不再展示）
+    projects: "physical",
+    sessions: "session",
+    conversation: "chat",
+    // 子会话面板与父会话共享工作区（父 session VFS），
+    // chat scope + sessionId 即父 session（见 ShellNavProvider 的恒等映射）
+    "subagent-conversation": "chat",
 };
 
 const WORKSPACE_TITLES: Record<WorkspaceScope, string> = {
-  session: "会话工作区",
-  chat: "聊天工作区",
-  physical: "文件浏览器",
+    session: coreT({key: "ui.nav.workspace_session"}),
+    chat: coreT({key: "ui.nav.workspace_chat"}),
+    physical: coreT({key: "ui.nav.file_browser"}),
 };
 
 /** Sync explorer title/panel with current chat nav view. */
 export function syncWorkspaceWithNav(viewId: NavViewId): WorkspaceScope {
-  return NAV_TO_WORKSPACE[viewId] ?? "physical";
+    return NAV_TO_WORKSPACE[viewId] ?? "physical";
 }
 
 export function workspaceTitleForScope(scope: WorkspaceScope): string {
-  return WORKSPACE_TITLES[scope] ?? "工作区";
+    return WORKSPACE_TITLES[scope] ?? coreT({key: "ui.nav.workspace"});
 }
 
 export function railPaneNavTitle(viewId: NavViewId): string {
-  if (viewId === "projects") return "项目";
-  if (viewId === "subagent-conversation") return "子智能体会话";
-  return "—";
+    if (viewId === "projects") return coreT({key: "ui.project.title"});
+    if (viewId === "subagent-conversation") return coreT({key: "ui.nav.subagent_session_view"});
+    return "—";
 }

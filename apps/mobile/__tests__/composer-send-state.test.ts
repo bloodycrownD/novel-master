@@ -23,66 +23,66 @@ import {type ChatMessageData} from '@novel-master/core/chat';
 import {ComposerSendState} from '@/components/chat/composer-send-state'
 
 function message(
-  id: string,
-  role: 'user' | 'assistant',
-  blocks: ChatMessageData['content']['blocks'] = [
-    {type: 'text', text: 'hi'},
-  ],
-  hidden = false,
+    id: string,
+    role: 'user' | 'assistant',
+    blocks: ChatMessageData['content']['blocks'] = [
+        {type: 'text', text: 'hi'},
+    ],
+    hidden = false,
 ): ChatMessageData {
-  return {
-    id,
-    sessionId: 's1',
-    seq: 1,
-    role,
-    content: {blocks},
-    provider: null,
-    raw: null,
-    createdAtMs: 1,
-    hidden,
-  };
+    return {
+        id,
+        sessionId: 's1',
+        seq: 1,
+        role,
+        content: {blocks},
+        provider: null,
+        raw: null,
+        createdAtMs: 1,
+        hidden,
+    };
 }
 
 describe('composer-send-state 薄推导', () => {
-  it('无消息：不可空续跑、末条非纯文本（发送键全灰）', () => {
-    expect(ComposerSendState.findLastVisibleMessage([])).toBeUndefined();
-    expect(ComposerSendState.derive(undefined)).toEqual({
-      canResumeWithoutInput: false,
-      lastMessageIsPlainUserText: false,
+    it('无消息：不可空续跑、末条非纯文本（发送键全灰）', () => {
+        expect(ComposerSendState.findLastVisibleMessage([])).toBeUndefined();
+        expect(ComposerSendState.derive(undefined)).toEqual({
+            canResumeWithoutInput: false,
+            lastMessageIsPlainUserText: false,
+        });
     });
-  });
 
-  it('findLastVisibleMessage 跳过尾部隐藏消息（隐藏不改可见性语义）', () => {
-    const visible = message('m1', 'user');
-    const hiddenTail = message('m2', 'assistant', undefined, true);
-    expect(ComposerSendState.findLastVisibleMessage([visible, hiddenTail])).toBe(visible);
-  });
-
-  it('末条为 user 纯文本：可空续跑 + 锁「带字发送」', () => {
-    const last = message('m1', 'user', [{type: 'text', text: '看这里'}]);
-    expect(ComposerSendState.derive(last)).toEqual({
-      canResumeWithoutInput: true,
-      lastMessageIsPlainUserText: true,
+    it('findLastVisibleMessage 跳过尾部隐藏消息（隐藏不改可见性语义）', () => {
+        const visible = message('m1', 'user');
+        const hiddenTail = message('m2', 'assistant', undefined, true);
+        expect(ComposerSendState.findLastVisibleMessage([visible, hiddenTail])).toBe(visible);
     });
-  });
 
-  it('T-PM5：末条为含 tool_result 的 user 消息——可空续跑但解锁带字发送', () => {
-    // 这是 T-PM5 的核心：tool_result 的 user 轮**不该**被当「纯文本轮」锁死，
-    // 用户能接着打字；isPlainUserText 的 tool_result 守卫见 core T-B3-06。
-    const last = message('m1', 'user', [
-      {type: 'tool_result', toolUseId: 't1', content: 'done', ok: true},
-    ]);
-    expect(ComposerSendState.derive(last)).toEqual({
-      canResumeWithoutInput: true,
-      lastMessageIsPlainUserText: false,
+    it('末条为 user 纯文本：可空续跑 + 锁「带字发送」', () => {
+        const last = message('m1', 'user', [{type: 'text', text: '看这里'}]);
+        expect(ComposerSendState.derive(last)).toEqual({
+            canResumeWithoutInput: true,
+            lastMessageIsPlainUserText: true,
+        });
     });
-  });
 
-  it('末条为 assistant：不可空续跑（等回复中），末条非纯文本', () => {
-    const last = message('m1', 'assistant');
-    expect(ComposerSendState.derive(last)).toEqual({
-      canResumeWithoutInput: false,
-      lastMessageIsPlainUserText: false,
+    it('T-PM5：末条为含 tool_result 的 user 消息——可空续跑但解锁带字发送', () => {
+        // 这是 T-PM5 的核心：tool_result 的 user 轮**不该**被当「纯文本轮」锁死，
+        // 用户能接着打字；isPlainUserText 的 tool_result 守卫见 core T-B3-06。
+        const last = message('m1', 'user', [
+            {type: 'tool_result', toolUseId: 't1', content: 'done', ok: true},
+        ]);
+        expect(ComposerSendState.derive(last)).toEqual({
+            canResumeWithoutInput: true,
+            lastMessageIsPlainUserText: false,
+        });
     });
-  });
+
+    it('末条为 assistant：不可空续跑（等回复中），末条非纯文本', () => {
+        const last = message('m1', 'assistant');
+        expect(ComposerSendState.derive(last)).toEqual({
+            canResumeWithoutInput: false,
+            lastMessageIsPlainUserText: false,
+        });
+    });
 });

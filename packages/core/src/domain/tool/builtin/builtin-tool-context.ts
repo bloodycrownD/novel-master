@@ -21,77 +21,77 @@ import type { ResolvedEngineConfig } from "@/domain/tool/builtin/search/types.js
 
 /** `runChildAgent` 透传给子 agent run 的解析后模型信息。 */
 interface ResolveChildModelIdResult {
-  readonly savedModelId: string;
-  readonly workspaceModelId: string;
+    readonly savedModelId: string;
+    readonly workspaceModelId: string;
 }
 
 /** `runChildAgent` 接收的运行选项。 */
 export interface RunChildAgentOptions {
-  readonly savedModelId: string;
-  readonly workspaceModelId: string;
-  readonly signal: AbortSignal;
-  readonly maxSteps?: number;
-  /**
+    readonly savedModelId: string;
+    readonly workspaceModelId: string;
+    readonly signal: AbortSignal;
+    readonly maxSteps?: number;
+    /**
    * task 工具入参的 prompt 正文：run 前写进子 session 作为第一条 user 消息，
    * 使子 agent 对话历史完整（UI 浏览可见、LLM 能看到任务描述）。
    */
-  readonly prompt?: string;
-  /**
+    readonly prompt?: string;
+    /**
    * task 工具入参 `fileAttachment` 全量物化出的附件（`attachmentsFromPaths`
    * 合规形态），随子 session 首条 user 消息落库——与主会话 `@path` 附件同链路
    * （`content:null` 落库、view-time hydrate）。
    *
    * 体积预算与降级由**子会话自己的 prepare 链**负责：派发侧不再自带预算软闸。
    */
-  readonly attachments?: readonly MessageAttachment[];
+    readonly attachments?: readonly MessageAttachment[];
 }
 
 /** `task` 工具读取的子代理装配闭包；仅 depth=0/1 注入（孙 agent 无 task 工具）。 */
 export interface BuiltinToolSubagentContext {
-  readonly agentRegistry: AgentRegistryService;
-  readonly messages: MessageService;
-  readonly sessions: SessionService;
-  /** 创建子 session（title 由调用方决定）；返回新 sessionId。 */
-  /** 四期门⑦：子会话创建的已知失败沿 Result 回传给 task 工具闭包。 */
-  readonly createChildSession: (title: string) => Promise<Result<string, AppError>>;
-  /**
+    readonly agentRegistry: AgentRegistryService;
+    readonly messages: MessageService;
+    readonly sessions: SessionService;
+    /** 创建子 session（title 由调用方决定）；返回新 sessionId。 */
+    /** 四期门⑦：子会话创建的已知失败沿 Result 回传给 task 工具闭包。 */
+    readonly createChildSession: (title: string) => Promise<Result<string, AppError>>;
+    /**
    * 直接父会话 id（**直接父**口径，spec D2）：主装配点填 `scope.sessionId`、
    * 子装配点填 `childSessionId`。`task` 的 `sessionId` 续用参数据此校验归属
    * ——目标子会话的 `parentSessionId` 必须等于本值（跨 project 的会话同样
    * 因父 id 不同而被拒）。
    */
-  readonly parentSessionId: string;
-  /**
+    readonly parentSessionId: string;
+    /**
    * 目标子会话当前是否有 in-flight run（软闸，给出可读引导文案）。
    *
    * 装配点绑 `runtime.abortRegistry?.has(id) ?? true`——**缺 registry 保守拒绝**，
    * 不放行续用（真正的并发硬互斥在 `runChildAgent` 内的 `tryRegister` claim）。
    */
-  readonly isSessionRunActive: (sessionId: string) => boolean;
-  /**
+    readonly isSessionRunActive: (sessionId: string) => boolean;
+    /**
    * 派生 `AbortController`（监听父 signal 一次）并装配子 agent runner 跑完。
    *
    * 返回值 {@link AgentRunResult} 不带文本——`task` 工具跑完后自己
    * `messages.listBySession(childSessionId)` 取末条 assistant text。
    */
-  /** 四期门⑦：子 run 的已知失败沿 Result 回传给 task 工具闭包（未知异常仍 reject）。 */
-  readonly runChildAgent: (def: AgentDefinition, childSessionId: string, opts: RunChildAgentOptions) => Promise<Result<AgentRunResult, AppError>>;
-  /** 解析子 agent 模型：子 pin → 父 savedModelId → 报错（不走 workspace fallback）。 */
-  readonly resolveChildModelId: (def: AgentDefinition) => Result<ResolveChildModelIdResult, AppError>;
-  /** 当前 agent 的递归深度：主 agent depth=0，子 depth=1，孙 depth=2。 */
-  readonly depth: number;
-  /** 父 agent run 的 abort signal；子 agent 内部派生自己的 controller 监听它。 */
-  readonly parentSignal: AbortSignal;
-  /**
+    /** 四期门⑦：子 run 的已知失败沿 Result 回传给 task 工具闭包（未知异常仍 reject）。 */
+    readonly runChildAgent: (def: AgentDefinition, childSessionId: string, opts: RunChildAgentOptions) => Promise<Result<AgentRunResult, AppError>>;
+    /** 解析子 agent 模型：子 pin → 父 savedModelId → 报错（不走 workspace fallback）。 */
+    readonly resolveChildModelId: (def: AgentDefinition) => Result<ResolveChildModelIdResult, AppError>;
+    /** 当前 agent 的递归深度：主 agent depth=0，子 depth=1，孙 depth=2。 */
+    readonly depth: number;
+    /** 父 agent run 的 abort signal；子 agent 内部派生自己的 controller 监听它。 */
+    readonly parentSignal: AbortSignal;
+    /**
    * 装配期预算好的候选子代理列表（name + 可选描述），
    * `task` 工具的 description lambda 从这里拼给 LLM 看的候选文案。
    * 已排除当前 agent 自身、且仅含 `mode !== "primary"` 的 agent，
    * 至少含内置 `general`，所以 task 描述始终有内容。
    */
-  readonly callableAgents: readonly {
-    readonly name: string;
-    readonly description?: string;
-  }[];
+    readonly callableAgents: readonly {
+        readonly name: string;
+        readonly description?: string;
+    }[];
 }
 
 /**
@@ -102,23 +102,23 @@ export interface BuiltinToolSubagentContext {
  * 工作区」语义一致）。
  */
 export interface BuiltinToolSkillsContext {
-  /** SkillService 实例（load/read/write/edit/list 五 action 全走它）。 */
-  readonly service: SkillService;
-  /** 解析上下文：当前会话（子代理时为父会话）的 projectId。 */
-  readonly projectId: string;
-  /**
+    /** SkillService 实例（load/read/write/edit/list 五 action 全走它）。 */
+    readonly service: SkillService;
+    /** 解析上下文：当前会话（子代理时为父会话）的 projectId。 */
+    readonly projectId: string;
+    /**
    * 装配期预算好的生效技能清单（name + 描述），`skill` 的
    * description lambda 从这里拼「可用技能」文案。每 run 预算一次，
    * 回合内技能启停不即时反映（与 task 工具一致，有意行为）。
    */
-  readonly effective: readonly EffectiveSkill[];
-  /**
+    readonly effective: readonly EffectiveSkill[];
+    /**
    * 本请求提示词可见窗口内已 `$` 引用（skillAttach）的技能名集合
    * （seen 共享方向 A）：装配点建空集合，agent-runner 每步 prepare
    * 后回填；`load` 命中时返回短提示，避免同一技能全文注入两遍。
    * 可选字段：旧测试 ctx 可不传（load 视作未引用）。
    */
-  readonly referencedNames?: Set<string>;
+    readonly referencedNames?: Set<string>;
 }
 
 /**
@@ -130,22 +130,22 @@ export interface BuiltinToolSkillsContext {
  * (`effective`) / task (`callableAgents`) 的装配期预算模式，每 run 一次。
  */
 export interface BuiltinToolAgentsContext {
-  /** AgentRegistryService 实例（get / create / update 走它）。 */
-  readonly registry: AgentRegistryService;
-  /**
+    /** AgentRegistryService 实例（get / create / update 走它）。 */
+    readonly registry: AgentRegistryService;
+    /**
    * 装配期预算好的 agent 名单快照（name + 描述 + mode，含虚拟 seed
    * general），`agent` 的 description lambda 与 list 动作从这里取数。
    * mode 缺省按 "all" 解释（与 AgentDefinition 消费侧 fallback 一致）。
    */
-  readonly agents: readonly {
-    readonly name: string;
-    readonly description?: string;
-    readonly mode: NonNullable<AgentDefinition["mode"]>;
-  }[];
-  /** probe 注册表名单（透传给 upsert 的工具策略校验）。 */
-  readonly registeredToolNames: readonly string[];
-  /** 可选：校验 model pin 指向已保存模型（照 ValidateAgentDefinitionOptions）。 */
-  readonly assertSavedModel?: (savedModelId: string) => void | Result<void, AppError> | Promise<void | Result<void, AppError>>;
+    readonly agents: readonly {
+        readonly name: string;
+        readonly description?: string;
+        readonly mode: NonNullable<AgentDefinition["mode"]>;
+    }[];
+    /** probe 注册表名单（透传给 upsert 的工具策略校验）。 */
+    readonly registeredToolNames: readonly string[];
+    /** 可选：校验 model pin 指向已保存模型（照 ValidateAgentDefinitionOptions）。 */
+    readonly assertSavedModel?: (savedModelId: string) => void | Result<void, AppError> | Promise<void | Result<void, AppError>>;
 }
 
 /**
@@ -166,36 +166,36 @@ export interface BuiltinToolAgentsContext {
  *（软化为不承诺 run 返回——实际行为以 run 内链解析为准）。
  */
 export interface BuiltinToolSearchContext {
-  /**
+    /**
    * 解析本次调用的串行引擎链（engineOrderV2 优先级序；显式 inputEngine
    * 时钉链首或沿序顺位回落；只含 enabled ∩ 配置完整的引擎；链空返回
    * 空数组，工具回落中性配置指引文案）。无效引擎名返回
    * `Result.err(TOOL_SEARCH_INVALID_ARGUMENT)`（工具侧解包进 ToolError 通道）。
    */
-  readonly resolveEngineChain: (inputEngine?: string) => Promise<Result<ResolvedEngineConfig[], AppError>>;
-  /**
+    readonly resolveEngineChain: (inputEngine?: string) => Promise<Result<ResolvedEngineConfig[], AppError>>;
+    /**
    * 装配期描述快照：`id` / `name` / `paramHint`（paramHint 不限长，装配期
    * 原样透传——v3 起已废除「保存拒绝 + 装配期截断 500」双道限长）。空数组
    * = 当前没有可跑引擎。
    */
-  readonly engineSnapshot: readonly {
-    readonly id: string;
-    readonly name: string;
-    readonly paramHint: string;
-  }[];
+    readonly engineSnapshot: readonly {
+        readonly id: string;
+        readonly name: string;
+        readonly paramHint: string;
+    }[];
 }
 
 /** 注入到内置工具 `run()` 的运行时上下文。 */
 export type BuiltinToolContext = {
-  readonly vfs: VfsService;
-  readonly projectId: string;
-  readonly sessionId: string;
-  /**
+    readonly vfs: VfsService;
+    readonly projectId: string;
+    readonly sessionId: string;
+    /**
    * 可选：`write` 成功后 upsert `file_cache` `full:{path}`。
    * `edit` / delete / rename / move **不**读写此字段。
    */
-  readonly sessionKkv?: SessionKkvService;
-  /**
+    readonly sessionKkv?: SessionKkvService;
+    /**
    * 可选：VFS 内允许访问的路径前缀白名单（A-14 path policy）。
    *
    * @remarks
@@ -226,24 +226,24 @@ export type BuiltinToolContext = {
    *    再次腐烂，这几行注释正是 A-14 收尾时唯一会被人读的施工清单，指向错行会
    *    让人去改错地方。
    */
-  readonly allowedPaths?: readonly string[];
-  /**
+    readonly allowedPaths?: readonly string[];
+    /**
    * 可选：仅 `task` 工具读取。vfs-tools 完全不感知。
    *
    * 主 agent run 装配 depth=0；子 agent run 装配 depth=parent+1。
    * depth >= 2 时 `AgentTools.resolveRegistry` 已强制 deny `task`，
    * 故孙 agent 的 LLM 看不到 `task` 工具，不会尝试调用。
    */
-  readonly subagent?: BuiltinToolSubagentContext;
-  /**
+    readonly subagent?: BuiltinToolSubagentContext;
+    /**
    * 可选：仅 `skill` 工具读取。vfs-tools / task 完全不感知。
    *
    * 主 agent run 与子 agent run 两个装配点都会注入（D2）；未注入时
    * skill 的 run 抛 ToolError（FAILED）。是否对 LLM 可见由
    * `AgentTools.resolveRegistry` 的 tools.allow/deny 控制。
    */
-  readonly skills?: BuiltinToolSkillsContext;
-  /**
+    readonly skills?: BuiltinToolSkillsContext;
+    /**
    * 可选：仅 `agent` 管理工具读取。vfs-tools / task / skill 完全不感知。
    *
    * 主 agent run 与子 agent run 两个装配点都会按「resolve 后注册表含
@@ -251,15 +251,15 @@ export type BuiltinToolContext = {
    * `AgentTools.resolveRegistry` 在摘 `task` 的同一分支强制摘除（D6），
    * 闭包不注入，run 抛 ToolError（FAILED）。
    */
-  readonly agents?: BuiltinToolAgentsContext;
-  /**
+    readonly agents?: BuiltinToolAgentsContext;
+    /**
    * 可选：仅 `write`（新建文件时）/ `fs(mkdir)` 读取——新建路径时为各层
    * 祖先目录补默认目录规则（无 `workplace_dir_rule` 行的目录会被判
    * rule_off，新目录默认应启用规则）；编辑已有文件不补，不融存量状态。
    * 未注入时跳过，行为向后兼容。
    */
-  readonly workplace?: Pick<WorkplaceService, "setDirRule" | "getDirRule" | "listDirRules">;
-  /**
+    readonly workplace?: Pick<WorkplaceService, "setDirRule" | "getDirRule" | "listDirRules">;
+    /**
    * 可选：仅 `search` 工具读取。未注入时（CLI 无 kkv、旧测试 mock）
    * search 的 run 抛 ToolError（FAILED），工具对 LLM 仍可见，
    * description 走中性「未装配搜索能力」文案（不承诺「返回配置指引」）。
@@ -267,23 +267,23 @@ export type BuiltinToolContext = {
    * 是否对 LLM 可用由 `AgentTools.resolveRegistry` 的 tools.allow/deny 控制
    * （search 不在任何摘除分支内，主/子/孙 agent 全深度可用，照 curl）。
    */
-  readonly search?: BuiltinToolSearchContext;
-  /**
+    readonly search?: BuiltinToolSearchContext;
+    /**
    * 可选：仅 `curl` 工具读取。缺省回落 `globalThis.fetch`（双端一致）。
    *
    * 类型就地定义为 `typeof globalThis.fetch`，与 infra/llm-protocol 的
    * `FetchFn` 结构相同但不跨层 import（domain/tool 不依赖 infra）；
    * 测试经此注入 mock（先例：llm-sse-transport.test.ts 的 mock FetchFn）。
    */
-  readonly fetchFn?: typeof globalThis.fetch;
-  /**
+    readonly fetchFn?: typeof globalThis.fetch;
+    /**
    * 回合级取消信号：用户点停止 / 回合中断时 abort。
    *
    * 长耗时工具（search / curl）必须监听它把在途 fetch 一起 abort——否则
    * 「waiting」中的回合线程被网络请求占住，停止按钮点不动。
    * 未注入（旧装配点 / 测试 mock）时工具按不取消处理，向后兼容。
    */
-  readonly signal?: AbortSignal;
+    readonly signal?: AbortSignal;
 };
 
 /** @deprecated Use {@link BuiltinToolContext}. */

@@ -12,9 +12,9 @@ import { ThinkingWire } from "./resolve-thinking-wire.js";
 
 /** Anthropic 各档位钳制前的 budget_tokens 常数。 */
 const ANTHROPIC_PRESET_BUDGET: Record<Exclude<ThinkingLevel, "off">, number> = {
-  low: 4096,
-  medium: 8192,
-  high: 16384,
+    low: 4096,
+    medium: 8192,
+    high: 16384,
 };
 
 /**
@@ -29,13 +29,13 @@ const ANTHROPIC_THINKING_BUDGET_RATIO = 0.8;
 
 /** Gemini 2.5 各档位 thinkingBudget 常数。 */
 const GEMINI_25_PRESET_BUDGET: Record<Exclude<ThinkingLevel, "off">, number> = {
-  low: 4096,
-  medium: -1,
-  high: 16384,
+    low: 4096,
+    medium: -1,
+    high: 16384,
 };
 
 export const ThinkingLevelPresets = {
-  /**
+    /**
    * 将持久化档位解析为与 provider 协议匹配的请求参数。
    *
    * @param level 已保存思考强度档位；`off` 时返回 `undefined`。
@@ -43,38 +43,38 @@ export const ThinkingLevelPresets = {
    * @param vendorModelId 厂商模型 id（Gemini 启发式用）。
    * @param sampling 已保存采样小节（Anthropic budget 上限钳制用）。
    */
-  toModelThinkingParams(level: ThinkingLevel, protocol: LlmProtocolKind, vendorModelId: string, sampling: SavedModelSamplingSettings): ModelThinkingParams | undefined {
-    if (level === "off") {
-      return undefined;
-    }
-
-    switch (protocol) {
-      case "openai":
-        return {
-          protocol: "openai",
-          openai: { reasoning_effort: level },
-        };
-      case "anthropic": {
-        const effectiveMax = ThinkingWire.resolveEffectiveMaxTokens(sampling, "anthropic");
-        const budget = Math.min(ANTHROPIC_PRESET_BUDGET[level], Math.max(1, Math.floor(effectiveMax * ANTHROPIC_THINKING_BUDGET_RATIO)));
-        return {
-          protocol: "anthropic",
-          anthropic: { type: "enabled", budget_tokens: budget },
-        };
-      }
-      case "gemini":
-        if (vendorModelId.toLowerCase().includes("gemini-3")) {
-          return {
-            protocol: "gemini",
-            gemini: { thinkingConfig: { thinkingLevel: level } },
-          };
+    toModelThinkingParams(level: ThinkingLevel, protocol: LlmProtocolKind, vendorModelId: string, sampling: SavedModelSamplingSettings): ModelThinkingParams | undefined {
+        if (level === "off") {
+            return undefined;
         }
-        return {
-          protocol: "gemini",
-          gemini: {
-            thinkingConfig: { thinkingBudget: GEMINI_25_PRESET_BUDGET[level] },
-          },
-        };
-    }
-  },
+
+        switch (protocol) {
+            case "openai":
+                return {
+                    protocol: "openai",
+                    openai: { reasoning_effort: level },
+                };
+            case "anthropic": {
+                const effectiveMax = ThinkingWire.resolveEffectiveMaxTokens(sampling, "anthropic");
+                const budget = Math.min(ANTHROPIC_PRESET_BUDGET[level], Math.max(1, Math.floor(effectiveMax * ANTHROPIC_THINKING_BUDGET_RATIO)));
+                return {
+                    protocol: "anthropic",
+                    anthropic: { type: "enabled", budget_tokens: budget },
+                };
+            }
+            case "gemini":
+                if (vendorModelId.toLowerCase().includes("gemini-3")) {
+                    return {
+                        protocol: "gemini",
+                        gemini: { thinkingConfig: { thinkingLevel: level } },
+                    };
+                }
+                return {
+                    protocol: "gemini",
+                    gemini: {
+                        thinkingConfig: { thinkingBudget: GEMINI_25_PRESET_BUDGET[level] },
+                    },
+                };
+        }
+    },
 } as const;

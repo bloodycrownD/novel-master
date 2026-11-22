@@ -9,370 +9,370 @@ import {  unwrap  } from "../helpers/result-unwrap.js";
 
 /** decode 已改返回 Result（四期签名）：测试内统一解包——Ok 取 value，Err 抛 error（assert.throws 的抛错契约保持不变）。 */
 function decode<T>(raw: unknown, schema: ZodType<T>): T {
-  return unwrap(SerializationDecode.decode(raw, schema));
+    return unwrap(SerializationDecode.decode(raw, schema));
 }
 
 const emptyPrompts = { persist: {}, dynamic: {} };
 const TEST_SAVED_MODEL = "11111111-1111-4111-8111-111111111111";
 
 describe("agentDefinitionSchema", () => {
-  it("parses valid document with system + persist + dynamic", () => {
-    const def = decode(
-      {
-        schemaVersion: 1,
-        name: "writer",
-        prompts: {
-          system: "hi",
-          persist: {
-            persona: { type: "text", role: "user", content: "人设" },
-          },
-          dynamic: {},
-        },
-        model: TEST_SAVED_MODEL,
-      },
-      agentDefinitionSchema
-    );
-    assert.equal(def.name, "writer");
-    assert.equal(def.model, TEST_SAVED_MODEL);
-    assert.equal(def.prompts.system, "hi");
-    assert.equal(def.prompts.persist[0]?.name, "persona");
-  });
-
-  it("T1: rejects preferredModelId with friendly message", () => {
-    assert.throws(
-      () =>
-        decode(
-          {
-            schemaVersion: 1,
-            name: "x",
-            prompts: emptyPrompts,
-            preferredModelId: "a/b",
-          },
-          agentDefinitionSchema
-        ),
-      (e: unknown) => AppErrorOps.is(e, "AGENT_INVALID_SCHEMA") && /model/.test(e.message)
-    );
-  });
-
-  it("T2: rejects legacy nested model object", () => {
-    assert.throws(
-      () =>
-        decode(
-          {
-            schemaVersion: 1,
-            name: "x",
-            prompts: emptyPrompts,
-            model: { applicationModelId: "a/b" },
-          },
-          agentDefinitionSchema
-        ),
-      (e: unknown) => AppErrorOps.is(e, "AGENT_INVALID_SCHEMA") && /legacy nested model/.test(e.message)
-    );
-  });
-
-  it("T3: model UUID round-trips via encode", () => {
-    const def = decode(
-      {
-        schemaVersion: 1,
-        name: "x",
-        prompts: emptyPrompts,
-        model: TEST_SAVED_MODEL,
-      },
-      agentDefinitionSchema
-    );
-    // encode 已 Result 化（错误通道迁移）：Err 抛出断言失败，Ok 解包取 wire
-    const doc = unwrap(SerializationEncode.encode(def, agentDefinitionSchema)) as { model?: string };
-    assert.equal(doc.model, TEST_SAVED_MODEL);
-    const again = decode(doc, agentDefinitionSchema);
-    assert.equal(again.model, TEST_SAVED_MODEL);
-  });
-
-  it("T4: persist map order matches definition.prompts.persist order", () => {
-    const def = decode(
-      {
-        schemaVersion: 1,
-        name: "writer",
-        prompts: {
-          persist: {
-            alpha: { type: "text", role: "user", content: "a" },
-            beta: { type: "worktree" },
-          },
-          dynamic: {
-            gamma: { type: "text", role: "user", content: "c" },
-          },
-        },
-      },
-      agentDefinitionSchema
-    );
-    assert.deepEqual(
-      def.prompts.persist.map((b) => b.name),
-      ["alpha"]
-    );
-    assert.deepEqual(
-      def.prompts.dynamic.map((b) => b.name),
-      ["gamma"]
-    );
-  });
-
-  it("T5: rejects prompts.blocks", () => {
-    assert.throws(
-      () =>
-        decode(
-          {
-            schemaVersion: 1,
-            name: "x",
-            prompts: { blocks: {} },
-          },
-          agentDefinitionSchema
-        ),
-      (e: unknown) => AppErrorOps.is(e, "AGENT_INVALID_SCHEMA") && e.message.includes("prompts.blocks is removed")
-    );
-  });
-
-  it("A1: rejects compact field in strict schema", () => {
-    assert.throws(
-      () =>
-        decode(
-          {
-            schemaVersion: 1,
-            name: "x",
-            prompts: emptyPrompts,
-            model: TEST_SAVED_MODEL,
-            compact: {
-              trigger: { tokenThreshold: 100 },
-              action: { keepLastN: 3, abstract: { type: "agent", agentId: "s" } },
-            },
-          },
-          agentDefinitionSchema
-        ),
-      (e: unknown) => AppErrorOps.is(e, "CONFIG_DECODE_INVALID_SCHEMA")
-    );
-  });
-
-  it("rejects persist text with when", () => {
-    assert.throws(
-      () =>
-        decode(
-          {
-            schemaVersion: 1,
-            name: "x",
-            prompts: {
-              persist: {
-                a: {
-                  type: "text",
-                  role: "user",
-                  content: "x",
-                  when: { present: "abstract" },
+    it("parses valid document with system + persist + dynamic", () => {
+        const def = decode(
+            {
+                schemaVersion: 1,
+                name: "writer",
+                prompts: {
+                    system: "hi",
+                    persist: {
+                        persona: { type: "text", role: "user", content: "人设" },
+                    },
+                    dynamic: {},
                 },
-              },
-              dynamic: {},
+                model: TEST_SAVED_MODEL,
             },
-          },
-          agentDefinitionSchema
-        ),
-      (e: unknown) => AppErrorOps.is(e, "CONFIG_DECODE_INVALID_SCHEMA")
-    );
-  });
-
-  it("L10-Z1: persist text 上的 lifecycle 静默剥键后正常 decode", () => {
-    const def = decode(
-      {
-        schemaVersion: 1,
-        name: "x",
-        prompts: {
-          persist: {
-            a: {
-              type: "text",
-              role: "user",
-              content: "x",
-              lifecycle: "once",
-            },
-          },
-          dynamic: {},
-        },
-      },
-      agentDefinitionSchema
-    );
-    assert.equal(def.prompts.persist.length, 1);
-    assert.deepEqual(def.prompts.persist[0], {
-      name: "a",
-      type: "text",
-      role: "user",
-      content: "x",
+            agentDefinitionSchema
+        );
+        assert.equal(def.name, "writer");
+        assert.equal(def.model, TEST_SAVED_MODEL);
+        assert.equal(def.prompts.system, "hi");
+        assert.equal(def.prompts.persist[0]?.name, "persona");
     });
-  });
 
-  it("L10-Z3: dynamic text 上的非法 lifecycle 静默剥键后正常 decode", () => {
-    const def = decode(
-      {
-        schemaVersion: 1,
-        name: "x",
-        prompts: {
-          persist: {},
-          dynamic: {
-            a: {
-              type: "text",
-              role: "user",
-              content: "x",
-              lifecycle: "foo",
-            },
-          },
-        },
-      },
-      agentDefinitionSchema
-    );
-    assert.equal(def.prompts.dynamic.length, 1);
-    assert.deepEqual(def.prompts.dynamic[0], {
-      name: "a",
-      type: "text",
-      role: "user",
-      content: "x",
+    it("T1: rejects preferredModelId with friendly message", () => {
+        assert.throws(
+            () =>
+                decode(
+                    {
+                        schemaVersion: 1,
+                        name: "x",
+                        prompts: emptyPrompts,
+                        preferredModelId: "a/b",
+                    },
+                    agentDefinitionSchema
+                ),
+            (e: unknown) => AppErrorOps.is(e, "AGENT_INVALID_SCHEMA") && /model/.test(e.message)
+        );
     });
-  });
 
-  it("L10-Z4: 存量 lifecycle once / always 均剥键，四态 decode 后域对象无 lifecycle", () => {
-    for (const lifecycle of ["once", "always", "foo", null]) {
-      const def = decode(
-        {
-          schemaVersion: 1,
-          name: "x",
-          prompts: {
-            persist: {
-              p: {
-                type: "text",
-                role: "user",
-                content: "p",
-                lifecycle,
-              },
+    it("T2: rejects legacy nested model object", () => {
+        assert.throws(
+            () =>
+                decode(
+                    {
+                        schemaVersion: 1,
+                        name: "x",
+                        prompts: emptyPrompts,
+                        model: { applicationModelId: "a/b" },
+                    },
+                    agentDefinitionSchema
+                ),
+            (e: unknown) => AppErrorOps.is(e, "AGENT_INVALID_SCHEMA") && /legacy nested model/.test(e.message)
+        );
+    });
+
+    it("T3: model UUID round-trips via encode", () => {
+        const def = decode(
+            {
+                schemaVersion: 1,
+                name: "x",
+                prompts: emptyPrompts,
+                model: TEST_SAVED_MODEL,
             },
-            dynamic: {
-              d: {
-                type: "text",
-                role: "user",
-                content: "d",
-                lifecycle,
-              },
+            agentDefinitionSchema
+        );
+        // encode 已 Result 化（错误通道迁移）：Err 抛出断言失败，Ok 解包取 wire
+        const doc = unwrap(SerializationEncode.encode(def, agentDefinitionSchema)) as { model?: string };
+        assert.equal(doc.model, TEST_SAVED_MODEL);
+        const again = decode(doc, agentDefinitionSchema);
+        assert.equal(again.model, TEST_SAVED_MODEL);
+    });
+
+    it("T4: persist map order matches definition.prompts.persist order", () => {
+        const def = decode(
+            {
+                schemaVersion: 1,
+                name: "writer",
+                prompts: {
+                    persist: {
+                        alpha: { type: "text", role: "user", content: "a" },
+                        beta: { type: "worktree" },
+                    },
+                    dynamic: {
+                        gamma: { type: "text", role: "user", content: "c" },
+                    },
+                },
             },
-          },
-        },
-        agentDefinitionSchema
-      );
-      assert.equal("lifecycle" in (def.prompts.persist[0] as Record<string, unknown>), false);
-      assert.equal("lifecycle" in (def.prompts.dynamic[0] as Record<string, unknown>), false);
-    }
-  });
+            agentDefinitionSchema
+        );
+        assert.deepEqual(
+            def.prompts.persist.map((b) => b.name),
+            ["alpha"]
+        );
+        assert.deepEqual(
+            def.prompts.dynamic.map((b) => b.name),
+            ["gamma"]
+        );
+    });
 
-  // ---- RT-04：definitionToDocument 的块名塌缩（写侧裸、读侧有唯一性语义）----
+    it("T5: rejects prompts.blocks", () => {
+        assert.throws(
+            () =>
+                decode(
+                    {
+                        schemaVersion: 1,
+                        name: "x",
+                        prompts: { blocks: {} },
+                    },
+                    agentDefinitionSchema
+                ),
+            (e: unknown) => AppErrorOps.is(e, "AGENT_INVALID_SCHEMA") && e.message.includes("prompts.blocks is removed")
+        );
+    });
 
-  /** 最小合法 definition（域形态），追加一条同名 persist 块。 */
-  function defWithDuplicatePersist() {
-    const base = decode(
-      {
-        schemaVersion: 1,
-        name: "dup-writer",
-        prompts: {
-          persist: {
-            persona: { type: "text", role: "user", content: "人设甲" },
-          },
-          dynamic: {},
-        },
-        model: TEST_SAVED_MODEL,
-      },
-      agentDefinitionSchema
-    );
-    return {
-      ...base,
-      prompts: {
-        ...base.prompts,
-        persist: [
-          ...base.prompts.persist,
-          {
-            // 同名副本：wire 形态是「块名 → 块」的对象映射，必然塌缩
-            name: base.prompts.persist[0]!.name,
-            type: "text" as const,
-            role: "user" as const,
-            content: "人设乙",
-          },
-        ],
-      },
-    };
-  }
+    it("A1: rejects compact field in strict schema", () => {
+        assert.throws(
+            () =>
+                decode(
+                    {
+                        schemaVersion: 1,
+                        name: "x",
+                        prompts: emptyPrompts,
+                        model: TEST_SAVED_MODEL,
+                        compact: {
+                            trigger: { tokenThreshold: 100 },
+                            action: { keepLastN: 3, abstract: { type: "agent", agentId: "s" } },
+                        },
+                    },
+                    agentDefinitionSchema
+                ),
+            (e: unknown) => AppErrorOps.is(e, "CONFIG_DECODE_INVALID_SCHEMA")
+        );
+    });
 
-  it("toWire 对重名 persist 块返 PROMPT_INVALID_LAYOUT（不静默塌缩）", () => {
-    const def = defWithDuplicatePersist();
-    const wired = agentDefinitionSchema.toWire(def);
-    assert.ok(!wired.ok, "重名 persist 块应走 Err 通道");
-    if (!wired.ok) {
-      assert.ok(AppErrorOps.is(wired.error, "PROMPT_INVALID_LAYOUT") && wired.error.messageKey === "error.prompt.invalid_layout.duplicate_block_name");
-    }
-  });
+    it("rejects persist text with when", () => {
+        assert.throws(
+            () =>
+                decode(
+                    {
+                        schemaVersion: 1,
+                        name: "x",
+                        prompts: {
+                            persist: {
+                                a: {
+                                    type: "text",
+                                    role: "user",
+                                    content: "x",
+                                    when: { present: "abstract" },
+                                },
+                            },
+                            dynamic: {},
+                        },
+                    },
+                    agentDefinitionSchema
+                ),
+            (e: unknown) => AppErrorOps.is(e, "CONFIG_DECODE_INVALID_SCHEMA")
+        );
+    });
 
-  it("toWire 对重名 dynamic 块抛 PROMPT_INVALID_LAYOUT", () => {
-    const base = decode(
-      {
-        schemaVersion: 1,
-        name: "dup-dyn",
-        prompts: {
-          persist: {},
-          dynamic: {
-            first: { type: "text", role: "assistant", content: "甲" },
-          },
-        },
-        model: TEST_SAVED_MODEL,
-      },
-      agentDefinitionSchema
-    );
-    const dup = {
-      ...base,
-      prompts: {
-        ...base.prompts,
-        dynamic: [...base.prompts.dynamic, { ...base.prompts.dynamic[0]! }],
-      },
-    };
-    const wired = agentDefinitionSchema.toWire(dup);
-    assert.ok(!wired.ok, "重名 dynamic 块应走 Err 通道");
-    if (!wired.ok) {
-      assert.ok(AppErrorOps.is(wired.error, "PROMPT_INVALID_LAYOUT") && wired.error.messageKey === "error.prompt.invalid_layout.duplicate_block_name");
-    }
-  });
-
-  it("toWire 失败后不改写入方对象（无副作用污染）", () => {
-    const def = defWithDuplicatePersist();
-    const before = JSON.stringify(def);
-    const wired = agentDefinitionSchema.toWire(def);
-    assert.ok(!wired.ok, "重名块应走 Err 通道");
-    assert.equal(JSON.stringify(def), before, "toWire 失败不得就地改写入方传入的对象");
-  });
-
-  it("合法 definition（多块不重名）toWire 往返等值（既有行为不受影响）", () => {
-    const wireDoc = agentDefinitionSchema.toWire(
-      decode(
-        {
-          schemaVersion: 1,
-          name: "ok-writer",
-          prompts: {
-            persist: {
-              persona: { type: "text", role: "user", content: "人设" },
-              notes: { type: "text", role: "assistant", content: "笔记" },
+    it("L10-Z1: persist text 上的 lifecycle 静默剥键后正常 decode", () => {
+        const def = decode(
+            {
+                schemaVersion: 1,
+                name: "x",
+                prompts: {
+                    persist: {
+                        a: {
+                            type: "text",
+                            role: "user",
+                            content: "x",
+                            lifecycle: "once",
+                        },
+                    },
+                    dynamic: {},
+                },
             },
-            dynamic: {},
-          },
-          model: TEST_SAVED_MODEL,
-        },
-        agentDefinitionSchema
-      )
-    );
-    const again = decode(
-      unwrap(wireDoc),
-      agentDefinitionSchema
-    );
-    assert.deepEqual(
-      again.prompts.persist.map((b) => b.name),
-      ["persona", "notes"]
-    );
-    assert.deepEqual(
-      again.prompts.persist.map((b) => (b as { content: string }).content),
-      ["人设", "笔记"]
-    );
-  });
+            agentDefinitionSchema
+        );
+        assert.equal(def.prompts.persist.length, 1);
+        assert.deepEqual(def.prompts.persist[0], {
+            name: "a",
+            type: "text",
+            role: "user",
+            content: "x",
+        });
+    });
+
+    it("L10-Z3: dynamic text 上的非法 lifecycle 静默剥键后正常 decode", () => {
+        const def = decode(
+            {
+                schemaVersion: 1,
+                name: "x",
+                prompts: {
+                    persist: {},
+                    dynamic: {
+                        a: {
+                            type: "text",
+                            role: "user",
+                            content: "x",
+                            lifecycle: "foo",
+                        },
+                    },
+                },
+            },
+            agentDefinitionSchema
+        );
+        assert.equal(def.prompts.dynamic.length, 1);
+        assert.deepEqual(def.prompts.dynamic[0], {
+            name: "a",
+            type: "text",
+            role: "user",
+            content: "x",
+        });
+    });
+
+    it("L10-Z4: 存量 lifecycle once / always 均剥键，四态 decode 后域对象无 lifecycle", () => {
+        for (const lifecycle of ["once", "always", "foo", null]) {
+            const def = decode(
+                {
+                    schemaVersion: 1,
+                    name: "x",
+                    prompts: {
+                        persist: {
+                            p: {
+                                type: "text",
+                                role: "user",
+                                content: "p",
+                                lifecycle,
+                            },
+                        },
+                        dynamic: {
+                            d: {
+                                type: "text",
+                                role: "user",
+                                content: "d",
+                                lifecycle,
+                            },
+                        },
+                    },
+                },
+                agentDefinitionSchema
+            );
+            assert.equal("lifecycle" in (def.prompts.persist[0] as Record<string, unknown>), false);
+            assert.equal("lifecycle" in (def.prompts.dynamic[0] as Record<string, unknown>), false);
+        }
+    });
+
+    // ---- RT-04：definitionToDocument 的块名塌缩（写侧裸、读侧有唯一性语义）----
+
+    /** 最小合法 definition（域形态），追加一条同名 persist 块。 */
+    function defWithDuplicatePersist() {
+        const base = decode(
+            {
+                schemaVersion: 1,
+                name: "dup-writer",
+                prompts: {
+                    persist: {
+                        persona: { type: "text", role: "user", content: "人设甲" },
+                    },
+                    dynamic: {},
+                },
+                model: TEST_SAVED_MODEL,
+            },
+            agentDefinitionSchema
+        );
+        return {
+            ...base,
+            prompts: {
+                ...base.prompts,
+                persist: [
+                    ...base.prompts.persist,
+                    {
+                        // 同名副本：wire 形态是「块名 → 块」的对象映射，必然塌缩
+                        name: base.prompts.persist[0]!.name,
+                        type: "text" as const,
+                        role: "user" as const,
+                        content: "人设乙",
+                    },
+                ],
+            },
+        };
+    }
+
+    it("toWire 对重名 persist 块返 PROMPT_INVALID_LAYOUT（不静默塌缩）", () => {
+        const def = defWithDuplicatePersist();
+        const wired = agentDefinitionSchema.toWire(def);
+        assert.ok(!wired.ok, "重名 persist 块应走 Err 通道");
+        if (!wired.ok) {
+            assert.ok(AppErrorOps.is(wired.error, "PROMPT_INVALID_LAYOUT") && wired.error.messageKey === "error.prompt.invalid_layout.duplicate_block_name");
+        }
+    });
+
+    it("toWire 对重名 dynamic 块抛 PROMPT_INVALID_LAYOUT", () => {
+        const base = decode(
+            {
+                schemaVersion: 1,
+                name: "dup-dyn",
+                prompts: {
+                    persist: {},
+                    dynamic: {
+                        first: { type: "text", role: "assistant", content: "甲" },
+                    },
+                },
+                model: TEST_SAVED_MODEL,
+            },
+            agentDefinitionSchema
+        );
+        const dup = {
+            ...base,
+            prompts: {
+                ...base.prompts,
+                dynamic: [...base.prompts.dynamic, { ...base.prompts.dynamic[0]! }],
+            },
+        };
+        const wired = agentDefinitionSchema.toWire(dup);
+        assert.ok(!wired.ok, "重名 dynamic 块应走 Err 通道");
+        if (!wired.ok) {
+            assert.ok(AppErrorOps.is(wired.error, "PROMPT_INVALID_LAYOUT") && wired.error.messageKey === "error.prompt.invalid_layout.duplicate_block_name");
+        }
+    });
+
+    it("toWire 失败后不改写入方对象（无副作用污染）", () => {
+        const def = defWithDuplicatePersist();
+        const before = JSON.stringify(def);
+        const wired = agentDefinitionSchema.toWire(def);
+        assert.ok(!wired.ok, "重名块应走 Err 通道");
+        assert.equal(JSON.stringify(def), before, "toWire 失败不得就地改写入方传入的对象");
+    });
+
+    it("合法 definition（多块不重名）toWire 往返等值（既有行为不受影响）", () => {
+        const wireDoc = agentDefinitionSchema.toWire(
+            decode(
+                {
+                    schemaVersion: 1,
+                    name: "ok-writer",
+                    prompts: {
+                        persist: {
+                            persona: { type: "text", role: "user", content: "人设" },
+                            notes: { type: "text", role: "assistant", content: "笔记" },
+                        },
+                        dynamic: {},
+                    },
+                    model: TEST_SAVED_MODEL,
+                },
+                agentDefinitionSchema
+            )
+        );
+        const again = decode(
+            unwrap(wireDoc),
+            agentDefinitionSchema
+        );
+        assert.deepEqual(
+            again.prompts.persist.map((b) => b.name),
+            ["persona", "notes"]
+        );
+        assert.deepEqual(
+            again.prompts.persist.map((b) => (b as { content: string }).content),
+            ["人设", "笔记"]
+        );
+    });
 });

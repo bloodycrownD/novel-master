@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  llm_saved_model 表的 SQL mapper（schema 见 resources/sql/schema/provider.sql）。
+
+  结构约定与 chat-message.mapper.xml 一致：
+  - 语句 id 与 repo 方法同名（camelCase），生成器按 id 产出 generated TS 映射
+    （src/infra/sql-template/generated/），repo 内只留引用。
+  - <sql id="selectColumns"> 经 <include ref> 展开，生成物里每条语句都是完整字面量。
+  - INSERT 的 #{} 占位与 selectColumns 顺序一一对应。
+-->
+<mapper namespace="llm_saved_model">
+
+  <sql id="selectColumns">id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms</sql>
+
+  <select id="listByProvider">
+    SELECT <include ref="selectColumns"/>
+    FROM llm_saved_model
+    WHERE provider_id = #{providerId}
+    ORDER BY vendor_model_id, model_name
+  </select>
+
+  <select id="findById">
+    SELECT <include ref="selectColumns"/> FROM llm_saved_model WHERE id = #{id}
+  </select>
+
+  <insert id="insert">
+    INSERT INTO llm_saved_model (<include ref="selectColumns"/>)
+    VALUES ( #{id}, #{providerId}, #{vendorModelId}, #{modelName}, #{settingsJson}, #{createdAtMs}, #{updatedAtMs} )
+  </insert>
+
+  <update id="updateById">
+    UPDATE llm_saved_model
+    SET model_name = #{modelName}, settings_json = #{settingsJson}, updated_at_ms = #{updatedAtMs}
+    WHERE id = #{id}
+  </update>
+
+  <delete id="deleteById">
+    DELETE FROM llm_saved_model WHERE id = #{id}
+  </delete>
+
+  <delete id="deleteByProvider">
+    DELETE FROM llm_saved_model WHERE provider_id = #{providerId}
+  </delete>
+
+</mapper>

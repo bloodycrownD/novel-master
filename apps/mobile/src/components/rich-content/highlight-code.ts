@@ -23,57 +23,58 @@ import yaml from 'highlight.js/lib/languages/yaml';
 
 /** fence 别名归一化表（与 desktop code-block.tsx 的 FENCE_LANG_ALIAS 同表）。 */
 export const LANG_ALIAS: Record<string, string> = {
-  typescript: 'typescript',
-  ts: 'typescript',
-  tsx: 'typescript',
-  javascript: 'javascript',
-  js: 'javascript',
-  jsx: 'javascript',
-  python: 'python',
-  py: 'python',
-  bash: 'bash',
-  sh: 'bash',
-  shell: 'bash',
-  zsh: 'bash',
-  sql: 'sql',
-  markdown: 'markdown',
-  yaml: 'yaml',
-  yml: 'yaml',
-  html: 'html',
-  css: 'css',
-  json: 'json',
+    typescript: 'typescript',
+    ts: 'typescript',
+    tsx: 'typescript',
+    javascript: 'javascript',
+    js: 'javascript',
+    jsx: 'javascript',
+    python: 'python',
+    py: 'python',
+    bash: 'bash',
+    sh: 'bash',
+    shell: 'bash',
+    zsh: 'bash',
+    sql: 'sql',
+    markdown: 'markdown',
+    yaml: 'yaml',
+    yml: 'yaml',
+    html: 'html',
+    css: 'css',
+    json: 'json',
 };
 
-let registered = false;
+/** 注册闩锁（模块内 holder，对象管理）：语言模块只注册一次。 */
+const highlightState = { registered: false };
 
 export namespace HighlightCode {
-  /** core 按需注册 10 语言模块（幂等；html 由 xml 别名承载）。 */
-  export function registerHighlightLanguages(): void {
-    if (registered) {
-      return;
+    /** core 按需注册 10 语言模块（幂等；html 由 xml 别名承载）。 */
+    export function registerHighlightLanguages(): void {
+        if (highlightState.registered) {
+            return;
+        }
+        highlightState.registered = true;
+        hljs.registerLanguage('typescript', typescript);
+        hljs.registerLanguage('javascript', javascript);
+        hljs.registerLanguage('json', json);
+        hljs.registerLanguage('python', python);
+        hljs.registerLanguage('bash', bash);
+        hljs.registerLanguage('sql', sql);
+        hljs.registerLanguage('markdown', markdownLang);
+        hljs.registerLanguage('yaml', yaml);
+        hljs.registerLanguage('xml', xml);
+        hljs.registerLanguage('css', css);
     }
-    registered = true;
-    hljs.registerLanguage('typescript', typescript);
-    hljs.registerLanguage('javascript', javascript);
-    hljs.registerLanguage('json', json);
-    hljs.registerLanguage('python', python);
-    hljs.registerLanguage('bash', bash);
-    hljs.registerLanguage('sql', sql);
-    hljs.registerLanguage('markdown', markdownLang);
-    hljs.registerLanguage('yaml', yaml);
-    hljs.registerLanguage('xml', xml);
-    hljs.registerLanguage('css', css);
-  }
 
-  /** fence 原始语言名 → 规范名；不在清单（如 rust/mermaid）或无语言返回 null。 */
-  export function normalizeFenceLang(lang: string | null | undefined): string | null {
-    if (!lang) {
-      return null;
+    /** fence 原始语言名 → 规范名；不在清单（如 rust/mermaid）或无语言返回 null。 */
+    export function normalizeFenceLang(lang: string | null | undefined): string | null {
+        if (!lang) {
+            return null;
+        }
+        return LANG_ALIAS[lang.toLowerCase()] ?? null;
     }
-    return LANG_ALIAS[lang.toLowerCase()] ?? null;
-  }
 
-  /**
+    /**
    * 源码 → 高亮 HTML（hljs 自带转义）；不支持的语言返回 ''（调用方走默认 escape）。
    *
    * 高亮语言判定：归一化表命中用规范名；表外回退 hljs 注册表查原始 lang（按小写查，
@@ -81,20 +82,20 @@ export namespace HighlightCode {
    * 的 AST 层判定同一注册表、同一逻辑，MF-1 双端统一）。语言标签（data-lang）由
    * 调用方按归一化表单独决定——表外语言高亮但不出标签。
    */
-  export function resolve(code: string, lang: string): string {
-    HighlightCode.registerHighlightLanguages();
-    const lowerLang = lang.toLowerCase();
-    const target = HighlightCode.normalizeFenceLang(lang) ?? (hljs.getLanguage(lowerLang) ? lowerLang : null);
-    if (!target || !hljs.getLanguage(target)) {
-      return '';
+    export function resolve(code: string, lang: string): string {
+        HighlightCode.registerHighlightLanguages();
+        const lowerLang = lang.toLowerCase();
+        const target = HighlightCode.normalizeFenceLang(lang) ?? (hljs.getLanguage(lowerLang) ? lowerLang : null);
+        if (!target || !hljs.getLanguage(target)) {
+            return '';
+        }
+        try {
+            return hljs.highlight(code, {
+                language: target,
+                ignoreIllegals: true,
+            }).value;
+        } catch {
+            return '';
+        }
     }
-    try {
-      return hljs.highlight(code, {
-        language: target,
-        ignoreIllegals: true,
-      }).value;
-    } catch {
-      return '';
-    }
-  }
 }

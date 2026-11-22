@@ -18,64 +18,64 @@ import type { ChatMessageData } from "@/domain/chat/model/message.js";
 
 /** 孤儿 tool_result / tool_use 归一化集合（compaction-safe view-time transform）。 */
 export const OrphanToolResults = {
-  /**
+    /**
    * Returns messages with unpaired `tool_result` blocks replaced by `text` blocks.
    * Does not mutate DB rows — same pattern as regex channel transforms.
    *
    * nm-style: keep-local — 导出函数；唯一生产调用方在 service/agent/impl/agent-runner.ts（本片目录外），片内无内联落点。
    */
-  normalizeForLlm(messages: readonly ChatMessageData[]): ChatMessageData[] {
-    // 第一遍：处理孤立的 tool_result（没有对应 tool_use 的）
-    const orphanResultFixed = messages.map((msg) => {
-      let changed = false;
-      const blocks: ContentBlock[] = [];
+    normalizeForLlm(messages: readonly ChatMessageData[]): ChatMessageData[] {
+        // 第一遍：处理孤立的 tool_result（没有对应 tool_use 的）
+        const orphanResultFixed = messages.map((msg) => {
+            let changed = false;
+            const blocks: ContentBlock[] = [];
 
-      for (const block of msg.content.blocks) {
-        if (block.type === "tool_result" && !messages.some((other) => other.content.blocks.some((candidate) => candidate.type === "tool_use" && candidate.id === block.toolUseId))) {
-          changed = true;
-          const text = MessageBodyText.fromBlocks([block]);
-          blocks.push({
-            type: "text",
-            text: text !== "" ? text : "[tool_result]",
-          });
-          continue;
+            for (const block of msg.content.blocks) {
+                if (block.type === "tool_result" && !messages.some((other) => other.content.blocks.some((candidate) => candidate.type === "tool_use" && candidate.id === block.toolUseId))) {
+                    changed = true;
+                    const text = MessageBodyText.fromBlocks([block]);
+                    blocks.push({
+                        type: "text",
+                        text: text !== "" ? text : "[tool_result]",
+                    });
+                    continue;
+                }
+                blocks.push(block);
+            }
+
+            if (!changed) {
+                return msg;
+            }
+            return { ...msg, content: { blocks } };
+        });
+
+        // 第二遍：处理孤立的 tool_use（没有对应 tool_result 的）——
+        // 直接从 blocks 中移除悬挂的 tool_use，避免 API 400。
+        const pairedResultIds = new Set<string>();
+        for (const msg of orphanResultFixed) {
+            for (const block of msg.content.blocks) {
+                if (block.type === "tool_result") {
+                    pairedResultIds.add(block.toolUseId);
+                }
+            }
         }
-        blocks.push(block);
-      }
+        return orphanResultFixed.map((msg) => {
+            let changed = false;
+            const blocks: ContentBlock[] = [];
 
-      if (!changed) {
-        return msg;
-      }
-      return { ...msg, content: { blocks } };
-    });
+            for (const block of msg.content.blocks) {
+                if (block.type === "tool_use" && !pairedResultIds.has(block.id)) {
+                    changed = true;
+                    // 跳过这个 block（悬挂的 tool_use）
+                    continue;
+                }
+                blocks.push(block);
+            }
 
-    // 第二遍：处理孤立的 tool_use（没有对应 tool_result 的）——
-    // 直接从 blocks 中移除悬挂的 tool_use，避免 API 400。
-    const pairedResultIds = new Set<string>();
-    for (const msg of orphanResultFixed) {
-      for (const block of msg.content.blocks) {
-        if (block.type === "tool_result") {
-          pairedResultIds.add(block.toolUseId);
-        }
-      }
-    }
-    return orphanResultFixed.map((msg) => {
-      let changed = false;
-      const blocks: ContentBlock[] = [];
-
-      for (const block of msg.content.blocks) {
-        if (block.type === "tool_use" && !pairedResultIds.has(block.id)) {
-          changed = true;
-          // 跳过这个 block（悬挂的 tool_use）
-          continue;
-        }
-        blocks.push(block);
-      }
-
-      if (!changed) {
-        return msg;
-      }
-      return { ...msg, content: { blocks } };
-    });
-  },
+            if (!changed) {
+                return msg;
+            }
+            return { ...msg, content: { blocks } };
+        });
+    },
 } as const;

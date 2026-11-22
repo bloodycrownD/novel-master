@@ -10,26 +10,26 @@
 
 import type { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { SerializationDecode } from "@/infra/serialization/decode.js";
-import { SerializationEncode } from "@/infra/serialization/encode.js";
-import { SerializationParseText } from "@/infra/serialization/parse-text.js";
-import { SerializationStringifyText } from "@/infra/serialization/stringify-text.js";
+import { SerializationDecode } from "@/common/serialization/decode.js";
+import { SerializationEncode } from "@/common/serialization/encode.js";
+import { SerializationParseText } from "@/common/serialization/parse-text.js";
+import { SerializationStringifyText } from "@/common/serialization/stringify-text.js";
 import type { AgentDefinition } from "../model/agent-definition.js";
 import { agentDefinitionSchema } from "../model/agent-definition.schema.js";
 
 export const AgentYamlCodec = {
-  /** YAML 文本 → {@link AgentDefinition}；语法错与 schema 违规沿 `Result.err` 返回。 */
-  decode(yaml: string): Result<AgentDefinition, AppError> {
-    const parsed = SerializationParseText.parse(yaml, "yaml");
-    if (!parsed.ok) return Result.err(parsed.error);
-    const decoded = SerializationDecode.decode(parsed.value, agentDefinitionSchema);
-    if (!decoded.ok) return Result.err(decoded.error);
-    return Result.ok(decoded.value);
-  },
+    /** YAML 文本 → {@link AgentDefinition}；语法错与 schema 违规沿 `Result.err` 返回。 */
+    decode(yaml: string): Result<AgentDefinition, AppError> {
+        const parsed = SerializationParseText.parse(yaml, "yaml");
+        if (!parsed.ok) return Result.err(parsed.error);
+        const decoded = SerializationDecode.decode(parsed.value, agentDefinitionSchema);
+        if (!decoded.ok) return Result.err(decoded.error);
+        return Result.ok(decoded.value);
+    },
 
-  /** {@link AgentDefinition} → YAML 文本。 */
-  encode(def: AgentDefinition): string {
-    const doc = SerializationEncode.encode(def, agentDefinitionSchema);
-    return SerializationStringifyText.stringify(doc, "yaml");
-  },
+    /** {@link AgentDefinition} → YAML 文本。 */
+    encode(def: AgentDefinition): string {
+        const doc = SerializationEncode.encode(def, agentDefinitionSchema);
+        return SerializationStringifyText.stringify(doc, "yaml");
+    },
 } as const;

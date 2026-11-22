@@ -10,46 +10,46 @@ import {vfsPage} from '../pageobjects/vfs.page';
  * （回滚本身已经把文件删光了，但项目与会话仍在，不清就会在 noReset 下逐轮堆积）。
  */
 describe('E3 chat rollback restores VFS', () => {
-  let projectName = '';
-  let anchorMessageId: string;
+    let projectName = '';
+    let anchorMessageId: string;
 
-  before(async () => {
-    projectName = await appPage.launchFresh('E2E Rollback VFS');
-    await appPage.switchToWorkspacePanel();
-    await vfsPage.createFile('file-a.md');
-    await appPage.switchToChatPanel();
-    await chatTranscriptPage.sendComposerMessage('vfs-anchor');
+    before(async () => {
+        projectName = await appPage.launchFresh('E2E Rollback VFS');
+        await appPage.switchToWorkspacePanel();
+        await vfsPage.createFile('file-a.md');
+        await appPage.switchToChatPanel();
+        await chatTranscriptPage.sendComposerMessage('vfs-anchor');
 
-    const ids = await chatTranscriptPage.getMessageIds();
-    expect(ids.length).toBeGreaterThanOrEqual(1);
-    anchorMessageId = ids[ids.length - 1]!;
+        const ids = await chatTranscriptPage.getMessageIds();
+        expect(ids.length).toBeGreaterThanOrEqual(1);
+        anchorMessageId = ids[ids.length - 1]!;
 
-    await appPage.switchToWorkspacePanel();
-    await vfsPage.createFile('file-b.md');
-    await appPage.switchToChatPanel();
-    await chatTranscriptPage.sendComposerMessage('after-vfs-edit');
-  });
+        await appPage.switchToWorkspacePanel();
+        await vfsPage.createFile('file-b.md');
+        await appPage.switchToChatPanel();
+        await chatTranscriptPage.sendComposerMessage('after-vfs-edit');
+    });
 
-  after(async () => {
-    if (projectName === '') {
-      return;
-    }
-    await appPage.deleteProjectViaDrawer(projectName);
-  });
+    after(async () => {
+        if (projectName === '') {
+            return;
+        }
+        await appPage.deleteProjectViaDrawer(projectName);
+    });
 
-  it('plain user undo_send 回滚至发送前 prior（首条锚点清空工作区）', async () => {
-    await chatTranscriptPage.openMessageMenu(anchorMessageId);
-    await chatTranscriptPage.tapMenuAction('rollback');
-    await alertPage.acceptRollback();
+    it('plain user undo_send 回滚至发送前 prior（首条锚点清空工作区）', async () => {
+        await chatTranscriptPage.openMessageMenu(anchorMessageId);
+        await chatTranscriptPage.tapMenuAction('rollback');
+        await alertPage.acceptRollback();
 
-    const toast = await vfsPage.readToastMessage();
-    expect(toast).toContain('回滚成功');
+        const toast = await vfsPage.readToastMessage();
+        expect(toast).toContain('回滚成功');
 
-    const idsAfter = await chatTranscriptPage.getMessageIds();
-    expect(idsAfter.length).toBe(0);
+        const idsAfter = await chatTranscriptPage.getMessageIds();
+        expect(idsAfter.length).toBe(0);
 
-    await appPage.switchToWorkspacePanel();
-    await vfsPage.expectRowMissing('file-a.md');
-    await vfsPage.expectRowMissing('file-b.md');
-  });
+        await appPage.switchToWorkspacePanel();
+        await vfsPage.expectRowMissing('file-a.md');
+        await vfsPage.expectRowMissing('file-b.md');
+    });
 });

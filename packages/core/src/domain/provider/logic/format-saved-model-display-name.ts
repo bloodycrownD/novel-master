@@ -5,8 +5,8 @@
  */
 
 export const SavedModelDisplayName = {
-  /** 主文案前缀为服务商 displayName（非技术 id）。 */
-  format(providerDisplayName: string, modelName: string): string {
-    return `${providerDisplayName}/${modelName}`;
-  },
+    /** 主文案前缀为服务商 displayName（非技术 id）。 */
+    format(providerDisplayName: string, modelName: string): string {
+        return `${providerDisplayName}/${modelName}`;
+    },
 } as const;

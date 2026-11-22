@@ -8,8 +8,8 @@ import {Modal, type ModalProps} from 'react-native';
 import {useIsFocused} from '@react-navigation/native';
 
 export function AppModal({visible, ...rest}: ModalProps) {
-  const isFocused = useIsFocused();
-  // WHY: unfocused hosts must not show native Modal even if local state is still true
-  const effectiveVisible = Boolean(visible && isFocused);
-  return <Modal visible={effectiveVisible} {...rest} />;
+    const isFocused = useIsFocused();
+    // WHY: unfocused hosts must not show native Modal even if local state is still true
+    const effectiveVisible = Boolean(visible && isFocused);
+    return <Modal visible={effectiveVisible} {...rest} />;
 }

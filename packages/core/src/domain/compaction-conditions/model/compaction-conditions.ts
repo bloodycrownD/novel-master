@@ -11,10 +11,10 @@
 export const DEFAULT_HIDE_START_DEPTH = 6 as const;
 
 export interface CompactionConditions {
-  readonly schemaVersion: 4;
-  readonly enabled: boolean;
-  readonly tokenRatio?: number;
-  readonly visibleFloor?: number;
-  /** hide-message 的起始深度（tail 0 = newest），缺省按 {@link DEFAULT_HIDE_START_DEPTH} 处理。 */
-  readonly hideStartDepth?: number;
+    readonly schemaVersion: 4;
+    readonly enabled: boolean;
+    readonly tokenRatio?: number;
+    readonly visibleFloor?: number;
+    /** hide-message 的起始深度（tail 0 = newest），缺省按 {@link DEFAULT_HIDE_START_DEPTH} 处理。 */
+    readonly hideStartDepth?: number;
 }

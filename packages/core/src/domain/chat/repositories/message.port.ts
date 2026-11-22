@@ -20,40 +20,40 @@ import type { MessageContent } from "../model/content-block.js";
  * `cancelled` / `replaced` 分支、**不返回半份结果**；`failed` 只装业务失败。
  */
 export interface MessageRepository {
-  /**
+    /**
    * 按 seq 升序列出会话消息。`includeHidden: false` 在 SQL 层滤掉 hidden
    * 行（默认含 hidden——回滚锚定等既有口径依赖「含隐藏全量」）。
    */
-  listBySession(sessionId: string, options?: { includeHidden?: boolean }, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>>;
+    listBySession(sessionId: string, options?: { includeHidden?: boolean }, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>>;
 
-  /**
+    /**
    * 消息头投影（无正文，不取 content 列）：压缩 hide / 置位锚定等只需要
    * id/seq/role/hidden 的区间逻辑专用，大会话上替代全量读。
    */
-  listMessageHeadersBySession(sessionId: string): Promise<ChatMessageHeader[]>;
+    listMessageHeadersBySession(sessionId: string): Promise<ChatMessageHeader[]>;
 
-  /**
+    /**
    * 统计会话消息行数（`SELECT COUNT(*) ... WHERE session_id = ?`）。
    *
    * 乐观锁只需要计数对比，不必把整行捞回内存——用这个替代 `listBySession().length`，
    * 1000 条消息从拉 1000 行退化成拉 1 行。
    */
-  countBySession(sessionId: string): Promise<number>;
+    countBySession(sessionId: string): Promise<number>;
 
-  // ============================================================
-  // 窄读口区 · Wave C「全量读收窄系列」四条
-  //
-  // 这四条是同一个动作的四次落地：把「本来只需要一小块」的读取从 19 列
-  // `listBySession` 上拆下来。**它们相邻排布是有意的护栏**（CR c1 K10）——
-  // 下一个人想加第五个全列读口时，会先看见这四条并被提醒「该加窄口，不该加
-  // 全列口」。每条都写明了「谁在用、为什么不能用别的」，因为「能不能用现成
-  // 的某个口」正是最容易拍错的地方。
-  //
-  // 新增读口时照这四条的两条纪律来：① 能收窄就别全量；② 收窄的口只服务一个
-  // 消费者，出现第二个消费者时**另起一条**，不要把上一条放宽。
-  // ============================================================
+    // ============================================================
+    // 窄读口区 · Wave C「全量读收窄系列」四条
+    //
+    // 这四条是同一个动作的四次落地：把「本来只需要一小块」的读取从 19 列
+    // `listBySession` 上拆下来。**它们相邻排布是有意的护栏**（CR c1 K10）——
+    // 下一个人想加第五个全列读口时，会先看见这四条并被提醒「该加窄口，不该加
+    // 全列口」。每条都写明了「谁在用、为什么不能用别的」，因为「能不能用现成
+    // 的某个口」正是最容易拍错的地方。
+    //
+    // 新增读口时照这四条的两条纪律来：① 能收窄就别全量；② 收窄的口只服务一个
+    // 消费者，出现第二个消费者时**另起一条**，不要把上一条放宽。
+    // ============================================================
 
-  /**
+    /**
    * 按 seq 升序跳过前 `offset` 行，取余下全部消息头（backfill 圈「新增段」用）。
    *
    * `offset` 是行偏移而非 seq 值（seq 可能因删除有洞）；SQLite 方言
@@ -67,9 +67,9 @@ export interface MessageRepository {
    *          根本不需要的 id。19 列 → 6 列、零 parse。
    * @remarks 新增第二个「要正文」的调用方时必须**另起读口**，不要放宽本口。
    */
-  listBySessionOffset(sessionId: string, offset: number): Promise<ChatMessageHeader[]>;
+    listBySessionOffset(sessionId: string, offset: number): Promise<ChatMessageHeader[]>;
 
-  /**
+    /**
    * 按 seq 升序列出「seq <= maxSeq（含上界）」的消息（fork 上界收窄用）。
    *
    * fork 消费方的全部读都在锚点及更早方向（`filter(seq <= upTo.seq)`），
@@ -86,9 +86,9 @@ export interface MessageRepository {
    *          ——fork 明确「Preserve hidden state」，滤掉 hidden 行会让 fork
    *          出来的会话**静默丢消息**。
    */
-  listBySessionUpToSeq(sessionId: string, maxSeq: number, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>>;
+    listBySessionUpToSeq(sessionId: string, maxSeq: number, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>>;
 
-  /**
+    /**
    * tail + role 过滤：取「该 role 的最后 limit 条」（seq 升序返回）。
    *
    * @remarks **谁在用**：`message.service.ts` 的 `listBySessionTailOfRole` 转发
@@ -101,9 +101,9 @@ export interface MessageRepository {
    *          多半是 tool_result，直接落空。`role` 必须在 SQL 子查询里过滤、
    *          `limit` 只数该 role，子会话 41 条时也不再整条倒扫。
    */
-  listBySessionTailOfRole(sessionId: string, role: string, limit: number, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>>;
+    listBySessionTailOfRole(sessionId: string, role: string, limit: number, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>>;
 
-  /**
+    /**
    * 列出会话内全部消息 id（清空会话场景的删除链素材），不投影任何其他列。
    *
    * @remarks **谁在用**：`message.service.ts` 的 `truncateAfter`（空锚分支——
@@ -118,28 +118,28 @@ export interface MessageRepository {
    *          双素材）——read 引用机制随 E1 清理版退役后（v1.5.40 同批），
    *          refs 消费方全灭，收窄为 id 单素材。
    */
-  listIdsBySession(sessionId: string): Promise<readonly string[]>;
+    listIdsBySession(sessionId: string): Promise<readonly string[]>;
 
-  /**
+    /**
    * 按 seq 升序列出「seq >= fromSeq（含下界）」的消息。
    *
    * 回滚 plan 拉取收窄口径（rollback-large-jank Step 2）：resolveRollbackPlan
    * 对消息列表的全部消费都落在「触发消息自身 + seq 更大方向」（锚点解析只做
    * tool_result 前向配对、tail 过滤只取锚点之后），锚点之前的消息不拉取。
    */
-  listBySessionFromSeq(sessionId: string, fromSeq: number, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>>;
+    listBySessionFromSeq(sessionId: string, fromSeq: number, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>>;
 
-  listBySessionTail(sessionId: string, limit: number, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>>;
+    listBySessionTail(sessionId: string, limit: number, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>>;
 
-  listBySessionPage(sessionId: string, limit: number, beforeSeq?: number, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>>;
+    listBySessionPage(sessionId: string, limit: number, beforeSeq?: number, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>>;
 
-  findById(id: string): Promise<ChatMessageData | null>;
+    findById(id: string): Promise<ChatMessageData | null>;
 
-  nextSeq(sessionId: string): Promise<number>;
+    nextSeq(sessionId: string): Promise<number>;
 
-  insert(message: ChatMessageData): Promise<void>;
+    insert(message: ChatMessageData): Promise<void>;
 
-  /**
+    /**
    * 批量写入消息：同一事务内按 200 条分片多次 `conn.batch`；空数组是 no-op
    * （不发出 SQL），方便调用方在不判断长度时直接传入。
    *
@@ -148,29 +148,29 @@ export interface MessageRepository {
    * 协议例外），外层 catch 转回 `Outcome.cancelled` / `replaced`——目标表无本批
    * 残留；外层事务路径（copy/fork）的回滚由外层事务边界负责。
    */
-  batchInsert(messages: readonly ChatMessageData[], hooks?: LongTaskHooks): Promise<Outcome<void>>;
+    batchInsert(messages: readonly ChatMessageData[], hooks?: LongTaskHooks): Promise<Outcome<void>>;
 
-  /**
+    /**
    * 替换存储的消息正文。行缺失时返回 false。
    *
    * 入参为 MessageContent 对象——JSON 序列化收口在 repository（service 层
    * 不再 stringify）。
    */
-  updateContent(id: string, content: MessageContent): Promise<boolean>;
+    updateContent(id: string, content: MessageContent): Promise<boolean>;
 
-  delete(id: string): Promise<boolean>;
+    delete(id: string): Promise<boolean>;
 
-  deleteBySession(sessionId: string): Promise<void>;
+    deleteBySession(sessionId: string): Promise<void>;
 
-  /** Deletes messages with seq strictly greater than `afterSeq` in the session. */
-  deleteAfterSeq(sessionId: string, afterSeq: number): Promise<void>;
+    /** Deletes messages with seq strictly greater than `afterSeq` in the session. */
+    deleteAfterSeq(sessionId: string, afterSeq: number): Promise<void>;
 
-  /** 列出 seq > afterSeq 的消息 id（截断 tail 用，避免全量 listBySession）。 */
-  listIdsAfterSeq(sessionId: string, afterSeq: number): Promise<string[]>;
+    /** 列出 seq > afterSeq 的消息 id（截断 tail 用，避免全量 listBySession）。 */
+    listIdsAfterSeq(sessionId: string, afterSeq: number): Promise<string[]>;
 
-  /** Update the hidden state of a single message. Returns true if message was found. */
-  updateHidden(messageId: string, hidden: boolean): Promise<boolean>;
+    /** Update the hidden state of a single message. Returns true if message was found. */
+    updateHidden(messageId: string, hidden: boolean): Promise<boolean>;
 
-  /** Update the hidden state of messages in a seq range. Returns count of affected rows. */
-  updateHiddenRange(sessionId: string, fromSeq: number, toSeq: number, hidden: boolean): Promise<number>;
+    /** Update the hidden state of messages in a seq range. Returns count of affected rows. */
+    updateHiddenRange(sessionId: string, fromSeq: number, toSeq: number, hidden: boolean): Promise<number>;
 }

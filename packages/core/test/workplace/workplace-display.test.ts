@@ -4,76 +4,76 @@ import {  FrontMatter, WorkplaceDisplay  } from "@novel-master/core/workplace";
 import {  FrontMatter as MarkdownFrontMatter  } from "@novel-master/core/common";
 
 describe("worktree display", () => {
-  it("escapes XML in path attribute", () => {
-    const block = WorkplaceDisplay.renderFileBlock({
-      logicalPath: '/a&b"c.md',
-      mtimeMs: 1_700_000_000_000,
-      display: "filename",
-      content: "",
-    });
-    assert.match(block, /path="\/a&amp;b&quot;c\.md"/);
-    assert.match(block, /createdAt="[^"]+"/);
+    it("escapes XML in path attribute", () => {
+        const block = WorkplaceDisplay.renderFileBlock({
+            logicalPath: '/a&b"c.md',
+            mtimeMs: 1_700_000_000_000,
+            display: "filename",
+            content: "",
+        });
+        assert.match(block, /path="\/a&amp;b&quot;c\.md"/);
+        assert.match(block, /createdAt="[^"]+"/);
     assert.match(block, /updatedAt="[^"]+"/);
-  });
-
-  it("parses valid front matter", () => {
-    const lines = FrontMatter.parseMarkdown("---\ntitle: x\n---\nbody");
-    assert.deepEqual(lines, ["1|title: x"]);
-  });
-
-  it("splits front matter from markdown body", () => {
-    const split = MarkdownFrontMatter.splitMarkdown("---\ntitle: x\n---\n# Hi\n");
-    assert.equal(split.closed, true);
-    assert.deepEqual(split.frontMatterLines, ["title: x"]);
-    assert.equal(split.body, "# Hi\n");
-  });
-
-  it("split without front matter returns full body", () => {
-    const split = MarkdownFrontMatter.splitMarkdown("# Only\n");
-    assert.equal(split.frontMatterLines, null);
-    assert.equal(split.body, "# Only\n");
-    assert.equal(split.closed, true);
-  });
-
-  it("treats unclosed front matter as no front matter", () => {
-    const lines = FrontMatter.parseMarkdown("---\nno close");
-    assert.deepEqual(lines, ["1|（无 Front Matter）"]);
-  });
-
-  it("split treats unclosed front matter as no front matter", () => {
-    const split = MarkdownFrontMatter.splitMarkdown("---\na: 1\n# body");
-    assert.equal(split.frontMatterLines, null);
-    assert.equal(split.body, "---\na: 1\n# body");
-    assert.equal(split.closed, true);
-  });
-
-  it("split handles single unclosed delimiter line", () => {
-    const split = MarkdownFrontMatter.splitMarkdown("---");
-    assert.equal(split.frontMatterLines, null);
-    assert.equal(split.body, "---");
-    assert.equal(split.closed, true);
-  });
-
-  it("split handles empty closed front matter", () => {
-    const split = MarkdownFrontMatter.splitMarkdown("---\n---\n");
-    assert.deepEqual(split.frontMatterLines, []);
-    assert.equal(split.body, "");
-    assert.equal(split.closed, true);
-  });
-
-  it("joins blocks with blank line", () => {
-    const a = WorkplaceDisplay.renderFileBlock({
-      logicalPath: "/a.md",
-      mtimeMs: 0,
-      display: "filename",
-      content: "",
     });
-    const b = WorkplaceDisplay.renderFileBlock({
-      logicalPath: "/b.md",
-      mtimeMs: 0,
-      display: "filename",
-      content: "",
+
+    it("parses valid front matter", () => {
+        const lines = FrontMatter.parseMarkdown("---\ntitle: x\n---\nbody");
+        assert.deepEqual(lines, ["1|title: x"]);
     });
-    assert.equal(WorkplaceDisplay.joinFileBlocks([a, b]).split("\n\n").length, 2);
-  });
+
+    it("splits front matter from markdown body", () => {
+        const split = MarkdownFrontMatter.splitMarkdown("---\ntitle: x\n---\n# Hi\n");
+        assert.equal(split.closed, true);
+        assert.deepEqual(split.frontMatterLines, ["title: x"]);
+        assert.equal(split.body, "# Hi\n");
+    });
+
+    it("split without front matter returns full body", () => {
+        const split = MarkdownFrontMatter.splitMarkdown("# Only\n");
+        assert.equal(split.frontMatterLines, null);
+        assert.equal(split.body, "# Only\n");
+        assert.equal(split.closed, true);
+    });
+
+    it("treats unclosed front matter as no front matter", () => {
+        const lines = FrontMatter.parseMarkdown("---\nno close");
+        assert.deepEqual(lines, ["1|（无 Front Matter）"]);
+    });
+
+    it("split treats unclosed front matter as no front matter", () => {
+        const split = MarkdownFrontMatter.splitMarkdown("---\na: 1\n# body");
+        assert.equal(split.frontMatterLines, null);
+        assert.equal(split.body, "---\na: 1\n# body");
+        assert.equal(split.closed, true);
+    });
+
+    it("split handles single unclosed delimiter line", () => {
+        const split = MarkdownFrontMatter.splitMarkdown("---");
+        assert.equal(split.frontMatterLines, null);
+        assert.equal(split.body, "---");
+        assert.equal(split.closed, true);
+    });
+
+    it("split handles empty closed front matter", () => {
+        const split = MarkdownFrontMatter.splitMarkdown("---\n---\n");
+        assert.deepEqual(split.frontMatterLines, []);
+        assert.equal(split.body, "");
+        assert.equal(split.closed, true);
+    });
+
+    it("joins blocks with blank line", () => {
+        const a = WorkplaceDisplay.renderFileBlock({
+            logicalPath: "/a.md",
+            mtimeMs: 0,
+            display: "filename",
+            content: "",
+        });
+        const b = WorkplaceDisplay.renderFileBlock({
+            logicalPath: "/b.md",
+            mtimeMs: 0,
+            display: "filename",
+            content: "",
+        });
+        assert.equal(WorkplaceDisplay.joinFileBlocks([a, b]).split("\n\n").length, 2);
+    });
 });

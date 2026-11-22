@@ -7,30 +7,30 @@
 import type { LlmProtocolKind } from "@/infra/llm-protocol/ports/adapter.port.js";
 
 export interface LlmProvider {
-  readonly id: string;
-  /** 仅内置行非空：openai / anthropic / …；自定义为 null。 */
-  readonly builtinKey: string | null;
-  readonly protocol: LlmProtocolKind;
-  readonly baseUrl: string;
-  /** 对人展示名称；必填非空。 */
-  readonly displayName: string;
-  readonly secretRef: string | null;
-  readonly headers: Readonly<Record<string, string>>;
-  /** 自定义参数：原样合并进请求体顶层（值任意 JSON，不限字符串）。 */
-  readonly bodyParams: Readonly<Record<string, unknown>>;
-  readonly isBuiltin: boolean;
-  readonly createdAtMs: number;
-  readonly updatedAtMs: number;
+    readonly id: string;
+    /** 仅内置行非空：openai / anthropic / …；自定义为 null。 */
+    readonly builtinKey: string | null;
+    readonly protocol: LlmProtocolKind;
+    readonly baseUrl: string;
+    /** 对人展示名称；必填非空。 */
+    readonly displayName: string;
+    readonly secretRef: string | null;
+    readonly headers: Readonly<Record<string, string>>;
+    /** 自定义参数：原样合并进请求体顶层（值任意 JSON，不限字符串）。 */
+    readonly bodyParams: Readonly<Record<string, unknown>>;
+    readonly isBuiltin: boolean;
+    readonly createdAtMs: number;
+    readonly updatedAtMs: number;
 }
 
 export const ProviderModel = {
-  /** 标准 provider API Key 的 SKSP ref。 */
-  apiKeyRef(providerId: string): string {
-    return `provider/${providerId}/apiKey`;
-  },
+    /** 标准 provider API Key 的 SKSP ref。 */
+    apiKeyRef(providerId: string): string {
+        return `provider/${providerId}/apiKey`;
+    },
 
-  /** 解析 provider API 密钥 SKSP ref（list 状态、请求、delete、edit 共用）。 */
-  resolveApiKeySecretRef(provider: Pick<LlmProvider, "id" | "secretRef">): string {
-    return provider.secretRef ?? ProviderModel.apiKeyRef(provider.id);
-  },
+    /** 解析 provider API 密钥 SKSP ref（list 状态、请求、delete、edit 共用）。 */
+    resolveApiKeySecretRef(provider: Pick<LlmProvider, "id" | "secretRef">): string {
+        return provider.secretRef ?? ProviderModel.apiKeyRef(provider.id);
+    },
 } as const;

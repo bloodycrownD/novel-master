@@ -19,235 +19,237 @@ novelMasterTestFixture();
 
 /** 指定 entry_id 的孤儿 revision 行是否还在（该行 entry 不存在于 vfs_entry）。 */
 async function orphanRevisionExists(
-  conn: TdbcConnection,
-  entryId: number
+    conn: TdbcConnection,
+    entryId: number
 ): Promise<boolean> {
-  const rows = await conn.query(
-    `SELECT COUNT(*) AS n FROM vfs_revision
-     WHERE entry_id = ? AND entry_id NOT IN (SELECT entry_id FROM vfs_entry)`,
-    [entryId]
-  );
-  return Number(rows[0]!.n) > 0;
+    const rows = await conn.query(
+        `SELECT COUNT(*) AS n
+    FROM vfs_revision
+    WHERE entry_id = ? AND entry_id NOT IN (SELECT entry_id
+    FROM vfs_entry)`,
+        [entryId]
+    );
+    return Number(rows[0]!.n) > 0;
 }
 
 /** 造一行孤儿 revision：entry_id 指向不存在的 entry、ref_count<=0。 */
 async function insertOrphanRevision(
-  conn: TdbcConnection,
-  entryId: number
+    conn: TdbcConnection,
+    entryId: number
 ): Promise<void> {
-  // content_hash 置 NULL 且 status=deleted，避开 INSERT 触发器与
-  // active+NULL 的 CHECK 约束。
-  await conn.execute(
-    `INSERT INTO vfs_revision (entry_id, version, status, mtime_ms, content_hash, ref_count)
-     VALUES (?, 1, 'deleted', 0, NULL, 0)`,
-    [entryId]
-  );
+    // content_hash 置 NULL 且 status=deleted，避开 INSERT 触发器与
+    // active+NULL 的 CHECK 约束。
+    await conn.execute(
+        `INSERT INTO vfs_revision (entry_id, version, status, mtime_ms, content_hash, ref_count)
+    VALUES (?, 1, 'deleted', 0, NULL, 0)`,
+        [entryId]
+    );
 }
 
 describe("TruncateTail.truncate", () => {
-  it("截断 seq > afterSeq 的消息并清理 checkpoint", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
+    it("截断 seq > afterSeq 的消息并清理 checkpoint", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
 
-    const m1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("1")));
-    const m2 = unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "2" }],
-    }));
-    await svfs.write("/a.md", "v1", { versionCheck: false });
-    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, m2.id));
-    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("3")));
+        const m1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("1")));
+        const m2 = unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "2" }],
+        }));
+        await svfs.write("/a.md", "v1", { versionCheck: false });
+        unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, m2.id));
+        unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("3")));
 
-    await ctx.conn.transaction(async (tx) => {
-      await TruncateTail.truncate(MessageCheckpointFactory.createTruncateTailDeps(tx), {
-        projectId: project.id,
-        sessionId: session.id,
-        afterSeq: m1.seq,
-        sweepRevisions: false,
-      });
+        await ctx.conn.transaction(async (tx) => {
+            await TruncateTail.truncate(MessageCheckpointFactory.createTruncateTailDeps(tx), {
+                projectId: project.id,
+                sessionId: session.id,
+                afterSeq: m1.seq,
+                sweepRevisions: false,
+            });
+        });
+
+        const left = outcomeValue(await ctx.messages.listBySession(session.id));
+        assert.equal(left.length, 1);
+        assert.equal(left[0]!.id, m1.id);
+
+        const checkpoints = new SqliteMessageCheckpointRepository(ctx.conn);
+        const cp = await checkpoints.loadFileTree(session.id, m2.id);
+        assert.equal(cp, null);
+        assert.equal(unwrap(await svfs.read("/a.md")).content, "v1");
     });
 
-    const left = outcomeValue(await ctx.messages.listBySession(session.id));
-    assert.equal(left.length, 1);
-    assert.equal(left[0]!.id, m1.id);
+    it("tail 非空时清空 file_cache / pending；保留 rule_snapshot", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const sessionKkv = SessionKkvServiceFactory.create(ctx.conn);
+        await sessionKkv.set(
+            session.id,
+            SESSION_KKV_DOMAIN_USER_VFS_PENDING,
+            USER_VFS_PENDING_QUEUE_KEY,
+            "[]",
+        );
+        await sessionKkv.set(
+            session.id,
+            SESSION_KKV_DOMAIN_FILE_CACHE,
+            "full:/a.md",
+            '{"body":"x","mtimeMs":1}',
+        );
+        await sessionKkv.set(
+            session.id,
+            SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+            RULE_SNAPSHOT_CANON_KEY,
+            "[]",
+        );
+        await sessionKkv.set(
+            session.id,
+            "other_domain",
+            "keep",
+            "value",
+        );
 
-    const checkpoints = new SqliteMessageCheckpointRepository(ctx.conn);
-    const cp = await checkpoints.loadFileTree(session.id, m2.id);
-    assert.equal(cp, null);
-    assert.equal(unwrap(await svfs.read("/a.md")).content, "v1");
-  });
+        const m1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("1")));
+        unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("2")));
 
-  it("tail 非空时清空 file_cache / pending；保留 rule_snapshot", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const sessionKkv = SessionKkvServiceFactory.create(ctx.conn);
-    await sessionKkv.set(
-      session.id,
-      SESSION_KKV_DOMAIN_USER_VFS_PENDING,
-      USER_VFS_PENDING_QUEUE_KEY,
-      "[]",
-    );
-    await sessionKkv.set(
-      session.id,
-      SESSION_KKV_DOMAIN_FILE_CACHE,
-      "full:/a.md",
-      '{"body":"x","mtimeMs":1}',
-    );
-    await sessionKkv.set(
-      session.id,
-      SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
-      RULE_SNAPSHOT_CANON_KEY,
-      "[]",
-    );
-    await sessionKkv.set(
-      session.id,
-      "other_domain",
-      "keep",
-      "value",
-    );
+        await ctx.conn.transaction(async (tx) => {
+            await TruncateTail.truncate(MessageCheckpointFactory.createTruncateTailDeps(tx), {
+                projectId: project.id,
+                sessionId: session.id,
+                afterSeq: m1.seq,
+                sweepRevisions: false,
+            });
+        });
 
-    const m1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("1")));
-    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("2")));
-
-    await ctx.conn.transaction(async (tx) => {
-      await TruncateTail.truncate(MessageCheckpointFactory.createTruncateTailDeps(tx), {
-        projectId: project.id,
-        sessionId: session.id,
-        afterSeq: m1.seq,
-        sweepRevisions: false,
-      });
+        assert.equal(
+            unwrap(await sessionKkv.get(
+                session.id,
+                SESSION_KKV_DOMAIN_USER_VFS_PENDING,
+                USER_VFS_PENDING_QUEUE_KEY,
+            )),
+            null,
+        );
+        assert.equal(
+            unwrap(await sessionKkv.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/a.md")),
+            null,
+        );
+        assert.equal(
+            unwrap(await sessionKkv.get(
+                session.id,
+                SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+                RULE_SNAPSHOT_CANON_KEY,
+            )),
+            "[]",
+        );
+        assert.equal(unwrap(await sessionKkv.get(session.id, "other_domain", "keep")), "value");
     });
 
-    assert.equal(
-      unwrap(await sessionKkv.get(
-        session.id,
-        SESSION_KKV_DOMAIN_USER_VFS_PENDING,
-        USER_VFS_PENDING_QUEUE_KEY,
-      )),
-      null,
-    );
-    assert.equal(
-      unwrap(await sessionKkv.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/a.md")),
-      null,
-    );
-    assert.equal(
-      unwrap(await sessionKkv.get(
-        session.id,
-        SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
-        RULE_SNAPSHOT_CANON_KEY,
-      )),
-      "[]",
-    );
-    assert.equal(unwrap(await sessionKkv.get(session.id, "other_domain", "keep")), "value");
-  });
+    it("afterSeq 之后无消息时不改状态条 kkv", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const sessionKkv = SessionKkvServiceFactory.create(ctx.conn);
+        const pendingJson = "[]";
+        await sessionKkv.set(
+            session.id,
+            SESSION_KKV_DOMAIN_USER_VFS_PENDING,
+            USER_VFS_PENDING_QUEUE_KEY,
+            pendingJson,
+        );
+        await sessionKkv.set(
+            session.id,
+            SESSION_KKV_DOMAIN_FILE_CACHE,
+            "full:/a.md",
+            '{"body":"x","mtimeMs":1}',
+        );
 
-  it("afterSeq 之后无消息时不改状态条 kkv", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const sessionKkv = SessionKkvServiceFactory.create(ctx.conn);
-    const pendingJson = "[]";
-    await sessionKkv.set(
-      session.id,
-      SESSION_KKV_DOMAIN_USER_VFS_PENDING,
-      USER_VFS_PENDING_QUEUE_KEY,
-      pendingJson,
-    );
-    await sessionKkv.set(
-      session.id,
-      SESSION_KKV_DOMAIN_FILE_CACHE,
-      "full:/a.md",
-      '{"body":"x","mtimeMs":1}',
-    );
+        const m1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("only")));
 
-    const m1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("only")));
+        await ctx.conn.transaction(async (tx) => {
+            await TruncateTail.truncate(MessageCheckpointFactory.createTruncateTailDeps(tx), {
+                projectId: project.id,
+                sessionId: session.id,
+                afterSeq: m1.seq,
+                sweepRevisions: false,
+            });
+        });
 
-    await ctx.conn.transaction(async (tx) => {
-      await TruncateTail.truncate(MessageCheckpointFactory.createTruncateTailDeps(tx), {
-        projectId: project.id,
-        sessionId: session.id,
-        afterSeq: m1.seq,
-        sweepRevisions: false,
-      });
+        assert.equal(
+            unwrap(await sessionKkv.get(
+                session.id,
+                SESSION_KKV_DOMAIN_USER_VFS_PENDING,
+                USER_VFS_PENDING_QUEUE_KEY,
+            )),
+            pendingJson,
+        );
+        assert.equal(
+            unwrap(await sessionKkv.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/a.md")),
+            '{"body":"x","mtimeMs":1}',
+        );
     });
 
-    assert.equal(
-      unwrap(await sessionKkv.get(
-        session.id,
-        SESSION_KKV_DOMAIN_USER_VFS_PENDING,
-        USER_VFS_PENDING_QUEUE_KEY,
-      )),
-      pendingJson,
-    );
-    assert.equal(
-      unwrap(await sessionKkv.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/a.md")),
-      '{"body":"x","mtimeMs":1}',
-    );
-  });
+    // RB-CORE-01：sweepRevisions 的全局孤儿清扫归属是「调用方可选 defer」，
+    // 不是「所有截断路径都跳过」。缺省必须在事务内把全局孤儿 DELETE 做完，
+    // 否则共享函数的另一调用方（批量删 truncateMessagesAfter）会静默丢掉
+    // 这步清扫、且那条路径没有 deferred 补做，孤儿行永久残留。
+    it("sweepRevisions 缺省不 defer 时，事务内仍做全局孤儿清扫", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-gs-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
 
-  // RB-CORE-01：sweepRevisions 的全局孤儿清扫归属是「调用方可选 defer」，
-  // 不是「所有截断路径都跳过」。缺省必须在事务内把全局孤儿 DELETE 做完，
-  // 否则共享函数的另一调用方（批量删 truncateMessagesAfter）会静默丢掉
-  // 这步清扫、且那条路径没有 deferred 补做，孤儿行永久残留。
-  it("sweepRevisions 缺省不 defer 时，事务内仍做全局孤儿清扫", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-gs-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
+        const m1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("1")));
+        unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("2")));
 
-    const m1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("1")));
-    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("2")));
+        // 造一行孤儿 revision：entry_id 指向不存在的 entry、ref_count<=0
+        await insertOrphanRevision(ctx.conn, 999101);
+        assert.equal(
+            await orphanRevisionExists(ctx.conn, 999101),
+            true,
+            "前置：孤儿行已就位"
+        );
 
-    // 造一行孤儿 revision：entry_id 指向不存在的 entry、ref_count<=0
-    await insertOrphanRevision(ctx.conn, 999101);
-    assert.equal(
-      await orphanRevisionExists(ctx.conn, 999101),
-      true,
-      "前置：孤儿行已就位"
-    );
+        await ctx.conn.transaction(async (tx) => {
+            await TruncateTail.truncate(MessageCheckpointFactory.createTruncateTailDeps(tx), {
+                projectId: project.id,
+                sessionId: session.id,
+                afterSeq: m1.seq,
+                sweepRevisions: true,
+                // 关键：不传 deferGlobalOrphanGc —— 默认路径必须照做全局清扫。
+            });
+        });
 
-    await ctx.conn.transaction(async (tx) => {
-      await TruncateTail.truncate(MessageCheckpointFactory.createTruncateTailDeps(tx), {
-        projectId: project.id,
-        sessionId: session.id,
-        afterSeq: m1.seq,
-        sweepRevisions: true,
-        // 关键：不传 deferGlobalOrphanGc —— 默认路径必须照做全局清扫。
-      });
+        assert.equal(
+            await orphanRevisionExists(ctx.conn, 999101),
+            false,
+            "未 defer 时全局孤儿 DELETE 应在事务内发生（同步路径，无需 deferred 补做）"
+        );
     });
 
-    assert.equal(
-      await orphanRevisionExists(ctx.conn, 999101),
-      false,
-      "未 defer 时全局孤儿 DELETE 应在事务内发生（同步路径，无需 deferred 补做）"
-    );
-  });
+    it("显式 deferGlobalOrphanGc 时事务内跳过全局孤儿清扫", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-gd-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
 
-  it("显式 deferGlobalOrphanGc 时事务内跳过全局孤儿清扫", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-gd-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
+        const m1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("1")));
+        unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("2")));
 
-    const m1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("1")));
-    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("2")));
+        await insertOrphanRevision(ctx.conn, 999102);
 
-    await insertOrphanRevision(ctx.conn, 999102);
+        await ctx.conn.transaction(async (tx) => {
+            await TruncateTail.truncate(MessageCheckpointFactory.createTruncateTailDeps(tx), {
+                projectId: project.id,
+                sessionId: session.id,
+                afterSeq: m1.seq,
+                sweepRevisions: true,
+                deferGlobalOrphanGc: true,
+            });
+        });
 
-    await ctx.conn.transaction(async (tx) => {
-      await TruncateTail.truncate(MessageCheckpointFactory.createTruncateTailDeps(tx), {
-        projectId: project.id,
-        sessionId: session.id,
-        afterSeq: m1.seq,
-        sweepRevisions: true,
-        deferGlobalOrphanGc: true,
-      });
+        assert.equal(
+            await orphanRevisionExists(ctx.conn, 999102),
+            true,
+            "defer 时事务内只做 scoped 打扫，孤儿行留给调用方提交后 deferred 补做"
+        );
     });
-
-    assert.equal(
-      await orphanRevisionExists(ctx.conn, 999102),
-      true,
-      "defer 时事务内只做 scoped 打扫，孤儿行留给调用方提交后 deferred 补做"
-    );
-  });
 });

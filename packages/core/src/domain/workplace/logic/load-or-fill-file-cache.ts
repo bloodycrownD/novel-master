@@ -20,16 +20,16 @@ import { CHARACTER_CARD_BLOB_COMPRESSED_GATE_BYTES, CHARACTER_CARD_MAX_SINGLE_FI
 import { RuleSnapshotCodec, type FileCachePayload, type WorkplaceDisplayStatus } from "./rule-snapshot-codec.js";
 
 export type LoadOrFillFileCacheDeps = {
-  readonly sessionId: string;
-  readonly sessionKkv: SessionKkvService;
-  readonly vfs: VfsService;
-  readonly path: string;
-  readonly status: WorkplaceDisplayStatus;
+    readonly sessionId: string;
+    readonly sessionKkv: SessionKkvService;
+    readonly vfs: VfsService;
+    readonly path: string;
+    readonly status: WorkplaceDisplayStatus;
 };
 
 /** {@link FileCache.fillFromVfs} 的行为开关。 */
 export interface FillFileCacheOptions {
-  /**
+    /**
    * `true` 时把「序列化 + 哈希 + 压缩 + 写回 file_cache」整段改成
    * fire-and-forget 后台任务（推迟一个宏任务，见 {@link FileCache.scheduleBackfill}
    * 里 JS 线程争抢的说明）：读到的内容立刻返回给组装路径，写回不再
@@ -44,7 +44,7 @@ export interface FillFileCacheOptions {
    * 缺省 `false`（同步写回）：hydrate 等需要「返回即已落库」的调用方
    * 保持原语义。
    */
-  readonly deferBackfillWrite?: boolean;
+    readonly deferBackfillWrite?: boolean;
 }
 
 /**
@@ -65,9 +65,9 @@ const pendingBackfills = new Set<Promise<void>>();
  * `FileCachePayload`**（不外泄 `degraded`）。
  */
 type FillResult = {
-  readonly payload: FileCachePayload;
-  /** true = 该 payload 来自降级兜底（`(missing)` / 探测失败），**不得**写入 file_cache。 */
-  readonly degraded?: boolean;
+    readonly payload: FileCachePayload;
+    /** true = 该 payload 来自降级兜底（`(missing)` / 探测失败），**不得**写入 file_cache。 */
+    readonly degraded?: boolean;
 };
 
 /**
@@ -77,12 +77,15 @@ type FillResult = {
  * - `placeholder == null`：未超限，`mtimeMs` 是可直接采用的真实值（探测不可用时为 `undefined`）
  */
 type FileMetaProbe = {
-  readonly placeholder: FileCachePayload | null;
-  readonly mtimeMs: number | undefined;
+    readonly placeholder: FileCachePayload | null;
+    readonly mtimeMs: number | undefined;
 };
 
+/** file_cache 写回（延迟 / 立即两分支共用）：sessionKkv 按 RuleSnapshotCodec 序列化写入。 */
+const writeFileCache = (deps: LoadOrFillFileCacheDeps, key: string, payload: FileCachePayload): Promise<void> => deps.sessionKkv.set(deps.sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, key, RuleSnapshotCodec.serializeFileCachePayload(payload));
+
 export const FileCache = {
-  /**
+    /**
    * filename 不读盘；缺失用 `(missing)` 占位。
    *
    * ⚠️ 占位 payload **不写 file_cache**（降级来源一律不落库，见 {@link FillResult.degraded}）：
@@ -96,31 +99,31 @@ export const FileCache = {
    * filename 档会做一次轻量 meta 探测（`vfs.findContentSize`，不读正文）拿真实
    * `mtimeMs`，避免组装时把 `1970-01-01` 假时间戳写进常驻提示词。
    */
-  async loadOrFill(deps: LoadOrFillFileCacheDeps): Promise<FileCachePayload> {
-    const key = RuleSnapshotCodec.fileCacheKey(deps.status, deps.path);
-    const raw = await deps.sessionKkv.get(deps.sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, key);
-    if (raw != null) {
-      const parsed = RuleSnapshotCodec.parseFileCachePayload(raw);
-      if (parsed.ok) {
-        return parsed.value;
-      }
-    }
-    return FileCache.fillFromVfs(deps);
-  },
+    async loadOrFill(deps: LoadOrFillFileCacheDeps): Promise<FileCachePayload> {
+        const key = RuleSnapshotCodec.fileCacheKey(deps.status, deps.path);
+        const raw = await deps.sessionKkv.get(deps.sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, key);
+        if (raw != null) {
+            const parsed = RuleSnapshotCodec.parseFileCachePayload(raw);
+            if (parsed.ok) {
+                return parsed.value;
+            }
+        }
+        return FileCache.fillFromVfs(deps);
+    },
 
-  /**
+    /**
    * 等待当前所有后台回填落定。
    *
    * @remarks 仅测试与显式需要确定性的调用方使用；循环取快照是因为回填
    * 落定前的清理回调才把条目移出集合，单次 `Promise.all` 会漏掉尾批。
    */
-  async settlePendingBackfills(): Promise<void> {
-    while (pendingBackfills.size > 0) {
-      await Promise.all([...pendingBackfills]);
-    }
-  },
+    async settlePendingBackfills(): Promise<void> {
+        while (pendingBackfills.size > 0) {
+            await Promise.all([...pendingBackfills]);
+        }
+    },
 
-  /**
+    /**
    * 登记一个后台回填：rejection 静默吞掉，不留 unhandled。
    *
    * 为什么要推迟到宏任务（`setTimeout(0)`）而不是直接 `void write()`：
@@ -134,70 +137,69 @@ export const FileCache = {
    * file_cache 是纯加速层，写失败（连接关、域被并发清掉、blob 表写不进去）
    * 的正确后果就是「下次组装重新回填」，不该把错误冒泡到宿主。
    */
-  scheduleBackfill(write: () => Promise<void>): void {
-    const settled = new Promise<void>((resolve) => {
-      setTimeout(() => void write().then(resolve, resolve), 0);
-    });
-    pendingBackfills.add(settled);
-    void settled.then(() => {
-      pendingBackfills.delete(settled);
-    });
-  },
+    scheduleBackfill(write: () => Promise<void>): void {
+        const settled = new Promise<void>((resolve) => {
+            setTimeout(() => void write().then(resolve, resolve), 0);
+        });
+        pendingBackfills.add(settled);
+        void settled.then(() => {
+            pendingBackfills.delete(settled);
+        });
+    },
 
-  /**
+    /**
    * 缓存 miss 后的回填半段（loadOrFill 与 assemble 批量预取共用）：
    * 超限探测 → VFS 读取 → 写回 file_cache。
    *
    * @param options `deferBackfillWrite: true` 时写回后台化（见
    *   {@link FillFileCacheOptions}）；返回值始终是读到的内容，与写回无关。
    */
-  async fillFromVfs(deps: LoadOrFillFileCacheDeps, options?: FillFileCacheOptions): Promise<FileCachePayload> {
-    const key = RuleSnapshotCodec.fileCacheKey(deps.status, deps.path);
+    async fillFromVfs(deps: LoadOrFillFileCacheDeps, options?: FillFileCacheOptions): Promise<FileCachePayload> {
+        const key = RuleSnapshotCodec.fileCacheKey(deps.status, deps.path);
 
-    // 轻量 meta 探测提到 status 判断之外：filename 档也需要它拿真实 mtimeMs
-    // （否则组装时渲染出 1970 假时间戳）。探测失败 / null 一律保守放行原路径。
-    let probe: FileMetaProbe = { placeholder: null, mtimeMs: undefined };
-    const size = await deps.vfs.findContentSize(deps.path);
-    if (size.ok && size.value != null) {
-      // 压缩侧长度按 4× 折算为明文字符数的估计值（标注「约」）
-      const limit = size.value.kind === "inlineChars" ? CHARACTER_CARD_MAX_SINGLE_FILE_BYTES : CHARACTER_CARD_BLOB_COMPRESSED_GATE_BYTES;
-      const chars = size.value.kind === "inlineChars" ? size.value.size : size.value.size * 4;
-      probe = { placeholder: size.value.size > limit ? { body: `（文件过大，已跳过，约 ${chars} 字符）`, mtimeMs: size.value.mtimeMs } : null, mtimeMs: size.value.mtimeMs };
-    }
+        // 轻量 meta 探测提到 status 判断之外：filename 档也需要它拿真实 mtimeMs
+        // （否则组装时渲染出 1970 假时间戳）。探测失败 / null 一律保守放行原路径。
+        let probe: FileMetaProbe = { placeholder: null, mtimeMs: undefined };
+        const size = await deps.vfs.findContentSize(deps.path);
+        if (size.ok && size.value != null) {
+            // 压缩侧长度按 4× 折算为明文字符数的估计值（标注「约」）
+            const limit = size.value.kind === "inlineChars" ? CHARACTER_CARD_MAX_SINGLE_FILE_BYTES : CHARACTER_CARD_BLOB_COMPRESSED_GATE_BYTES;
+            const chars = size.value.kind === "inlineChars" ? size.value.size : size.value.size * 4;
+            probe = { placeholder: size.value.size > limit ? { body: `（文件过大，已跳过，约 ${chars} 字符）`, mtimeMs: size.value.mtimeMs } : null, mtimeMs: size.value.mtimeMs };
+        }
 
-    // ⚠️ 超限占位分支**只对非 filename 档生效**（既有语义不变）：filename 档渲染的是
-    // 文件名本身、payload.body 恒为空串，占位正文对它没有意义。
-    if (deps.status !== "filename" && probe.placeholder != null) {
-      // 超大文件降级：不读全文、不写 file_cache（避免把占位符粘进缓存）；
-      // 每次组装重新轻量探测，代价只是一条长度 SQL；mtime 用探测带回的
-      // 真实值，避免占位块渲染出 1970 假时间戳随提示词送给模型
-      return probe.placeholder;
-    }
+        // ⚠️ 超限占位分支**只对非 filename 档生效**（既有语义不变）：filename 档渲染的是
+        // 文件名本身、payload.body 恒为空串，占位正文对它没有意义。
+        if (deps.status !== "filename" && probe.placeholder != null) {
+            // 超大文件降级：不读全文、不写 file_cache（避免把占位符粘进缓存）；
+            // 每次组装重新轻量探测，代价只是一条长度 SQL；mtime 用探测带回的
+            // 真实值，避免占位块渲染出 1970 假时间戳随提示词送给模型
+            return probe.placeholder;
+        }
 
-    // filename 档不读正文，但仍用探测带回的真实 mtime（探测不可用时退回 0）；
-    // 读失败按 `(missing)` 降级，且不落 cache（见 degraded 注释）。
-    let filled: FillResult;
-    if (deps.status === "filename") {
-      filled = { payload: { body: "", mtimeMs: probe.mtimeMs ?? 0 } };
-    } else {
-      const result = await deps.vfs.read(deps.path);
-      if (result.ok) {
-        filled = { payload: { body: result.value.content, mtimeMs: result.value.mtimeMs } };
-      } else {
-        filled = { payload: { body: "(missing)", mtimeMs: 0 }, degraded: true };
-      }
-    }
-    // 降级来源不落 cache（判据用显式标记，**不是**正文匹配——`(missing)`
-    // 三个字可能真出现在文件正文里）。
-    if (filled.degraded === true) {
-      return filled.payload;
-    }
-    const writeBack = (): Promise<void> => deps.sessionKkv.set(deps.sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, key, RuleSnapshotCodec.serializeFileCachePayload(filled.payload));
-    if (options?.deferBackfillWrite === true) {
-      FileCache.scheduleBackfill(writeBack);
-    } else {
-      await writeBack();
-    }
-    return filled.payload;
-  },
+        // filename 档不读正文，但仍用探测带回的真实 mtime（探测不可用时退回 0）；
+        // 读失败按 `(missing)` 降级，且不落 cache（见 degraded 注释）。
+        let filled: FillResult;
+        if (deps.status === "filename") {
+            filled = { payload: { body: "", mtimeMs: probe.mtimeMs ?? 0 } };
+        } else {
+            const result = await deps.vfs.read(deps.path);
+            if (result.ok) {
+                filled = { payload: { body: result.value.content, mtimeMs: result.value.mtimeMs } };
+            } else {
+                filled = { payload: { body: "(missing)", mtimeMs: 0 }, degraded: true };
+            }
+        }
+        // 降级来源不落 cache（判据用显式标记，**不是**正文匹配——`(missing)`
+        // 三个字可能真出现在文件正文里）。
+        if (filled.degraded === true) {
+            return filled.payload;
+        }
+        if (options?.deferBackfillWrite === true) {
+            FileCache.scheduleBackfill(() => writeFileCache(deps, key, filled.payload));
+        } else {
+            await writeFileCache(deps, key, filled.payload);
+        }
+        return filled.payload;
+    },
 } as const;

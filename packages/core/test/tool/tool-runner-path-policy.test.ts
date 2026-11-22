@@ -17,318 +17,318 @@ import {  Path  } from "../../src/common/path.js";
  */
 
 describe("A-14 tool path policy", () => {
-  describe("Path.hasPrefix / isPathAllowed", () => {
-    it("空前缀与根前缀恒为通过", () => {
-      assert.equal(Path.hasPrefix("any/path", ""), true);
-      assert.equal(Path.hasPrefix("any/path", "/"), true);
-      assert.equal(Path.hasPrefix("any/path", "\\"), true);
+    describe("Path.hasPrefix / isPathAllowed", () => {
+        it("空前缀与根前缀恒为通过", () => {
+            assert.equal(Path.hasPrefix("any/path", ""), true);
+            assert.equal(Path.hasPrefix("any/path", "/"), true);
+            assert.equal(Path.hasPrefix("any/path", "\\"), true);
+        });
+
+        it("精确匹配与子路径匹配", () => {
+            assert.equal(Path.hasPrefix("src/a.ts", "src"), true);
+            assert.equal(Path.hasPrefix("src/a.ts", "src/"), true);
+            assert.equal(Path.hasPrefix("src", "src"), true);
+            // 不能只看字符串前缀，得是路径层级前缀，避免 src-foo 被放行
+            assert.equal(Path.hasPrefix("src-foo/a.ts", "src"), false);
+            assert.equal(Path.hasPrefix("source/a.ts", "src"), false);
+        });
+
+        it("Windows 风格反斜杠分隔符同样识别", () => {
+            assert.equal(Path.hasPrefix("src\\a.ts", "src"), true);
+            assert.equal(Path.hasPrefix("src\\a.ts", "src\\"), true);
+        });
+
+        it("allowedPaths undefined 表示不限制", () => {
+            assert.equal(ToolPathPolicy.isPathAllowed("/etc/passwd"), true);
+            assert.equal(ToolPathPolicy.isPathAllowed("/etc/passwd", undefined), true);
+        });
+
+        it("allowedPaths 非空时落在任一前缀下放行", () => {
+            assert.equal(ToolPathPolicy.isPathAllowed("src/a.ts", ["docs", "src"]), true);
+            assert.equal(ToolPathPolicy.isPathAllowed("docs/notes.md", ["docs", "src"]), true);
+            assert.equal(ToolPathPolicy.isPathAllowed("secrets/key.txt", ["docs", "src"]), false);
+        });
     });
 
-    it("精确匹配与子路径匹配", () => {
-      assert.equal(Path.hasPrefix("src/a.ts", "src"), true);
-      assert.equal(Path.hasPrefix("src/a.ts", "src/"), true);
-      assert.equal(Path.hasPrefix("src", "src"), true);
-      // 不能只看字符串前缀，得是路径层级前缀，避免 src-foo 被放行
-      assert.equal(Path.hasPrefix("src-foo/a.ts", "src"), false);
-      assert.equal(Path.hasPrefix("source/a.ts", "src"), false);
+    describe("extractInputPaths", () => {
+        it("抽取约定字段 path / filePath / from / to，跳过空串与非字符串", () => {
+            assert.deepEqual(
+                ToolPathPolicy.extractInputPaths({
+                    path: "a/b.ts",
+                    filePath: "c/d.ts",
+                    from: "x",
+                    to: "y",
+                    pattern: "*.ts", // 非约定字段，不抽
+                    ignored: "",
+                    ignored2: 42,
+                }),
+                ["a/b.ts", "c/d.ts", "x", "y"],
+            );
+        });
+
+        it("fileAttachment 数组逐元素展开参与校验（task 附件面不得成唯一旁路）", () => {
+            assert.deepEqual(
+                ToolPathPolicy.extractInputPaths({
+                    description: "d",
+                    prompt: "p",
+                    subagentName: "general",
+                    fileAttachment: ["notes/a.md", "", "设定/b.md"],
+                }),
+                ["notes/a.md", "设定/b.md"],
+            );
+            // 非数组 / 非字符串元素跳过，不炸
+            assert.deepEqual(ToolPathPolicy.extractInputPaths({ fileAttachment: "notes/a.md" }), []);
+            assert.deepEqual(ToolPathPolicy.extractInputPaths({ fileAttachment: [1, null, "ok.md"] }), [
+                "ok.md",
+            ]);
+            assert.deepEqual(ToolPathPolicy.extractInputPaths({ fileAttachment: undefined }), []);
+        });
+
+        it("非对象 input 返回空数组", () => {
+            assert.deepEqual(ToolPathPolicy.extractInputPaths(null), []);
+            assert.deepEqual(ToolPathPolicy.extractInputPaths(undefined), []);
+            assert.deepEqual(ToolPathPolicy.extractInputPaths("not an object"), []);
+        });
     });
 
-    it("Windows 风格反斜杠分隔符同样识别", () => {
-      assert.equal(Path.hasPrefix("src\\a.ts", "src"), true);
-      assert.equal(Path.hasPrefix("src\\a.ts", "src\\"), true);
+    describe("readAllowedPaths", () => {
+        it("鸭子读 ctx.allowedPaths；缺失或非数组时返回 undefined", () => {
+            assert.deepEqual(ToolPathPolicy.readAllowedPaths({}), undefined);
+            assert.deepEqual(ToolPathPolicy.readAllowedPaths({ allowedPaths: undefined }), undefined);
+            assert.deepEqual(
+                ToolPathPolicy.readAllowedPaths({ allowedPaths: ["src"] }),
+                ["src"],
+            );
+            assert.deepEqual(
+                ToolPathPolicy.readAllowedPaths({ allowedPaths: "not-array" }),
+                undefined,
+            );
+            assert.deepEqual(ToolPathPolicy.readAllowedPaths(null), undefined);
+            assert.deepEqual(ToolPathPolicy.readAllowedPaths("str"), undefined);
+        });
     });
 
-    it("allowedPaths undefined 表示不限制", () => {
-      assert.equal(ToolPathPolicy.isPathAllowed("/etc/passwd"), true);
-      assert.equal(ToolPathPolicy.isPathAllowed("/etc/passwd", undefined), true);
-    });
+    describe("findDisallowedPath", () => {
+        it("全部放行返回 null；任一越界返回第一条越界路径", () => {
+            assert.equal(
+                ToolPathPolicy.findDisallowedPath(["src/a.ts", "src/b.ts"], ["src"]),
+                null,
+            );
+            assert.equal(
+                ToolPathPolicy.findDisallowedPath(["src/a.ts", "secret/k.txt"], ["src"]),
+                "secret/k.txt",
+            );
+        });
 
-    it("allowedPaths 非空时落在任一前缀下放行", () => {
-      assert.equal(ToolPathPolicy.isPathAllowed("src/a.ts", ["docs", "src"]), true);
-      assert.equal(ToolPathPolicy.isPathAllowed("docs/notes.md", ["docs", "src"]), true);
-      assert.equal(ToolPathPolicy.isPathAllowed("secrets/key.txt", ["docs", "src"]), false);
+        it("allowedPaths undefined 时一律返回 null", () => {
+            assert.equal(ToolPathPolicy.findDisallowedPath(["/etc/shadow"], undefined), null);
+        });
     });
-  });
-
-  describe("extractInputPaths", () => {
-    it("抽取约定字段 path / filePath / from / to，跳过空串与非字符串", () => {
-      assert.deepEqual(
-        ToolPathPolicy.extractInputPaths({
-          path: "a/b.ts",
-          filePath: "c/d.ts",
-          from: "x",
-          to: "y",
-          pattern: "*.ts", // 非约定字段，不抽
-          ignored: "",
-          ignored2: 42,
-        }),
-        ["a/b.ts", "c/d.ts", "x", "y"],
-      );
-    });
-
-    it("fileAttachment 数组逐元素展开参与校验（task 附件面不得成唯一旁路）", () => {
-      assert.deepEqual(
-        ToolPathPolicy.extractInputPaths({
-          description: "d",
-          prompt: "p",
-          subagentName: "general",
-          fileAttachment: ["notes/a.md", "", "设定/b.md"],
-        }),
-        ["notes/a.md", "设定/b.md"],
-      );
-      // 非数组 / 非字符串元素跳过，不炸
-      assert.deepEqual(ToolPathPolicy.extractInputPaths({ fileAttachment: "notes/a.md" }), []);
-      assert.deepEqual(ToolPathPolicy.extractInputPaths({ fileAttachment: [1, null, "ok.md"] }), [
-        "ok.md",
-      ]);
-      assert.deepEqual(ToolPathPolicy.extractInputPaths({ fileAttachment: undefined }), []);
-    });
-
-    it("非对象 input 返回空数组", () => {
-      assert.deepEqual(ToolPathPolicy.extractInputPaths(null), []);
-      assert.deepEqual(ToolPathPolicy.extractInputPaths(undefined), []);
-      assert.deepEqual(ToolPathPolicy.extractInputPaths("not an object"), []);
-    });
-  });
-
-  describe("readAllowedPaths", () => {
-    it("鸭子读 ctx.allowedPaths；缺失或非数组时返回 undefined", () => {
-      assert.deepEqual(ToolPathPolicy.readAllowedPaths({}), undefined);
-      assert.deepEqual(ToolPathPolicy.readAllowedPaths({ allowedPaths: undefined }), undefined);
-      assert.deepEqual(
-        ToolPathPolicy.readAllowedPaths({ allowedPaths: ["src"] }),
-        ["src"],
-      );
-      assert.deepEqual(
-        ToolPathPolicy.readAllowedPaths({ allowedPaths: "not-array" }),
-        undefined,
-      );
-      assert.deepEqual(ToolPathPolicy.readAllowedPaths(null), undefined);
-      assert.deepEqual(ToolPathPolicy.readAllowedPaths("str"), undefined);
-    });
-  });
-
-  describe("findDisallowedPath", () => {
-    it("全部放行返回 null；任一越界返回第一条越界路径", () => {
-      assert.equal(
-        ToolPathPolicy.findDisallowedPath(["src/a.ts", "src/b.ts"], ["src"]),
-        null,
-      );
-      assert.equal(
-        ToolPathPolicy.findDisallowedPath(["src/a.ts", "secret/k.txt"], ["src"]),
-        "secret/k.txt",
-      );
-    });
-
-    it("allowedPaths undefined 时一律返回 null", () => {
-      assert.equal(ToolPathPolicy.findDisallowedPath(["/etc/shadow"], undefined), null);
-    });
-  });
 });
 
 describe("ToolRunner path policy (T-SC9)", () => {
-  // 构造一个会「真实落盘」的 tool 太重，且这一层只关心 runner 是否在调 tool 之前
-  // 把越权调用挡掉，所以这里用 run() 断言「绝不被调到」就够。
-  function makeWriteTool(ran: { ok: boolean }): {
-    name: "write";
-    description: string;
-    inputSchema: z.ZodType<{ path: string; content: string }>;
-    run: () => Promise<Result<{ ok: true }, AppError>>;
-  } {
-    return {
-      name: "write",
-      description: "stub write",
-      inputSchema: z.object({
-        path: z.string().min(1),
-        content: z.string(),
-      }),
-      async run() {
-        ran.ok = true;
-        // 四期门⑦：工具闭包返回 Result，runner 统一解包 out.value。
-        return Result.ok({ ok: true as const });
-      },
-    };
-  }
+    // 构造一个会「真实落盘」的 tool 太重，且这一层只关心 runner 是否在调 tool 之前
+    // 把越权调用挡掉，所以这里用 run() 断言「绝不被调到」就够。
+    function makeWriteTool(ran: { ok: boolean }): {
+        name: "write";
+        description: string;
+        inputSchema: z.ZodType<{ path: string; content: string }>;
+        run: () => Promise<Result<{ ok: true }, AppError>>;
+    } {
+        return {
+            name: "write",
+            description: "stub write",
+            inputSchema: z.object({
+                path: z.string().min(1),
+                content: z.string(),
+            }),
+            async run() {
+                ran.ok = true;
+                // 四期门⑦：工具闭包返回 Result，runner 统一解包 out.value。
+                return Result.ok({ ok: true as const });
+            },
+        };
+    }
 
-  function makeFsMvTool(ran: { ok: boolean }): {
-    name: "fs";
-    description: string;
-    inputSchema: z.ZodType<{ action: "mv"; from: string; to: string }>;
-    run: () => Promise<Result<{ ok: true }, AppError>>;
-  } {
-    return {
-      name: "fs",
-      description: "stub fs mv",
-      inputSchema: z.object({
-        action: z.literal("mv"),
-        from: z.string().min(1),
-        to: z.string().min(1),
-      }),
-      async run() {
-        ran.ok = true;
-        return Result.ok({ ok: true as const });
-      },
-    };
-  }
+    function makeFsMvTool(ran: { ok: boolean }): {
+        name: "fs";
+        description: string;
+        inputSchema: z.ZodType<{ action: "mv"; from: string; to: string }>;
+        run: () => Promise<Result<{ ok: true }, AppError>>;
+    } {
+        return {
+            name: "fs",
+            description: "stub fs mv",
+            inputSchema: z.object({
+                action: z.literal("mv"),
+                from: z.string().min(1),
+                to: z.string().min(1),
+            }),
+            async run() {
+                ran.ok = true;
+                return Result.ok({ ok: true as const });
+            },
+        };
+    }
 
-  it("allowedPaths 未设置时正常通过（向后兼容）", async () => {
-    const ran = { ok: false };
-    const registry = new ToolRegistry();
-    registry.register(makeWriteTool(ran));
-    const runner = new ToolRunner(registry);
+    it("allowedPaths 未设置时正常通过（向后兼容）", async () => {
+        const ran = { ok: false };
+        const registry = new ToolRegistry();
+        registry.register(makeWriteTool(ran));
+        const runner = new ToolRunner(registry);
 
-    const out = unwrap(await runner.call(
-      "write",
-      { path: "anywhere/secret.txt", content: "x" },
-      {}, // 没有 allowedPaths
-    ));
-    assert.deepEqual(out, { ok: true });
-    assert.equal(ran.ok, true);
-  });
+        const out = unwrap(await runner.call(
+            "write",
+            { path: "anywhere/secret.txt", content: "x" },
+            {}, // 没有 allowedPaths
+        ));
+        assert.deepEqual(out, { ok: true });
+        assert.equal(ran.ok, true);
+    });
 
-  it("allowedPaths 覆盖到放行前缀，调用正常", async () => {
-    const ran = { ok: false };
-    const registry = new ToolRegistry();
-    registry.register(makeWriteTool(ran));
-    const runner = new ToolRunner(registry);
+    it("allowedPaths 覆盖到放行前缀，调用正常", async () => {
+        const ran = { ok: false };
+        const registry = new ToolRegistry();
+        registry.register(makeWriteTool(ran));
+        const runner = new ToolRunner(registry);
 
-    const out = unwrap(await runner.call(
-      "write",
-      { path: "src/a.ts", content: "x" },
-      { allowedPaths: ["src", "docs"] },
-    ));
-    assert.deepEqual(out, { ok: true });
-    assert.equal(ran.ok, true);
-  });
+        const out = unwrap(await runner.call(
+            "write",
+            { path: "src/a.ts", content: "x" },
+            { allowedPaths: ["src", "docs"] },
+        ));
+        assert.deepEqual(out, { ok: true });
+        assert.equal(ran.ok, true);
+    });
 
-  it("T-SC9: 越界写被拒，抛 FORBIDDEN，且 tool.run 绝不被调到", async () => {
-    const ran = { ok: false };
-    const registry = new ToolRegistry();
-    registry.register(makeWriteTool(ran));
-    const runner = new ToolRunner(registry);
+    it("T-SC9: 越界写被拒，抛 FORBIDDEN，且 tool.run 绝不被调到", async () => {
+        const ran = { ok: false };
+        const registry = new ToolRegistry();
+        registry.register(makeWriteTool(ran));
+        const runner = new ToolRunner(registry);
 
-    await rejectsErr(
-      () =>
-        runner.call(
-          "write",
-          { path: "secrets/key.txt", content: "x" },
-          { allowedPaths: ["src", "docs"] },
-        ),
-      (e: unknown) => {
-        assert.ok(AppErrorOps.is(e) && e.key.startsWith("TOOL_"), "应为 ToolError");
-        assert.equal(e.key, "TOOL_FORBIDDEN");
-        assert.equal((e as AppError).details?.toolName, "write");
-        const details = (e as AppError).details as { path: string };
-        assert.equal(details.path, "secrets/key.txt");
-        return true;
-      },
-    );
-    // 关键：被拒时 run() 绝不执行
-    assert.equal(ran.ok, false);
-  });
-
-  it("T-SC9: 路径层级伪前缀不能绕过（src-foo 不在 src 下）", async () => {
-    const ran = { ok: false };
-    const registry = new ToolRegistry();
-    registry.register(makeWriteTool(ran));
-    const runner = new ToolRunner(registry);
-
-    await rejectsErr(
-      () =>
-        runner.call(
-          "write",
-          { path: "src-evil/x.ts", content: "x" },
-          { allowedPaths: ["src"] },
-        ),
-      (e) => AppErrorOps.is(e, "TOOL_FORBIDDEN"),
-    );
-    assert.equal(ran.ok, false);
-  });
-
-  it("T-SC9: fs.mv 同时校验 from 与 to，任一越界即拒", async () => {
-    const ran = { ok: false };
-    const registry = new ToolRegistry();
-    registry.register(makeFsMvTool(ran));
-    const runner = new ToolRunner(registry);
-
-    // from 在 src 下，to 跑到 secrets 下——必须被拒
-    await rejectsErr(
-      () =>
-        runner.call(
-          "fs",
-          { action: "mv", from: "src/a.ts", to: "secrets/a.ts" },
-          { allowedPaths: ["src"] },
-        ),
-      (e: unknown) => {
-        assert.ok(AppErrorOps.is(e) && e.key.startsWith("TOOL_"));
-        assert.equal(e.key, "TOOL_FORBIDDEN");
-        assert.equal(
-          ((e as AppError).details as { path: string }).path,
-          "secrets/a.ts",
+        await rejectsErr(
+            () =>
+                runner.call(
+                    "write",
+                    { path: "secrets/key.txt", content: "x" },
+                    { allowedPaths: ["src", "docs"] },
+                ),
+            (e: unknown) => {
+                assert.ok(AppErrorOps.is(e) && e.key.startsWith("TOOL_"), "应为 ToolError");
+                assert.equal(e.key, "TOOL_FORBIDDEN");
+                assert.equal((e as AppError).details?.toolName, "write");
+                const details = (e as AppError).details as { path: string };
+                assert.equal(details.path, "secrets/key.txt");
+                return true;
+            },
         );
-        return true;
-      },
-    );
-    assert.equal(ran.ok, false);
-  });
+        // 关键：被拒时 run() 绝不执行
+        assert.equal(ran.ok, false);
+    });
 
-  it("task 的 fileAttachment 越界同样被拒（数组展开后参与 allowedPaths 校验）", async () => {
-    const ran = { ok: false };
-    const registry = new ToolRegistry();
-    registry.register({
-      name: "task",
-      description: "stub task",
-      inputSchema: z.object({
-        description: z.string().min(1),
-        prompt: z.string().min(1),
-        subagentName: z.string().min(1),
-        fileAttachment: z.array(z.string().min(1)).optional(),
-      }),
-      async run() {
-        ran.ok = true;
-        return Result.ok({ ok: true as const });
-      },
-    } as never);
-    const runner = new ToolRunner(registry);
+    it("T-SC9: 路径层级伪前缀不能绕过（src-foo 不在 src 下）", async () => {
+        const ran = { ok: false };
+        const registry = new ToolRegistry();
+        registry.register(makeWriteTool(ran));
+        const runner = new ToolRunner(registry);
 
-    await rejectsErr(
-      () =>
-        runner.call(
-          "task",
-          {
-            description: "d",
-            prompt: "p",
-            subagentName: "general",
-            fileAttachment: ["src/ok.md", "secrets/leak.md"],
-          },
-          { allowedPaths: ["src"] },
-        ),
-      (e: unknown) => {
-        assert.ok(AppErrorOps.is(e) && e.key.startsWith("TOOL_"));
-        assert.equal(e.key, "TOOL_FORBIDDEN");
-        assert.equal((e as AppError).details && (e as AppError).details.path, "secrets/leak.md");
-        return true;
-      },
-    );
-    assert.equal(ran.ok, false, "被拒时 run() 绝不执行");
-  });
+        await rejectsErr(
+            () =>
+                runner.call(
+                    "write",
+                    { path: "src-evil/x.ts", content: "x" },
+                    { allowedPaths: ["src"] },
+                ),
+            (e) => AppErrorOps.is(e, "TOOL_FORBIDDEN"),
+        );
+        assert.equal(ran.ok, false);
+    });
 
-  it("schema 校验失败时仍走 INVALID_ARGUMENT（policy 在 schema 之后）", async () => {
-    const ran = { ok: false };
-    const registry = new ToolRegistry();
-    registry.register(makeWriteTool(ran));
-    const runner = new ToolRunner(registry);
+    it("T-SC9: fs.mv 同时校验 from 与 to，任一越界即拒", async () => {
+        const ran = { ok: false };
+        const registry = new ToolRegistry();
+        registry.register(makeFsMvTool(ran));
+        const runner = new ToolRunner(registry);
 
-    await rejectsErr(
-      () =>
-        runner.call(
-          "write",
-          // @ts-expect-error 故意少字段
-          { path: "src/a.ts" },
-          { allowedPaths: ["src"] },
-        ),
-      (e) => AppErrorOps.is(e, "TOOL_INVALID_ARGUMENT"),
-    );
-    assert.equal(ran.ok, false);
-  });
+        // from 在 src 下，to 跑到 secrets 下——必须被拒
+        await rejectsErr(
+            () =>
+                runner.call(
+                    "fs",
+                    { action: "mv", from: "src/a.ts", to: "secrets/a.ts" },
+                    { allowedPaths: ["src"] },
+                ),
+            (e: unknown) => {
+                assert.ok(AppErrorOps.is(e) && e.key.startsWith("TOOL_"));
+                assert.equal(e.key, "TOOL_FORBIDDEN");
+                assert.equal(
+                    ((e as AppError).details as { path: string }).path,
+                    "secrets/a.ts",
+                );
+                return true;
+            },
+        );
+        assert.equal(ran.ok, false);
+    });
+
+    it("task 的 fileAttachment 越界同样被拒（数组展开后参与 allowedPaths 校验）", async () => {
+        const ran = { ok: false };
+        const registry = new ToolRegistry();
+        registry.register({
+            name: "task",
+            description: "stub task",
+            inputSchema: z.object({
+                description: z.string().min(1),
+                prompt: z.string().min(1),
+                subagentName: z.string().min(1),
+                fileAttachment: z.array(z.string().min(1)).optional(),
+            }),
+            async run() {
+                ran.ok = true;
+                return Result.ok({ ok: true as const });
+            },
+        } as never);
+        const runner = new ToolRunner(registry);
+
+        await rejectsErr(
+            () =>
+                runner.call(
+                    "task",
+                    {
+                        description: "d",
+                        prompt: "p",
+                        subagentName: "general",
+                        fileAttachment: ["src/ok.md", "secrets/leak.md"],
+                    },
+                    { allowedPaths: ["src"] },
+                ),
+            (e: unknown) => {
+                assert.ok(AppErrorOps.is(e) && e.key.startsWith("TOOL_"));
+                assert.equal(e.key, "TOOL_FORBIDDEN");
+                assert.equal((e as AppError).details && (e as AppError).details.path, "secrets/leak.md");
+                return true;
+            },
+        );
+        assert.equal(ran.ok, false, "被拒时 run() 绝不执行");
+    });
+
+    it("schema 校验失败时仍走 INVALID_ARGUMENT（policy 在 schema 之后）", async () => {
+        const ran = { ok: false };
+        const registry = new ToolRegistry();
+        registry.register(makeWriteTool(ran));
+        const runner = new ToolRunner(registry);
+
+        await rejectsErr(
+            () =>
+                runner.call(
+                    "write",
+                    // @ts-expect-error 故意少字段
+                    { path: "src/a.ts" },
+                    { allowedPaths: ["src"] },
+                ),
+            (e) => AppErrorOps.is(e, "TOOL_INVALID_ARGUMENT"),
+        );
+        assert.equal(ran.ok, false);
+    });
 });

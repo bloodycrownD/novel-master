@@ -13,13 +13,13 @@ export const IOS_DOCUMENT_PATH = '/mock-ios-documents';
 
 /** 假连接对象：常用方法均为 jest.fn()，仅保证可加载、可调用。 */
 export const MOCK_DB = {
-  execute: jest.fn(),
-  executeAsync: jest.fn(),
-  close: jest.fn(),
-  delete: jest.fn(),
-  attach: jest.fn(),
-  detach: jest.fn(),
-  transaction: jest.fn(),
+    execute: jest.fn(),
+    executeAsync: jest.fn(),
+    close: jest.fn(),
+    delete: jest.fn(),
+    attach: jest.fn(),
+    detach: jest.fn(),
+    transaction: jest.fn(),
 };
 
 export const open = jest.fn(() => MOCK_DB);

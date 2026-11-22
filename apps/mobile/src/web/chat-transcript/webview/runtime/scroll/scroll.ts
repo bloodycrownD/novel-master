@@ -9,38 +9,41 @@ import {RowWindow} from '../render/row-windowing';
  */
 const SCROLL_TOP_LOAD_OLDER = 24;
 
-let scrollTimer: ReturnType<typeof setTimeout> | null = null;
+/** 防抖定时器槽（模块内 holder，对象管理）。 */
+const scrollTimerSlot = {
+    timer: null as ReturnType<typeof setTimeout> | null,
+};
 
 export const Scroll = {
-  offsetFromBottom: (el: HTMLElement): number => {
-    return ScrollMath.offsetFromBottom(el.scrollTop, el.scrollHeight, el.clientHeight);
-  },
+    offsetFromBottom: (el: HTMLElement): number => {
+        return ScrollMath.offsetFromBottom(el.scrollTop, el.scrollHeight, el.clientHeight);
+    },
 
-  isNearBottom: (el: HTMLElement): boolean => {
-    return ScrollMath.isNearBottomOffset(Scroll.offsetFromBottom(el), NEAR_BOTTOM_THRESHOLD_PX);
-  },
+    isNearBottom: (el: HTMLElement): boolean => {
+        return ScrollMath.isNearBottomOffset(Scroll.offsetFromBottom(el), NEAR_BOTTOM_THRESHOLD_PX);
+    },
 
-  stickToBottom: (el: HTMLElement): void => {
-    el.scrollTop = ScrollMath.scrollTopForBottom(el.scrollHeight, el.clientHeight);
-    state.nearBottom = true;
-  },
+    stickToBottom: (el: HTMLElement): void => {
+        el.scrollTop = ScrollMath.scrollTopForBottom(el.scrollHeight, el.clientHeight);
+        state.nearBottom = true;
+    },
 
-  /** Tail shrink (rollback): prevScrollTop may exceed new max — clamp to avoid bubble jump. */
-  clampTop: (el: HTMLElement, prevScrollTop: number): void => {
-    el.scrollTop = ScrollMath.clampScrollTop(prevScrollTop, el.scrollHeight, el.clientHeight);
-  },
+    /** Tail shrink (rollback): prevScrollTop may exceed new max — clamp to avoid bubble jump. */
+    clampTop: (el: HTMLElement, prevScrollTop: number): void => {
+        el.scrollTop = ScrollMath.clampScrollTop(prevScrollTop, el.scrollHeight, el.clientHeight);
+    },
 
-  scheduleStickIfNearBottom: (): void => {
-    if (!state.nearBottom) return;
-    if (state.scrollRaf != null) return;
-    state.scrollRaf = requestAnimationFrame(function () {
-      state.scrollRaf = null;
-      const scroller = document.getElementById('scroller');
-      if (scroller) Scroll.stickToBottom(scroller);
-    });
-  },
+    scheduleStickIfNearBottom: (): void => {
+        if (!state.nearBottom) return;
+        if (state.scrollRaf != null) return;
+        state.scrollRaf = requestAnimationFrame(function () {
+            state.scrollRaf = null;
+            const scroller = document.getElementById('scroller');
+            if (scroller) Scroll.stickToBottom(scroller);
+        });
+    },
 
-  /**
+    /**
    * 视口高度变化时的即时贴底（键盘顶起后消息「迟到上跳」修，2026-10-01）。
    *
    * 病灶：键盘弹起让 dock 留白经 200ms 过渡归零 → #scroller 的 clientHeight
@@ -56,49 +59,49 @@ export const Scroll = {
    * 长高、chips 显隐都覆盖）。判据只用 state.nearBottom（全仓唯一贴底真源），
    * 不做「按 offsetFromBottom 补偿」——那会把向上翻历史的用户整屏下拽。
    */
-  stickIfNearBottomNow: (): void => {
-    const scroller = document.getElementById('scroller');
-    if (scroller == null || !state.nearBottom) {
-      return;
-    }
-    Scroll.stickToBottom(scroller);
-  },
+    stickIfNearBottomNow: (): void => {
+        const scroller = document.getElementById('scroller');
+        if (scroller == null || !state.nearBottom) {
+            return;
+        }
+        Scroll.stickToBottom(scroller);
+    },
 
-  emitSnapshot: (): void => {
-    const scroller = document.getElementById('scroller');
-    if (!scroller) return;
-    const off = Scroll.offsetFromBottom(scroller);
-    const near = ScrollMath.isNearBottomOffset(off, NEAR_BOTTOM_THRESHOLD_PX);
-    state.nearBottom = near;
-    post('scrollSnapshot', {
-      schemaVersion: SCHEMA_V,
-      offsetY: off,
-      nearBottom: near,
-      scrollHeight: scroller.scrollHeight,
-      clientHeight: scroller.clientHeight,
-    });
-  },
+    emitSnapshot: (): void => {
+        const scroller = document.getElementById('scroller');
+        if (!scroller) return;
+        const off = Scroll.offsetFromBottom(scroller);
+        const near = ScrollMath.isNearBottomOffset(off, NEAR_BOTTOM_THRESHOLD_PX);
+        state.nearBottom = near;
+        post('scrollSnapshot', {
+            schemaVersion: SCHEMA_V,
+            offsetY: off,
+            nearBottom: near,
+            scrollHeight: scroller.scrollHeight,
+            clientHeight: scroller.clientHeight,
+        });
+    },
 
-  requestLoadOlder: (): void => {
-    if (!state.hasMore || !state.loadOlderArmed) return;
-    state.loadOlderArmed = false;
-    post('loadOlder', {});
-  },
+    requestLoadOlder: (): void => {
+        if (!state.hasMore || !state.loadOlderArmed) return;
+        state.loadOlderArmed = false;
+        post('loadOlder', {});
+    },
 
-  on: (): void => {
-    const scroller = document.getElementById('scroller');
-    if (!scroller) return;
-    state.nearBottom = Scroll.isNearBottom(scroller);
-    // 窗口化（Step 7）：滚动近界扩窗 / 远界收缩（幂等；上端移动自带
-    // scrollHeight 差值补偿，不产生读位跳动）。
-    RowWindow.handleScroll();
-    if (scroller.scrollTop <= SCROLL_TOP_LOAD_OLDER) {
-      Scroll.requestLoadOlder();
-    }
-    if (scrollTimer != null) return;
-    scrollTimer = setTimeout(function () {
-      scrollTimer = null;
-      Scroll.emitSnapshot();
-    }, 100);
-  },
+    on: (): void => {
+        const scroller = document.getElementById('scroller');
+        if (!scroller) return;
+        state.nearBottom = Scroll.isNearBottom(scroller);
+        // 窗口化（Step 7）：滚动近界扩窗 / 远界收缩（幂等；上端移动自带
+        // scrollHeight 差值补偿，不产生读位跳动）。
+        RowWindow.handleScroll();
+        if (scroller.scrollTop <= SCROLL_TOP_LOAD_OLDER) {
+            Scroll.requestLoadOlder();
+        }
+        if (scrollTimerSlot.timer != null) return;
+        scrollTimerSlot.timer = setTimeout(function () {
+            scrollTimerSlot.timer = null;
+            Scroll.emitSnapshot();
+        }, 100);
+    },
 } as const;

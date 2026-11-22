@@ -11,49 +11,51 @@
 
 import { parse as parseYaml } from "yaml";
 import type { MessageCatalog } from "@/common/i18n.js";
-import { CORE_MESSAGE_KEY_PATTERN, ERROR_KEY_DOMAINS, LABEL_KEY_DOMAINS, type CoreMessageKey } from "./keys.js";
+import { CORE_MESSAGE_KEY_PATTERN, ERROR_KEY_DOMAINS, LABEL_KEY_DOMAINS, UI_KEY_DOMAINS, type CoreMessageKey } from "./keys.js";
 
 /**
  * catalog 解析操作族。
  */
 export const Catalog = {
-  // nm-style: keep-public — spec §2.4 指定的宿主加载契约（经 `@novel-master/core/i18n` 子入口暴露，宿主 load YAML 后 parse）；当前实现改走构建期内嵌 CORE_CATALOGS，故生产调用为 0，撤销即违背 spec 的公开子入口契约。
-  parseCore(text: string): MessageCatalog<CoreMessageKey> {
-    const root: unknown = parseYaml(text);
-    if (root === null || typeof root !== "object" || Array.isArray(root)) {
-      // nm-throw: keep — catalog 结构不变量：构建期内嵌资源写坏即打包错误，非用户可触发失败。
-      throw new Error("[parseCoreCatalog] 根节点必须是对象映射（error / label 两棵子树）");
-    }
-    const flat: Record<string, string> = {};
-    // 迭代式深度展平：[节点, dotted 前缀] 入栈，替代递归私有函数。
-    const pending: Array<[Record<string, unknown>, string]> = [[root as Record<string, unknown>, ""]];
-    while (pending.length > 0) {
-      const [node, prefix] = pending.pop()!;
-      for (const [name, value] of Object.entries(node)) {
-        const key = prefix === "" ? name : `${prefix}.${name}`;
-        if (typeof value === "string") {
-          flat[key] = value;
-          continue;
+    // nm-style: keep-public — spec §2.4 指定的宿主加载契约（经 `@novel-master/core/i18n` 子入口暴露，宿主 load YAML 后 parse）；当前实现改走构建期内嵌 CORE_CATALOGS，故生产调用为 0，撤销即违背 spec 的公开子入口契约。
+    parseCore(text: string): MessageCatalog<CoreMessageKey> {
+        const root: unknown = parseYaml(text);
+        if (root === null || typeof root !== "object" || Array.isArray(root)) {
+            // nm-throw: keep — catalog 结构不变量：构建期内嵌资源写坏即打包错误，非用户可触发失败。
+            throw new Error("[parseCoreCatalog] 根节点必须是对象映射（error / label / ui 三棵子树）");
         }
-        if (value === null || typeof value !== "object" || Array.isArray(value)) {
-          // nm-throw: keep — catalog 结构不变量：构建期内嵌资源写坏即打包错误，非用户可触发失败。
-          throw new Error(`[parseCoreCatalog] ${key || "<根>"} 的中间节点必须是对象映射、叶子必须是字符串（形似数字/布尔的裸值必须加引号），实际是 ${value === null ? "null" : Array.isArray(value) ? "数组" : typeof value}`);
+        const flat: Record<string, string> = {};
+        // 迭代式深度展平：[节点, dotted 前缀] 入栈，替代递归私有函数。
+        // 输入约定为 core 组（error / label / ui）文本；chat / settings 域段拆分后各自成文件，
+        // 由 CHAT_CATALOGS / SETTINGS_CATALOGS 装载，不经此处。
+        const pending: Array<[Record<string, unknown>, string]> = [[root as Record<string, unknown>, ""]];
+        while (pending.length > 0) {
+            const [node, prefix] = pending.pop()!;
+            for (const [name, value] of Object.entries(node)) {
+                const key = prefix === "" ? name : `${prefix}.${name}`;
+                if (typeof value === "string") {
+                    flat[key] = value;
+                    continue;
+                }
+                if (value === null || typeof value !== "object" || Array.isArray(value)) {
+                    // nm-throw: keep — catalog 结构不变量：构建期内嵌资源写坏即打包错误，非用户可触发失败。
+                    throw new Error(`[parseCoreCatalog] ${key || "<根>"} 的中间节点必须是对象映射、叶子必须是字符串（形似数字/布尔的裸值必须加引号），实际是 ${value === null ? "null" : Array.isArray(value) ? "数组" : typeof value}`);
+                }
+                pending.push([value as Record<string, unknown>, key]);
+            }
         }
-        pending.push([value as Record<string, unknown>, key]);
-      }
-    }
-    for (const key of Object.keys(flat)) {
-      if (!CORE_MESSAGE_KEY_PATTERN.test(key)) {
-        // nm-throw: keep — catalog 结构不变量：构建期内嵌资源写坏即打包错误，非用户可触发失败。
-        throw new Error(`[parseCoreCatalog] key 不匹配 keyRule（^(error|label)\\.域.名字段，全小写 snake_case，3-5 段）：${key}`);
-      }
-      const [area, domain] = key.split(".") as [string, string];
-      const domains: readonly string[] = area === "error" ? ERROR_KEY_DOMAINS : LABEL_KEY_DOMAINS;
-      if (!domains.includes(domain)) {
-        // nm-throw: keep — catalog 结构不变量：构建期内嵌资源写坏即打包错误，非用户可触发失败。
-        throw new Error(`[parseCoreCatalog] key 的域不在词表内（${area}.* 只允许 ${domains.join(" / ")}）：${key}`);
-      }
-    }
-    return flat as MessageCatalog<CoreMessageKey>;
-  },
+        for (const key of Object.keys(flat)) {
+            if (!CORE_MESSAGE_KEY_PATTERN.test(key)) {
+                // nm-throw: keep — catalog 结构不变量：构建期内嵌资源写坏即打包错误，非用户可触发失败。
+                throw new Error(`[parseCoreCatalog] key 不匹配 keyRule（^(error|label|ui)\\.域.名字段，全小写 snake_case，3-5 段）：${key}`);
+            }
+            const [area, domain] = key.split(".") as [string, string];
+            const domains: readonly string[] = area === "error" ? ERROR_KEY_DOMAINS : area === "label" ? LABEL_KEY_DOMAINS : UI_KEY_DOMAINS;
+            if (!domains.includes(domain)) {
+                // nm-throw: keep — catalog 结构不变量：构建期内嵌资源写坏即打包错误，非用户可触发失败。
+                throw new Error(`[parseCoreCatalog] key 的域不在词表内（${area}.* 只允许 ${domains.join(" / ")}）：${key}`);
+            }
+        }
+        return flat as MessageCatalog<CoreMessageKey>;
+    },
 } as const;

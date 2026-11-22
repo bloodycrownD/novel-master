@@ -17,42 +17,42 @@ const markdown = new MarkdownIt({html: true, linkify: true});
 // cl/sc/st/as 等国别码）；zip/app/page/link/file/mov 在当前依赖下不可达、
 // 属前向防御。
 const FILE_EXTENSION_LOOKALIKE_TLDS = new Set([
-  'md',
-  'zip',
-  'sh',
-  'py',
-  'rs',
-  'pl',
-  'pm',
-  'ai',
-  'app',
-  'page',
-  'link',
-  'file',
-  'mov',
-  'so',
-  // 两字符国别码撞车扩展（round 3 CR 补，实测可达）
-  'tf',
-  'cc',
-  'ml',
-  'in',
-  'cl',
-  'sc',
-  'st',
-  'as',
+    'md',
+    'zip',
+    'sh',
+    'py',
+    'rs',
+    'pl',
+    'pm',
+    'ai',
+    'app',
+    'page',
+    'link',
+    'file',
+    'mov',
+    'so',
+    // 两字符国别码撞车扩展（round 3 CR 补，实测可达）
+    'tf',
+    'cc',
+    'ml',
+    'in',
+    'cl',
+    'sc',
+    'st',
+    'as',
 ]);
 const originalLinkifyMatch = markdown.linkify.match.bind(markdown.linkify);
 markdown.linkify.match = (text: string) =>
-  (originalLinkifyMatch(text) ?? []).filter(match => {
-    if (match.schema !== '') {
-      return true; // 显式带协议的 URL 一律保留
-    }
-    if (!/^https?:\/\/[^/]+$/.test(match.url)) {
-      return true; // 非无路径形态不动
-    }
-    const host = match.url.replace(/^https?:\/\//, '').toLowerCase();
-    return !FILE_EXTENSION_LOOKALIKE_TLDS.has(host.slice(host.lastIndexOf('.') + 1));
-  });
+    (originalLinkifyMatch(text) ?? []).filter(match => {
+        if (match.schema !== '') {
+            return true; // 显式带协议的 URL 一律保留
+        }
+        if (!/^https?:\/\/[^/]+$/.test(match.url)) {
+            return true; // 非无路径形态不动
+        }
+        const host = match.url.replace(/^https?:\/\//, '').toLowerCase();
+        return !FILE_EXTENSION_LOOKALIKE_TLDS.has(host.slice(host.lastIndexOf('.') + 1));
+    });
 
 // 代码块唯一高亮出口：覆盖 renderer.rules.fence（不挂 markdown-it highlight 选项，
 // fence 被覆盖后该选项不再被 fence 路径消费，双轨冗余）。
@@ -65,58 +65,58 @@ markdown.linkify.match = (text: string) =>
 // mermaid fence 除外：mermaid 不是普通代码块（走图表链路），不插按钮，
 // 与 desktop MermaidBlock 无按钮口径对齐（cr-fix MF-11）。
 markdown.renderer.rules.fence = (tokens, idx) => {
-  const token = tokens[idx]!;
-  const rawLang = token.info.trim().split(/\s+/)[0] || '';
-  const normalized = HighlightCode.normalizeFenceLang(rawLang);
-  // 高亮判定在 HighlightCode.resolve 内统一（归一化表 + hljs 注册表内置别名，与 desktop 同一逻辑）；
-  // 语言标分流按 normalizeFenceLang 返回值走，与高亮与否解耦（MF-1 修订）。
-  const highlighted = HighlightCode.resolve(token.content, rawLang);
-  // mermaid 不插复制按钮：与 desktop MermaidBlock（图表渲染、无按钮）口径对齐（MF-11）
-  const isMermaid = rawLang === 'mermaid';
-  const copyBtn = isMermaid ? '' : '<span class="code-copy"></span>';
-  // rawLang 来自 fence info 首词，未经归一化表约束：拼接前必须转义，
-  // 避免未来表 key 引入特殊字符时打开属性注入面（MF-2）
-  const langClass = markdown.utils.escapeHtml(rawLang);
-  if (highlighted) {
-    // 三态：mermaid 裸 pre（图表链路豁免语言标）/ 命中归一化表带真语言标 / 表外语言统一 plain 标
-    const label = isMermaid ? '' : normalized ? ` data-lang="${normalized}"` : ' data-lang="plain"';
-    return `<pre${label}>${copyBtn}<code class="language-${langClass} hljs">${highlighted}</code></pre>\n`;
-  }
-  // 等价 markdown-it 默认 fence 输出（escapeHtml 同源）+ 复制按钮
-  const cls = rawLang ? ` class="language-${langClass}"` : '';
-  const escaped = markdown.utils.escapeHtml(token.content);
-  // mermaid 走图表链路：裸 pre、无语言标、无复制按钮（desktop 同口径）
-  if (isMermaid) {
-    return `<pre><code${cls}>${escaped}</code></pre>\n`;
-  }
-  // 未命中归一化表（无语言 / 表外语言）统一 plain 标
-  return `<pre data-lang="plain">${copyBtn}<code${cls}>${escaped}</code></pre>\n`;
+    const token = tokens[idx]!;
+    const rawLang = token.info.trim().split(/\s+/)[0] || '';
+    const normalized = HighlightCode.normalizeFenceLang(rawLang);
+    // 高亮判定在 HighlightCode.resolve 内统一（归一化表 + hljs 注册表内置别名，与 desktop 同一逻辑）；
+    // 语言标分流按 normalizeFenceLang 返回值走，与高亮与否解耦（MF-1 修订）。
+    const highlighted = HighlightCode.resolve(token.content, rawLang);
+    // mermaid 不插复制按钮：与 desktop MermaidBlock（图表渲染、无按钮）口径对齐（MF-11）
+    const isMermaid = rawLang === 'mermaid';
+    const copyBtn = isMermaid ? '' : '<span class="code-copy"></span>';
+    // rawLang 来自 fence info 首词，未经归一化表约束：拼接前必须转义，
+    // 避免未来表 key 引入特殊字符时打开属性注入面（MF-2）
+    const langClass = markdown.utils.escapeHtml(rawLang);
+    if (highlighted) {
+        // 三态：mermaid 裸 pre（图表链路豁免语言标）/ 命中归一化表带真语言标 / 表外语言统一 plain 标
+        const label = isMermaid ? '' : normalized ? ` data-lang="${normalized}"` : ' data-lang="plain"';
+        return `<pre${label}>${copyBtn}<code class="language-${langClass} hljs">${highlighted}</code></pre>\n`;
+    }
+    // 等价 markdown-it 默认 fence 输出（escapeHtml 同源）+ 复制按钮
+    const cls = rawLang ? ` class="language-${langClass}"` : '';
+    const escaped = markdown.utils.escapeHtml(token.content);
+    // mermaid 走图表链路：裸 pre、无语言标、无复制按钮（desktop 同口径）
+    if (isMermaid) {
+        return `<pre><code${cls}>${escaped}</code></pre>\n`;
+    }
+    // 未命中归一化表（无语言 / 表外语言）统一 plain 标
+    return `<pre data-lang="plain">${copyBtn}<code${cls}>${escaped}</code></pre>\n`;
 };
 
 // 缩进代码块（4 空格 / tab）出口：token 无 info 串，不走 normalizeFenceLang，
 // 与「无语言 fence」同归 plain 标；同时补上复制按钮（默认 renderer 只出裸 pre>code，
 // 双端缩进块形态由此对齐）。
 markdown.renderer.rules.code_block = (tokens, idx) => {
-  const token = tokens[idx]!;
-  return `<pre data-lang="plain"><span class="code-copy"></span><code>${markdown.utils.escapeHtml(token.content)}</code></pre>\n`;
+    const token = tokens[idx]!;
+    return `<pre data-lang="plain"><span class="code-copy"></span><code>${markdown.utils.escapeHtml(token.content)}</code></pre>\n`;
 };
 
 // 文件名带动词 prepare，按内容主体（transcript 富文本 HTML 管线）起名 TranscriptRichHtml。
 export namespace TranscriptRichHtml {
-  /**
+    /**
    * Markdown → 消毒 HTML，供 WebView transcript 气泡（browser innerHTML）。
    * 顺序：入口完整 decode → markdown-it → sanitize(escape) → 出口 decode（保留 &lt;/&gt;）。
    * 安全规则由共享的 SanitizeRichHtml.sanitize 统一（各富文本管线同源）；不做 RN RenderHTML 的 class 物化。
    */
-  export function prepare(content: string): string {
-    const normalized = Text.decodeHtmlEntities(content);
-    // 表格包一层横滚容器：单元格上限（72vw）+ 表宽 max-content 的组合需要「不超过气泡宽」的外壳来滚动，
-    // 否则 table 自己的盒子与内容同宽，没有可滚动的溢出、只会撑破气泡（真机实测）。
-    // 代码块里的 <table> 字面量已被转义成 &lt;table&gt;，不会误伤。
-    const tableWrapped = markdown.render(normalized).replace(/<table(\s[^>]*)?>/g, '<div class="table-wrap"><table$1>');
-    const rendered = tableWrapped.replace(/<\/table>/g, '</table></div>');
-    const sanitized = SanitizeRichHtml.sanitize(rendered);
-    // sanitize-html 只能把 markdown-it 的 &quot; 变成 &amp;quot; —— 出口仍解 quot/amp
-    return LiteralHtmlEntities.decodeAfterSanitize(sanitized);
-  }
+    export function prepare(content: string): string {
+        const normalized = Text.decodeHtmlEntities(content);
+        // 表格包一层横滚容器：单元格上限（72vw）+ 表宽 max-content 的组合需要「不超过气泡宽」的外壳来滚动，
+        // 否则 table 自己的盒子与内容同宽，没有可滚动的溢出、只会撑破气泡（真机实测）。
+        // 代码块里的 <table> 字面量已被转义成 &lt;table&gt;，不会误伤。
+        const tableWrapped = markdown.render(normalized).replace(/<table(\s[^>]*)?>/g, '<div class="table-wrap"><table$1>');
+        const rendered = tableWrapped.replace(/<\/table>/g, '</table></div>');
+        const sanitized = SanitizeRichHtml.sanitize(rendered);
+        // sanitize-html 只能把 markdown-it 的 &quot; 变成 &amp;quot; —— 出口仍解 quot/amp
+        return LiteralHtmlEntities.decodeAfterSanitize(sanitized);
+    }
 }

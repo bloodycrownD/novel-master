@@ -7,7 +7,7 @@
  *
  * r3-dt-align 第 3 层：build 的分段弃权（shouldBail）。真实 build 有五段（解析
  * agent / 取可见消息 / assemble 工作区 / prepare 消息 / 拼 layout），这里逐段把
- * 判据翻真，钉住「抛 ChatPromptBuildBailedError 且**后续段一次都不执行**」——
+ * 判据翻真，钉住「返回 null 哨兵且**后续段一次都不执行**」——
  * 只断言「抛错」是不够的：把 bail 挪到最后一段同样会抛错，却把整趟重活跑完了。
  */
 import assert from "node:assert/strict";
@@ -15,7 +15,6 @@ import { after, before, describe, it } from "node:test";
 import { TextBlocks, ATTACH_PROMPT_CHAR_BUDGET } from "@novel-master/core/chat";
 import { DefaultAgentDefinition } from "@novel-master/core/stored-config-validity";
 import { RuleSnapshotCodec } from "@novel-master/core/workplace";
-import { ChatPromptBuildBailedError } from "@novel-master/core";
 import { Projects } from "../src/main/ipc/handlers/projects.js";
 import { AgentRegistry } from "../src/main/ipc/handlers/agent-registry.js";
 import { Agent } from "../src/main/ipc/handlers/agent.js";
@@ -24,103 +23,103 @@ import { DesktopRuntimeSingleton } from "../src/main/runtime/desktop-runtime-sin
 import type { DesktopNovelMasterRuntime } from "../src/main/runtime/types.js";
 import { SessionPromptInputService } from "../src/main/services/session-prompt-input.service.js";
 import {
-  setupDesktopDbTestEnv,
-  teardownDesktopDbTestEnv,
+    setupDesktopDbTestEnv,
+    teardownDesktopDbTestEnv,
 } from "./desktop-db-test-env.js";
 
 /** 从消息 content（{ blocks: [...] }）里拼出纯文本，供断言关键字。 */
 function bodyText(content: unknown): string {
-  if (
-    content == null ||
-    typeof content !== "object" ||
-    !Array.isArray((content as { blocks?: unknown }).blocks)
-  ) {
-    return "";
-  }
-  return (content as { blocks: unknown[] }).blocks
-    .map((block) =>
-      block != null &&
-      typeof block === "object" &&
-      (block as { type?: string }).type === "text"
-        ? String((block as { text?: unknown }).text ?? "")
-        : "",
-    )
-    .join("\n");
+    if (
+        content == null ||
+        typeof content !== "object" ||
+        !Array.isArray((content as { blocks?: unknown }).blocks)
+    ) {
+        return "";
+    }
+    return (content as { blocks: unknown[] }).blocks
+        .map((block) =>
+            block != null &&
+            typeof block === "object" &&
+            (block as { type?: string }).type === "text"
+                ? String((block as { text?: unknown }).text ?? "")
+                : "",
+        )
+        .join("\n");
 }
 
 describe("session-prompt-input.service (T-CA5 desktop)", () => {
-  let tempDir: string;
-  let projectId: string;
-  let sessionId: string;
+    let tempDir: string;
+    let projectId: string;
+    let sessionId: string;
 
-  before(async () => {
-    ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-session-prompt-"));
+    before(async () => {
+        ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-session-prompt-"));
 
-    const project = await Projects.create({ name: "extra-info-preview" });
-    assert.equal(project.ok, true);
-    if (!project.ok) return;
-    projectId = project.data.id;
+        const project = await Projects.create({ name: "extra-info-preview" });
+        assert.equal(project.ok, true);
+        if (!project.ok) return;
+        projectId = project.data.id;
 
-    // 注册空白 agent 并设为 workspace 当前，保证 session create 能复制到 agentId。
-    const agent = await AgentRegistry.createBlank();
-    assert.equal(agent.ok, true);
-    if (!agent.ok) return;
-    const setAgent = await Agent.setCurrent({ agentId: agent.data.agentId });
-    assert.equal(setAgent.ok, true);
+        // 注册空白 agent 并设为 workspace 当前，保证 session create 能复制到 agentId。
+        const agent = await AgentRegistry.createBlank();
+        assert.equal(agent.ok, true);
+        if (!agent.ok) return;
+        const setAgent = await Agent.setCurrent({ agentId: agent.data.agentId });
+        assert.equal(setAgent.ok, true);
 
-    const session = await Sessions.create({
-      projectId,
-      title: "extra-info-session",
+        const session = await Sessions.create({
+            projectId,
+            title: "extra-info-session",
+        });
+        assert.equal(session.ok, true);
+        if (!session.ok) return;
+        sessionId = session.data.id;
+
+        const rtR = await DesktopRuntimeSingleton.get();
+        if (!rtR.ok) throw rtR.error;
+        const rt = rtR.value;
+        await rt.messages.append(sessionId, "user", TextBlocks.of("你好，请记住附加信息"));
     });
-    assert.equal(session.ok, true);
-    if (!session.ok) return;
-    sessionId = session.data.id;
 
-    const rtR = await DesktopRuntimeSingleton.get();
-    if (!rtR.ok) throw rtR.error;
-    const rt = rtR.value;
-    await rt.messages.append(sessionId, "user", TextBlocks.of("你好，请记住附加信息"));
-  });
+    after(async () => {
+        await teardownDesktopDbTestEnv(tempDir);
+    });
 
-  after(async () => {
-    await teardownDesktopDbTestEnv(tempDir);
-  });
+    it("T-CA5: definition.prompts.customAttach 非空时预览路径 messages 含 <extra-info> 块", async () => {
+        const rtR = await DesktopRuntimeSingleton.get();
+        if (!rtR.ok) throw rtR.error;
+        const rt = rtR.value;
+        const definition = DefaultAgentDefinition.build("extra-info-agent");
+        // 与 domain prompts.customAttach 对齐；wrap 阶段在 </user-ops> 后注入 <extra-info>。
+        definition.prompts = {
+            ...definition.prompts,
+            customAttach: "这是常驻附加信息：优先级最高",
+        };
 
-  it("T-CA5: definition.prompts.customAttach 非空时预览路径 messages 含 <extra-info> 块", async () => {
-    const rtR = await DesktopRuntimeSingleton.get();
-    if (!rtR.ok) throw rtR.error;
-    const rt = rtR.value;
-    const definition = DefaultAgentDefinition.build("extra-info-agent");
-    // 与 domain prompts.customAttach 对齐；wrap 阶段在 </user-ops> 后注入 <extra-info>。
-    definition.prompts = {
-      ...definition.prompts,
-      customAttach: "这是常驻附加信息：优先级最高",
-    };
+        const bundleResult = await SessionPromptInputService.buildAdapter(
+            rt,
+            { projectId, sessionId },
+            definition,
+        )
+        if (!bundleResult.ok) throw bundleResult.error;
+        const bundle = bundleResult.value;
 
-    const bundleResult = await SessionPromptInputService.buildAdapter(
-      rt,
-      { projectId, sessionId },
-      definition,
-    )
-    if (!bundleResult.ok) throw bundleResult.error;
-    const bundle = bundleResult.value;
+        const userBody = bundle.ctx.messages
+            .filter((m) => m.role === "user")
+            .map((m) => bodyText(m.content))
+            .join("\n");
 
-    const userBody = bundle.ctx.messages
-      .filter((m) => m.role === "user")
-      .map((m) => bodyText(m.content))
-      .join("\n");
-
-    assert.match(
-      userBody,
-      /<extra-info>/,
-      "预览路径产出的 user 消息体应包含 <extra-info> 块",
-    );
-    assert.match(
-      userBody,
-      /这是常驻附加信息：优先级最高/,
-      "customAttach 文本应原样出现在 extra-info 块内",
-    );
-  });
+        assert.match(
+            userBody,
+            /<extra-info>/,
+            "预览路径产出的 user 消息体应包含 <extra-info> 块",
+        );
+        assert.match(
+            userBody,
+            /这是常驻附加信息：优先级最高/,
+            "customAttach 文本应原样出现在 extra-info 块内",
+        );
+    });
 });
 
 /**
@@ -136,94 +135,94 @@ describe("session-prompt-input.service (T-CA5 desktop)", () => {
  * 与 mobile 侧同款：真 DB / 真 VFS，只在最后一步断言 prepare 的降级形态。
  */
 describe("session-prompt-input.service 附件预算降级 parity（T-A8）", () => {
-  let tempDir: string;
-  let projectId: string;
-  let sessionId: string;
+    let tempDir: string;
+    let projectId: string;
+    let sessionId: string;
 
-  /** 超预算附件路径。 */
-  const HUGE_PATH = "/huge.md";
-  /**
+    /** 超预算附件路径。 */
+    const HUGE_PATH = "/huge.md";
+    /**
    * 超预算正文长度 = 预算 + 1。
    *
    * 预算来源：core `ATTACH_PROMPT_CHAR_BUDGET`（public 子路径已导出），
    * 直接引用常量——预算值若调整，这里自动跟随，不会以「不降级」红脸告警。
    */
-  const OVER_BUDGET_BODY = "H".repeat(ATTACH_PROMPT_CHAR_BUDGET + 1);
+    const OVER_BUDGET_BODY = "H".repeat(ATTACH_PROMPT_CHAR_BUDGET + 1);
 
-  before(async () => {
-    ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-attach-budget-"));
-    const project = await Projects.create({ name: "attach-budget" });
-    assert.equal(project.ok, true);
-    if (!project.ok) return;
-    projectId = project.data.id;
-    const agent = await AgentRegistry.createBlank();
-    assert.equal(agent.ok, true);
-    if (!agent.ok) return;
-    const setAgent = await Agent.setCurrent({ agentId: agent.data.agentId });
-    assert.equal(setAgent.ok, true);
-    const session = await Sessions.create({ projectId, title: "attach-budget" });
-    assert.equal(session.ok, true);
-    if (!session.ok) return;
-    sessionId = session.data.id;
+    before(async () => {
+        ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-attach-budget-"));
+        const project = await Projects.create({ name: "attach-budget" });
+        assert.equal(project.ok, true);
+        if (!project.ok) return;
+        projectId = project.data.id;
+        const agent = await AgentRegistry.createBlank();
+        assert.equal(agent.ok, true);
+        if (!agent.ok) return;
+        const setAgent = await Agent.setCurrent({ agentId: agent.data.agentId });
+        assert.equal(setAgent.ok, true);
+        const session = await Sessions.create({ projectId, title: "attach-budget" });
+        assert.equal(session.ok, true);
+        if (!session.ok) return;
+        sessionId = session.data.id;
 
-    const rtR = await DesktopRuntimeSingleton.get();
-    if (!rtR.ok) throw rtR.error;
-    const rt = rtR.value;
-    // 真写一份超预算正文进 VFS：prepare 首次全文 hydrate 走
-    // file_cache miss → vfs.read 这条路。
-    await rt.sessionVfs(projectId, sessionId).write(HUGE_PATH, OVER_BUDGET_BODY);
-    // content: null ⇒ prepare 不走「已是 action XML」旁路，预算判据真的生效。
-    await rt.messages.append(sessionId, "user", TextBlocks.of("帮我看看这个附件"), {
-      attachments: [
-        {
-          name: HUGE_PATH,
-          source: "attach",
-          type: "text",
-          content: null,
-          path: HUGE_PATH,
-        },
-      ],
+        const rtR = await DesktopRuntimeSingleton.get();
+        if (!rtR.ok) throw rtR.error;
+        const rt = rtR.value;
+        // 真写一份超预算正文进 VFS：prepare 首次全文 hydrate 走
+        // file_cache miss → vfs.read 这条路。
+        await rt.sessionVfs(projectId, sessionId).write(HUGE_PATH, OVER_BUDGET_BODY);
+        // content: null ⇒ prepare 不走「已是 action XML」旁路，预算判据真的生效。
+        await rt.messages.append(sessionId, "user", TextBlocks.of("帮我看看这个附件"), {
+            attachments: [
+                {
+                    name: HUGE_PATH,
+                    source: "attach",
+                    type: "text",
+                    content: null,
+                    path: HUGE_PATH,
+                },
+            ],
+        });
     });
-  });
 
-  after(async () => {
-    await teardownDesktopDbTestEnv(tempDir);
-  });
+    after(async () => {
+        await teardownDesktopDbTestEnv(tempDir);
+    });
 
-  it("T-A8: 超预算文本附件在预览路径降级为 filename 档引导文案（与实发链同口径）", async () => {
-    const rtR = await DesktopRuntimeSingleton.get();
-    if (!rtR.ok) throw rtR.error;
-    const rt = rtR.value;
-    const bundleResult = await SessionPromptInputService.buildAdapter(rt, { projectId, sessionId })
-    if (!bundleResult.ok) throw bundleResult.error;
-    const bundle = bundleResult.value;
+    it("T-A8: 超预算文本附件在预览路径降级为 filename 档引导文案（与实发链同口径）", async () => {
+        const rtR = await DesktopRuntimeSingleton.get();
+        if (!rtR.ok) throw rtR.error;
+        const rt = rtR.value;
+        const bundleResult = await SessionPromptInputService.buildAdapter(rt, { projectId, sessionId })
+        if (!bundleResult.ok) throw bundleResult.error;
+        const bundle = bundleResult.value;
 
-    const attachXml = bundle.ctx.messages[0]?.attachments?.[0]?.content ?? "";
-    // ① 降级文案：与实发链同一份 OVERSIZED_ATTACH_NOTE。
-    assert.match(
-      attachXml,
-      /文件过长，可用 read 配合 offset\/limit 分段读取/,
-      "预览路径产出的 attach XML 应含超预算降级引导文案",
-    );
-    // ② display 强制 filename 档（action JSON 里的 display 字段）。
-    assert.match(
-      attachXml,
-      /"display": "filename"/,
-      "超预算降级应把 display 强制成 filename 档",
-    );
-    // ③ 正文确实没进 XML（否则「降级」只是加了一句提示，白烧 token）。
-    assert.equal(
-      attachXml.includes("HHH"),
-      false,
-      "降级后不应把超预算正文塞回 attach XML",
-    );
-    // ④ 包裹后的消息体里同样能看到降级文案（预览渲染消费的就是它）。
-    assert.match(
-      bodyText(bundle.ctx.messages[0]?.content),
-      /文件过长，可用 read 配合 offset\/limit 分段读取/,
-      "包裹后的 user 消息体也应能看到降级文案",
-    );
-  });
+        const attachXml = bundle.ctx.messages[0]?.attachments?.[0]?.content ?? "";
+        // ① 降级文案：与实发链同一份 OVERSIZED_ATTACH_NOTE。
+        assert.match(
+            attachXml,
+            /文件过长，可用 read 配合 offset\/limit 分段读取/,
+            "预览路径产出的 attach XML 应含超预算降级引导文案",
+        );
+        // ② display 强制 filename 档（action JSON 里的 display 字段）。
+        assert.match(
+            attachXml,
+            /"display": "filename"/,
+            "超预算降级应把 display 强制成 filename 档",
+        );
+        // ③ 正文确实没进 XML（否则「降级」只是加了一句提示，白烧 token）。
+        assert.equal(
+            attachXml.includes("HHH"),
+            false,
+            "降级后不应把超预算正文塞回 attach XML",
+        );
+        // ④ 包裹后的消息体里同样能看到降级文案（预览渲染消费的就是它）。
+        assert.match(
+            bodyText(bundle.ctx.messages[0]?.content),
+            /文件过长，可用 read 配合 offset\/limit 分段读取/,
+            "包裹后的 user 消息体也应能看到降级文案",
+        );
+    });
 });
 
 /**
@@ -235,271 +234,259 @@ describe("session-prompt-input.service 附件预算降级 parity（T-A8）", () 
  * 于是「第 N 个检查点翻真 ⇒ 第 N+1 段没跑」是可以真断言的，而不是靠时序赌。
  */
 describe("session-prompt-input.service：build 分段弃权（r3-dt-align）", () => {
-  let tempDir: string;
-  let projectId: string;
-  let sessionId: string;
+    let tempDir: string;
+    let projectId: string;
+    let sessionId: string;
 
-  before(async () => {
-    ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-build-bail-"));
-    const project = await Projects.create({ name: "build-bail" });
-    assert.equal(project.ok, true);
-    if (!project.ok) return;
-    projectId = project.data.id;
-    const agent = await AgentRegistry.createBlank();
-    assert.equal(agent.ok, true);
-    if (!agent.ok) return;
-    const setAgent = await Agent.setCurrent({ agentId: agent.data.agentId });
-    assert.equal(setAgent.ok, true);
-    const session = await Sessions.create({ projectId, title: "build-bail" });
-    assert.equal(session.ok, true);
-    if (!session.ok) return;
-    sessionId = session.data.id;
-    const rtR = await DesktopRuntimeSingleton.get();
-    if (!rtR.ok) throw rtR.error;
-    const rt = rtR.value;
-    await rt.messages.append(sessionId, "user", TextBlocks.of("他把伞收了"));
-  });
-
-  after(async () => {
-    await teardownDesktopDbTestEnv(tempDir);
-  });
-
-  /** 数各段的调用足迹。 */
-  function probeRuntime(rt: DesktopNovelMasterRuntime): {
-    runtime: DesktopNovelMasterRuntime;
-    counts: { list: number; workplace: number; skills: number };
-  } {
-    const counts = { list: 0, workplace: 0, skills: 0 };
-    const messages = new Proxy(rt.messages, {
-      get(target, prop, receiver) {
-        if (prop === "listBySession") {
-          return async (...args: unknown[]) => {
-            counts.list += 1;
-            return (
-              target.listBySession as (...a: unknown[]) => Promise<unknown>
-            )(...args);
-          };
-        }
-        return Reflect.get(target, prop, receiver);
-      },
+    before(async () => {
+        ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-build-bail-"));
+        const project = await Projects.create({ name: "build-bail" });
+        assert.equal(project.ok, true);
+        if (!project.ok) return;
+        projectId = project.data.id;
+        const agent = await AgentRegistry.createBlank();
+        assert.equal(agent.ok, true);
+        if (!agent.ok) return;
+        const setAgent = await Agent.setCurrent({ agentId: agent.data.agentId });
+        assert.equal(setAgent.ok, true);
+        const session = await Sessions.create({ projectId, title: "build-bail" });
+        assert.equal(session.ok, true);
+        if (!session.ok) return;
+        sessionId = session.data.id;
+        const rtR = await DesktopRuntimeSingleton.get();
+        if (!rtR.ok) throw rtR.error;
+        const rt = rtR.value;
+        await rt.messages.append(sessionId, "user", TextBlocks.of("他把伞收了"));
     });
-    const runtime = new Proxy(rt, {
-      get(target, prop, receiver) {
-        if (prop === "messages") return messages;
-        if (prop === "workplace" || prop === "sessionVfs") {
-          return (...args: unknown[]) => {
-            counts.workplace += 1;
-            return (Reflect.get(target, prop, receiver) as (
-              ...a: unknown[]
-            ) => unknown)(...args);
-          };
-        }
-        if (prop === "skills") {
-          return (...args: unknown[]) => {
-            counts.skills += 1;
-            return (Reflect.get(target, prop, receiver) as (
-              ...a: unknown[]
-            ) => unknown)(...args);
-          };
-        }
-        return Reflect.get(target, prop, receiver);
-      },
-    }) as DesktopNovelMasterRuntime;
-    return { runtime, counts };
-  }
 
-  /** 第 flipAt 个检查点（1 起）起恒真。 */
-  function bailAt(flipAt: number): () => boolean {
-    let calls = 0;
-    return () => {
-      calls += 1;
-      return calls >= flipAt;
-    };
-  }
-
-  it("检查点①（解析 agent 之后）翻真：取消息一步都不许跑", async () => {
-    const rtR = await DesktopRuntimeSingleton.get();
-    if (!rtR.ok) throw rtR.error;
-    const rt = rtR.value;
-    const { runtime, counts } = probeRuntime(rt);
-    await assert.rejects(
-      SessionPromptInputService.buildAdapter(
-        runtime,
-        { projectId, sessionId },
-        undefined,
-        { shouldBail: bailAt(1) },
-      ),
-      (error: unknown) => error instanceof ChatPromptBuildBailedError,
-      "第①段弃权应抛 ChatPromptBuildBailedError",
-    );
-    assert.equal(counts.list, 0, "第①段弃权后不应再取可见消息");
-  });
-
-  it("检查点②（取消息之后）翻真：工作区装配不许起步", async () => {
-    const rtR = await DesktopRuntimeSingleton.get();
-    if (!rtR.ok) throw rtR.error;
-    const rt = rtR.value;
-    const { runtime, counts } = probeRuntime(rt);
-    await assert.rejects(
-      SessionPromptInputService.buildAdapter(
-        runtime,
-        { projectId, sessionId },
-        undefined,
-        { shouldBail: bailAt(2) },
-      ),
-      (error: unknown) => error instanceof ChatPromptBuildBailedError,
-    );
-    assert.equal(counts.list, 1, "第②检查点前应已取过一次可见消息");
-    assert.equal(
-      counts.workplace,
-      0,
-      "第②段弃权后不应再取 workplace/VFS 句柄（装配未起步）",
-    );
-  });
-
-  it("检查点③（工作区装配之后）翻真：prepare 段不许起步", async () => {
-    const rtR = await DesktopRuntimeSingleton.get();
-    if (!rtR.ok) throw rtR.error;
-    const rt = rtR.value;
-    const { runtime, counts } = probeRuntime(rt);
-    await assert.rejects(
-      SessionPromptInputService.buildAdapter(
-        runtime,
-        { projectId, sessionId },
-        undefined,
-        // 八期给 listBySession 加了 checkpoint（分片级），shouldBail 的调用次数
-        // 因此前移，"第 N 次调用" 不再是稳定坐标。改用**足迹判据**：workplace 句柄
-        // 已取过（装配起步）且 skills 还没取（prepare 未进）时才翻真。
-        { shouldBail: () => counts.workplace > 0 && counts.skills === 0 },
-      ),
-      (error: unknown) => error instanceof ChatPromptBuildBailedError,
-    );
-    assert.ok(counts.workplace > 0, "第③检查点前应已装配过工作区显示");
-    assert.equal(
-      counts.skills,
-      0,
-      "第③段弃权后不应再进入 prepare 段（skills 只在 prepare 的参数里取）",
-    );
-  });
-
-  it("检查点④（prepare 之后）翻真：四段足迹全见过才抛（layout 不再碰 runtime）", async () => {
-    const rtR = await DesktopRuntimeSingleton.get();
-    if (!rtR.ok) throw rtR.error;
-    const rt = rtR.value;
-    const { runtime, counts } = probeRuntime(rt);
-    await assert.rejects(
-      SessionPromptInputService.buildAdapter(
-        runtime,
-        { projectId, sessionId },
-        undefined,
-        // 同上：四段足迹全部出现过（list/workplace/skills 各 ≥1）才翻真，
-        // 不依赖 shouldBail 的调用序号。
-        { shouldBail: () => counts.list >= 1 && counts.workplace >= 1 && counts.skills >= 1 },
-      ),
-      (error: unknown) => error instanceof ChatPromptBuildBailedError,
-    );
-    // 与③的区分点：prepare 已经跑过（skills 足迹 ≥1）——④是最后一段边界，
-    // 此后 layout 拼装是纯计算，不再有 runtime 足迹可数，故以「前三段 IO
-    // 全部发生 + 仍抛弃权错误」钉住检查点确实落在 prepare 之后。
-    assert.ok(
-      counts.list >= 1 && counts.workplace >= 1 && counts.skills >= 1,
-      "第④检查点前 list/workplace/skills 三段足迹都该在（证明翻真位置正确）",
-    );
-  });
-
-  it("workplace 段内中止：assemble 文件粒度抛错 → build 转抛 ChatPromptBuildBailedError", async () => {
-    const rtR = await DesktopRuntimeSingleton.get();
-    if (!rtR.ok) throw rtR.error;
-    const rt = rtR.value;
-    const project = await Projects.create({ name: "wp-bail" });
-    assert.equal(project.ok, true);
-    if (!project.ok) return;
-    const session = await Sessions.create({
-      projectId: project.data.id,
-      title: "wp-bail",
+    after(async () => {
+        await teardownDesktopDbTestEnv(tempDir);
     });
-    assert.equal(session.ok, true);
-    if (!session.ok) return;
-    const { projectId, sessionId } = {
-      projectId: project.data.id,
-      sessionId: session.data.id,
-    };
 
-    // 预置两条 full 文件的规则快照（域/键字面量与 core 常量一致），不写
-    // VFS 正文 → file_cache miss → 逐文件回填（read 走 (missing) 兜底）。
-    await rt.sessionKkv.set(
-      sessionId,
-      "rule_snapshot",
-      "canon",
-      RuleSnapshotCodec.serialize([
-        { path: "/a.md", status: "full" },
-        { path: "/b.md", status: "full" },
-      ]),
-    );
-
-    // 数 vfs.read：shouldBail 在第一个文件回填后翻真，第二个文件的检查点
-    // 上 assemble 抛 WorkplaceAssemblyAbortedError → build 必须转抛统一哨兵。
-    let readCalls = 0;
-    const realSessionVfs = rt.sessionVfs.bind(rt);
-    const wrapped: typeof realSessionVfs = (pid, sid) => {
-      const vfs = realSessionVfs(pid, sid);
-      return new Proxy(vfs, {
-        get(target, prop, receiver) {
-          if (prop === "read") {
-            return async (path: string) => {
-              readCalls += 1;
-              return target.read(path);
-            };
-          }
-          return Reflect.get(target, prop, receiver);
-        },
-      }) as ReturnType<typeof realSessionVfs>;
-    };
-    rt.sessionVfs = wrapped;
-    try {
-      const definition = DefaultAgentDefinition.build("wp-bail");
-      definition.prompts = {
-        ...definition.prompts,
-        persist: [],
-        dynamic: [],
-        workplace: "【工作区】",
-      };
-      await assert.rejects(
-        SessionPromptInputService.buildAdapter(rt, { projectId, sessionId }, definition, {
-          shouldBail: () => readCalls >= 1,
-        }),
-        (error: unknown) => error instanceof ChatPromptBuildBailedError,
-        "assemble 的文件粒度中止必须转抛成 build 的统一哨兵类",
-      );
-      assert.equal(readCalls, 1, "第二个文件的 read 不该发生（文件粒度检查点）");
-    } finally {
-      rt.sessionVfs = realSessionVfs;
+    /** 数各段的调用足迹。 */
+    function probeRuntime(rt: DesktopNovelMasterRuntime): {
+        runtime: DesktopNovelMasterRuntime;
+        counts: { list: number; workplace: number; skills: number };
+    } {
+        const counts = { list: 0, workplace: 0, skills: 0 };
+        const messages = new Proxy(rt.messages, {
+            get(target, prop, receiver) {
+                if (prop === "listBySession") {
+                    return async (...args: unknown[]) => {
+                        counts.list += 1;
+                        return (
+                            target.listBySession as (...a: unknown[]) => Promise<unknown>
+                        )(...args);
+                    };
+                }
+                return Reflect.get(target, prop, receiver);
+            },
+        });
+        const runtime = new Proxy(rt, {
+            get(target, prop, receiver) {
+                if (prop === "messages") return messages;
+                if (prop === "workplace" || prop === "sessionVfs") {
+                    return (...args: unknown[]) => {
+                        counts.workplace += 1;
+                        return (Reflect.get(target, prop, receiver) as (
+                            ...a: unknown[]
+                        ) => unknown)(...args);
+                    };
+                }
+                if (prop === "skills") {
+                    return (...args: unknown[]) => {
+                        counts.skills += 1;
+                        return (Reflect.get(target, prop, receiver) as (
+                            ...a: unknown[]
+                        ) => unknown)(...args);
+                    };
+                }
+                return Reflect.get(target, prop, receiver);
+            },
+        }) as DesktopNovelMasterRuntime;
+        return { runtime, counts };
     }
-  });
 
-  it("判据恒假 / 不传 options ⇒ 行为零变化（弃权检查点不许误伤）", async () => {
-    const rtR = await DesktopRuntimeSingleton.get();
-    if (!rtR.ok) throw rtR.error;
-    const rt = rtR.value;
-    const { runtime, counts } = probeRuntime(rt);
-    const bundleResult = await SessionPromptInputService.buildAdapter(
-      runtime,
-      { projectId, sessionId },
-      undefined,
-      { shouldBail: () => false },
-    )
-    if (!bundleResult.ok) throw bundleResult.error;
-    const bundle = bundleResult.value;
-    assert.equal(bundle.rawMessages.length, 1);
-    assert.ok(counts.list >= 1 && counts.workplace >= 1 && counts.skills >= 1);
+    /** 第 flipAt 个检查点（1 起）起恒真。 */
+    function bailAt(flipAt: number): () => boolean {
+        let calls = 0;
+        return () => {
+            calls += 1;
+            return calls >= flipAt;
+        };
+    }
 
-    // 预览消费方（不传 options）：原签名调用零变化。
-    const previewResult = await SessionPromptInputService.buildAdapter(
-      runtime,
-      { projectId, sessionId },
-    );
-    if (!previewResult.ok) throw previewResult.error;
-    const previewBundle = previewResult.value;
-    assert.equal(previewBundle.rawMessages.length, 1);
-  });
+    it("检查点①（解析 agent 之后）翻真：取消息一步都不许跑", async () => {
+        const rtR = await DesktopRuntimeSingleton.get();
+        if (!rtR.ok) throw rtR.error;
+        const rt = rtR.value;
+        const { runtime, counts } = probeRuntime(rt);
+        const r1 = await SessionPromptInputService.buildAdapter(
+            runtime,
+            { projectId, sessionId },
+            undefined,
+            { shouldBail: bailAt(1) },
+        );
+        assert.ok(r1.ok && r1.value === null, "第①段弃权应返回 null 哨兵（error-matrix-final R3）");
+        assert.equal(counts.list, 0, "第①段弃权后不应再取可见消息");
+    });
+
+    it("检查点②（取消息之后）翻真：工作区装配不许起步", async () => {
+        const rtR = await DesktopRuntimeSingleton.get();
+        if (!rtR.ok) throw rtR.error;
+        const rt = rtR.value;
+        const { runtime, counts } = probeRuntime(rt);
+        const r2 = await SessionPromptInputService.buildAdapter(
+            runtime,
+            { projectId, sessionId },
+            undefined,
+            { shouldBail: bailAt(2) },
+        );
+        assert.ok(r2.ok && r2.value === null, "第②段弃权应返回 null 哨兵");
+        assert.equal(counts.list, 1, "第②检查点前应已取过一次可见消息");
+        assert.equal(
+            counts.workplace,
+            0,
+            "第②段弃权后不应再取 workplace/VFS 句柄（装配未起步）",
+        );
+    });
+
+    it("检查点③（工作区装配之后）翻真：prepare 段不许起步", async () => {
+        const rtR = await DesktopRuntimeSingleton.get();
+        if (!rtR.ok) throw rtR.error;
+        const rt = rtR.value;
+        const { runtime, counts } = probeRuntime(rt);
+        const r3 = await SessionPromptInputService.buildAdapter(
+            runtime,
+            { projectId, sessionId },
+            undefined,
+            // 八期给 listBySession 加了 checkpoint（分片级），shouldBail 的调用次数
+            // 因此前移，"第 N 次调用" 不再是稳定坐标。改用**足迹判据**：workplace 句柄
+            // 已取过（装配起步）且 skills 还没取（prepare 未进）时才翻真。
+            { shouldBail: () => counts.workplace > 0 && counts.skills === 0 },
+        );
+        assert.ok(r3.ok && r3.value === null, "第③段弃权应返回 null 哨兵");
+        assert.ok(counts.workplace > 0, "第③检查点前应已装配过工作区显示");
+        assert.equal(
+            counts.skills,
+            0,
+            "第③段弃权后不应再进入 prepare 段（skills 只在 prepare 的参数里取）",
+        );
+    });
+
+    it("检查点④（prepare 之后）翻真：四段足迹全见过才抛（layout 不再碰 runtime）", async () => {
+        const rtR = await DesktopRuntimeSingleton.get();
+        if (!rtR.ok) throw rtR.error;
+        const rt = rtR.value;
+        const { runtime, counts } = probeRuntime(rt);
+        const r4 = await SessionPromptInputService.buildAdapter(
+            runtime,
+            { projectId, sessionId },
+            undefined,
+            // 同上：四段足迹全部出现过（list/workplace/skills 各 ≥1）才翻真，
+            // 不依赖 shouldBail 的调用序号。
+            { shouldBail: () => counts.list >= 1 && counts.workplace >= 1 && counts.skills >= 1 },
+        );
+        assert.ok(r4.ok && r4.value === null, "第④段弃权应返回 null 哨兵");
+        // 与③的区分点：prepare 已经跑过（skills 足迹 ≥1）——④是最后一段边界，
+        // 此后 layout 拼装是纯计算，不再有 runtime 足迹可数，故以「前三段 IO
+        // 全部发生 + 仍抛弃权错误」钉住检查点确实落在 prepare 之后。
+        assert.ok(
+            counts.list >= 1 && counts.workplace >= 1 && counts.skills >= 1,
+            "第④检查点前 list/workplace/skills 三段足迹都该在（证明翻真位置正确）",
+        );
+    });
+
+    it("workplace 段内中止：assemble 文件粒度抛错 → build 返回 null 哨兵", async () => {
+        const rtR = await DesktopRuntimeSingleton.get();
+        if (!rtR.ok) throw rtR.error;
+        const rt = rtR.value;
+        const project = await Projects.create({ name: "wp-bail" });
+        assert.equal(project.ok, true);
+        if (!project.ok) return;
+        const session = await Sessions.create({
+            projectId: project.data.id,
+            title: "wp-bail",
+        });
+        assert.equal(session.ok, true);
+        if (!session.ok) return;
+        const { projectId, sessionId } = {
+            projectId: project.data.id,
+            sessionId: session.data.id,
+        };
+
+        // 预置两条 full 文件的规则快照（域/键字面量与 core 常量一致），不写
+        // VFS 正文 → file_cache miss → 逐文件回填（read 走 (missing) 兜底）。
+        await rt.sessionKkv.set(
+            sessionId,
+            "rule_snapshot",
+            "canon",
+            RuleSnapshotCodec.serialize([
+                { path: "/a.md", status: "full" },
+                { path: "/b.md", status: "full" },
+            ]),
+        );
+
+        // 数 vfs.read：shouldBail 在第一个文件回填后翻真，第二个文件的检查点
+        // 上 assemble 抛 WorkplaceAssemblyAbortedError → build 必须转抛统一哨兵。
+        let readCalls = 0;
+        const realSessionVfs = rt.sessionVfs.bind(rt);
+        const wrapped: typeof realSessionVfs = (pid, sid) => {
+            const vfs = realSessionVfs(pid, sid);
+            return new Proxy(vfs, {
+                get(target, prop, receiver) {
+                    if (prop === "read") {
+                        return async (path: string) => {
+                            readCalls += 1;
+                            return target.read(path);
+                        };
+                    }
+                    return Reflect.get(target, prop, receiver);
+                },
+            }) as ReturnType<typeof realSessionVfs>;
+        };
+        rt.sessionVfs = wrapped;
+        try {
+            const definition = DefaultAgentDefinition.build("wp-bail");
+            definition.prompts = {
+                ...definition.prompts,
+                persist: [],
+                dynamic: [],
+                workplace: "【工作区】",
+            };
+            const rw = await SessionPromptInputService.buildAdapter(rt, { projectId, sessionId }, definition, {
+                shouldBail: () => readCalls >= 1,
+            });
+            assert.ok(rw.ok && rw.value === null, "assemble 的文件粒度中止必须收成 null 哨兵（error-matrix-final R3）");
+            assert.equal(readCalls, 1, "第二个文件的 read 不该发生（文件粒度检查点）");
+        } finally {
+            rt.sessionVfs = realSessionVfs;
+        }
+    });
+
+    it("判据恒假 / 不传 options ⇒ 行为零变化（弃权检查点不许误伤）", async () => {
+        const rtR = await DesktopRuntimeSingleton.get();
+        if (!rtR.ok) throw rtR.error;
+        const rt = rtR.value;
+        const { runtime, counts } = probeRuntime(rt);
+        const bundleResult = await SessionPromptInputService.buildAdapter(
+            runtime,
+            { projectId, sessionId },
+            undefined,
+            { shouldBail: () => false },
+        )
+        if (!bundleResult.ok) throw bundleResult.error;
+        const bundle = bundleResult.value;
+        assert.equal(bundle.rawMessages.length, 1);
+        assert.ok(counts.list >= 1 && counts.workplace >= 1 && counts.skills >= 1);
+
+        // 预览消费方（不传 options）：原签名调用零变化。
+        const previewResult = await SessionPromptInputService.buildAdapter(
+            runtime,
+            { projectId, sessionId },
+        );
+        if (!previewResult.ok) throw previewResult.error;
+        const previewBundle = previewResult.value;
+        assert.equal(previewBundle.rawMessages.length, 1);
+    });
 });

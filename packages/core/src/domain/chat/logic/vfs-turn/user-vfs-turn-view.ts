@@ -48,7 +48,8 @@ export type UserVfsTurnView = {
 export const USER_VFS_TURN_SPAN = 2 as const;
 
 /** 用户 VFS UA 两段领域服务。 */
-class UserVfsTurns {
+export const UserVfsTurns = {
+
     /** 解析文本中全部 `<action name="…">`。 */
     parseActions(text: string): readonly ParsedUserVfsAction[] {
         return UserVfsActionXml.parseFromText(text).map(({name, params}) => {
@@ -71,7 +72,8 @@ class UserVfsTurns {
                 hunks,
             };
         });
-    }
+    },
+
 
     /** 从已解析的 action 还原 flush 前的完整 tool input。 */
     /** nm-style: keep-public — UserVfsTurns 派生工具入口，保留服务组合。 */
@@ -90,7 +92,8 @@ class UserVfsTurns {
             xmlParts.push(UserVfsActionXml.build(action.name || action.kind, params));
         }
         return ActionXmlToolUses.toToolUses(xmlParts.join("\n"));
-    }
+    },
+
 
     /** 从 `startIndex` 起是否为完整的用户 VFS UA 两段（均未 hidden）。 */
     /** nm-style: keep-public — core-shim / UI 测试的 VFS 两段匹配入口。 */
@@ -108,15 +111,16 @@ class UserVfsTurns {
         if (ackBlocks.some((block) => block.type !== "text")) return null;
         if (MessageBodyText.fromBlocks(ackBlocks) !== USER_VFS_TURN_ACK_TEXT) return null;
         return [m0, m1];
-    }
+    },
+
 
     /** 从已匹配的 UA 两段构建视图。 */
     /** nm-style: keep-public — core-shim / UI 测试的 VFS 视图构建入口。 */
     buildView(turn: readonly [ChatMessageData, ChatMessageData]): UserVfsTurnView {
         const [actionMsg, ackMsg] = turn;
         const actionText = MessageBodyText.fromBlocks(actionMsg.content.blocks);
-        const actions = this.parseActions(actionText);
-        const toolUses = this.deriveToolUses(actions).map((toolUse, index) => ({
+        const actions = UserVfsTurns.parseActions(actionText);
+        const toolUses = UserVfsTurns.deriveToolUses(actions).map((toolUse, index) => ({
             type: "tool_use" as const,
             id: `vfs-tu-${index}`,
             name: toolUse.name,
@@ -135,7 +139,6 @@ class UserVfsTurns {
             })),
             bridgeText: MessageBodyText.fromBlocks(ackMsg.content.blocks),
         };
-    }
-}
+    },
+} as const;
 
-export const userVfsTurns = new UserVfsTurns();

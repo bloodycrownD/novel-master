@@ -10,14 +10,14 @@
 import { SkspNodeFactory } from "@novel-master/core/sksp-node";
 
 const keyringOptions = {
-  service: "novel-master",
-  label: "Keychain",
-  displayName: "macOS Keychain",
-  platform: "darwin",
-  open: async (service: string, user: string) => {
-    const { Entry } = await import("@napi-rs/keyring");
-    return new Entry(service, user);
-  },
+    service: "novel-master",
+    label: "Keychain",
+    displayName: "macOS Keychain",
+    platform: "darwin",
+    open: async (service: string, user: string) => {
+        const { Entry } = await import("@napi-rs/keyring");
+        return new Entry(service, user);
+    },
 };
 
 const keyring = SkspNodeFactory.createKeyringMasterKey(keyringOptions);

@@ -11,86 +11,86 @@ import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix
 novelMasterTestFixture();
 
 describe("revision GC", () => {
-  it("R8: rollback deletes tail-only revisions while keeping anchor references", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
-    const entries = new SqliteVfsEntryRepository(ctx.conn);
-    const revisions = new SqliteVfsRevisionRepository(ctx.conn);
+    it("R8: rollback deletes tail-only revisions while keeping anchor references", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
+        const entries = new SqliteVfsEntryRepository(ctx.conn);
+        const revisions = new SqliteVfsRevisionRepository(ctx.conn);
 
-    const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "a" }],
-    }));
-    await svfs.write("/gc.md", "v1", { versionCheck: false });
-    const v1 = unwrap(await svfs.read("/gc.md")).version;
-    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
+        const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "a" }],
+        }));
+        await svfs.write("/gc.md", "v1", { versionCheck: false });
+        const v1 = unwrap(await svfs.read("/gc.md")).version;
+        unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
-    const assistant2 = unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "b" }],
-    }));
-    await svfs.write("/gc.md", "v2", { versionCheck: false });
-    const v2 = unwrap(await svfs.read("/gc.md")).version;
-    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id));
+        const assistant2 = unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "b" }],
+        }));
+        await svfs.write("/gc.md", "v2", { versionCheck: false });
+        const v2 = unwrap(await svfs.read("/gc.md")).version;
+        unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id));
 
-    const scope = {
-      kind: "session" as const,
-      projectId: project.id,
-      sessionId: session.id,
-    };
-    const sk = LogicalPath.scopeKey(scope);
-    const entry = unwrap(await entries.findByPath(sk, "/gc.md"));
-    assert.ok(entry != null);
+        const scope = {
+            kind: "session" as const,
+            projectId: project.id,
+            sessionId: session.id,
+        };
+        const sk = LogicalPath.scopeKey(scope);
+        const entry = unwrap(await entries.findByPath(sk, "/gc.md"));
+        assert.ok(entry != null);
 
-    const before = await revisions.listKeysUnderScope(sk, "/");
-    assert.ok(before.some((r) => r.entryId === entry.entryId && r.version === v1));
-    assert.ok(before.some((r) => r.entryId === entry.entryId && r.version === v2));
+        const before = await revisions.listKeysUnderScope(sk, "/");
+        assert.ok(before.some((r) => r.entryId === entry.entryId && r.version === v1));
+        assert.ok(before.some((r) => r.entryId === entry.entryId && r.version === v2));
 
-    await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant1.id);
+        await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant1.id);
 
-    const after = await revisions.listKeysUnderScope(sk, "/");
-    assert.ok(after.some((r) => r.entryId === entry.entryId && r.version === v1));
-    assert.equal(
-      after.some((r) => r.entryId === entry.entryId && r.version === v2),
-      false
-    );
+        const after = await revisions.listKeysUnderScope(sk, "/");
+        assert.ok(after.some((r) => r.entryId === entry.entryId && r.version === v1));
+        assert.equal(
+            after.some((r) => r.entryId === entry.entryId && r.version === v2),
+            false
+        );
 
-    const head = unwrap(await svfs.read("/gc.md")).version;
-    assert.notEqual(head, v2);
-    assert.equal(RevisionPairKey.build(entry.entryId, v1).includes(String(entry.entryId)), true);
-  });
+        const head = unwrap(await svfs.read("/gc.md")).version;
+        assert.notEqual(head, v2);
+        assert.equal(RevisionPairKey.build(entry.entryId, v1).includes(String(entry.entryId)), true);
+    });
 
-  it("sweep drops intermediate revisions not referenced by checkpoint or live head", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
-    const entries = new SqliteVfsEntryRepository(ctx.conn);
-    const revisions = new SqliteVfsRevisionRepository(ctx.conn);
+    it("sweep drops intermediate revisions not referenced by checkpoint or live head", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
+        const entries = new SqliteVfsEntryRepository(ctx.conn);
+        const revisions = new SqliteVfsRevisionRepository(ctx.conn);
 
-    const assistant = unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "w" }],
-    }));
-    await svfs.write("/trim.md", "one", { versionCheck: false });
-    const v1 = unwrap(await svfs.read("/trim.md")).version;
-    await svfs.write("/trim.md", "two", { versionCheck: false });
-    const v2 = unwrap(await svfs.read("/trim.md")).version;
-    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant.id));
+        const assistant = unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "w" }],
+        }));
+        await svfs.write("/trim.md", "one", { versionCheck: false });
+        const v1 = unwrap(await svfs.read("/trim.md")).version;
+        await svfs.write("/trim.md", "two", { versionCheck: false });
+        const v2 = unwrap(await svfs.read("/trim.md")).version;
+        unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant.id));
 
-    const scope = {
-      kind: "session" as const,
-      projectId: project.id,
-      sessionId: session.id,
-    };
-    const sk = LogicalPath.scopeKey(scope);
-    const entry = unwrap(await entries.findByPath(sk, "/trim.md"));
-    assert.ok(entry != null);
+        const scope = {
+            kind: "session" as const,
+            projectId: project.id,
+            sessionId: session.id,
+        };
+        const sk = LogicalPath.scopeKey(scope);
+        const entry = unwrap(await entries.findByPath(sk, "/trim.md"));
+        assert.ok(entry != null);
 
-    await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant.id);
+        await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant.id);
 
-    const keys = await revisions.listKeysUnderScope(sk, "/");
-    const versions = keys.filter((k) => k.entryId === entry.entryId).map((k) => k.version);
-    assert.ok(versions.includes(v2));
-    assert.equal(versions.includes(v1), false);
-  });
+        const keys = await revisions.listKeysUnderScope(sk, "/");
+        const versions = keys.filter((k) => k.entryId === entry.entryId).map((k) => k.version);
+        assert.ok(versions.includes(v2));
+        assert.equal(versions.includes(v1), false);
+    });
 });

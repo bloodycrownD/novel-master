@@ -14,34 +14,34 @@ type PostToHost = (type: string, payload: Record<string, unknown>) => void;
 /** 复制成功反馈时长（按钮伪元素切「已复制」）。 */
 const COPY_FEEDBACK_MS = 1500;
 
-/** 挂接点击委托（幂等：重复调用只挂一次）。 */
-let attached = false;
+/** 挂接点击委托（幂等：重复调用只挂一次；模块内 holder，对象管理）。 */
+const copyAttachState = { attached: false };
 
 export namespace CodeCopy {
-  export function attach(post: PostToHost): void {
-    if (attached || typeof document === 'undefined') {
-      return;
+    export function attach(post: PostToHost): void {
+        if (copyAttachState.attached || typeof document === 'undefined') {
+            return;
+        }
+        copyAttachState.attached = true;
+        const onClick = (event: Event) => {
+            const target = event.target as Element | null;
+            if (!target || typeof target.closest !== 'function') {
+                return;
+            }
+            const btn = target.closest('.code-copy');
+            if (!btn) {
+                return;
+            }
+            event.stopPropagation();
+            const code = btn.closest('pre')?.querySelector('code');
+            const text = code?.textContent ?? '';
+            if (!text) {
+                return;
+            }
+            post('copyCode', {code: text});
+            btn.classList.add('copied');
+            window.setTimeout(() => btn.classList.remove('copied'), COPY_FEEDBACK_MS);
+        };
+        document.addEventListener('click', onClick, true);
     }
-    attached = true;
-    const onClick = (event: Event) => {
-      const target = event.target as Element | null;
-      if (!target || typeof target.closest !== 'function') {
-        return;
-      }
-      const btn = target.closest('.code-copy');
-      if (!btn) {
-        return;
-      }
-      event.stopPropagation();
-      const code = btn.closest('pre')?.querySelector('code');
-      const text = code?.textContent ?? '';
-      if (!text) {
-        return;
-      }
-      post('copyCode', {code: text});
-      btn.classList.add('copied');
-      window.setTimeout(() => btn.classList.remove('copied'), COPY_FEEDBACK_MS);
-    };
-    document.addEventListener('click', onClick, true);
-  }
 }

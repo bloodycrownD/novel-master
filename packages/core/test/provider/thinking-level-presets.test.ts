@@ -5,111 +5,111 @@ import {  ThinkingLevelPresets  } from "../../src/domain/provider/logic/thinking
 const samplingOff = { enabled: false as const };
 
 describe("thinkingLevelToModelThinkingParams", () => {
-  it("off 返回 undefined", () => {
-    assert.equal(
-      ThinkingLevelPresets.toModelThinkingParams("off", "openai", "gpt-4o", samplingOff),
-      undefined,
-    );
-  });
+    it("off 返回 undefined", () => {
+        assert.equal(
+            ThinkingLevelPresets.toModelThinkingParams("off", "openai", "gpt-4o", samplingOff),
+            undefined,
+        );
+    });
 
-  it("OpenAI 四档映射 reasoning_effort", () => {
-    assert.deepEqual(
-      ThinkingLevelPresets.toModelThinkingParams("low", "openai", "gpt-4o", samplingOff),
-      { protocol: "openai", openai: { reasoning_effort: "low" } },
-    );
-    assert.deepEqual(
-      ThinkingLevelPresets.toModelThinkingParams("medium", "openai", "gpt-4o", samplingOff),
-      { protocol: "openai", openai: { reasoning_effort: "medium" } },
-    );
-    assert.deepEqual(
-      ThinkingLevelPresets.toModelThinkingParams("high", "openai", "gpt-4o", samplingOff),
-      { protocol: "openai", openai: { reasoning_effort: "high" } },
-    );
-  });
+    it("OpenAI 四档映射 reasoning_effort", () => {
+        assert.deepEqual(
+            ThinkingLevelPresets.toModelThinkingParams("low", "openai", "gpt-4o", samplingOff),
+            { protocol: "openai", openai: { reasoning_effort: "low" } },
+        );
+        assert.deepEqual(
+            ThinkingLevelPresets.toModelThinkingParams("medium", "openai", "gpt-4o", samplingOff),
+            { protocol: "openai", openai: { reasoning_effort: "medium" } },
+        );
+        assert.deepEqual(
+            ThinkingLevelPresets.toModelThinkingParams("high", "openai", "gpt-4o", samplingOff),
+            { protocol: "openai", openai: { reasoning_effort: "high" } },
+        );
+    });
 
-  it("GLM 型号与 gpt-* 输出完全一致，无型号差异", () => {
-    for (const model of ["glm-4.7", "glm-5.2"]) {
-      assert.equal(
-        ThinkingLevelPresets.toModelThinkingParams("off", "openai", model, samplingOff),
-        undefined,
-      );
-      assert.deepEqual(
-        ThinkingLevelPresets.toModelThinkingParams("low", "openai", model, samplingOff),
-        { protocol: "openai", openai: { reasoning_effort: "low" } },
-      );
-      assert.deepEqual(
-        ThinkingLevelPresets.toModelThinkingParams("medium", "openai", model, samplingOff),
-        { protocol: "openai", openai: { reasoning_effort: "medium" } },
-      );
-      assert.deepEqual(
-        ThinkingLevelPresets.toModelThinkingParams("high", "openai", model, samplingOff),
-        { protocol: "openai", openai: { reasoning_effort: "high" } },
-      );
-    }
-  });
+    it("GLM 型号与 gpt-* 输出完全一致，无型号差异", () => {
+        for (const model of ["glm-4.7", "glm-5.2"]) {
+            assert.equal(
+                ThinkingLevelPresets.toModelThinkingParams("off", "openai", model, samplingOff),
+                undefined,
+            );
+            assert.deepEqual(
+                ThinkingLevelPresets.toModelThinkingParams("low", "openai", model, samplingOff),
+                { protocol: "openai", openai: { reasoning_effort: "low" } },
+            );
+            assert.deepEqual(
+                ThinkingLevelPresets.toModelThinkingParams("medium", "openai", model, samplingOff),
+                { protocol: "openai", openai: { reasoning_effort: "medium" } },
+            );
+            assert.deepEqual(
+                ThinkingLevelPresets.toModelThinkingParams("high", "openai", model, samplingOff),
+                { protocol: "openai", openai: { reasoning_effort: "high" } },
+            );
+        }
+    });
 
-  it("Anthropic 档位 budget 受 effective max_tokens 按 0.8 比例钳制，三档可区分", () => {
-    // 修复前：预算公式是 `effectiveMax - 1`，默认 max=4096 ⇒ 三档全被钳成
-    // 4095（可见正文只剩 1 token，三档无差别）。修复后 max=16000、比例 0.8 ⇒
-    // 上限 12800，三档 4096 / 8192 / 12800 各自可区分，且都留 3200 给可见正文。
-    const budgetOf = (level: "low" | "medium" | "high"): number => {
-      const params = ThinkingLevelPresets.toModelThinkingParams(
-        level,
-        "anthropic",
-        "claude-3-5-sonnet",
-        samplingOff,
-      );
-      assert.equal(params?.protocol, "anthropic");
-      if (params?.protocol !== "anthropic") {
-        throw new Error("expected anthropic params");
-      }
-      return params.anthropic.budget_tokens;
-    };
-    assert.equal(budgetOf("low"), 4096);
-    assert.equal(budgetOf("medium"), 8192);
-    assert.equal(budgetOf("high"), 12800);
-  });
+    it("Anthropic 档位 budget 受 effective max_tokens 按 0.8 比例钳制，三档可区分", () => {
+        // 修复前：预算公式是 `effectiveMax - 1`，默认 max=4096 ⇒ 三档全被钳成
+        // 4095（可见正文只剩 1 token，三档无差别）。修复后 max=16000、比例 0.8 ⇒
+        // 上限 12800，三档 4096 / 8192 / 12800 各自可区分，且都留 3200 给可见正文。
+        const budgetOf = (level: "low" | "medium" | "high"): number => {
+            const params = ThinkingLevelPresets.toModelThinkingParams(
+                level,
+                "anthropic",
+                "claude-3-5-sonnet",
+                samplingOff,
+            );
+            assert.equal(params?.protocol, "anthropic");
+            if (params?.protocol !== "anthropic") {
+                throw new Error("expected anthropic params");
+            }
+            return params.anthropic.budget_tokens;
+        };
+        assert.equal(budgetOf("low"), 4096);
+        assert.equal(budgetOf("medium"), 8192);
+        assert.equal(budgetOf("high"), 12800);
+    });
 
-  it("Gemini 2.5 使用 thinkingBudget preset", () => {
-    const low = ThinkingLevelPresets.toModelThinkingParams(
-      "low",
-      "gemini",
-      "gemini-2.5-flash",
-      samplingOff,
-    );
-    assert.equal(low?.protocol, "gemini");
-    if (low?.protocol === "gemini") {
-      assert.equal(low.gemini.thinkingConfig.thinkingBudget, 4096);
-    }
-    const medium = ThinkingLevelPresets.toModelThinkingParams(
-      "medium",
-      "gemini",
-      "gemini-2.5-flash",
-      samplingOff,
-    );
-    if (medium?.protocol === "gemini") {
-      assert.equal(medium.gemini.thinkingConfig.thinkingBudget, -1);
-    }
-    const high = ThinkingLevelPresets.toModelThinkingParams(
-      "high",
-      "gemini",
-      "gemini-2.5-flash",
-      samplingOff,
-    );
-    if (high?.protocol === "gemini") {
-      assert.equal(high.gemini.thinkingConfig.thinkingBudget, 16384);
-    }
-  });
+    it("Gemini 2.5 使用 thinkingBudget preset", () => {
+        const low = ThinkingLevelPresets.toModelThinkingParams(
+            "low",
+            "gemini",
+            "gemini-2.5-flash",
+            samplingOff,
+        );
+        assert.equal(low?.protocol, "gemini");
+        if (low?.protocol === "gemini") {
+            assert.equal(low.gemini.thinkingConfig.thinkingBudget, 4096);
+        }
+        const medium = ThinkingLevelPresets.toModelThinkingParams(
+            "medium",
+            "gemini",
+            "gemini-2.5-flash",
+            samplingOff,
+        );
+        if (medium?.protocol === "gemini") {
+            assert.equal(medium.gemini.thinkingConfig.thinkingBudget, -1);
+        }
+        const high = ThinkingLevelPresets.toModelThinkingParams(
+            "high",
+            "gemini",
+            "gemini-2.5-flash",
+            samplingOff,
+        );
+        if (high?.protocol === "gemini") {
+            assert.equal(high.gemini.thinkingConfig.thinkingBudget, 16384);
+        }
+    });
 
-  it("Gemini 3.x 使用 thinkingLevel preset", () => {
-    const params = ThinkingLevelPresets.toModelThinkingParams(
-      "medium",
-      "gemini",
-      "gemini-3-pro",
-      samplingOff,
-    );
-    if (params?.protocol === "gemini") {
-      assert.equal(params.gemini.thinkingConfig.thinkingLevel, "medium");
-    }
-  });
+    it("Gemini 3.x 使用 thinkingLevel preset", () => {
+        const params = ThinkingLevelPresets.toModelThinkingParams(
+            "medium",
+            "gemini",
+            "gemini-3-pro",
+            samplingOff,
+        );
+        if (params?.protocol === "gemini") {
+            assert.equal(params.gemini.thinkingConfig.thinkingLevel, "medium");
+        }
+    });
 });

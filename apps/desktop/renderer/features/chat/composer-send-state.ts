@@ -5,86 +5,82 @@ import { ChatMessage, type ChatMessageData, type ContentBlock } from "@shared/lo
 import type { ChatMessageDto, ContentBlockDto } from "@shared/ipc-types";
 
 function blockFromDto(dto: ContentBlockDto): ContentBlock | null {
-  switch (dto.type) {
-    case "text":
-      return { type: "text", text: dto.text };
-    case "thinking":
-      return { type: "thinking", text: dto.text };
-    case "tool_use":
-      return {
-        type: "tool_use",
-        id: dto.id,
-        name: dto.name,
-        input: dto.input,
-      };
-    case "tool_result":
-      return {
-        type: "tool_result",
-        toolUseId: dto.toolUseId,
-        content: dto.content,
-        ...(dto.ok !== undefined ? { ok: dto.ok } : {}),
-        ...(dto.summary !== undefined ? { summary: dto.summary } : {}),
-      };
-    default:
-      return null;
-  }
+    switch (dto.type) {
+        case "text":
+            return { type: "text", text: dto.text };
+        case "thinking":
+            return { type: "thinking", text: dto.text };
+        case "tool_use":
+            return {
+                type: "tool_use",
+                id: dto.id,
+                name: dto.name,
+                input: dto.input,
+            };
+        case "tool_result":
+            return {
+                type: "tool_result",
+                toolUseId: dto.toolUseId,
+                content: dto.content,
+                ...(dto.ok !== undefined ? { ok: dto.ok } : {}),
+                ...(dto.summary !== undefined ? { summary: dto.summary } : {}),
+            };
+        default:
+            return null;
+    }
 }
 
 /** 将 IPC DTO 转为 {@link ChatMessage} 供领域行为使用。 */
 export function chatMessageFromDto(dto: ChatMessageDto): ChatMessage {
-  return ChatMessage.from({
-    id: dto.id,
-    sessionId: dto.sessionId,
-    role: dto.role,
-    seq: dto.seq,
-    hidden: dto.hidden,
-    createdAtMs: dto.createdAtMs,
-    provider: null,
-    raw: dto.metadata != null ? { metadata: dto.metadata } : null,
-    content: {
-      blocks: dto.contentBlocks
-        .map(blockFromDto)
-        .filter((b): b is ContentBlock => b != null),
-    },
-    ...(dto.attachments != null && dto.attachments.length > 0
-      ? { attachments: dto.attachments }
-      : {}),
-  });
+    return ChatMessage.from({
+        id: dto.id,
+        sessionId: dto.sessionId,
+        role: dto.role,
+        seq: dto.seq,
+        hidden: dto.hidden,
+        createdAtMs: dto.createdAtMs,
+        provider: null,
+        raw: dto.metadata != null ? { metadata: dto.metadata } : null,
+        content: {
+            blocks: dto.contentBlocks
+                .map(blockFromDto)
+                .filter((b): b is ContentBlock => b != null),
+        },
+        ...(dto.attachments != null && dto.attachments.length > 0
+            ? { attachments: dto.attachments }
+            : {}),
+    });
 }
 
 type ComposerSendState = {
-  /** 末条为 user 时可空发续跑。 */
-  readonly canResumeWithoutInput: boolean;
-  /** 末条为 plain user 文本（禁止带文字发送）。 */
-  readonly lastMessageIsPlainUserText: boolean;
+    /** 末条为 user 时可空发续跑。 */
+    readonly canResumeWithoutInput: boolean;
+    /** 末条为 plain user 文本（禁止带文字发送）。 */
+    readonly lastMessageIsPlainUserText: boolean;
 };
 
 /** 取会话列表中末条未隐藏消息（对应 spec `lastVisible`）。 */
-export function findLastVisibleMessageDto(
-  messages: readonly ChatMessageDto[],
-): ChatMessageDto | undefined {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const msg = messages[i];
-    if (msg != null && !msg.hidden) {
-      return msg;
+export function findLastVisibleMessageDto( messages: readonly ChatMessageDto[] ): ChatMessageDto | undefined {
+    for (let i = messages.length - 1; i >= 0; i--) {
+        const msg = messages[i];
+        if (msg != null && !msg.hidden) {
+            return msg;
+        }
     }
-  }
-  return undefined;
+    return undefined;
 }
 
 /** 由末条可见消息推导 Composer 发送规则。 */
-export function deriveComposerSendState(
-  lastMessage: ChatMessageDto | undefined,
-): ComposerSendState {
-  if (lastMessage == null) {
+export function deriveComposerSendState( lastMessage: ChatMessageDto | undefined ): ComposerSendState {
+    if (lastMessage == null) {
+        return {
+            canResumeWithoutInput: false,
+            lastMessageIsPlainUserText: false,
+        };
+    }
+    const msg = chatMessageFromDto(lastMessage);
     return {
-      canResumeWithoutInput: false,
-      lastMessageIsPlainUserText: false,
+        canResumeWithoutInput: lastMessage.role === "user",
+        lastMessageIsPlainUserText: ChatMessage.from(msg).isPlainUserText(),
     };
-  }
-  const msg = chatMessageFromDto(lastMessage);
-  return {
-    canResumeWithoutInput: lastMessage.role === "user",
-    lastMessageIsPlainUserText: ChatMessage.from(msg).isPlainUserText(),
-  };
 }

@@ -6,50 +6,50 @@ import {AppModal} from '@/components/ui/AppModal';
 let mockIsFocused = true;
 
 jest.mock('@react-navigation/native', () => ({
-  useIsFocused: () => mockIsFocused,
+    useIsFocused: () => mockIsFocused,
 }));
 
 const mockModalRender = jest.fn(
-  (props: {visible?: boolean; children?: React.ReactNode}) =>
-    React.createElement('RNModal', props, props.children),
+    (props: {visible?: boolean; children?: React.ReactNode}) =>
+        React.createElement('RNModal', props, props.children),
 );
 
 jest.mock('react-native', () => ({
-  Modal: (props: {visible?: boolean; children?: React.ReactNode}) =>
-    mockModalRender(props),
+    Modal: (props: {visible?: boolean; children?: React.ReactNode}) =>
+        mockModalRender(props),
 }));
 
 describe('AppModal', () => {
-  beforeEach(() => {
-    mockIsFocused = true;
-    mockModalRender.mockClear();
-  });
-
-  it('passes visible=false to RN Modal when screen is unfocused', () => {
-    mockIsFocused = false;
-    act(() => {
-      TestRenderer.create(
-        <AppModal visible onRequestClose={jest.fn()}>
-          {null}
-        </AppModal>,
-      );
+    beforeEach(() => {
+        mockIsFocused = true;
+        mockModalRender.mockClear();
     });
-    expect(mockModalRender).toHaveBeenCalledWith(
-      expect.objectContaining({visible: false}),
-    );
-  });
 
-  it('passes visible=true to RN Modal when visible and focused', () => {
-    mockIsFocused = true;
-    act(() => {
-      TestRenderer.create(
-        <AppModal visible onRequestClose={jest.fn()}>
-          {null}
-        </AppModal>,
-      );
+    it('passes visible=false to RN Modal when screen is unfocused', () => {
+        mockIsFocused = false;
+        act(() => {
+            TestRenderer.create(
+                <AppModal visible onRequestClose={jest.fn()}>
+                    {null}
+                </AppModal>,
+            );
+        });
+        expect(mockModalRender).toHaveBeenCalledWith(
+            expect.objectContaining({visible: false}),
+        );
     });
-    expect(mockModalRender).toHaveBeenCalledWith(
-      expect.objectContaining({visible: true}),
-    );
-  });
+
+    it('passes visible=true to RN Modal when visible and focused', () => {
+        mockIsFocused = true;
+        act(() => {
+            TestRenderer.create(
+                <AppModal visible onRequestClose={jest.fn()}>
+                    {null}
+                </AppModal>,
+            );
+        });
+        expect(mockModalRender).toHaveBeenCalledWith(
+            expect.objectContaining({visible: true}),
+        );
+    });
 });

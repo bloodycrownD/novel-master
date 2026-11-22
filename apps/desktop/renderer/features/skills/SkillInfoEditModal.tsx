@@ -15,139 +15,134 @@ import { BUILTIN_SKILL_NAMES, validateSkillName } from "@shared/logic/skills";
 import type { SkillRefDto } from "@shared/ipc-types";
 import { ipcSkillsUpdateInfo } from "@/ipc/client";
 import { toSkillRef } from "./skill-ui";
+import { coreT } from "@shared/logic/core-i18n";
 
 type SkillInfoEditModalProps = {
-  open: boolean;
-  /** 待编辑技能（含域定位）。 */
-  skillRef: SkillRefDto;
-  currentName: string;
-  currentDescription: string | null;
-  onClose: () => void;
-  /** 保存成功；参数为最新定位（可能已改名）。 */
-  onSaved: (ref: SkillRefDto) => void;
+    open: boolean;
+    /** 待编辑技能（含域定位）。 */
+    skillRef: SkillRefDto;
+    currentName: string;
+    currentDescription: string | null;
+    onClose: () => void;
+    /** 保存成功；参数为最新定位（可能已改名）。 */
+    onSaved: (ref: SkillRefDto) => void;
 };
 
 export function SkillInfoEditModal({
-  open,
-  skillRef,
-  currentName,
-  currentDescription,
-  onClose,
-  onSaved,
+    open,
+    skillRef,
+    currentName,
+    currentDescription,
+    onClose,
+    onSaved,
 }: SkillInfoEditModalProps) {
-  const [name, setName] = useState(currentName);
-  const [description, setDescription] = useState(currentDescription ?? "");
-  const [error, setError] = useState<string | undefined>();
-  const [saving, setSaving] = useState(false);
+    const [name, setName] = useState(currentName);
+    const [description, setDescription] = useState(currentDescription ?? "");
+    const [error, setError] = useState<string | undefined>();
+    const [saving, setSaving] = useState(false);
 
-  // 每次打开以当前值重置（技能切换/描述外部变更都跟随）
-  useEffect(() => {
-    if (open) {
-      setName(currentName);
-      setDescription(currentDescription ?? "");
-      setError(undefined);
+    // 每次打开以当前值重置（技能切换/描述外部变更都跟随）
+    useEffect(() => {
+        if (open) {
+            setName(currentName);
+            setDescription(currentDescription ?? "");
+            setError(undefined);
+        }
+    }, [open, currentName, currentDescription]);
+
+    if (!open) {
+        return null;
     }
-  }, [open, currentName, currentDescription]);
 
-  if (!open) {
-    return null;
-  }
+    const builtin = skillRef.domain === "global" && BUILTIN_SKILL_NAMES.has(skillRef.name);
+    const trimmedName = name.trim();
+    const trimmedDesc = description.trim();
+    const nameChanged = !builtin && trimmedName !== currentName;
+    const descChanged = trimmedDesc !== (currentDescription ?? "");
+    // 与 mobile 同口径：输入期即出 core 校验 reason（含保留名 SKILL.md）
+    const nameIssue = nameChanged && name.length > 0 ? validateSkillName(trimmedName) : null;
+    const canSubmit = !saving && (nameChanged || descChanged) && nameIssue == null && name.length > 0;
 
-  const builtin = skillRef.domain === "global" && BUILTIN_SKILL_NAMES.has(skillRef.name);
-  const trimmedName = name.trim();
-  const trimmedDesc = description.trim();
-  const nameChanged = !builtin && trimmedName !== currentName;
-  const descChanged = trimmedDesc !== (currentDescription ?? "");
-  // 与 mobile 同口径：输入期即出 core 校验 reason（含保留名 SKILL.md）
-  const nameIssue =
-    nameChanged && name.length > 0 ? validateSkillName(trimmedName) : null;
-  const canSubmit =
-    !saving && (nameChanged || descChanged) && nameIssue == null && name.length > 0;
+    const handleConfirm = async () => {
+        if (!canSubmit) {
+            return;
+        }
+        setSaving(true);
+        setError(undefined);
+        try {
+            const res = await ipcSkillsUpdateInfo({
+                domain: skillRef.domain,
+                ...(skillRef.domain === "project" && skillRef.projectId != null
+                    ? { projectId: skillRef.projectId }
+                    : {}),
+                name: skillRef.name,
+                ...(nameChanged ? { newName: trimmedName } : {}),
+                ...(descChanged ? { description: trimmedDesc } : {}),
+            });
+            if (!res.ok) {
+                setError(res.error.message);
+                return;
+            }
+            onSaved( nameChanged ? toSkillRef(skillRef.domain, trimmedName, skillRef.projectId) : skillRef );
+            onClose();
+        } catch (err) {
+            // 对齐 mobile：IPC 极端失败（如 bridge 断连）以页面错误提示，不静默
+            setError(err instanceof Error ? err.message : String(err));
+            return;
+        } finally {
+            setSaving(false);
+        }
+    };
 
-  const handleConfirm = async () => {
-    if (!canSubmit) {
-      return;
-    }
-    setSaving(true);
-    setError(undefined);
-    try {
-      const res = await ipcSkillsUpdateInfo({
-        domain: skillRef.domain,
-        ...(skillRef.domain === "project" && skillRef.projectId != null
-          ? { projectId: skillRef.projectId }
-          : {}),
-        name: skillRef.name,
-        ...(nameChanged ? { newName: trimmedName } : {}),
-        ...(descChanged ? { description: trimmedDesc } : {}),
-      });
-      if (!res.ok) {
-        setError(res.error.message);
-        return;
-      }
-      onSaved(
-        nameChanged
-          ? toSkillRef(skillRef.domain, trimmedName, skillRef.projectId)
-          : skillRef,
-      );
-      onClose();
-    } catch (err) {
-      // 对齐 mobile：IPC 极端失败（如 bridge 断连）以页面错误提示，不静默
-      setError(err instanceof Error ? err.message : String(err));
-      return;
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="text-prompt-overlay" onClick={onClose}>
-      <div
-        className="text-prompt-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="skill-info-edit-title"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 id="skill-info-edit-title" className="text-prompt-modal__title">
-          编辑信息
-        </h3>
-        <p className="text-prompt-modal__label">
-          {builtin ? "技能名（内置技能不可改名）" : "技能名"}
-        </p>
-        <input
-          className="text-prompt-modal__input"
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          readOnly={builtin}
-          autoFocus
-        />
-        {nameIssue ? (
-          <p className="new-skill-modal__error">{nameIssue}</p>
-        ) : null}
-        <p className="text-prompt-modal__label">描述（进入技能索引）</p>
-        <textarea
-          className="text-prompt-modal__input new-skill-modal__desc"
-          rows={3}
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="模型会据此决定是否使用该技能"
-        />
-        {error ? <p className="new-skill-modal__error">{error}</p> : null}
-        <div className="text-prompt-modal__actions">
-          <button type="button" className="text-prompt-modal__btn" onClick={onClose}>
-            取消
-          </button>
-          <button
-            type="button"
-            className="text-prompt-modal__btn text-prompt-modal__btn--primary"
-            disabled={!canSubmit}
-            onClick={() => void handleConfirm()}
-          >
-            {saving ? "保存中…" : "保存"}
-          </button>
+    return (
+        <div className="text-prompt-overlay" onClick={onClose}>
+            <div
+                className="text-prompt-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="skill-info-edit-title"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <h3 id="skill-info-edit-title" className="text-prompt-modal__title">
+                    {coreT({key: "ui.skills.edit_info"})}
+                </h3>
+                <p className="text-prompt-modal__label">
+                    {builtin ? coreT({key: "ui.skills.name_label_builtin_hint"}) : coreT({key: "ui.skills.name_label_plain"})}
+                </p>
+                <input
+                    className="text-prompt-modal__input"
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    readOnly={builtin}
+                    autoFocus
+                />
+                {nameIssue ? (
+                    <p className="new-skill-modal__error">{nameIssue}</p>
+                ) : null}
+                <p className="text-prompt-modal__label">{coreT({key: "ui.skills.desc_label_desktop"})}</p>
+                <textarea
+                    className="text-prompt-modal__input new-skill-modal__desc"
+                    rows={3}
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder={coreT({key: "ui.skills.desc_hint_desktop"})}
+                />
+                {error ? <p className="new-skill-modal__error">{error}</p> : null}
+                <div className="text-prompt-modal__actions">
+                    <button type="button" className="text-prompt-modal__btn" onClick={onClose}>
+                        {coreT({key: "ui.common.cancel"})}
+                    </button>
+                    <button
+                        type="button"
+                        className="text-prompt-modal__btn text-prompt-modal__btn--primary"
+                        disabled={!canSubmit}
+                        onClick={() => void handleConfirm()}
+                    >
+                        {saving ? coreT({key: "ui.common.saving"}) : coreT({key: "ui.common.save"})}
+                    </button>
+                </div>
+            </div>
         </div>
-      </div>
-    </div>
-  );
+    );
 }

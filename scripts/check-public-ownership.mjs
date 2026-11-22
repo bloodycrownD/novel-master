@@ -72,7 +72,7 @@ const EXCEPTIONS = [
   {
     barrel: "chat",
     domains: ["domain/tool"],
-    symbols: ["resolveVfsToolFilePath"],
+    symbols: ["resolveVfsToolFilePath", "VfsToolFilePath"], // p25 裸函数收编后 resolveVfsToolFilePath → VfsToolFilePath.resolve
     why: "VFS 工具卡路径解析，desktop/mobile 的 transcript 消费方都在 chat 门面取，domain/tool 无独立出口（p22 实测有双端消费者，非零消费）",
   },
 ];

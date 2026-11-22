@@ -19,49 +19,49 @@
 
 /** 快照完成信号盒：webview 侧 notify，回滚链侧 consumeNext。 */
 export interface SnapshotCompleteSignal {
-  /** 快照全部片 post 且 deferred actions 排空后调用（组件侧）。 */
-  notify(): void;
-  /**
+    /** 快照全部片 post 且 deferred actions 排空后调用（组件侧）。 */
+    notify(): void;
+    /**
    * 等待下一次快照完成信号。
    *
    * @returns 'signaled'（等到了信号）或 'timeout'（超时兜底）。
    */
-  consumeNext(timeoutMs: number): Promise<'signaled' | 'timeout'>;
+    consumeNext(timeoutMs: number): Promise<'signaled' | 'timeout'>;
 }
 
 export namespace SnapshotCompleteSignal {
-  export function create(): SnapshotCompleteSignal {
-    let waiting: (() => void) | null = null;
-    let pending = false;
-    return {
-      notify() {
-        if (waiting != null) {
-          const resolve = waiting;
-          waiting = null;
-          resolve();
-          return;
-        }
-        pending = true;
-      },
-      consumeNext(timeoutMs: number): Promise<'signaled' | 'timeout'> {
-        return new Promise(resolve => {
-          if (pending) {
-            pending = false;
-            resolve('signaled');
-            return;
-          }
-          const timer = setTimeout(() => {
-            if (waiting != null) {
-              waiting = null;
-              resolve('timeout');
-            }
-          }, timeoutMs);
-          waiting = () => {
-            clearTimeout(timer);
-            resolve('signaled');
-          };
-        });
-      },
-    };
-  }
+    export function create(): SnapshotCompleteSignal {
+        let waiting: (() => void) | null = null;
+        let pending = false;
+        return {
+            notify() {
+                if (waiting != null) {
+                    const resolve = waiting;
+                    waiting = null;
+                    resolve();
+                    return;
+                }
+                pending = true;
+            },
+            consumeNext(timeoutMs: number): Promise<'signaled' | 'timeout'> {
+                return new Promise(resolve => {
+                    if (pending) {
+                        pending = false;
+                        resolve('signaled');
+                        return;
+                    }
+                    const timer = setTimeout(() => {
+                        if (waiting != null) {
+                            waiting = null;
+                            resolve('timeout');
+                        }
+                    }, timeoutMs);
+                    waiting = () => {
+                        clearTimeout(timer);
+                        resolve('signaled');
+                    };
+                });
+            },
+        };
+    }
 }

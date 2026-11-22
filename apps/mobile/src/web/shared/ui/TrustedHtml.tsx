@@ -6,24 +6,24 @@
 import type {JSX} from 'preact';
 
 type TrustedHtmlProps = {
-  html: string;
-  className?: string;
+    html: string;
+    className?: string;
 } & Omit<
-  JSX.HTMLAttributes<HTMLDivElement>,
-  'dangerouslySetInnerHTML' | 'children'
+    JSX.HTMLAttributes<HTMLDivElement>,
+    'dangerouslySetInnerHTML' | 'children'
 >;
 
 /**
  * Preact 组件：用 dangerouslySetInnerHTML 注入已消毒 HTML。
  */
 export function TrustedHtml({html, className, ...rest}: TrustedHtmlProps) {
-  return (
-    <div
-      className={className}
-      {...rest}
-      dangerouslySetInnerHTML={{__html: html}}
-    />
-  );
+    return (
+        <div
+            className={className}
+            {...rest}
+            dangerouslySetInnerHTML={{__html: html}}
+        />
+    );
 }
 
 /**
@@ -33,7 +33,7 @@ export function TrustedHtml({html, className, ...rest}: TrustedHtmlProps) {
  * （信任 HTML 的 DOM 写入面）起名。
  */
 export namespace TrustedHtmlWriter {
-  export function apply(el: Element, html: string): void {
-    el.innerHTML = html;
-  }
+    export function apply(el: Element, html: string): void {
+        el.innerHTML = html;
+    }
 }

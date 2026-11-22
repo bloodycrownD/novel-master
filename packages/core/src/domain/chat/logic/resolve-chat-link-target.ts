@@ -26,21 +26,16 @@ const SCHEME_PATTERN = /^[a-z][a-z0-9+.-]*:/i;
 /** http(s) 外跳判定单源（mobile RN / desktop renderer / desktop main 三端共用）。 */
 const HTTPS_PATTERN = /^https?:\/\//i;
 
-/**
- * 判定 href 是否为 http(s) 外部链接（大小写不敏感）。
- *
- * 三端（链接路由、导航拦截、新窗口拦截）统一消费本判定，
- * 避免各入口自持正则导致口径漂移。
- * nm-style: keep-public — 语义谓词，4 个生产入口直接消费。
- */
 /** 省略显示长度门槛（字符数）：路径超过该长度且层数 >2 才做中间省略。 */
 const ELIDE_PATH_MIN_LENGTH = 20;
 
-class ChatLinkResolver {
+export const ChatLinkResolver = {
+
     /** 判定 href 是否为 http(s) 外部链接。 */
     isHttp(href: string): boolean {
         return HTTPS_PATTERN.test(href);
-    }
+    },
+
 
     /**
      * 识别聊天链接 href 是否指向工作区文件。
@@ -48,7 +43,6 @@ class ChatLinkResolver {
      * @param href - `<a>` 元素的原始 href（未解码）
      * @returns 归一化后的工作区逻辑路径（如 `/笔记/大纲.md`）；非工作区目标返回 null
      */
-    /** 识别聊天链接 href 是否指向工作区文件。 */
     resolve(href: string): string | null {
         const trimmed = href.trim();
         if (trimmed.length === 0) {
@@ -86,7 +80,7 @@ class ChatLinkResolver {
             return null;
         }
         return resolved.value;
-    }
+    },
 
 
     /**
@@ -95,21 +89,21 @@ class ChatLinkResolver {
      * 入参应为归一化绝对逻辑路径（/ 开头、无空段无尾斜杠，即
      * resolveChatLinkTarget/LogicalPath.resolve 的产出形态）；短路径（两段内或
      * 未超过 ELIDE_PATH_MIN_LENGTH）原样返回；文件名/首段本身超长不截断。
-     * nm-style: keep-local — chatLinkNotFoundMessage 复用；测试直接锁省略规则。
+     * nm-style: keep-local — ChatLinkResolver.notFoundMessage 复用；测试直接锁省略规则。
      */
-    /** nm-style: keep-public — chatLinkNotFoundMessage 复用；测试直接锁省略规则。 */
+    /** nm-style: keep-public — ChatLinkResolver.notFoundMessage 复用；测试直接锁省略规则。 */
     elidePath(path: string): string {
         const parts = path.split("/").filter((part) => part.length > 0);
         if (parts.length <= 2 || path.length <= ELIDE_PATH_MIN_LENGTH) {
             return path;
         }
         return `/${parts[0]!}.../${parts[parts.length - 1]!}`;
-    }
+    },
+
 
     /** 聊天路径链接未命中的提示文案（descriptor，宿主 translator 渲染）。 */
     notFoundMessage(path: string): CoreMessageDescriptor {
-        return { key: "label.chat.link_not_found", params: { path: this.elidePath(path) } };
-    }
-}
+        return { key: "label.chat.link_not_found", params: { path: ChatLinkResolver.elidePath(path) } };
+    },
+} as const;
 
-export const chatLinkResolver = new ChatLinkResolver();

@@ -32,6 +32,14 @@ interface FrontMatterField {
  */
 export const FrontMatter = {
     /**
+     * Front matter 一行的写侧格式化：`key: value`，value 走 JSON.stringify（JSON 字符串
+     * 即合法 YAML double-quoted scalar）。{@link FrontMatter.parseFields} 的写侧对偶。
+     */
+    formatField(key: string, value: string): string {
+        return `${key}: ${JSON.stringify(value)}`;
+    },
+
+    /**
      * Splits YAML front matter between `---` lines from the Markdown body.
      *
      * @remarks 未闭合的起始 `---` 按「无 front matter」处理，正文取原文。

@@ -2,11 +2,11 @@
  * Desktop：透明 textarea + 高亮层着色 `@路径` / `$技能`（落库仍为纯字符串）。
  */
 import {
-  useMemo,
-  useRef,
-  type KeyboardEvent,
-  type RefObject,
-  type UIEvent,
+    useMemo,
+    useRef,
+    type KeyboardEvent,
+    type RefObject,
+    type UIEvent,
 } from "react";
 
 // `@路径` 与 `$技能` 共用高亮；token 内排除另一 trigger，避免 `@a$b` 整段误吞。
@@ -14,11 +14,11 @@ import {
 const AT_TOKEN_RE = /@([^\s@$]+)|\$([^\s$@]+)/g;
 
 function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    return s
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
 }
 
 /** 将正文中的 `@path` / `$技能` 标成高亮 span；其余转义。 */

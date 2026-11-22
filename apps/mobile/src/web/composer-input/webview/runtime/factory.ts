@@ -21,73 +21,73 @@ import {ComposerEditor} from './editor';
 import {BRIDGE_V} from './model';
 
 type ComposerRuntimeOptions = {
-  /**
+    /**
    * 高度上报开关（默认 true = 旧包行为）。
    * false 时闸门在 editor 的 `scheduleMeasure` 一层就关掉整条测高链：逐键调用
    * 直接早退（不排 rAF）、ResizeObserver 不注册、`heightChange` 零上行；用于高度
    * 改由文档内布局消化的场景（合成包 dock 与转录同文档，不需要跨桥高度链）。
    */
-  readonly heightReport?: boolean;
-  /** 是否绑定 host→web 消息通道（默认 true）。false 时由合成入口统一注册单次通道。 */
-  readonly bindChannel?: boolean;
-  /** 是否发 ready（默认 true）。false 时由合成入口在两 runtime 均 boot 完成后发单条 ready。 */
-  readonly emitReady?: boolean;
+    readonly heightReport?: boolean;
+    /** 是否绑定 host→web 消息通道（默认 true）。false 时由合成入口统一注册单次通道。 */
+    readonly bindChannel?: boolean;
+    /** 是否发 ready（默认 true）。false 时由合成入口在两 runtime 均 boot 完成后发单条 ready。 */
+    readonly emitReady?: boolean;
 };
 
 type ComposerRuntimeHandle = {
-  /** 解析出的挂载点；null = host 未命中（此时只走绑定/ready，与旧 main.ts 一致）。 */
-  readonly parent: HTMLElement | null;
-  /** 是否真的挂载了编辑器（parent 命中即 true）。 */
-  readonly mounted: boolean;
-  /** 生效后的三个开关（回显，便于调用方与单测断言）。 */
-  readonly heightReport: boolean;
-  readonly bindChannel: boolean;
-  readonly emitReady: boolean;
+    /** 解析出的挂载点；null = host 未命中（此时只走绑定/ready，与旧 main.ts 一致）。 */
+    readonly parent: HTMLElement | null;
+    /** 是否真的挂载了编辑器（parent 命中即 true）。 */
+    readonly mounted: boolean;
+    /** 生效后的三个开关（回显，便于调用方与单测断言）。 */
+    readonly heightReport: boolean;
+    readonly bindChannel: boolean;
+    readonly emitReady: boolean;
 };
 
 export namespace ComposerFactory {
-  /**
+    /**
    * 挂载点解析：元素直通；选择器字符串走 querySelector（合成包挂 `#composer-input`）。
    *
    * 模块内私有：全仓只有本工厂自用（cr1-P1-1 收回导出——外部零消费方的 export 是
    * 死面，留着只会让人以为它是一条可依赖的公开契约）。
    */
-  function resolveComposerHost(host: HTMLElement | string): HTMLElement | null {
-    if (typeof host === 'string') {
-      return document.querySelector(host);
+    function resolveComposerHost(host: HTMLElement | string): HTMLElement | null {
+        if (typeof host === 'string') {
+            return document.querySelector(host);
+        }
+        return host ?? null;
     }
-    return host ?? null;
-  }
 
-  /**
+    /**
    * 装配 composer runtime 的全部顶层副作用（挂载 / 绑通道 / 发 ready）。
    * @param host    挂载点元素或选择器；未命中时跳过挂载（不抛，与旧 main.ts 的 null 守卫同口径）
    * @param options 三个开关，缺省即旧包现行为
    */
-  export function create(host: HTMLElement | string, options: ComposerRuntimeOptions = {}): ComposerRuntimeHandle {
-    const heightReport = options.heightReport !== false;
-    const bindChannel = options.bindChannel !== false;
-    const emitReady = options.emitReady !== false;
+    export function create(host: HTMLElement | string, options: ComposerRuntimeOptions = {}): ComposerRuntimeHandle {
+        const heightReport = options.heightReport !== false;
+        const bindChannel = options.bindChannel !== false;
+        const emitReady = options.emitReady !== false;
 
-    const parent = resolveComposerHost(host);
-    if (parent != null) {
-      ComposerEditor.mount(parent, {heightReport});
+        const parent = resolveComposerHost(host);
+        if (parent != null) {
+            ComposerEditor.mount(parent, {heightReport});
+        }
+
+        if (bindChannel) {
+            HostMessageChannel.bind(ComposerBridge.handle);
+        }
+
+        if (emitReady) {
+            post('ready', {version: BRIDGE_V});
+        }
+
+        return {
+            parent,
+            mounted: parent != null,
+            heightReport,
+            bindChannel,
+            emitReady,
+        };
     }
-
-    if (bindChannel) {
-      HostMessageChannel.bind(ComposerBridge.handle);
-    }
-
-    if (emitReady) {
-      post('ready', {version: BRIDGE_V});
-    }
-
-    return {
-      parent,
-      mounted: parent != null,
-      heightReport,
-      bindChannel,
-      emitReady,
-    };
-  }
 }

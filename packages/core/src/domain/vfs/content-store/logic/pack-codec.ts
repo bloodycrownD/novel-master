@@ -41,8 +41,8 @@ type VfsContentError = AppError<"VFS_CONTENT_CORRUPT" | "VFS_CONTENT_UNSUPPORTED
 
 /** member 在其语义空间内的字节区间（pack：解压后明文空间；fossil：bytes 空间）。 */
 export interface VfsPackSpan {
-  readonly offset: number;
-  readonly length: number;
+    readonly offset: number;
+    readonly length: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -51,21 +51,21 @@ export interface VfsPackSpan {
 
 /** 探针计数快照。 */
 interface VfsPackDecodeCounters {
-  /** zlib-concat 组流解压次数（整组一次为正确形态）。 */
-  readonly zlibConcatInflates: number;
-  /** fossil 段解压次数（组内按段数一次为正确形态，不含链 apply）。 */
-  readonly fossilSegmentInflates: number;
+    /** zlib-concat 组流解压次数（整组一次为正确形态）。 */
+    readonly zlibConcatInflates: number;
+    /** fossil 段解压次数（组内按段数一次为正确形态，不含链 apply）。 */
+    readonly fossilSegmentInflates: number;
 }
 
 const decodeCounters = {
-  zlibConcatInflates: 0,
-  fossilSegmentInflates: 0,
+    zlibConcatInflates: 0,
+    fossilSegmentInflates: 0,
 };
 
 /** fossil 段表解析结果：段数 + 各段在 bytes 内的区间（按链序）。 */
 interface FossilSegmentTable {
-  readonly segmentCount: number;
-  readonly segments: ReadonlyArray<VfsPackSpan>;
+    readonly segmentCount: number;
+    readonly segments: ReadonlyArray<VfsPackSpan>;
 };
 
 /**
@@ -89,22 +89,22 @@ interface FossilSegmentTable {
 const FOSSIL_SEGMENT_TARGET_SIZE_LIMIT_BYTES = 1024 * 1024;
 
 export const PackCodec = {
-  /** 清零解压计数探针（测试钩子）。 */
-  __resetDecodeCountersForTests(): void {
-    decodeCounters.zlibConcatInflates = 0;
-    decodeCounters.fossilSegmentInflates = 0;
-  },
+    /** 清零解压计数探针（测试钩子）。 */
+    __resetDecodeCountersForTests(): void {
+        decodeCounters.zlibConcatInflates = 0;
+        decodeCounters.fossilSegmentInflates = 0;
+    },
 
-  /** 读取解压计数探针当前值（测试钩子）。 */
-  __getDecodeCountersForTests(): VfsPackDecodeCounters {
-    return { ...decodeCounters };
-  },
+    /** 读取解压计数探针当前值（测试钩子）。 */
+    __getDecodeCountersForTests(): VfsPackDecodeCounters {
+        return { ...decodeCounters };
+    },
 
-  // -------------------------------------------------------------------------
-  // zlib-concat-v1
-  // -------------------------------------------------------------------------
+    // -------------------------------------------------------------------------
+    // zlib-concat-v1
+    // -------------------------------------------------------------------------
 
-  /**
+    /**
    * 解码 zlib-concat 组的若干成员：整组流只解压一次，再按区间切片明文。
    *
    * @remarks `spans` 为空时**不碰流、不计探针**直接返回空数组（与 fossil 版同形）：
@@ -113,32 +113,32 @@ export const PackCodec = {
    * @returns 与 spans 同序的成员明文 UTF-8 字节（subarray 视图，调用方解码后即弃）；
    *   `spans` 为空时返回空数组且不解压整组流；流损坏 / 区间越界返回 `VFS_CONTENT_CORRUPT`
    */
-  decodeZlibConcatSpans(packBytes: Uint8Array, spans: ReadonlyArray<VfsPackSpan>): Result<Uint8Array[], VfsContentError> {
-    if (spans.length === 0) {
-      return Result.ok([]);
-    }
-    decodeCounters.zlibConcatInflates++;
-    const decompressed = ZlibCodec.decompress(packBytes);
-    if (!decompressed.ok) {
-      return Result.err(decompressed.error);
-    }
-    const plainAll = decompressed.value;
-    const plains: Uint8Array[] = [];
-    for (const span of spans) {
-      const within = PackCodec.assertSpanWithin(span, plainAll.byteLength, VFS_PACK_FORMAT_ZLIB_CONCAT_V1);
-      if (!within.ok) {
-        return Result.err(within.error);
-      }
-      plains.push(plainAll.subarray(span.offset, span.offset + span.length));
-    }
-    return Result.ok(plains);
-  },
+    decodeZlibConcatSpans(packBytes: Uint8Array, spans: ReadonlyArray<VfsPackSpan>): Result<Uint8Array[], VfsContentError> {
+        if (spans.length === 0) {
+            return Result.ok([]);
+        }
+        decodeCounters.zlibConcatInflates++;
+        const decompressed = ZlibCodec.decompress(packBytes);
+        if (!decompressed.ok) {
+            return Result.err(decompressed.error);
+        }
+        const plainAll = decompressed.value;
+        const plains: Uint8Array[] = [];
+        for (const span of spans) {
+            const within = PackCodec.assertSpanWithin(span, plainAll.byteLength, VFS_PACK_FORMAT_ZLIB_CONCAT_V1);
+            if (!within.ok) {
+                return Result.err(within.error);
+            }
+            plains.push(plainAll.subarray(span.offset, span.offset + span.length));
+        }
+        return Result.ok(plains);
+    },
 
-  // -------------------------------------------------------------------------
-  // fossil-chain-v1
-  // -------------------------------------------------------------------------
+    // -------------------------------------------------------------------------
+    // fossil-chain-v1
+    // -------------------------------------------------------------------------
 
-  /**
+    /**
    * 解析 fossil 段表（`4B 段数（LE）+ N×4B 各段压缩长（LE）+ 段数据连排`）。
    *
    * @remarks 段表自洽性校验：段表长度区不完整、段数为 0、段长合计与流长不符
@@ -146,33 +146,33 @@ export const PackCodec = {
    *   ——零长段由写侧（测试夹具 `encodeFossilChainPack` 每段必有内容）保证，本解析层不拦；
    *   零长段的后果见 {@link PackCodec.decodeFossilChainSpans} 里的 offset 索引注释。
    */
-  parseFossilSegmentTable(packBytes: Uint8Array): Result<FossilSegmentTable, VfsContentError> {
-    if (packBytes.byteLength < 4) {
-      return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: "fossil-chain-v1 流过短：连段数头都读不到", byteLength: packBytes.byteLength }));
-    }
-    const view = new DataView(packBytes.buffer, packBytes.byteOffset, packBytes.byteLength);
-    const segmentCount = view.getUint32(0, true);
-    if (segmentCount === 0) {
-      return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: "fossil-chain-v1 段表段数为 0", byteLength: packBytes.byteLength }));
-    }
-    const headerLength = 4 + 4 * segmentCount;
-    if (packBytes.byteLength < headerLength) {
-      return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: "fossil-chain-v1 流过短：段表长度区不完整", byteLength: packBytes.byteLength, headerLength }));
-    }
-    const segments: VfsPackSpan[] = [];
-    let cursor = headerLength;
-    for (let index = 0; index < segmentCount; index++) {
-      const length = view.getUint32(4 + 4 * index, true);
-      segments.push({ offset: cursor, length });
-      cursor += length;
-    }
-    if (cursor !== packBytes.byteLength) {
-      return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: `fossil-chain-v1 段表与流长不符：段数据合计 ${cursor - headerLength}，实际剩余 ${packBytes.byteLength - headerLength}`, byteLength: packBytes.byteLength, headerLength }));
-    }
-    return Result.ok({ segmentCount, segments });
-  },
+    parseFossilSegmentTable(packBytes: Uint8Array): Result<FossilSegmentTable, VfsContentError> {
+        if (packBytes.byteLength < 4) {
+            return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: "fossil-chain-v1 流过短：连段数头都读不到", byteLength: packBytes.byteLength }));
+        }
+        const view = new DataView(packBytes.buffer, packBytes.byteOffset, packBytes.byteLength);
+        const segmentCount = view.getUint32(0, true);
+        if (segmentCount === 0) {
+            return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: "fossil-chain-v1 段表段数为 0", byteLength: packBytes.byteLength }));
+        }
+        const headerLength = 4 + 4 * segmentCount;
+        if (packBytes.byteLength < headerLength) {
+            return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: "fossil-chain-v1 流过短：段表长度区不完整", byteLength: packBytes.byteLength, headerLength }));
+        }
+        const segments: VfsPackSpan[] = [];
+        let cursor = headerLength;
+        for (let index = 0; index < segmentCount; index++) {
+            const length = view.getUint32(4 + 4 * index, true);
+            segments.push({ offset: cursor, length });
+            cursor += length;
+        }
+        if (cursor !== packBytes.byteLength) {
+            return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: `fossil-chain-v1 段表与流长不符：段数据合计 ${cursor - headerLength}，实际剩余 ${packBytes.byteLength - headerLength}`, byteLength: packBytes.byteLength, headerLength }));
+        }
+        return Result.ok({ segmentCount, segments });
+    },
 
-  /**
+    /**
    * 解码 fossil 链组的若干成员：解段表 → 解段 0 得 v0 → 沿链 applyDelta 到所需最大
    * 段号，中间明文全组共享（一次链遍历喂所有成员，而非逐成员从段 0 重解）。
    *
@@ -180,90 +180,90 @@ export const PackCodec = {
    * @returns 与 spans 同序的成员明文 UTF-8 字节；段表 / 段区间 / 解压 / apply 失败
    *   返回 `VFS_CONTENT_CORRUPT`
    */
-  decodeFossilChainSpans(packBytes: Uint8Array, spans: ReadonlyArray<VfsPackSpan>): Result<Uint8Array[], VfsContentError> {
-    if (spans.length === 0) {
-      return Result.ok([]);
-    }
-    const tableResult = PackCodec.parseFossilSegmentTable(packBytes);
-    if (!tableResult.ok) {
-      return Result.err(tableResult.error);
-    }
-    const table = tableResult.value;
-    // offset → 段号索引的**唯一性前提**是「各段 length > 0」：零长段会让后一段的
-    // offset 与前一段撞车，Map.set 后写覆盖前写，只保留最后一个同 offset 的段号。
-    // 该前提由写侧保证（测试夹具 `encodeFossilChainPack` 每段都装了一整条 zlib 流，长度
-    // 必 > 0），本解析层刻意不校验它（见 {@link PackCodec.parseFossilSegmentTable} 的
-    // @remarks）。即便有坏 pack 带零长段撞车，后果**仍是响亮失败而非静默错读**：
-    // 撞车时 member span 的 offset 命中的是另一个段号，随后 `segment.length !==
-    // span.length` 的长度对账（或段边界解析）必然失败，不存在「解出别的成员明文
-    // 并冒充返回」这条静默路径。
-    const segmentIndexByOffset = new Map<number, number>();
-    table.segments.forEach((segment, index) => {
-      segmentIndexByOffset.set(segment.offset, index);
-    });
-    const memberIndices: number[] = [];
-    for (const span of spans) {
-      const within = PackCodec.assertSpanWithin(span, packBytes.byteLength, VFS_PACK_FORMAT_FOSSIL_CHAIN_V1);
-      if (!within.ok) {
-        return Result.err(within.error);
-      }
-      const index = segmentIndexByOffset.get(span.offset);
-      if (index == null) {
-        return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: `fossil-chain-v1 member offset 与段表不符: ${span.offset}`, offset: span.offset, length: span.length }));
-      }
-      const segment = table.segments[index]!;
-      if (segment.length !== span.length) {
-        return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: `fossil-chain-v1 member length 与段表不符: ${span.length} != ${segment.length}`, offset: span.offset, length: span.length, segmentLength: segment.length, segmentIndex: index }));
-      }
-      memberIndices.push(index);
-    }
+    decodeFossilChainSpans(packBytes: Uint8Array, spans: ReadonlyArray<VfsPackSpan>): Result<Uint8Array[], VfsContentError> {
+        if (spans.length === 0) {
+            return Result.ok([]);
+        }
+        const tableResult = PackCodec.parseFossilSegmentTable(packBytes);
+        if (!tableResult.ok) {
+            return Result.err(tableResult.error);
+        }
+        const table = tableResult.value;
+        // offset → 段号索引的**唯一性前提**是「各段 length > 0」：零长段会让后一段的
+        // offset 与前一段撞车，Map.set 后写覆盖前写，只保留最后一个同 offset 的段号。
+        // 该前提由写侧保证（测试夹具 `encodeFossilChainPack` 每段都装了一整条 zlib 流，长度
+        // 必 > 0），本解析层刻意不校验它（见 {@link PackCodec.parseFossilSegmentTable} 的
+        // @remarks）。即便有坏 pack 带零长段撞车，后果**仍是响亮失败而非静默错读**：
+        // 撞车时 member span 的 offset 命中的是另一个段号，随后 `segment.length !==
+        // span.length` 的长度对账（或段边界解析）必然失败，不存在「解出别的成员明文
+        // 并冒充返回」这条静默路径。
+        const segmentIndexByOffset = new Map<number, number>();
+        table.segments.forEach((segment, index) => {
+            segmentIndexByOffset.set(segment.offset, index);
+        });
+        const memberIndices: number[] = [];
+        for (const span of spans) {
+            const within = PackCodec.assertSpanWithin(span, packBytes.byteLength, VFS_PACK_FORMAT_FOSSIL_CHAIN_V1);
+            if (!within.ok) {
+                return Result.err(within.error);
+            }
+            const index = segmentIndexByOffset.get(span.offset);
+            if (index == null) {
+                return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: `fossil-chain-v1 member offset 与段表不符: ${span.offset}`, offset: span.offset, length: span.length }));
+            }
+            const segment = table.segments[index]!;
+            if (segment.length !== span.length) {
+                return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: `fossil-chain-v1 member length 与段表不符: ${span.length} != ${segment.length}`, offset: span.offset, length: span.length, segmentLength: segment.length, segmentIndex: index }));
+            }
+            memberIndices.push(index);
+        }
 
-    // 沿链一次走到所需最大段号；fossil-delta 的 applyDelta 默认校验 delta 校验和。
-    const chain: Uint8Array[] = [];
-    const first = PackCodec.inflateFossilSegment(packBytes, table.segments[0]!, 0);
-    if (!first.ok) {
-      return Result.err(first.error);
-    }
-    let current = first.value;
-    chain[0] = current;
-    const maxIndex = Math.max(...memberIndices);
-    for (let index = 1; index <= maxIndex; index++) {
-      const segment = table.segments[index]!;
-      const inflated = PackCodec.inflateFossilSegment(packBytes, segment, index);
-      if (!inflated.ok) {
-        return Result.err(inflated.error);
-      }
-      const delta = inflated.value;
-      // applyDelta 输出规模闸门：坏段可自述 4GB 的 targetSize（几百字节 delta 放大
-      // 数十 MB 输出、打死宿主堆），必须在 apply 之前拦（详见常量注释）。
-      let targetSize: number;
-      try {
-        targetSize = getDeltaTargetSize(delta);
-      } catch (error) {
-        // delta 头本身损坏时 getDeltaTargetSize 会抛（段级包装补上段号与坐标）。
-        return Result.err(PackCodec.segmentError(index, segment, "targetSize", error));
-      }
-      if (targetSize > FOSSIL_SEGMENT_TARGET_SIZE_LIMIT_BYTES) {
-        return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: `fossil-chain-v1 段 ${index} delta 声明的输出规模 ${targetSize} 字节超过上限 ${FOSSIL_SEGMENT_TARGET_SIZE_LIMIT_BYTES} 字节（坏段防御，拒绝 apply）`, segmentIndex: index, targetSize, limit: FOSSIL_SEGMENT_TARGET_SIZE_LIMIT_BYTES }));
-      }
-      try {
-        current = applyDelta(current, delta);
-      } catch (error) {
-        // 裸冒泡只有 `bad checksum` / `corrupt delta` 之类底层文案，链路末端（只拿到
-        // 一串 hash 的 content store 调用方）完全无从判断是哪一段出的问题——段级
-        // 包装补上段号与区间坐标。
-        return Result.err(PackCodec.segmentError(index, segment, "applyDelta", error));
-      }
-      chain[index] = current;
-    }
-    return Result.ok(memberIndices.map((index) => chain[index]!));
-  },
+        // 沿链一次走到所需最大段号；fossil-delta 的 applyDelta 默认校验 delta 校验和。
+        const chain: Uint8Array[] = [];
+        const first = PackCodec.inflateFossilSegment(packBytes, table.segments[0]!, 0);
+        if (!first.ok) {
+            return Result.err(first.error);
+        }
+        let current = first.value;
+        chain[0] = current;
+        const maxIndex = Math.max(...memberIndices);
+        for (let index = 1; index <= maxIndex; index++) {
+            const segment = table.segments[index]!;
+            const inflated = PackCodec.inflateFossilSegment(packBytes, segment, index);
+            if (!inflated.ok) {
+                return Result.err(inflated.error);
+            }
+            const delta = inflated.value;
+            // applyDelta 输出规模闸门：坏段可自述 4GB 的 targetSize（几百字节 delta 放大
+            // 数十 MB 输出、打死宿主堆），必须在 apply 之前拦（详见常量注释）。
+            let targetSize: number;
+            try {
+                targetSize = getDeltaTargetSize(delta);
+            } catch (error) {
+                // delta 头本身损坏时 getDeltaTargetSize 会抛（段级包装补上段号与坐标）。
+                return Result.err(PackCodec.segmentError(index, segment, "targetSize", error));
+            }
+            if (targetSize > FOSSIL_SEGMENT_TARGET_SIZE_LIMIT_BYTES) {
+                return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: `fossil-chain-v1 段 ${index} delta 声明的输出规模 ${targetSize} 字节超过上限 ${FOSSIL_SEGMENT_TARGET_SIZE_LIMIT_BYTES} 字节（坏段防御，拒绝 apply）`, segmentIndex: index, targetSize, limit: FOSSIL_SEGMENT_TARGET_SIZE_LIMIT_BYTES }));
+            }
+            try {
+                current = applyDelta(current, delta);
+            } catch (error) {
+                // 裸冒泡只有 `bad checksum` / `corrupt delta` 之类底层文案，链路末端（只拿到
+                // 一串 hash 的 content store 调用方）完全无从判断是哪一段出的问题——段级
+                // 包装补上段号与区间坐标。
+                return Result.err(PackCodec.segmentError(index, segment, "applyDelta", error));
+            }
+            chain[index] = current;
+        }
+        return Result.ok(memberIndices.map((index) => chain[index]!));
+    },
 
-  // -------------------------------------------------------------------------
-  // format 分派（读路径 / 校验 / 展开共用的唯一入口）
-  // -------------------------------------------------------------------------
+    // -------------------------------------------------------------------------
+    // format 分派（读路径 / 校验 / 展开共用的唯一入口）
+    // -------------------------------------------------------------------------
 
-  /**
+    /**
    * 按 pack 的 `format` 分派解码组成员：**读路径（content store get/getMany）
    * 的唯一入口**。
    *
@@ -277,38 +277,38 @@ export const PackCodec = {
    * @returns 与 spans 同序的成员明文 UTF-8 字节；未知 format 返回
    *   `VFS_CONTENT_UNSUPPORTED_FORMAT`
    */
-  decodeMembers(format: string, packBytes: Uint8Array, spans: ReadonlyArray<VfsPackSpan>): Result<Uint8Array[], VfsContentError> {
-    if (format === VFS_PACK_FORMAT_ZLIB_CONCAT_V1) {
-      return PackCodec.decodeZlibConcatSpans(packBytes, spans);
-    }
-    if (format === VFS_PACK_FORMAT_FOSSIL_CHAIN_V1) {
-      return PackCodec.decodeFossilChainSpans(packBytes, spans);
-    }
-    return Result.err(new AppError("VFS_CONTENT_UNSUPPORTED_FORMAT", { detail: `不支持的 vfs_content_pack.format: ${format}`, format }));
-  },
+    decodeMembers(format: string, packBytes: Uint8Array, spans: ReadonlyArray<VfsPackSpan>): Result<Uint8Array[], VfsContentError> {
+        if (format === VFS_PACK_FORMAT_ZLIB_CONCAT_V1) {
+            return PackCodec.decodeZlibConcatSpans(packBytes, spans);
+        }
+        if (format === VFS_PACK_FORMAT_FOSSIL_CHAIN_V1) {
+            return PackCodec.decodeFossilChainSpans(packBytes, spans);
+        }
+        return Result.err(new AppError("VFS_CONTENT_UNSUPPORTED_FORMAT", { detail: `不支持的 vfs_content_pack.format: ${format}`, format }));
+    },
 
-  // -------------------------------------------------------------------------
-  // 内部工具
-  // -------------------------------------------------------------------------
+    // -------------------------------------------------------------------------
+    // 内部工具
+    // -------------------------------------------------------------------------
 
-  /**
+    /**
    * 解单段 fossil 段（zlib 解压），失败按段级上下文包装。
    *
    * @param index 段号（链序，从 0 起）——仅用于错误上下文，不参与解压
    * @param segment 该段在 packBytes 内的区间
    */
-  inflateFossilSegment(packBytes: Uint8Array, segment: VfsPackSpan, index: number): Result<Uint8Array, VfsContentError> {
-    decodeCounters.fossilSegmentInflates++;
-    const decompressed = ZlibCodec.decompress(packBytes.subarray(segment.offset, segment.offset + segment.length));
-    if (!decompressed.ok) {
-      // 同 {@link PackCodec.decodeFossilChainSpans} 里 applyDelta 的包装理由：裸冒泡只有
-      // fflate/zlib 的底层文案（如 `invalid zlib data`），看不出是哪一段坏了。
-      return Result.err(PackCodec.segmentError(index, segment, "inflate", decompressed.error));
-    }
-    return decompressed;
-  },
+    inflateFossilSegment(packBytes: Uint8Array, segment: VfsPackSpan, index: number): Result<Uint8Array, VfsContentError> {
+        decodeCounters.fossilSegmentInflates++;
+        const decompressed = ZlibCodec.decompress(packBytes.subarray(segment.offset, segment.offset + segment.length));
+        if (!decompressed.ok) {
+            // 同 {@link PackCodec.decodeFossilChainSpans} 里 applyDelta 的包装理由：裸冒泡只有
+            // fflate/zlib 的底层文案（如 `invalid zlib data`），看不出是哪一段坏了。
+            return Result.err(PackCodec.segmentError(index, segment, "inflate", decompressed.error));
+        }
+        return decompressed;
+    },
 
-  /**
+    /**
    * 段级错误包装：给底层失败补上「哪一段、在流的哪个区间、哪个阶段、什么原因」。
    *
    * @param index 段号（链序，从 0 起）
@@ -320,14 +320,14 @@ export const PackCodec = {
    * @returns 带段号/区间/阶段/原因的 AppError，并以 `{ cause }` 挂住原始错误供上层
    *   取详情（`cause` 保底，不依赖它一定被消费）
    */
-  segmentError(index: number, segment: VfsPackSpan, phase: "inflate" | "targetSize" | "applyDelta", error: unknown): AppError<"VFS_CONTENT_CORRUPT"> {
-    return new AppError("VFS_CONTENT_CORRUPT", { detail: `fossil-chain-v1 段 ${index} ${phase} 失败: offset=${segment.offset} length=${segment.length} 原因=${Errors.text(error)}`, segmentIndex: index, offset: segment.offset, length: segment.length, phase }, { cause: error });
-  },
+    segmentError(index: number, segment: VfsPackSpan, phase: "inflate" | "targetSize" | "applyDelta", error: unknown): AppError<"VFS_CONTENT_CORRUPT"> {
+        return new AppError("VFS_CONTENT_CORRUPT", { detail: `fossil-chain-v1 段 ${index} ${phase} 失败: offset=${segment.offset} length=${segment.length} 原因=${Errors.text(error)}`, segmentIndex: index, offset: segment.offset, length: segment.length, phase }, { cause: error });
+    },
 
-  assertSpanWithin(span: VfsPackSpan, limit: number, label: string): Result<void, VfsContentError> {
-    if (span.offset < 0 || span.length < 0 || span.offset + span.length > limit) {
-      return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: `${label} member 区间越界: offset=${span.offset} length=${span.length} 界限=${limit}`, offset: span.offset, length: span.length, limit }));
-    }
-    return Result.ok(undefined);
-  },
+    assertSpanWithin(span: VfsPackSpan, limit: number, label: string): Result<void, VfsContentError> {
+        if (span.offset < 0 || span.length < 0 || span.offset + span.length > limit) {
+            return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: `${label} member 区间越界: offset=${span.offset} length=${span.length} 界限=${limit}`, offset: span.offset, length: span.length, limit }));
+        }
+        return Result.ok(undefined);
+    },
 } as const;

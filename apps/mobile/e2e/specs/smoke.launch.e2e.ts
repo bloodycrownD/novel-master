@@ -7,9 +7,9 @@ import {appPage} from '../pageobjects/app.page';
  * noReset 之后这里不会因为上一轮残留而失效（只看 tab 是否可见）。
  */
 describe('E0 smoke launch', () => {
-  it('shows chat tab after app launch', async () => {
-    await appPage.waitForLaunch();
-    const chatTab = await $('~对话');
-    await expect(chatTab).toBeDisplayed();
-  });
+    it('shows chat tab after app launch', async () => {
+        await appPage.waitForLaunch();
+        const chatTab = await $('~对话');
+        await expect(chatTab).toBeDisplayed();
+    });
 });

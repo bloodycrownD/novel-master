@@ -23,141 +23,141 @@ import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
 novelMasterTestFixture();
 
 function makeRunner(): ToolRunner<BuiltinToolContext> {
-  const registry = new ToolRegistry<BuiltinToolContext>();
-  BuiltinTools.register(registry);
-  return new ToolRunner(registry);
+    const registry = new ToolRegistry<BuiltinToolContext>();
+    BuiltinTools.register(registry);
+    return new ToolRunner(registry);
 }
 
 /** 真实链路的工具上下文：registry 接真实 SQLite 连接（非 fake）。 */
 function makeRealCtx(): BuiltinToolContext {
-  const ctx = getNovelMasterTestContext();
-  const registry = AgentServiceFactory.createRegistry(ctx.conn);
-  const probe = new ToolRegistry<BuiltinToolContext>();
-  BuiltinTools.register(probe);
-  return {
-    vfs: {} as never,
-    projectId: "proj-1",
-    sessionId: "sess-1",
-    agents: {
-      registry,
-      agents: [{ name: "general", description: "内置通用 agent", mode: "all" }],
-      registeredToolNames: probe.list(),
-    },
-  };
+    const ctx = getNovelMasterTestContext();
+    const registry = AgentServiceFactory.createRegistry(ctx.conn);
+    const probe = new ToolRegistry<BuiltinToolContext>();
+    BuiltinTools.register(probe);
+    return {
+        vfs: {} as never,
+        projectId: "proj-1",
+        sessionId: "sess-1",
+        agents: {
+            registry,
+            agents: [{ name: "general", description: "内置通用 agent", mode: "all" }],
+            registeredToolNames: probe.list(),
+        },
+    };
 }
 
 describe("agent 工具 create 端到端（真实 registry）", () => {
-  it("缺 definition.name：报错文案含「definition.name 必填」且注册表无落盘", async () => {
-    const testCtx = getNovelMasterTestContext();
-    const registry = AgentServiceFactory.createRegistry(testCtx.conn);
-    const idsBefore = new Set(await registry.listAgentIds());
+    it("缺 definition.name：报错文案含「definition.name 必填」且注册表无落盘", async () => {
+        const testCtx = getNovelMasterTestContext();
+        const registry = AgentServiceFactory.createRegistry(testCtx.conn);
+        const idsBefore = new Set(await registry.listAgentIds());
 
-    await rejectsErr(
-      () =>
-        makeRunner().call(
-          "agent",
-          {
-            action: "create",
-            // definition 给出但顶层缺 name（prompts 也缺省，校验须先拒 name）。
-            definition: { description: "缺名字的坏定义", mode: "subagent" },
-          },
-          makeRealCtx(),
-        ),
-      (e: unknown) =>
-        assert.ok(
-          AppErrorOps.is(e) && e.key.startsWith("TOOL_") &&
-          e.key === "TOOL_INVALID_ARGUMENT" &&
-          e.message.includes("error.agent.invalid_schema.name_required"),
-        ),
-    );
+        await rejectsErr(
+            () =>
+                makeRunner().call(
+                    "agent",
+                    {
+                        action: "create",
+                        // definition 给出但顶层缺 name（prompts 也缺省，校验须先拒 name）。
+                        definition: { description: "缺名字的坏定义", mode: "subagent" },
+                    },
+                    makeRealCtx(),
+                ),
+            (e: unknown) =>
+                assert.ok(
+                    AppErrorOps.is(e) && e.key.startsWith("TOOL_") &&
+                    e.key === "TOOL_INVALID_ARGUMENT" &&
+                    e.message.includes("error.agent.invalid_schema.name_required"),
+                ),
+        );
 
-    // 拒绝后无落盘：持久化 id 集合与调用前一致（无 agent- 前缀新行）。
-    const idsAfter = await registry.listAgentIds();
-    assert.deepEqual([...idsAfter].sort(), [...idsBefore].sort());
-  });
+        // 拒绝后无落盘：持久化 id 集合与调用前一致（无 agent- 前缀新行）。
+        const idsAfter = await registry.listAgentIds();
+        assert.deepEqual([...idsAfter].sort(), [...idsBefore].sort());
+    });
 });
 
 describe("agent 工具 update patch 端到端（真实 registry）", () => {
-  it("patch 只改 description：其余字段与 prompts 布局保留，get 可读回", async () => {
-    const testCtx = getNovelMasterTestContext();
-    const registry = AgentServiceFactory.createRegistry(testCtx.conn);
-    // 种一个带完整字段的现状
-    const agentId = "agent-patch-e2e-1";
-    await registry.upsert(agentId, {
-      name: "patch-e2e-alpha",
-      description: "旧描述",
-      model: undefined,
-      prompts: {
-        persist: [{ name: "p1", role: "user", content: "持久块" }],
-        dynamic: [],
-      },
-    } as never);
+    it("patch 只改 description：其余字段与 prompts 布局保留，get 可读回", async () => {
+        const testCtx = getNovelMasterTestContext();
+        const registry = AgentServiceFactory.createRegistry(testCtx.conn);
+        // 种一个带完整字段的现状
+        const agentId = "agent-patch-e2e-1";
+        await registry.upsert(agentId, {
+            name: "patch-e2e-alpha",
+            description: "旧描述",
+            model: undefined,
+            prompts: {
+                persist: [{ name: "p1", role: "user", content: "持久块" }],
+                dynamic: [],
+            },
+        } as never);
 
-    const out = await makeRunner().call(
-      "agent",
-      {
-        action: "update",
-        agentId,
-        // patch：只改 description，未填 name/prompts
-        definition: { description: "新描述" },
-      },
-      makeRealCtx(),
-    );
-    assert.equal(unwrap(out).action, "update");
+        const out = await makeRunner().call(
+            "agent",
+            {
+                action: "update",
+                agentId,
+                // patch：只改 description，未填 name/prompts
+                definition: { description: "新描述" },
+            },
+            makeRealCtx(),
+        );
+        assert.equal(unwrap(out).action, "update");
 
-    // 读回：description 已改，prompts 布局原样保留
-    const saved = unwrap(await registry.get(agentId));
-    assert.equal(saved.description, "新描述");
-    assert.equal(saved.name, "patch-e2e-alpha");
-    // wire 往返会给块补 type: "text"（归一），断言对齐落盘后的形状。
-    assert.deepEqual(saved.prompts, {
-      persist: [
-        { name: "p1", type: "text", role: "user", content: "持久块" },
-      ],
-      dynamic: [],
+        // 读回：description 已改，prompts 布局原样保留
+        const saved = unwrap(await registry.get(agentId));
+        assert.equal(saved.description, "新描述");
+        assert.equal(saved.name, "patch-e2e-alpha");
+        // wire 往返会给块补 type: "text"（归一），断言对齐落盘后的形状。
+        assert.deepEqual(saved.prompts, {
+            persist: [
+                { name: "p1", type: "text", role: "user", content: "持久块" },
+            ],
+            dynamic: [],
+        });
+
+        await registry.delete(agentId);
     });
 
-    await registry.delete(agentId);
-  });
+    it("patch 改名撞名：服务层 DUPLICATE_NAME 转译为 INVALID_ARGUMENT", async () => {
+        const testCtx = getNovelMasterTestContext();
+        const registry = AgentServiceFactory.createRegistry(testCtx.conn);
+        const a = "agent-patch-e2e-a";
+        const b = "agent-patch-e2e-b";
+        await registry.upsert(a, { name: "dup-target" } as never);
+        await registry.upsert(b, { name: "dup-source" } as never);
 
-  it("patch 改名撞名：服务层 DUPLICATE_NAME 转译为 INVALID_ARGUMENT", async () => {
-    const testCtx = getNovelMasterTestContext();
-    const registry = AgentServiceFactory.createRegistry(testCtx.conn);
-    const a = "agent-patch-e2e-a";
-    const b = "agent-patch-e2e-b";
-    await registry.upsert(a, { name: "dup-target" } as never);
-    await registry.upsert(b, { name: "dup-source" } as never);
+        await rejectsErr(
+            () =>
+                makeRunner().call(
+                    "agent",
+                    { action: "update", agentId: b, definition: { name: "dup-target" } },
+                    makeRealCtx(),
+                ),
+            (e: unknown) =>
+                assert.ok(
+                    AppErrorOps.is(e) && e.key.startsWith("TOOL_") &&
+                    e.key === "TOOL_INVALID_ARGUMENT" &&
+                    e.message.includes("error.agent.duplicate_name"),
+                ),
+        );
 
-    await rejectsErr(
-      () =>
-        makeRunner().call(
-          "agent",
-          { action: "update", agentId: b, definition: { name: "dup-target" } },
-          makeRealCtx(),
-        ),
-      (e: unknown) =>
-        assert.ok(
-          AppErrorOps.is(e) && e.key.startsWith("TOOL_") &&
-          e.key === "TOOL_INVALID_ARGUMENT" &&
-          e.message.includes("error.agent.duplicate_name"),
-        ),
-    );
-
-    await registry.delete(a);
-    await registry.delete(b);
-  });
+        await registry.delete(a);
+        await registry.delete(b);
+    });
 });
 
 /** 错误用户可见文案：带 messageKey 时经 tCore 渲染（G1-G3 descriptor 契约），否则回退 message。 */
 function renderError(error: unknown): string {
-  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
-  return textOf(error);
+    const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
+    return textOf(error);
 }
 
 /** 含 cause 链（ToolError 包装 AppError 时 messageKey 在 cause 上）。 */
 function textOf(error: unknown): string {
-  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
-  if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
-  if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
-  return e.message;
+    const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
+    if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
+    if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
+    return e.message;
 }

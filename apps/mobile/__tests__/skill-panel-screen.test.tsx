@@ -13,156 +13,156 @@ import {AppError, Result} from '@novel-master/core/errors';
 const mockEffectiveSkills = jest.fn();
 
 const mockRuntime = {
-  skills: () => ({
-    effectiveSkills: mockEffectiveSkills,
-    setDisabled: jest.fn(),
-  }),
+    skills: () => ({
+        effectiveSkills: mockEffectiveSkills,
+        setDisabled: jest.fn(),
+    }),
 };
 
 jest.mock('@/hooks/useRuntime', () => ({
-  useRuntime: () => mockRuntime,
+    useRuntime: () => mockRuntime,
 }));
 
 jest.mock('@/theme/ThemeProvider', () => ({
-  useTheme: () => ({
-    tokens: {
-      background: '#fff',
-      surface: '#f5f5f5',
-      surfaceElevated: '#fafafa',
-      text: '#111',
-      textSecondary: '#666',
-      border: '#ddd',
-      borderLight: '#eee',
-      primary: '#007aff',
-      danger: '#f00',
-    },
-  }),
+    useTheme: () => ({
+        tokens: {
+            background: '#fff',
+            surface: '#f5f5f5',
+            surfaceElevated: '#fafafa',
+            text: '#111',
+            textSecondary: '#666',
+            border: '#ddd',
+            borderLight: '#eee',
+            primary: '#007aff',
+            danger: '#f00',
+        },
+    }),
 }));
 
 const mockShowToast = jest.fn();
 jest.mock('@/components/chrome/ToastHost', () => ({
-  useToast: () => ({showToast: mockShowToast}),
+    useToast: () => ({showToast: mockShowToast}),
 }));
 
 jest.mock('@/errors/toast-message', () => {
-  const legacy = {
-  toastMessage: (title: string, _err: unknown) => `${title}`,
+    const legacy = {
+    toastMessage: (title: string, _err: unknown) => `${title}`,
 };
-  return {...legacy, ToastMessage: {toast: legacy.toastMessage}};
+    return {...legacy, ToastMessage: {toast: legacy.toastMessage}};
 });
 
 const mockNavigate = jest.fn();
 jest.mock('@react-navigation/native', () => ({
-  useRoute: () => ({params: {projectId: 'p1'}}),
-  useNavigation: () => ({navigate: mockNavigate, goBack: jest.fn()}),
-  // 面板靠 useFocusEffect 触发首次 reload；用 useEffect 语义避免每次渲染重触发
-  useFocusEffect: (cb: () => void) =>
-    require('react').useEffect(() => {
-      cb();
-    }, []),
+    useRoute: () => ({params: {projectId: 'p1'}}),
+    useNavigation: () => ({navigate: mockNavigate, goBack: jest.fn()}),
+    // 面板靠 useFocusEffect 触发首次 reload；用 useEffect 语义避免每次渲染重触发
+    useFocusEffect: (cb: () => void) =>
+        require('react').useEffect(() => {
+            cb();
+        }, []),
 }));
 
 jest.mock('@/navigation/HeaderContext', () => ({
-  useHeaderContext: () => ({
-    setStackOverride: jest.fn(),
-  }),
-  useStackOverrideSetter: () => jest.fn(),
+    useHeaderContext: () => ({
+        setStackOverride: jest.fn(),
+    }),
+    useStackOverrideSetter: () => jest.fn(),
 }));
 
 jest.mock('@/components/icons/TabIcons', () => ({
-  ManageListIcon: () => null,
+    ManageListIcon: () => null,
 }));
 
 jest.mock('@/components/skills/NewSkillModal', () => ({
-  NewSkillModal: () => null,
+    NewSkillModal: () => null,
 }));
 
 jest.mock('@/components/ui/Buttons', () => ({
-  SecondaryButton: () => null,
-  PrimaryButton: () => null,
+    SecondaryButton: () => null,
+    PrimaryButton: () => null,
 }));
 
 jest.mock('react-native', () => {
-  const RnReact = require('react');
-  const View = ({
-    children,
-    testID,
-  }: {
-    children?: React.ReactNode;
-    testID?: string;
-  }) => RnReact.createElement('View', {testID}, children);
-  const Text = ({
-    children,
-    testID,
-  }: {
-    children?: React.ReactNode;
-    testID?: string;
-  }) => RnReact.createElement('Text', {testID}, children);
-  return {
-    View,
-    Text,
-    FlatList: ({
-      data,
-      ListEmptyComponent,
+    const RnReact = require('react');
+    const View = ({
+        children,
+        testID,
     }: {
-      data: unknown[];
-      ListEmptyComponent?: React.ReactNode;
-    }) =>
-      RnReact.createElement(
-        'View',
-        {testID: 'flat-list'},
-        data != null && data.length === 0 ? ListEmptyComponent : null,
-      ),
-    ActivityIndicator: () => null,
-    RefreshControl: () => null,
-    Switch: () => null,
-    Pressable: (props: {
-      children?: React.ReactNode;
-      onPress?: () => void;
-      testID?: string;
-    }) => RnReact.createElement('View', {testID: props.testID}, props.children),
-    StyleSheet: {
-      create: (s: Record<string, unknown>) => s,
-      hairlineWidth: 1,
-    },
-  };
+        children?: React.ReactNode;
+        testID?: string;
+    }) => RnReact.createElement('View', {testID}, children);
+    const Text = ({
+        children,
+        testID,
+    }: {
+        children?: React.ReactNode;
+        testID?: string;
+    }) => RnReact.createElement('Text', {testID}, children);
+    return {
+        View,
+        Text,
+        FlatList: ({
+            data,
+            ListEmptyComponent,
+        }: {
+            data: unknown[];
+            ListEmptyComponent?: React.ReactNode;
+        }) =>
+            RnReact.createElement(
+                'View',
+                {testID: 'flat-list'},
+                data != null && data.length === 0 ? ListEmptyComponent : null,
+            ),
+        ActivityIndicator: () => null,
+        RefreshControl: () => null,
+        Switch: () => null,
+        Pressable: (props: {
+            children?: React.ReactNode;
+            onPress?: () => void;
+            testID?: string;
+        }) => RnReact.createElement('View', {testID: props.testID}, props.children),
+        StyleSheet: {
+            create: (s: Record<string, unknown>) => s,
+            hairlineWidth: 1,
+        },
+    };
 });
 
 beforeEach(() => {
-  jest.clearAllMocks();
+    jest.clearAllMocks();
 });
 
 describe('SkillPanelScreen 空态容错', () => {
-  it('NOT_FOUND（技能根目录不存在）静默显示空态，不弹 toast', async () => {
-    // 错误通道迁移后 effectiveSkills 走 Result 通道（生产侧 `!list.ok` 判定）；
-    // screen 按 isAppError 判 VFS_NOT_FOUND 静默空态。
-    mockEffectiveSkills.mockResolvedValue(
-      Result.err(
-        new AppError('VFS_NOT_FOUND', {
-          detail: 'vfs entry not found: /meta/skills',
-        }),
-      ),
-    );
+    it('NOT_FOUND（技能根目录不存在）静默显示空态，不弹 toast', async () => {
+        // 错误通道迁移后 effectiveSkills 走 Result 通道（生产侧 `!list.ok` 判定）；
+        // screen 按 isAppError 判 VFS_NOT_FOUND 静默空态。
+        mockEffectiveSkills.mockResolvedValue(
+            Result.err(
+                new AppError('VFS_NOT_FOUND', {
+                    detail: 'vfs entry not found: /meta/skills',
+                }),
+            ),
+        );
 
-    let renderer!: TestRenderer.ReactTestRenderer;
-    await act(async () => {
-      renderer = TestRenderer.create(<SkillPanelScreen />);
+        let renderer!: TestRenderer.ReactTestRenderer;
+        await act(async () => {
+            renderer = TestRenderer.create(<SkillPanelScreen />);
+        });
+
+        expect(mockShowToast).not.toHaveBeenCalled();
+        // 空态文案出现（而非报错）
+        const json = renderer.toJSON();
+        const texts = JSON.stringify(json);
+        expect(texts).toContain('还没有可用技能');
     });
 
-    expect(mockShowToast).not.toHaveBeenCalled();
-    // 空态文案出现（而非报错）
-    const json = renderer.toJSON();
-    const texts = JSON.stringify(json);
-    expect(texts).toContain('还没有可用技能');
-  });
+    it('其他错误照常 toast 加载失败', async () => {
+        mockEffectiveSkills.mockRejectedValue(new Error('no such table: boom'));
 
-  it('其他错误照常 toast 加载失败', async () => {
-    mockEffectiveSkills.mockRejectedValue(new Error('no such table: boom'));
+        await act(async () => {
+            TestRenderer.create(<SkillPanelScreen />);
+        });
 
-    await act(async () => {
-      TestRenderer.create(<SkillPanelScreen />);
+        expect(mockShowToast).toHaveBeenCalledTimes(1);
     });
-
-    expect(mockShowToast).toHaveBeenCalledTimes(1);
-  });
 });

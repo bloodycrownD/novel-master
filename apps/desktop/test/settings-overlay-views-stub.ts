@@ -13,12 +13,12 @@ import type {SettingsNavHandle} from "@/features/settings/settings-nav";
 export const seenNavs = new Map<string, SettingsNavHandle>();
 
 function makeStub(viewId: string) {
-  return function StubView(props: {nav?: SettingsNavHandle}) {
-    if (props?.nav != null) {
-      seenNavs.set(viewId, props.nav);
-    }
-    return createElement("div", {"data-view": viewId});
-  };
+    return function StubView(props: {nav?: SettingsNavHandle}) {
+        if (props?.nav != null) {
+            seenNavs.set(viewId, props.nav);
+        }
+        return createElement("div", {"data-view": viewId});
+    };
 }
 
 export const AgentEditorView = makeStub("agentEditor");

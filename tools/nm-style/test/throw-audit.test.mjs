@@ -66,7 +66,7 @@ test("T-TA1 四形态识别与属性列（fn 路径 / ret 八值桶 / catch / ke
   assert.equal(t1.text, "throw x.error;", "text 是 throw 语句本身（空白归一），不含同函数其余语句");
 });
 
-test("T-TA2 白名单三类：tdbc 驱动层 / 事务回调（文件名与 .transaction 回调实参 AST 判定）/ 控制信号类名（外层 if 条件里）", () => {
+test("T-TA2 白名单：tdbc 驱动层 / 事务回调（文件名与 .transaction 回调实参 AST 判定）；控制信号白名单已随三类哨兵退役清空", () => {
   const tdbc = throwSitesOfText("packages/core/src/infra/tdbc/conn.ts", "function open(): void { throw new Error('open'); }")[0];
   assert.equal(tdbc.verdict, "ALLOWED");
   assert.equal(tdbc.allow, "tdbc-driver");
@@ -75,9 +75,12 @@ test("T-TA2 白名单三类：tdbc 驱动层 / 事务回调（文件名与 .tran
   const txn = throwSitesOfText("packages/core/src/domain/x/logic/truncate-tail-in-transaction.ts", "function cut(t: unknown): void { if (t.kind === 'failed') throw t.error; }")[0];
   assert.equal(txn.verdict, "ALLOWED");
   assert.equal(txn.allow, "transaction");
+  // error-matrix-final W5：三类控制流哨兵类退役（CoordinatedWriteRollback→INFRA_ROLLBACK_DEGRADED、
+  // DatabaseReplaced→DB_BACKUP_REPLACE_INCOMPLETE、ChatPromptBuildBailed→null 哨兵），control-signal
+  // 白名单清空——同名形态不再享豁免，按普通矩阵判（plain 无 catch → VIOLATION-B）。
   const signal = throwSitesOfText("apps/desktop/src/main/x.ts", "function sync(r: unknown): void { if (r.error instanceof DatabaseReplacedError) throw r.error; }")[0];
-  assert.equal(signal.verdict, "ALLOWED");
-  assert.equal(signal.allow, "control-signal");
+  assert.equal(signal.verdict, "VIOLATION-B", "control-signal 白名单已清空，退役类形态不再豁免");
+  assert.equal(signal.allow, null);
   // 事务回调 AST 判定：文件名不带 in-transaction，throw 在 conn.transaction 回调内 → ALLOWED（总纲 §五例外 2）。
   const txnCallback = throwSitesOfText("packages/core/src/service/chat/impl/message.service.ts", "class S { async fork(conn: {transaction<T>(fn: (tx: unknown) => Promise<T>): Promise<T>}): Promise<void> { const t = conn.transaction(async (tx) => { const v = await read(tx); if (v.kind === 'failed') throw v.error; return 1; }); await t; } }")[0];
   assert.equal(txnCallback.verdict, "ALLOWED", "conn.transaction 回调实参内的 throw 应按事务回滚放行");
@@ -124,6 +127,11 @@ test("T-TA4 write-baseline：旧 disposition+reason 按 key salvage，新增站�
   assert.equal(payload.sites[boundarySite.key].disposition, "UNTRIAGED", "BOUNDARY 新站点同样 UNTRIAGED（理由必须人工写）");
   const fresh = throwBaselinePayload(sites, null, "note", false);
   assert.equal(fresh.sites[keepSite.key].disposition, "KEEP", "无旧基线时 KEEP 按注释自动入表");
+  // error-matrix-final W5：旧登记 BOUNDARY 但站点已落 keep 注释（当前 verdict=KEEP）→ disposition 刷新为 KEEP、人工理由保留。
+  const oldBoundary = parseThrowBaseline(JSON.stringify({ sites: { [keepSite.key]: { form: "T4", line: 1, disposition: "BOUNDARY", reason: "旧人工定性" } } }));
+  const refreshed = throwBaselinePayload(sites, oldBoundary, "note", false);
+  assert.equal(refreshed.sites[keepSite.key].disposition, "KEEP", "当前机器判 KEEP，旧 BOUNDARY 登记刷新");
+  assert.equal(refreshed.sites[keepSite.key].reason, "旧人工定性", "人工理由不被注释文案覆盖");
 });
 
 function git(args, cwd) {

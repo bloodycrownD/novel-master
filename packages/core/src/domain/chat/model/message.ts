@@ -13,37 +13,37 @@ import type { MessageUsage } from "./message-usage.js";
 
 /** A single message in a session, ordered by `seq` (持久化/IPC 的纯数据形状). */
 export interface ChatMessageData {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly seq: number;
-  readonly role: string;
-  readonly content: MessageContent;
-  readonly provider: string | null;
-  /**
+    readonly id: string;
+    readonly sessionId: string;
+    readonly seq: number;
+    readonly role: string;
+    readonly content: MessageContent;
+    readonly provider: string | null;
+    /**
    * 产生本条 assistant 消息的服务商配置 id（`llm_saved_model.provider_id`，
    * 映射 `chat_message.provider_id` 列），写入时快照：服务商后续改名/删除
    * 不回写历史行。老消息缺列/NULL → `null`（统计归「其他」桶）。
    */
-  readonly providerId?: string | null;
-  /**
+    readonly providerId?: string | null;
+    /**
    * 产生本条 assistant 消息的厂商模型 id（`llm_saved_model.vendor_model_id`，
    * 映射 `chat_message.model_name` 列）。老消息缺列/NULL → `null`。
    */
-  readonly modelName?: string | null;
-  readonly raw: Record<string, unknown> | null;
-  readonly createdAtMs: number;
-  /** Whether this message is hidden from LLM prompt rendering. */
-  readonly hidden: boolean;
-  /**
+    readonly modelName?: string | null;
+    readonly raw: Record<string, unknown> | null;
+    readonly createdAtMs: number;
+    /** Whether this message is hidden from LLM prompt rendering. */
+    readonly hidden: boolean;
+    /**
    * 结构化附件（与 `attachments_json` 双向映射）。
    * 缺列/NULL → `undefined`；`content_json` 永不写 wrap XML。
    */
-  readonly attachments?: readonly MessageAttachment[];
-  /**
+    readonly attachments?: readonly MessageAttachment[];
+    /**
    * LLM token usage（assistant message 持久化的 prompt/completion/total tokens）。
    * 老消息缺列/NULL → `undefined`。
    */
-  readonly usage?: MessageUsage;
+    readonly usage?: MessageUsage;
 }
 
 /**
@@ -52,10 +52,10 @@ export interface ChatMessageData {
  * 解压。需要正文检查时（如 tool_result 锚定）按窗口补拉全量行。
  */
 export interface ChatMessageHeader {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly seq: number;
-  readonly role: string;
-  readonly hidden: boolean;
-  readonly createdAtMs: number;
+    readonly id: string;
+    readonly sessionId: string;
+    readonly seq: number;
+    readonly role: string;
+    readonly hidden: boolean;
+    readonly createdAtMs: number;
 }

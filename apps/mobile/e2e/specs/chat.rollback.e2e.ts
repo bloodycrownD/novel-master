@@ -1,18 +1,18 @@
 import {
-  E2E_FIXTURE_ASSISTANT_MESSAGE_ID,
-  E2E_FIXTURE_TAIL_ASSISTANT_MESSAGE_ID,
-  E2E_FIXTURE_TAIL_USER_MESSAGE_ID,
+    E2E_FIXTURE_ASSISTANT_MESSAGE_ID,
+    E2E_FIXTURE_TAIL_ASSISTANT_MESSAGE_ID,
+    E2E_FIXTURE_TAIL_USER_MESSAGE_ID,
 } from '../fixtures/session-ids';
 import {
-  allowFixtureSkip,
-  fixtureSpecsDisabledReason,
-  fixtureSpecsEnabled,
-  isFixtureSessionAvailable,
-  openFixtureSession,
+    allowFixtureSkip,
+    fixtureSpecsDisabledReason,
+    fixtureSpecsEnabled,
+    isFixtureSessionAvailable,
+    openFixtureSession,
 } from '../helpers/fixture-session';
 import {
-  assertBottomAfterRollback,
-  sampleScrollAnchor,
+    assertBottomAfterRollback,
+    sampleScrollAnchor,
 } from '../helpers/scroll-anchor';
 import {alertPage} from '../pageobjects/alert.page';
 import {appPage} from '../pageobjects/app.page';
@@ -23,164 +23,164 @@ const FIXTURE_ANCHOR_USER_ID = 'e2e-fix-u1';
 const FIXTURE_ANCHOR_USER_TEXT = 'read file';
 
 describe('E2 chat rollback', () => {
-  describe('T-E1 plain user undo_send', () => {
-    let projectName = '';
-    let anchorMessageId: string;
+    describe('T-E1 plain user undo_send', () => {
+        let projectName = '';
+        let anchorMessageId: string;
 
-    before(async () => {
-      // 隔离：UI 自建本轮唯一项目（会话 + 3 条自己发的消息），after 里 UI 删掉该项目。
-      projectName = await appPage.launchFresh('E2E Rollback Undo');
-      await chatTranscriptPage.sendComposerMessage('anchor-one');
-      await chatTranscriptPage.sendComposerMessage('tail-two');
-      await chatTranscriptPage.sendComposerMessage('tail-three');
+        before(async () => {
+            // 隔离：UI 自建本轮唯一项目（会话 + 3 条自己发的消息），after 里 UI 删掉该项目。
+            projectName = await appPage.launchFresh('E2E Rollback Undo');
+            await chatTranscriptPage.sendComposerMessage('anchor-one');
+            await chatTranscriptPage.sendComposerMessage('tail-two');
+            await chatTranscriptPage.sendComposerMessage('tail-three');
 
-      const ids = await chatTranscriptPage.getMessageIds();
-      expect(ids.length).toBe(3);
-      anchorMessageId = ids[0]!;
-      await chatTranscriptPage.scrollTranscriptUp(500);
+            const ids = await chatTranscriptPage.getMessageIds();
+            expect(ids.length).toBe(3);
+            anchorMessageId = ids[0]!;
+            await chatTranscriptPage.scrollTranscriptUp(500);
+        });
+
+        after(async () => {
+            if (projectName === '') {
+                return;
+            }
+            await appPage.deleteProjectViaDrawer(projectName);
+        });
+
+        it('删除 plain user 锚点并恢复 Composer 原文', async () => {
+            const before = await sampleScrollAnchor(anchorMessageId);
+            expect(before.anchorVisible).toBe(true);
+
+            await chatTranscriptPage.openMessageMenu(anchorMessageId);
+            await chatTranscriptPage.tapMenuAction('rollback');
+            await alertPage.acceptRollback();
+
+            const toast = await vfsPage.readToastMessage();
+            expect(toast).toContain('回滚成功');
+
+            const idsAfter = await chatTranscriptPage.getMessageIds();
+            expect(idsAfter.length).toBe(0);
+            expect(idsAfter).not.toContain(anchorMessageId);
+
+            await chatTranscriptPage.expectComposerText('anchor-one');
+            await assertBottomAfterRollback();
+        });
+
+        it('贴底时回滚后仍贴底', async () => {
+            await chatTranscriptPage.sendComposerMessage('bottom-four');
+            await chatTranscriptPage.sendComposerMessage('bottom-five');
+
+            const idsBefore = await chatTranscriptPage.getMessageIds();
+            expect(idsBefore.length).toBe(2);
+            const rollbackTargetId = idsBefore[idsBefore.length - 2]!;
+
+            await assertBottomAfterRollback();
+
+            await chatTranscriptPage.openMessageMenu(rollbackTargetId);
+            await chatTranscriptPage.tapMenuAction('rollback');
+            await alertPage.acceptRollback();
+
+            const toast = await vfsPage.readToastMessage();
+            expect(toast).toContain('回滚成功');
+
+            const idsAfter = await chatTranscriptPage.getMessageIds();
+            expect(idsAfter.length).toBe(0);
+
+            await assertBottomAfterRollback();
+        });
     });
 
-    after(async () => {
-      if (projectName === '') {
-        return;
-      }
-      await appPage.deleteProjectViaDrawer(projectName);
+    describe('T-E2 assistant rewind', () => {
+        // 结构性跑不动：fixture 靠注入应用沙箱 SQLite 造 assistant 轮次，UI 建不出
+        // thinking/tool_use/tool_result 三段结构。没显式开 fixture 就整段跳过（如实标注，
+        // 不硬改成假路径）。理由见 fixtureSpecsDisabledReason()。
+        before(function () {
+            if (!fixtureSpecsEnabled()) {
+                console.warn(fixtureSpecsDisabledReason());
+                this.skip();
+            }
+        });
+
+        it('keeps assistant anchor when rolling back on assistant with tool_use', async function () {
+            if (!(await isFixtureSessionAvailable())) {
+                if (allowFixtureSkip()) {
+                    this.skip();
+                    return;
+                }
+                throw new Error(
+                    '[e2e] Turn rollback fixture missing. Inject via e2e/scripts/README.md.',
+                );
+            }
+
+            await openFixtureSession();
+            await chatTranscriptPage.openWebView();
+
+            const assistantId = E2E_FIXTURE_ASSISTANT_MESSAGE_ID;
+            const tailUserId = E2E_FIXTURE_TAIL_USER_MESSAGE_ID;
+            const tailAssistantId = E2E_FIXTURE_TAIL_ASSISTANT_MESSAGE_ID;
+
+            await chatTranscriptPage.waitForMessage(assistantId);
+            // assistant rewind 的锚点与断言对象是 assistant 消息：走不过滤的全量入口
+            // （cr2-D-1），user 过滤入口拿不到 assistant 行。
+            const idsBefore = await chatTranscriptPage.getAllMessageIds();
+            expect(idsBefore.length).toBeGreaterThanOrEqual(4);
+            expect(idsBefore).toContain(assistantId);
+            expect(idsBefore).toContain(tailUserId);
+            expect(idsBefore).toContain(tailAssistantId);
+
+            await chatTranscriptPage.openMessageMenu(assistantId);
+            await chatTranscriptPage.tapMenuAction('rollback');
+            await alertPage.acceptRollback();
+
+            const toast = await vfsPage.readToastMessage();
+            expect(toast).toContain('回滚成功');
+
+            const idsAfter = await chatTranscriptPage.getAllMessageIds();
+            expect(idsAfter.length).toBe(2);
+            expect(idsAfter[0]).toBe(idsBefore[0]);
+            expect(idsAfter[1]).toBe(assistantId);
+            expect(idsAfter).not.toContain(tailUserId);
+            expect(idsAfter).not.toContain(tailAssistantId);
+
+            await chatTranscriptPage.assertMessageHasToolGroup(assistantId);
+            await chatTranscriptPage.expectMessageMissing(tailAssistantId);
+        });
     });
 
-    it('删除 plain user 锚点并恢复 Composer 原文', async () => {
-      const before = await sampleScrollAnchor(anchorMessageId);
-      expect(before.anchorVisible).toBe(true);
+    describe('T-E3 composer draft overwrite', () => {
+        // 同 T-E2：结构性依赖 fixture 注入，UI 造不出被回滚的 tool_result 轮次锚点。
+        before(function () {
+            if (!fixtureSpecsEnabled()) {
+                console.warn(fixtureSpecsDisabledReason());
+                this.skip();
+            }
+        });
 
-      await chatTranscriptPage.openMessageMenu(anchorMessageId);
-      await chatTranscriptPage.tapMenuAction('rollback');
-      await alertPage.acceptRollback();
+        it('回滚 plain user 时 Composer 覆盖旧草稿', async function () {
+            if (!(await isFixtureSessionAvailable())) {
+                if (allowFixtureSkip()) {
+                    this.skip();
+                    return;
+                }
+                throw new Error(
+                    '[e2e] Fixture session missing for composer draft test. Inject via e2e/scripts/README.md.',
+                );
+            }
 
-      const toast = await vfsPage.readToastMessage();
-      expect(toast).toContain('回滚成功');
+            await openFixtureSession();
+            await chatTranscriptPage.openWebView();
+            await chatTranscriptPage.waitForMessage(FIXTURE_ANCHOR_USER_ID);
 
-      const idsAfter = await chatTranscriptPage.getMessageIds();
-      expect(idsAfter.length).toBe(0);
-      expect(idsAfter).not.toContain(anchorMessageId);
+            await chatTranscriptPage.setComposerText('old draft before rollback');
 
-      await chatTranscriptPage.expectComposerText('anchor-one');
-      await assertBottomAfterRollback();
+            await chatTranscriptPage.openMessageMenu(FIXTURE_ANCHOR_USER_ID);
+            await chatTranscriptPage.tapMenuAction('rollback');
+            await alertPage.acceptRollback();
+
+            const toast = await vfsPage.readToastMessage();
+            expect(toast).toContain('回滚成功');
+
+            await chatTranscriptPage.expectComposerText(FIXTURE_ANCHOR_USER_TEXT);
+        });
     });
-
-    it('贴底时回滚后仍贴底', async () => {
-      await chatTranscriptPage.sendComposerMessage('bottom-four');
-      await chatTranscriptPage.sendComposerMessage('bottom-five');
-
-      const idsBefore = await chatTranscriptPage.getMessageIds();
-      expect(idsBefore.length).toBe(2);
-      const rollbackTargetId = idsBefore[idsBefore.length - 2]!;
-
-      await assertBottomAfterRollback();
-
-      await chatTranscriptPage.openMessageMenu(rollbackTargetId);
-      await chatTranscriptPage.tapMenuAction('rollback');
-      await alertPage.acceptRollback();
-
-      const toast = await vfsPage.readToastMessage();
-      expect(toast).toContain('回滚成功');
-
-      const idsAfter = await chatTranscriptPage.getMessageIds();
-      expect(idsAfter.length).toBe(0);
-
-      await assertBottomAfterRollback();
-    });
-  });
-
-  describe('T-E2 assistant rewind', () => {
-    // 结构性跑不动：fixture 靠注入应用沙箱 SQLite 造 assistant 轮次，UI 建不出
-    // thinking/tool_use/tool_result 三段结构。没显式开 fixture 就整段跳过（如实标注，
-    // 不硬改成假路径）。理由见 fixtureSpecsDisabledReason()。
-    before(function () {
-      if (!fixtureSpecsEnabled()) {
-        console.warn(fixtureSpecsDisabledReason());
-        this.skip();
-      }
-    });
-
-    it('keeps assistant anchor when rolling back on assistant with tool_use', async function () {
-      if (!(await isFixtureSessionAvailable())) {
-        if (allowFixtureSkip()) {
-          this.skip();
-          return;
-        }
-        throw new Error(
-          '[e2e] Turn rollback fixture missing. Inject via e2e/scripts/README.md.',
-        );
-      }
-
-      await openFixtureSession();
-      await chatTranscriptPage.openWebView();
-
-      const assistantId = E2E_FIXTURE_ASSISTANT_MESSAGE_ID;
-      const tailUserId = E2E_FIXTURE_TAIL_USER_MESSAGE_ID;
-      const tailAssistantId = E2E_FIXTURE_TAIL_ASSISTANT_MESSAGE_ID;
-
-      await chatTranscriptPage.waitForMessage(assistantId);
-      // assistant rewind 的锚点与断言对象是 assistant 消息：走不过滤的全量入口
-      // （cr2-D-1），user 过滤入口拿不到 assistant 行。
-      const idsBefore = await chatTranscriptPage.getAllMessageIds();
-      expect(idsBefore.length).toBeGreaterThanOrEqual(4);
-      expect(idsBefore).toContain(assistantId);
-      expect(idsBefore).toContain(tailUserId);
-      expect(idsBefore).toContain(tailAssistantId);
-
-      await chatTranscriptPage.openMessageMenu(assistantId);
-      await chatTranscriptPage.tapMenuAction('rollback');
-      await alertPage.acceptRollback();
-
-      const toast = await vfsPage.readToastMessage();
-      expect(toast).toContain('回滚成功');
-
-      const idsAfter = await chatTranscriptPage.getAllMessageIds();
-      expect(idsAfter.length).toBe(2);
-      expect(idsAfter[0]).toBe(idsBefore[0]);
-      expect(idsAfter[1]).toBe(assistantId);
-      expect(idsAfter).not.toContain(tailUserId);
-      expect(idsAfter).not.toContain(tailAssistantId);
-
-      await chatTranscriptPage.assertMessageHasToolGroup(assistantId);
-      await chatTranscriptPage.expectMessageMissing(tailAssistantId);
-    });
-  });
-
-  describe('T-E3 composer draft overwrite', () => {
-    // 同 T-E2：结构性依赖 fixture 注入，UI 造不出被回滚的 tool_result 轮次锚点。
-    before(function () {
-      if (!fixtureSpecsEnabled()) {
-        console.warn(fixtureSpecsDisabledReason());
-        this.skip();
-      }
-    });
-
-    it('回滚 plain user 时 Composer 覆盖旧草稿', async function () {
-      if (!(await isFixtureSessionAvailable())) {
-        if (allowFixtureSkip()) {
-          this.skip();
-          return;
-        }
-        throw new Error(
-          '[e2e] Fixture session missing for composer draft test. Inject via e2e/scripts/README.md.',
-        );
-      }
-
-      await openFixtureSession();
-      await chatTranscriptPage.openWebView();
-      await chatTranscriptPage.waitForMessage(FIXTURE_ANCHOR_USER_ID);
-
-      await chatTranscriptPage.setComposerText('old draft before rollback');
-
-      await chatTranscriptPage.openMessageMenu(FIXTURE_ANCHOR_USER_ID);
-      await chatTranscriptPage.tapMenuAction('rollback');
-      await alertPage.acceptRollback();
-
-      const toast = await vfsPage.readToastMessage();
-      expect(toast).toContain('回滚成功');
-
-      await chatTranscriptPage.expectComposerText(FIXTURE_ANCHOR_USER_TEXT);
-    });
-  });
 });

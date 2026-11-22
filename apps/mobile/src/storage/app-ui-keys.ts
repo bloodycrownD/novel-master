@@ -35,11 +35,11 @@ export const APP_UI_KEY_UPDATES_SNOOZE_UNTIL = 'updates.snoozeUntil';
 
 /** Default string values when a key is missing. */
 export const APP_UI_DEFAULTS = {
-  [APP_UI_KEY_THEME]: 'light',
-  [APP_UI_KEY_CHAT_RICH_TEXT]: 'false',
-  // KKV 未写值（get 抛 NOT_FOUND）时的功能性回退，锁定消息通知默认关；
-  // 与调用点 readBoolPref 的第三参 false 联动，
-  // 两处缺一不可（只改第三参时存量未写值用户 get 永远回退 'true'）。
-  [APP_UI_KEY_MESSAGE_NOTIFICATION]: 'false',
-  [APP_UI_KEY_UPDATES_AUTO_CHECK]: 'true',
+    [APP_UI_KEY_THEME]: 'light',
+    [APP_UI_KEY_CHAT_RICH_TEXT]: 'false',
+    // KKV 未写值（get 抛 NOT_FOUND）时的功能性回退，锁定消息通知默认关；
+    // 与调用点 readBoolPref 的第三参 false 联动，
+    // 两处缺一不可（只改第三参时存量未写值用户 get 永远回退 'true'）。
+    [APP_UI_KEY_MESSAGE_NOTIFICATION]: 'false',
+    [APP_UI_KEY_UPDATES_AUTO_CHECK]: 'true',
 } as const;

@@ -12,43 +12,43 @@ import { dialog } from "electron";
 import { DbBackupService } from "../src/main/services/db-backup.service.js";
 import { DesktopRuntimeSingleton } from "../src/main/runtime/desktop-runtime-singleton.js";
 import {
-  setupDesktopDbTestEnv,
-  teardownDesktopDbTestEnv,
+    setupDesktopDbTestEnv,
+    teardownDesktopDbTestEnv,
 } from "./desktop-db-test-env.js";
 
 describe("exportDatabaseBackup 保存框命名与 filters", () => {
-  let tempDir: string;
-  const savedDialogs: unknown[][] = [];
-  const originalShowSaveDialog = dialog.showSaveDialog;
+    let tempDir: string;
+    const savedDialogs: unknown[][] = [];
+    const originalShowSaveDialog = dialog.showSaveDialog;
 
-  before(async () => {
-    ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-backup-name-"));
-    await DesktopRuntimeSingleton.get();
-    dialog.showSaveDialog = (async (...args: unknown[]) => {
-      savedDialogs.push(args);
-      return { canceled: true, filePath: undefined };
-    }) as typeof dialog.showSaveDialog;
-  });
+    before(async () => {
+        ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-backup-name-"));
+        await DesktopRuntimeSingleton.get();
+        dialog.showSaveDialog = (async (...args: unknown[]) => {
+            savedDialogs.push(args);
+            return { canceled: true, filePath: undefined };
+        }) as typeof dialog.showSaveDialog;
+    });
 
-  after(async () => {
-    dialog.showSaveDialog = originalShowSaveDialog;
-    await teardownDesktopDbTestEnv(tempDir);
-  });
+    after(async () => {
+        dialog.showSaveDialog = originalShowSaveDialog;
+        await teardownDesktopDbTestEnv(tempDir);
+    });
 
-  it("默认名 nmbackup.db，filters 含 db 与 nmbackup（无窗口分支）", async () => {
-    const runtimeR = await DesktopRuntimeSingleton.get();
-    if (!runtimeR.ok) throw runtimeR.error;
-    const runtime = runtimeR.value;
-    // 四期签名：exportDatabaseBackup 沿 Result 回传，解包取结果。
-    const exported = await DbBackupService.exportWithDialog(runtime);
-    if (!exported.ok) throw exported.error;
-    assert.equal(exported.value, "cancelled");
-    assert.equal(savedDialogs.length, 1);
-    const options = savedDialogs[0]![0] as {
-      defaultPath: string;
-      filters: { name: string; extensions: string[] }[];
-    };
-    assert.equal(options.defaultPath, "nmbackup.db");
-    assert.deepEqual(options.filters[0]!.extensions, ["db", "nmbackup"]);
-  });
+    it("默认名 nmbackup.db，filters 含 db 与 nmbackup（无窗口分支）", async () => {
+        const runtimeR = await DesktopRuntimeSingleton.get();
+        if (!runtimeR.ok) throw runtimeR.error;
+        const runtime = runtimeR.value;
+        // 四期签名：exportDatabaseBackup 沿 Result 回传，解包取结果。
+        const exported = await DbBackupService.exportWithDialog(runtime);
+        if (!exported.ok) throw exported.error;
+        assert.equal(exported.value, "cancelled");
+        assert.equal(savedDialogs.length, 1);
+        const options = savedDialogs[0]![0] as {
+            defaultPath: string;
+            filters: { name: string; extensions: string[] }[];
+        };
+        assert.equal(options.defaultPath, "nmbackup.db");
+        assert.deepEqual(options.filters[0]!.extensions, ["db", "nmbackup"]);
+    });
 });

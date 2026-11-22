@@ -15,61 +15,61 @@ import {DocumentModel} from '@/web/rich-document/webview/runtime/document-model'
 import {readWebViewDistFile} from './helpers/read-webview-dist';
 
 describe('concatDocBodyHtml (T-FA4 html 分支 fm+body 拼接)', () => {
-  it('有 FM 时把 FM 置于正文之前、拼成同一条 HTML', () => {
-    const fm = '<div class="fm-card"><h1>title</h1></div>';
-    const body = '<p>正文段落</p>';
-    expect(DocumentModel.concatBodyHtml(fm, body)).toBe(`${fm}${body}`);
-  });
+    it('有 FM 时把 FM 置于正文之前、拼成同一条 HTML', () => {
+        const fm = '<div class="fm-card"><h1>title</h1></div>';
+        const body = '<p>正文段落</p>';
+        expect(DocumentModel.concatBodyHtml(fm, body)).toBe(`${fm}${body}`);
+    });
 
-  it('无 FM 时原样返回正文', () => {
-    const body = '<p>仅正文</p>';
-    expect(DocumentModel.concatBodyHtml('', body)).toBe(body);
-  });
+    it('无 FM 时原样返回正文', () => {
+        const body = '<p>仅正文</p>';
+        expect(DocumentModel.concatBodyHtml('', body)).toBe(body);
+    });
 });
 
 describe('buildDocumentBody (T-FA4 分支选择)', () => {
-  it('html 模式：FM 拼进正文 HTML、layout 透传', () => {
-    const fm = '<div class="fm-card"></div>';
-    const desc = DocumentModel.buildBody({
-      mode: 'html',
-      html: '<p>正文</p>',
-      frontMatterHtml: fm,
-      layout: 'rich',
+    it('html 模式：FM 拼进正文 HTML、layout 透传', () => {
+        const fm = '<div class="fm-card"></div>';
+        const desc = DocumentModel.buildBody({
+            mode: 'html',
+            html: '<p>正文</p>',
+            frontMatterHtml: fm,
+            layout: 'rich',
+        });
+        expect(desc).toEqual({kind: 'html', html: `${fm}<p>正文</p>`, layout: 'rich'});
     });
-    expect(desc).toEqual({kind: 'html', html: `${fm}<p>正文</p>`, layout: 'rich'});
-  });
 
-  it('plain 回退（over-limit）：fmHtml 与 text 分离，text 不得含 FM HTML', () => {
-    const fm = '<div class="fm-card"><div class="fm-title">Front Matter</div></div>';
-    const desc = DocumentModel.buildBody({
-      mode: 'plain',
-      plain: '第1章\n正文',
-      overLimit: true,
-      frontMatterHtml: fm,
+    it('plain 回退（over-limit）：fmHtml 与 text 分离，text 不得含 FM HTML', () => {
+        const fm = '<div class="fm-card"><div class="fm-title">Front Matter</div></div>';
+        const desc = DocumentModel.buildBody({
+            mode: 'plain',
+            plain: '第1章\n正文',
+            overLimit: true,
+            frontMatterHtml: fm,
+        });
+        expect(desc).toEqual({kind: 'plain', fmHtml: fm, text: '第1章\n正文'});
+        // 回归守卫：正文按原文显示，FM HTML 绝不混进文本节点
+        expect(desc?.kind === 'plain' && desc.text.includes('<')).toBe(false);
     });
-    expect(desc).toEqual({kind: 'plain', fmHtml: fm, text: '第1章\n正文'});
-    // 回归守卫：正文按原文显示，FM HTML 绝不混进文本节点
-    expect(desc?.kind === 'plain' && desc.text.includes('<')).toBe(false);
-  });
 
-  it('plain 回退无 FM：fmHtml 为空串、正文原样', () => {
-    const desc = DocumentModel.buildBody({mode: 'plain', plain: '仅正文'});
-    expect(desc).toEqual({kind: 'plain', fmHtml: '', text: '仅正文'});
-  });
+    it('plain 回退无 FM：fmHtml 为空串、正文原样', () => {
+        const desc = DocumentModel.buildBody({mode: 'plain', plain: '仅正文'});
+        expect(desc).toEqual({kind: 'plain', fmHtml: '', text: '仅正文'});
+    });
 
-  it('无 html 且无 plain 时返回 null', () => {
-    expect(DocumentModel.buildBody({mode: 'html', frontMatterHtml: '<div/>'})).toBeNull();
-    expect(DocumentModel.buildBody({})).toBeNull();
-  });
+    it('无 html 且无 plain 时返回 null', () => {
+        expect(DocumentModel.buildBody({mode: 'html', frontMatterHtml: '<div/>'})).toBeNull();
+        expect(DocumentModel.buildBody({})).toBeNull();
+    });
 
-  it('DocumentApp 分支接线在 WebView 产物中经由 buildDocumentBody', () => {
-    const script = readWebViewDistFile('rich-document', 'app.js');
-    // minify 重命名 buildDocumentBody（→ 短符号），函数名指纹失效；断言换它
-    // **产出**的稳定面：分支判别式返回的对象字面量键与 kind 字面量
-    // （对象属性名 / 字符串字面量都不受压缩影响）。分支语义本身由上面直测
-    // buildDocumentBody 的四个用例承担，这里只钉「DocumentApp 真走了这条
-    // 分支选择，且 plain 分支的 fmHtml 确实被单独消费」。
-    expect(script).toMatch(/kind:\s*['"]html['"]\s*,\s*html:/);
+    it('DocumentApp 分支接线在 WebView 产物中经由 buildDocumentBody', () => {
+        const script = readWebViewDistFile('rich-document', 'app.js');
+        // minify 重命名 buildDocumentBody（→ 短符号），函数名指纹失效；断言换它
+        // **产出**的稳定面：分支判别式返回的对象字面量键与 kind 字面量
+        // （对象属性名 / 字符串字面量都不受压缩影响）。分支语义本身由上面直测
+        // buildDocumentBody 的四个用例承担，这里只钉「DocumentApp 真走了这条
+        // 分支选择，且 plain 分支的 fmHtml 确实被单独消费」。
+        expect(script).toMatch(/kind:\s*['"]html['"]\s*,\s*html:/);
     expect(script).toMatch(/kind:\s*['"]plain['"]\s*,\s*fmHtml:/);
     expect(script).toMatch(/\.fmHtml\s*\?/);
   });

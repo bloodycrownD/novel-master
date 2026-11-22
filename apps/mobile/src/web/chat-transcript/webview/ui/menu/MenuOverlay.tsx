@@ -12,73 +12,73 @@ import {Menu, type ContextMenuLayout} from '../../runtime/menu/menu';
 import {ContextMenu} from './ContextMenu';
 
 type MenuOverlayProps = {
-  messageId: string;
-  items: MenuItem[];
-  anchor: MenuAnchor;
+    messageId: string;
+    items: MenuItem[];
+    anchor: MenuAnchor;
 };
 
 export function MenuOverlay({messageId, items, anchor}: MenuOverlayProps) {
-  const menuRef = useRef<HTMLDivElement>(null);
-  const menuWidth = Menu.computeWidth(items);
-  /** null = 仍隐藏待测；非 null = 已定位，由 state 驱动最终 style/className */
-  const [layout, setLayout] = useState<ContextMenuLayout | null>(null);
+    const menuRef = useRef<HTMLDivElement>(null);
+    const menuWidth = Menu.computeWidth(items);
+    /** null = 仍隐藏待测；非 null = 已定位，由 state 驱动最终 style/className */
+    const [layout, setLayout] = useState<ContextMenuLayout | null>(null);
 
-  // 输入变更：先回到隐藏，同帧后续 effect 再 measure（避免带着旧坐标测）
-  useLayoutEffect(() => {
-    setLayout(null);
-  }, [messageId, items, anchor, menuWidth]);
+    // 输入变更：先回到隐藏，同帧后续 effect 再 measure（避免带着旧坐标测）
+    useLayoutEffect(() => {
+        setLayout(null);
+    }, [messageId, items, anchor, menuWidth]);
 
-  useLayoutEffect(() => {
-    if (layout !== null) return;
-    const menuEl = menuRef.current;
-    if (!menuEl) return;
+    useLayoutEffect(() => {
+        if (layout !== null) return;
+        const menuEl = menuRef.current;
+        if (!menuEl) return;
 
-    // 只读 measure；结果经 setLayout，不写 menuEl.style / className
-    const measuredHeight = menuEl.offsetHeight || menuEl.scrollHeight;
-    const contentHeight = measuredHeight > 0 ? measuredHeight : items.length * ANCHORED_MENU_ITEM_LAYOUT_HEIGHT;
-    let next = Menu.layout(anchor, contentHeight, menuWidth);
-    if (items.length <= MESSAGE_ACTION_MENU_ITEM_COUNT) {
-      next = {
-        left: next.left,
-        top: next.top,
-        width: next.width,
-        maxHeight: contentHeight,
-        scrollable: false,
-      };
+        // 只读 measure；结果经 setLayout，不写 menuEl.style / className
+        const measuredHeight = menuEl.offsetHeight || menuEl.scrollHeight;
+        const contentHeight = measuredHeight > 0 ? measuredHeight : items.length * ANCHORED_MENU_ITEM_LAYOUT_HEIGHT;
+        let next = Menu.layout(anchor, contentHeight, menuWidth);
+        if (items.length <= MESSAGE_ACTION_MENU_ITEM_COUNT) {
+            next = {
+                left: next.left,
+                top: next.top,
+                width: next.width,
+                maxHeight: contentHeight,
+                scrollable: false,
+            };
+        }
+        setLayout(next);
+    }, [layout, messageId, items, anchor, menuWidth]);
+
+    const placed = layout !== null;
+    const className = placed && layout.scrollable ? 'context-menu scrollable' : 'context-menu';
+    let style: JSX.CSSProperties;
+    if (layout !== null) {
+        style = {
+            position: 'fixed',
+            left: layout.left + 'px',
+            top: layout.top + 'px',
+            width: layout.width + 'px',
+            height: 'auto',
+            maxHeight: layout.scrollable ? layout.maxHeight + 'px' : 'none',
+            visibility: 'visible',
+        };
+    } else {
+        style = {
+            position: 'fixed',
+            visibility: 'hidden',
+            left: '0',
+            top: '0',
+            width: menuWidth + 'px',
+            maxHeight: 'none',
+        };
     }
-    setLayout(next);
-  }, [layout, messageId, items, anchor, menuWidth]);
 
-  const placed = layout !== null;
-  const className = placed && layout.scrollable ? 'context-menu scrollable' : 'context-menu';
-  let style: JSX.CSSProperties;
-  if (layout !== null) {
-    style = {
-      position: 'fixed',
-      left: layout.left + 'px',
-      top: layout.top + 'px',
-      width: layout.width + 'px',
-      height: 'auto',
-      maxHeight: layout.scrollable ? layout.maxHeight + 'px' : 'none',
-      visibility: 'visible',
-    };
-  } else {
-    style = {
-      position: 'fixed',
-      visibility: 'hidden',
-      left: '0',
-      top: '0',
-      width: menuWidth + 'px',
-      maxHeight: 'none',
-    };
-  }
-
-  return (
-    <>
-      <div id="menu-backdrop" className="menu-backdrop" data-action="close-menu" />
-      <div ref={menuRef} id="context-menu" className={className} style={style}>
-        <ContextMenu messageId={messageId} items={items} />
-      </div>
-    </>
-  );
+    return (
+        <>
+            <div id="menu-backdrop" className="menu-backdrop" data-action="close-menu" />
+            <div ref={menuRef} id="context-menu" className={className} style={style}>
+                <ContextMenu messageId={messageId} items={items} />
+            </div>
+        </>
+    );
 }

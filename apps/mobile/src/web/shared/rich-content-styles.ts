@@ -4,63 +4,63 @@
  */
 
 export namespace RichContentStyles {
-  /** 按根选择器生成复合规则（如 `.bubble.rich p, .thinking-body.rich p`）。 */
-  export function buildCssRules(selectors: readonly string[]): string {
-    const group = selectors.join(', ');
-    const child = (tag: string) => selectors.map(s => `${s} ${tag}`).join(', ');
-    const mermaidBlock = selectors.map(s => `${s} .mermaid-block`).join(', ');
-    const mermaidChart = selectors.map(s => `${s} .mermaid-block__chart`).join(', ');
-    const mermaidChartSvg = selectors.map(s => `${s} .mermaid-block__chart svg`).join(', ');
-    const mermaidSource = selectors.map(s => `${s} .mermaid-block__source`).join(', ');
-    // 失败态源码回退：pre 只加 mermaid-failed（不进 .mermaid-block 容器），
-    // 成功态源码 pre 才带 mermaid-block__source（display:none）
-    const mermaidSourceVisible = selectors.map(s => `${s} pre.mermaid-failed`).join(', ');
-    const mermaidPending = selectors.map(s => `${s} pre > code.language-mermaid`).join(', ');
-    const mermaidFailedCode = selectors.map(s => `${s} pre.mermaid-failed > code.language-mermaid`).join(', ');
-    const mermaidChartActive = selectors.map(s => `${s} .mermaid-block__chart:active`).join(', ');
-    const nestedList = selectors.map(s => `${s} ul ul, ${s} ol ol, ${s} ul ol, ${s} ol ul`).join(', ');
-    const liAdjacent = selectors.map(s => `${s} li + li`).join(', ');
-    const liParagraph = selectors.map(s => `${s} li > p`).join(', ');
-    // 块级渲染尾块容器（spec §6）：纯文本降级期补 pre-wrap（.rich 的
-    // white-space: normal 会继承下来把换行折叠，B-1）；已提交块存在时
-    // （尾块非首子元素）首段补回块间距，防块边界 5px 塌陷（C-1）。
-    const streamTailPlain = selectors.map(s => `${s} .stream-active-tail.stream-tail-plain`).join(', ');
-    const streamTailFirstParagraph = selectors.map(s => `${s} > .stream-active-tail:not(:first-child) > p:first-child`).join(', ');
-    // 尾块内段落零段距：plain 态（pre-wrap 裸文本）无段间距，350ms 轻量升级
-    // 成 <p> 段落后若保留 0.35em 段距，升级瞬间整块行距跳变——流式期间
-    // 「一闪一闪」的主源之一（2026-10-02 真机实测反馈）。段间距留给块提交后
-    // 的正式渲染（宿主下发 html 整体替换，一次性过渡可接受）。
-    const streamTailParagraph = selectors.map(s => `${s} .stream-active-tail > p`).join(', ');
-    // 块级代码：pre 内 code 重置行内形态（透明背景/零 padding/无圆角）
-    const preCode = selectors.map(s => `${s} pre code`).join(', ');
-    // 代码块横滚容器：必须逐 root 挂 `> code`——`${child('pre[data-lang]')} > code`
-    // 只会把后缀加到最后一个 root 上（与下方 ::after 同一个坑），chat 侧会整条拿不到规则、
-    // pre 自己变成滚动容器，复制按钮跟着滚（2026-10-28 真机 + WebView devtools 实测）。
-    const preScroller = selectors.map(s => `${s} pre[data-lang] > code`).join(', ');
-    const preLangLabel = selectors.map(s => `${s} pre[data-lang]::before`).join(', ');
-    // 代码块复制按钮：空 span，label 走伪元素（零 DOM 文本，批注零偏移）。
-    // 伪元素选择器必须逐个带 ::after 再 join——`${list}::after` 只会给最后一项挂伪元素，
-    // 其余项的 content 落在元素本身上不生效（chat 气泡因此只见到空壳小长条）。
-    const preCopyBtn = selectors.map(s => `${s} pre > .code-copy`).join(', ');
-    const preCopyBtnAfter = selectors.map(s => `${s} pre > .code-copy::after`).join(', ');
-    const preCopyBtnCopied = selectors.map(s => `${s} pre > .code-copy.copied`).join(', ');
-    const preCopyBtnCopiedAfter = selectors.map(s => `${s} pre > .code-copy.copied::after`).join(', ');
-    // 高亮 token 两套配色：默认亮色，html[data-nm-mode="dark"]（bridge applyTheme 推断写入）覆盖暗色
-    // 色值与 desktop shell.css 的 --hljs-* 变量一致（双端一致性）
-    const hljsTokens: Array<[string, string, string]> = [
-      ['hljs-keyword', '#cf222e', '#ff7b72'],
-      ['hljs-string', '#0a3069', '#a5d6ff'],
-      ['hljs-comment', '#6e7781', '#8b949e'],
-      ['hljs-number', '#0550ae', '#79c0ff'],
-      ['hljs-title', '#8250df', '#d2a8ff'],
-      ['hljs-attr', '#116329', '#7ee787'],
-      ['hljs-literal', '#005cc5', '#79c0ff'],
-      ['hljs-built_in', '#953800', '#ffa657'],
-      ['hljs-meta', '#cf222e', '#ff7b72'],
-      ['hljs-tag', '#116329', '#7ee787'],
-      ['hljs-symbol', '#0550ae', '#79c0ff'],
-    ];
-    return `
+    /** 按根选择器生成复合规则（如 `.bubble.rich p, .thinking-body.rich p`）。 */
+    export function buildCssRules(selectors: readonly string[]): string {
+        const group = selectors.join(', ');
+        const child = (tag: string) => selectors.map(s => `${s} ${tag}`).join(', ');
+        const mermaidBlock = selectors.map(s => `${s} .mermaid-block`).join(', ');
+        const mermaidChart = selectors.map(s => `${s} .mermaid-block__chart`).join(', ');
+        const mermaidChartSvg = selectors.map(s => `${s} .mermaid-block__chart svg`).join(', ');
+        const mermaidSource = selectors.map(s => `${s} .mermaid-block__source`).join(', ');
+        // 失败态源码回退：pre 只加 mermaid-failed（不进 .mermaid-block 容器），
+        // 成功态源码 pre 才带 mermaid-block__source（display:none）
+        const mermaidSourceVisible = selectors.map(s => `${s} pre.mermaid-failed`).join(', ');
+        const mermaidPending = selectors.map(s => `${s} pre > code.language-mermaid`).join(', ');
+        const mermaidFailedCode = selectors.map(s => `${s} pre.mermaid-failed > code.language-mermaid`).join(', ');
+        const mermaidChartActive = selectors.map(s => `${s} .mermaid-block__chart:active`).join(', ');
+        const nestedList = selectors.map(s => `${s} ul ul, ${s} ol ol, ${s} ul ol, ${s} ol ul`).join(', ');
+        const liAdjacent = selectors.map(s => `${s} li + li`).join(', ');
+        const liParagraph = selectors.map(s => `${s} li > p`).join(', ');
+        // 块级渲染尾块容器（spec §6）：纯文本降级期补 pre-wrap（.rich 的
+        // white-space: normal 会继承下来把换行折叠，B-1）；已提交块存在时
+        // （尾块非首子元素）首段补回块间距，防块边界 5px 塌陷（C-1）。
+        const streamTailPlain = selectors.map(s => `${s} .stream-active-tail.stream-tail-plain`).join(', ');
+        const streamTailFirstParagraph = selectors.map(s => `${s} > .stream-active-tail:not(:first-child) > p:first-child`).join(', ');
+        // 尾块内段落零段距：plain 态（pre-wrap 裸文本）无段间距，350ms 轻量升级
+        // 成 <p> 段落后若保留 0.35em 段距，升级瞬间整块行距跳变——流式期间
+        // 「一闪一闪」的主源之一（2026-10-02 真机实测反馈）。段间距留给块提交后
+        // 的正式渲染（宿主下发 html 整体替换，一次性过渡可接受）。
+        const streamTailParagraph = selectors.map(s => `${s} .stream-active-tail > p`).join(', ');
+        // 块级代码：pre 内 code 重置行内形态（透明背景/零 padding/无圆角）
+        const preCode = selectors.map(s => `${s} pre code`).join(', ');
+        // 代码块横滚容器：必须逐 root 挂 `> code`——`${child('pre[data-lang]')} > code`
+        // 只会把后缀加到最后一个 root 上（与下方 ::after 同一个坑），chat 侧会整条拿不到规则、
+        // pre 自己变成滚动容器，复制按钮跟着滚（2026-10-28 真机 + WebView devtools 实测）。
+        const preScroller = selectors.map(s => `${s} pre[data-lang] > code`).join(', ');
+        const preLangLabel = selectors.map(s => `${s} pre[data-lang]::before`).join(', ');
+        // 代码块复制按钮：空 span，label 走伪元素（零 DOM 文本，批注零偏移）。
+        // 伪元素选择器必须逐个带 ::after 再 join——`${list}::after` 只会给最后一项挂伪元素，
+        // 其余项的 content 落在元素本身上不生效（chat 气泡因此只见到空壳小长条）。
+        const preCopyBtn = selectors.map(s => `${s} pre > .code-copy`).join(', ');
+        const preCopyBtnAfter = selectors.map(s => `${s} pre > .code-copy::after`).join(', ');
+        const preCopyBtnCopied = selectors.map(s => `${s} pre > .code-copy.copied`).join(', ');
+        const preCopyBtnCopiedAfter = selectors.map(s => `${s} pre > .code-copy.copied::after`).join(', ');
+        // 高亮 token 两套配色：默认亮色，html[data-nm-mode="dark"]（bridge applyTheme 推断写入）覆盖暗色
+        // 色值与 desktop shell.css 的 --hljs-* 变量一致（双端一致性）
+        const hljsTokens: Array<[string, string, string]> = [
+            ['hljs-keyword', '#cf222e', '#ff7b72'],
+            ['hljs-string', '#0a3069', '#a5d6ff'],
+            ['hljs-comment', '#6e7781', '#8b949e'],
+            ['hljs-number', '#0550ae', '#79c0ff'],
+            ['hljs-title', '#8250df', '#d2a8ff'],
+            ['hljs-attr', '#116329', '#7ee787'],
+            ['hljs-literal', '#005cc5', '#79c0ff'],
+            ['hljs-built_in', '#953800', '#ffa657'],
+            ['hljs-meta', '#cf222e', '#ff7b72'],
+            ['hljs-tag', '#116329', '#7ee787'],
+            ['hljs-symbol', '#0550ae', '#79c0ff'],
+        ];
+        return `
     ${group} { white-space: normal; overflow-wrap: anywhere; }
     ${child('p')} { margin: 0.35em 0; }
     ${child('p')}:first-child { margin-top: 0; }
@@ -203,7 +203,7 @@ export namespace RichContentStyles {
     }
     ${mermaidFailedCode}::before { content: attr(data-mermaid-error, "图表渲染失败，已回退源码"); color: var(--danger, #d92d20); opacity: 0.9; }
   `.trim();
-  }
+    }
 }
 
 /** 聊天 transcript 气泡 + thinking 富文本规则。 */

@@ -8,132 +8,132 @@ import {  WorkplaceMaterializeEngine  } from "@/domain/workplace/logic/workplace
 import {  DEFAULT_WORKPLACE_DIR_RULE  } from "@/domain/workplace/logic/default-dir-rule.js";
 
 function createSpyVfs(
-  contents: ReadonlyMap<string, string>,
+    contents: ReadonlyMap<string, string>,
 ): VfsEntryRepository & { findByPathCalls: string[] } {
-  const findByPathCalls: string[] = [];
-  return {
-    findByPathCalls,
-    list: async () => [],
-    findByPath: async (scopeKey: string, path: string) => {
-      findByPathCalls.push(path);
-      const content = contents.get(path);
-      if (content == null) {
-        return Result.ok(null);
-      }
-      return Result.ok({ entryId: 1, scopeKey, path, content, version: 1, mtimeMs: 0 });
-    },
-    findContentHash: async () => null,
-    insert: async () => ({ version: 1 }),
-    insertWithContentHash: async () => ({ version: 1 }),
-    insertAtVersion: async () => ({ version: 1 }),
-    insertDirectory: async () => undefined,
-    update: async () => ({ version: 1 }),
-    updateWithContentHash: async () => ({ version: 1 }),
-    setHeadContentHash: async () => undefined,
-    delete: async () => ({ deleted: true }),
-    listAllPaths: async () => [],
-    listDirectoryPathsUnderPrefix: async () => [],
-    listDirectoryMetaUnderPrefix: async () => [],
-    listEntriesUnderPrefix: async () => [],
-    listFileMetaUnderPrefix: async () => [],
-    listFileHeadsUnderPrefix: async () => [],
-    scanContents: async () => [],
-  } as unknown as VfsEntryRepository & { findByPathCalls: string[] };
+    const findByPathCalls: string[] = [];
+    return {
+        findByPathCalls,
+        list: async () => [],
+        findByPath: async (scopeKey: string, path: string) => {
+            findByPathCalls.push(path);
+            const content = contents.get(path);
+            if (content == null) {
+                return Result.ok(null);
+            }
+            return Result.ok({ entryId: 1, scopeKey, path, content, version: 1, mtimeMs: 0 });
+        },
+        findContentHash: async () => null,
+        insert: async () => ({ version: 1 }),
+        insertWithContentHash: async () => ({ version: 1 }),
+        insertAtVersion: async () => ({ version: 1 }),
+        insertDirectory: async () => undefined,
+        update: async () => ({ version: 1 }),
+        updateWithContentHash: async () => ({ version: 1 }),
+        setHeadContentHash: async () => undefined,
+        delete: async () => ({ deleted: true }),
+        listAllPaths: async () => [],
+        listDirectoryPathsUnderPrefix: async () => [],
+        listDirectoryMetaUnderPrefix: async () => [],
+        listEntriesUnderPrefix: async () => [],
+        listFileMetaUnderPrefix: async () => [],
+        listFileHeadsUnderPrefix: async () => [],
+        scanContents: async () => [],
+    } as unknown as VfsEntryRepository & { findByPathCalls: string[] };
 }
 
 describe("worktree materialize engine", () => {
-  it("T-WEC16：仅 full/header 读正文，hidden/filename 不 findByPath", async () => {
-    const scope = { kind: "project" as const, projectId: "p1" };
-    const ctx = {
-      dirRuleMap: new Map([
-        [
-          "/hdr",
-          {
-            scopeKey: "global",
-            logicalPath: "/hdr",
-            ruleEnabled: true,
-            ...DEFAULT_WORKPLACE_DIR_RULE,
-            headCount: 0,
-            tailCount: 0,
-            fillPolicy: "header" as const,
-          },
-        ],
-        [
-          "/hid",
-          {
-            scopeKey: "global",
-            logicalPath: "/hid",
-            ruleEnabled: true,
-            ...DEFAULT_WORKPLACE_DIR_RULE,
-            headCount: 0,
-            tailCount: 0,
-            fillPolicy: "hidden" as const,
-          },
-        ],
-        [
-          "/fn",
-          {
-            scopeKey: "global",
-            logicalPath: "/fn",
-            ruleEnabled: true,
-            ...DEFAULT_WORKPLACE_DIR_RULE,
-            headCount: 0,
-            tailCount: 0,
-            fillPolicy: "filename" as const,
-          },
-        ],
-      ]),
-      fileRuleMap: new Map([
-        [
-          "/show/a.md",
-          {
-            scopeKey: "global",
-            logicalPath: "/show/a.md",
-            inclusionMode: "show" as const,
-          },
-        ],
-      ]),
-      fileSet: new Set([
-        "/show/a.md",
-        "/hdr/b.md",
-        "/hid/c.md",
-        "/fn/d.md",
-      ]),
-      mtimeByPath: new Map([
-        ["/show/a.md", 100],
-        ["/hdr/b.md", 200],
-        ["/hid/c.md", 300],
-        ["/fn/d.md", 400],
-      ]),
-      allDirs: new Set(["/", "/show", "/hdr", "/hid", "/fn"]),
-    };
+    it("T-WEC16：仅 full/header 读正文，hidden/filename 不 findByPath", async () => {
+        const scope = { kind: "project" as const, projectId: "p1" };
+        const ctx = {
+            dirRuleMap: new Map([
+                [
+                    "/hdr",
+                    {
+                        scopeKey: "global",
+                        logicalPath: "/hdr",
+                        ruleEnabled: true,
+                        ...DEFAULT_WORKPLACE_DIR_RULE,
+                        headCount: 0,
+                        tailCount: 0,
+                        fillPolicy: "header" as const,
+                    },
+                ],
+                [
+                    "/hid",
+                    {
+                        scopeKey: "global",
+                        logicalPath: "/hid",
+                        ruleEnabled: true,
+                        ...DEFAULT_WORKPLACE_DIR_RULE,
+                        headCount: 0,
+                        tailCount: 0,
+                        fillPolicy: "hidden" as const,
+                    },
+                ],
+                [
+                    "/fn",
+                    {
+                        scopeKey: "global",
+                        logicalPath: "/fn",
+                        ruleEnabled: true,
+                        ...DEFAULT_WORKPLACE_DIR_RULE,
+                        headCount: 0,
+                        tailCount: 0,
+                        fillPolicy: "filename" as const,
+                    },
+                ],
+            ]),
+            fileRuleMap: new Map([
+                [
+                    "/show/a.md",
+                    {
+                        scopeKey: "global",
+                        logicalPath: "/show/a.md",
+                        inclusionMode: "show" as const,
+                    },
+                ],
+            ]),
+            fileSet: new Set([
+                "/show/a.md",
+                "/hdr/b.md",
+                "/hid/c.md",
+                "/fn/d.md",
+            ]),
+            mtimeByPath: new Map([
+                ["/show/a.md", 100],
+                ["/hdr/b.md", 200],
+                ["/hid/c.md", 300],
+                ["/fn/d.md", 400],
+            ]),
+            allDirs: new Set(["/", "/show", "/hdr", "/hid", "/fn"]),
+        };
 
-    const view = unwrap(WorkplaceRuleEngine.evaluateView(scope, ctx));
-    assert.equal(view.displayByPath.get("/show/a.md"), "full");
-    assert.equal(view.displayByPath.get("/hdr/b.md"), "header");
-    assert.equal(view.displayByPath.get("/hid/c.md"), "hidden");
-    assert.equal(view.displayByPath.get("/fn/d.md"), "filename");
+        const view = unwrap(WorkplaceRuleEngine.evaluateView(scope, ctx));
+        assert.equal(view.displayByPath.get("/show/a.md"), "full");
+        assert.equal(view.displayByPath.get("/hdr/b.md"), "header");
+        assert.equal(view.displayByPath.get("/hid/c.md"), "hidden");
+        assert.equal(view.displayByPath.get("/fn/d.md"), "filename");
 
-    const vfs = createSpyVfs(
-      new Map([
-        ["/show/a.md", "FULL-A"],
-        ["/hdr/b.md", "---\ntitle: B\n---\nbody"],
-      ]),
-    );
+        const vfs = createSpyVfs(
+            new Map([
+                ["/show/a.md", "FULL-A"],
+                ["/hdr/b.md", "---\ntitle: B\n---\nbody"],
+            ]),
+        );
 
-    const block = unwrap(await WorkplaceMaterializeEngine.materializeBlockFromView(
-      view,
-      vfs,
-      scope,
-      ctx.mtimeByPath,
-    ));
+        const block = unwrap(await WorkplaceMaterializeEngine.materializeBlockFromView(
+            view,
+            vfs,
+            scope,
+            ctx.mtimeByPath,
+        ));
 
-    assert.equal(vfs.findByPathCalls.length, 2);
-    assert.ok(vfs.findByPathCalls.includes("/show/a.md"));
-    assert.ok(vfs.findByPathCalls.includes("/hdr/b.md"));
-    assert.match(block, /FULL-A/);
-    assert.match(block, /title: B/);
-    assert.match(block, /d\.md/);
-    assert.doesNotMatch(block, /c\.md/);
-  });
+        assert.equal(vfs.findByPathCalls.length, 2);
+        assert.ok(vfs.findByPathCalls.includes("/show/a.md"));
+        assert.ok(vfs.findByPathCalls.includes("/hdr/b.md"));
+        assert.match(block, /FULL-A/);
+        assert.match(block, /title: B/);
+        assert.match(block, /d\.md/);
+        assert.doesNotMatch(block, /c\.md/);
+    });
 });

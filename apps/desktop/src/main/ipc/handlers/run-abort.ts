@@ -22,51 +22,51 @@ const log = LogFactory.create("desktop.ipc.run-abort");
 
 /** kind → `ABORT_KEY` 工厂；键集合与 shared `RunAbortRequest.kind` 一一对应。 */
 const ABORT_KEY_BY_KIND = {
-  backup: ABORT_KEY.backup,
-  dbmaint: ABORT_KEY.dbMaintenance,
-  stats: ABORT_KEY.usageStats,
-  models: ABORT_KEY.providerModels,
-  sync: ABORT_KEY.cloudSync,
-  compaction: ABORT_KEY.compaction,
+    backup: ABORT_KEY.backup,
+    dbmaint: ABORT_KEY.dbMaintenance,
+    stats: ABORT_KEY.usageStats,
+    models: ABORT_KEY.providerModels,
+    sync: ABORT_KEY.cloudSync,
+    compaction: ABORT_KEY.compaction,
 } as const;
 
 type RunAbortKind = keyof typeof ABORT_KEY_BY_KIND;
 
 export const RunAbort = {
-  /**
+    /**
    * 按完整 key 取消；key 未注册、或 runtime 尚未就位时静默 no-op。
    *
    * 与 `handleAgentAbort`（agent.ts，原 abortAgentRun）同口径：runtime 未就绪时
    * 无在途任务可中断，留痕后返回，不让取消按钮把错误弹给用户。
    */
-  async abortRegisteredKey(key: string): Promise<void> {
-    const built = await DesktopRuntimeSingleton.get();
-    if (!built.ok) {
-      log.warn("abort before runtime ready", { key, error: built.error });
-      return;
-    }
-    built.value.abortRegistry.abort(key);
-  },
+    async abortRegisteredKey(key: string): Promise<void> {
+        const built = await DesktopRuntimeSingleton.get();
+        if (!built.ok) {
+            log.warn("abort before runtime ready", { key, error: built.error });
+            return;
+        }
+        built.value.abortRegistry.abort(key);
+    },
 
-  /** `nm:run/abort`：`{ kind, id }` → `abort(ABORT_KEY[kind](id))`。 */
-  async abort(req: RunAbortRequest | undefined): Promise<RunAbortResponse> {
-    const kind: unknown = req?.kind;
-    // 渲染进程可能传来任意字符串：`Object.hasOwn` 做运行时收窄（不信任 DTO 联合）。
-    const keyOfKind = typeof kind === "string" && Object.hasOwn(ABORT_KEY_BY_KIND, kind) ? ABORT_KEY_BY_KIND[kind as RunAbortKind] : null;
-    if (keyOfKind == null) {
-      return IpcResults.err(FormatIpcError.format(new AppError("IPC_INVALID_ABORT_TARGET", { detail: `unknown kind: ${String(kind)}` })));
-    }
-    const id = req?.id;
-    if (id == null || id === "") {
-      return IpcResults.ok(null);
-    }
-    await RunAbort.abortRegisteredKey(keyOfKind(id));
-    return IpcResults.ok(null);
-  },
+    /** `nm:run/abort`：`{ kind, id }` → `abort(ABORT_KEY[kind](id))`。 */
+    async abort(req: RunAbortRequest | undefined): Promise<RunAbortResponse> {
+        const kind: unknown = req?.kind;
+        // 渲染进程可能传来任意字符串：`Object.hasOwn` 做运行时收窄（不信任 DTO 联合）。
+        const keyOfKind = typeof kind === "string" && Object.hasOwn(ABORT_KEY_BY_KIND, kind) ? ABORT_KEY_BY_KIND[kind as RunAbortKind] : null;
+        if (keyOfKind == null) {
+            return IpcResults.err(FormatIpcError.format(new AppError("IPC_INVALID_ABORT_TARGET", { detail: `unknown kind: ${String(kind)}` })));
+        }
+        const id = req?.id;
+        if (id == null || id === "") {
+            return IpcResults.ok(null);
+        }
+        await RunAbort.abortRegisteredKey(keyOfKind(id));
+        return IpcResults.ok(null);
+    },
 
-  /** `nm:agent/abort` 转发别名：等价于 `abort(ABORT_KEY.agent(sessionId))`。 */
-  async abortAlias(req: AgentAbortRequest): Promise<IpcResult<void>> {
-    await RunAbort.abortRegisteredKey(ABORT_KEY.agent(req.sessionId));
-    return IpcResults.ok(undefined);
-  },
+    /** `nm:agent/abort` 转发别名：等价于 `abort(ABORT_KEY.agent(sessionId))`。 */
+    async abortAlias(req: AgentAbortRequest): Promise<IpcResult<void>> {
+        await RunAbort.abortRegisteredKey(ABORT_KEY.agent(req.sessionId));
+        return IpcResults.ok(undefined);
+    },
 } as const;

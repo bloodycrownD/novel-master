@@ -14,23 +14,24 @@
  * ConversationPanel → MessageList → ToolCallCard 的长 props 链。
  */
 import { useCallback, useEffect, useState } from "react";
+import { coreT } from "@shared/logic/core-i18n";
 import { Button } from "@/components/ui/Button";
 
 // nm-style: keep-public — 测试契约：apps/desktop/test/tool-result-viewer-modal.test.tsx:23 动态 import 解构直引
 export const OPEN_TOOL_RESULT_EVENT = "open-tool-result-view";
 
 type ToolResultViewDetail = {
-  /** Modal 标题（工具名，如 `search`）。 */
-  readonly title: string;
-  /** tool_result 正文全文。 */
-  readonly content: string;
-  /**
+    /** Modal 标题（工具名，如 `search`）。 */
+    readonly title: string;
+    /** tool_result 正文全文。 */
+    readonly content: string;
+    /**
    * 入参原文 pretty JSON（2 空格缩进）。curl 的 body/headers、fs 的
    * `from → to` 这类信息只在原始入参里，卡片摘要一行给不全；阅读页要能
    * 同时看到「发了什么」与「回了什么」。无入参的工具不带此字段，
    * Modal 只渲染结果区块。
    */
-  readonly inputJson?: string;
+    readonly inputJson?: string;
 };
 
 /**
@@ -42,118 +43,113 @@ type ToolResultViewDetail = {
  * 只在无专属去向时被消费（判定 + 载荷构造单源）。
  */
 export function toolResultViewFor(tool: {
-  readonly name: string;
-  readonly resultContent?: string;
-  readonly summary?: string;
-  readonly input?: Record<string, unknown>;
+    readonly name: string;
+    readonly resultContent?: string;
+    readonly summary?: string;
+    readonly input?: Record<string, unknown>;
 }): ToolResultViewDetail | undefined {
-  const pickReadable = (value: unknown): string | undefined =>
-    typeof value === "string" && value.trim() !== "" ? value : undefined;
-  const content =
-    pickReadable(tool.resultContent) ?? pickReadable(tool.summary);
-  if (content == null) {
-    return undefined;
-  }
-  // 入参 stringify 可能抛（循环引用等），抛了就不带 inputJson——阅读页退回
-  // 只看结果，绝不让一次格式化失败把整条工具结果阅读点崩掉。
-  let inputJson: string | undefined;
-  if (tool.input != null) {
-    try {
-      inputJson = JSON.stringify(tool.input, null, 2);
-    } catch {
-      inputJson = undefined;
+    const pickReadable = (value: unknown): string | undefined =>
+        typeof value === "string" && value.trim() !== "" ? value : undefined;
+    const content = pickReadable(tool.resultContent) ?? pickReadable(tool.summary);
+    if (content == null) {
+        return undefined;
     }
-  }
-  return inputJson != null ? { title: tool.name, content, inputJson } : { title: tool.name, content };
+    // 入参 stringify 可能抛（循环引用等），抛了就不带 inputJson——阅读页退回
+    // 只看结果，绝不让一次格式化失败把整条工具结果阅读点崩掉。
+    let inputJson: string | undefined;
+    if (tool.input != null) {
+        try {
+            inputJson = JSON.stringify(tool.input, null, 2);
+        } catch {
+            inputJson = undefined;
+        }
+    }
+    return inputJson != null ? { title: tool.name, content, inputJson } : { title: tool.name, content };
 }
 
-export function dispatchOpenToolResultView(
-  detail: ToolResultViewDetail
-): void {
-  window.dispatchEvent(
-    new CustomEvent<ToolResultViewDetail>(OPEN_TOOL_RESULT_EVENT, { detail })
-  );
+export function dispatchOpenToolResultView( detail: ToolResultViewDetail ): void {
+    window.dispatchEvent( new CustomEvent<ToolResultViewDetail>(OPEN_TOOL_RESULT_EVENT, { detail }) );
 }
 
 /** 纯展示层（给定 target 渲染），监听壳薄层复用；static render 可直测。 */
 export function ToolResultViewOverlay({
-  target,
-  onClose,
+    target,
+    onClose,
 }: {
-  target: ToolResultViewDetail;
-  onClose: () => void;
+    target: ToolResultViewDetail;
+    onClose: () => void;
 }) {
-  return (
-    <div className="text-prompt-overlay" onClick={onClose}>
-      <div
-        className="prompt-editor-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-label={`${target.title}结果`}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="prompt-fullscreen__title">{target.title}</div>
-        <div className="prompt-fullscreen__body">
-          {/* 两段式阅读（有入参时）：入参在上、结果在下，各配一个中文标签行。
+    return (
+        <div className="text-prompt-overlay" onClick={onClose}>
+            <div
+                className="prompt-editor-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-label={`${target.title}${coreT({key: "ui.common.result"})}`}
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="prompt-fullscreen__title">{target.title}</div>
+                <div className="prompt-fullscreen__body">
+                    {/* 两段式阅读（有入参时）：入参在上、结果在下，各配一个中文标签行。
               复用 prompt-fullscreen__block/__raw 的 pre 形态，不新造样式类。 */}
-          {target.inputJson != null && target.inputJson !== "" ? (
-            <div className="prompt-fullscreen__block">
-              <div className="prompt-fullscreen__label">入参</div>
-              <pre className="prompt-fullscreen__raw">{target.inputJson}</pre>
+                    {target.inputJson != null && target.inputJson !== "" ? (
+                        <div className="prompt-fullscreen__block">
+                            <div className="prompt-fullscreen__label">{coreT({key: "ui.prompt.input_label"})}</div>
+                            <pre className="prompt-fullscreen__raw">{target.inputJson}</pre>
+                        </div>
+                    ) : null}
+                    {target.content === "" ? (
+                        <p className="prompt-fullscreen__empty">{coreT({key: "ui.prompt.empty_value"})}</p>
+                    ) : (
+                        <div className="prompt-fullscreen__block">
+                            {target.inputJson != null && target.inputJson !== "" ? (
+                                <div className="prompt-fullscreen__label">{coreT({key: "ui.common.result"})}</div>
+                            ) : null}
+                            <pre className="prompt-fullscreen__raw">{target.content}</pre>
+                        </div>
+                    )}
+                </div>
+                <div className="prompt-editor-modal__footer">
+                    <Button variant="secondary" onClick={onClose}>
+                        {coreT({key: "ui.common.close"})}
+                    </Button>
+                </div>
             </div>
-          ) : null}
-          {target.content === "" ? (
-            <p className="prompt-fullscreen__empty">（空）</p>
-          ) : (
-            <div className="prompt-fullscreen__block">
-              {target.inputJson != null && target.inputJson !== "" ? (
-                <div className="prompt-fullscreen__label">结果</div>
-              ) : null}
-              <pre className="prompt-fullscreen__raw">{target.content}</pre>
-            </div>
-          )}
         </div>
-        <div className="prompt-editor-modal__footer">
-          <Button variant="secondary" onClick={onClose}>
-            关闭
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
+    );
 }
 
 export function ToolResultViewerModal() {
-  const [target, setTarget] = useState<ToolResultViewDetail | null>(null);
-  const close = useCallback(() => setTarget(null), []);
+    const [target, setTarget] = useState<ToolResultViewDetail | null>(null);
+    const close = useCallback(() => setTarget(null), []);
 
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent<ToolResultViewDetail>).detail;
-      if (detail != null && typeof detail.content === "string") {
-        setTarget(detail);
-      }
-    };
-    window.addEventListener(OPEN_TOOL_RESULT_EVENT, handler);
-    return () => window.removeEventListener(OPEN_TOOL_RESULT_EVENT, handler);
-  }, []);
+    useEffect(() => {
+        const handler = (e: Event) => {
+            const detail = (e as CustomEvent<ToolResultViewDetail>).detail;
+            if (detail != null && typeof detail.content === "string") {
+                setTarget(detail);
+            }
+        };
+        window.addEventListener(OPEN_TOOL_RESULT_EVENT, handler);
+        return () => window.removeEventListener(OPEN_TOOL_RESULT_EVENT, handler);
+    }, []);
 
-  // Esc 关闭（照 RealPromptPanel：已被下游消费掉的 Esc 不拦截）
-  useEffect(() => {
+    // Esc 关闭（照 RealPromptPanel：已被下游消费掉的 Esc 不拦截）
+    useEffect(() => {
+        if (target == null) {
+            return;
+        }
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "Escape" && !e.defaultPrevented) {
+                setTarget(null);
+            }
+        };
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [target]);
+
     if (target == null) {
-      return;
+        return null;
     }
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !e.defaultPrevented) {
-        setTarget(null);
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [target]);
-
-  if (target == null) {
-    return null;
-  }
-  return <ToolResultViewOverlay target={target} onClose={close} />;
+    return <ToolResultViewOverlay target={target} onClose={close} />;
 }

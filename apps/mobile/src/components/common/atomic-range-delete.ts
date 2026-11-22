@@ -1,11 +1,11 @@
 /** 原子删候选区间：可被「单次连续删除整段摘除」的目标 span。 */
 export type AtomicDeleteRange = {
-  readonly start: number;
-  readonly end: number;
+    readonly start: number;
+    readonly end: number;
 };
 
 export namespace AtomicRangeDelete {
-  /**
+    /**
    * 泛化原子删：单次连续删除若碰到候选区间，整段删掉。
    *
    * 算法骨架（与原 `tryAtomicMacroDelete` 一致，仅把「宏白名单区间」参数化）：
@@ -21,34 +21,34 @@ export namespace AtomicRangeDelete {
    *
    * @returns 整段删除后的新串；无需原子删拦截时返回 null
    */
-  export function tryAtomicRangeDelete(prev: string, next: string, ranges: readonly AtomicDeleteRange[]): string | null {
-    if (next.length >= prev.length) {
-      return null;
-    }
+    export function tryAtomicRangeDelete(prev: string, next: string, ranges: readonly AtomicDeleteRange[]): string | null {
+        if (next.length >= prev.length) {
+            return null;
+        }
 
-    let prefix = 0;
-    const minLen = Math.min(next.length, prev.length);
-    while (prefix < minLen && next[prefix] === prev[prefix]) {
-      prefix++;
-    }
+        let prefix = 0;
+        const minLen = Math.min(next.length, prev.length);
+        while (prefix < minLen && next[prefix] === prev[prefix]) {
+            prefix++;
+        }
 
-    const deletedCount = prev.length - next.length;
-    const deleteStart = prefix;
-    const deleteEnd = deleteStart + deletedCount;
-    if (prev.slice(deleteEnd) !== next.slice(deleteStart)) {
-      return null;
-    }
+        const deletedCount = prev.length - next.length;
+        const deleteStart = prefix;
+        const deleteEnd = deleteStart + deletedCount;
+        if (prev.slice(deleteEnd) !== next.slice(deleteStart)) {
+            return null;
+        }
 
-    const hitRange = ranges.find(range => deleteStart < range.end && deleteEnd > range.start);
-    if (hitRange == null) {
-      return null;
-    }
+        const hitRange = ranges.find(range => deleteStart < range.end && deleteEnd > range.start);
+        if (hitRange == null) {
+            return null;
+        }
 
-    // 删除已覆盖整段区间：交给默认差分即可
-    if (deleteStart <= hitRange.start && deleteEnd >= hitRange.end) {
-      return null;
-    }
+        // 删除已覆盖整段区间：交给默认差分即可
+        if (deleteStart <= hitRange.start && deleteEnd >= hitRange.end) {
+            return null;
+        }
 
-    return prev.slice(0, hitRange.start) + prev.slice(hitRange.end);
-  }
+        return prev.slice(0, hitRange.start) + prev.slice(hitRange.end);
+    }
 }

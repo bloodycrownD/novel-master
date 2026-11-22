@@ -9,27 +9,27 @@ import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix
 novelMasterTestFixture();
 
 describe("skill 空态", () => {
-  it("全新库零技能时 effectiveSkills 返回空数组而非抛错", async () => {
-    const ctx = getNovelMasterTestContext();
-    const skills = SkillsServiceFactory.create(ctx.conn);
-    const project = await ctx.projects.create(`P-empty-${testIsolationSuffix()}`);
+    it("全新库零技能时 effectiveSkills 返回空数组而非抛错", async () => {
+        const ctx = getNovelMasterTestContext();
+        const skills = SkillsServiceFactory.create(ctx.conn);
+        const project = await ctx.projects.create(`P-empty-${testIsolationSuffix()}`);
 
-    // bootstrap 会幂等种入内置 agent-config（seed-builtin-skills），
-    // 「空态」指除内置外无用户技能。
-    const globalList = outcomeValue(await skills.listSkills("global"));
-    assert.deepEqual(
-      globalList.map((s) => s.name).filter((n) => !BUILTIN_SKILL_NAMES.has(n)),
-      [],
-    );
+        // bootstrap 会幂等种入内置 agent-config（seed-builtin-skills），
+        // 「空态」指除内置外无用户技能。
+        const globalList = outcomeValue(await skills.listSkills("global"));
+        assert.deepEqual(
+            globalList.map((s) => s.name).filter((n) => !BUILTIN_SKILL_NAMES.has(n)),
+            [],
+        );
 
-    const projectList = outcomeValue(await skills.listSkills({ projectId: project.id }));
-    assert.deepEqual(projectList, []);
+        const projectList = outcomeValue(await skills.listSkills({ projectId: project.id }));
+        assert.deepEqual(projectList, []);
 
-    const view = unwrap(await skills.effectiveSkills(project.id));
-    // 未禁用时内置技能计入生效列表（索引可见属预期）；断言仅含内置。
-    assert.deepEqual(
-      view.filter((s) => !BUILTIN_SKILL_NAMES.has(s.name)).map((s) => s.name),
-      [],
-    );
-  });
+        const view = unwrap(await skills.effectiveSkills(project.id));
+        // 未禁用时内置技能计入生效列表（索引可见属预期）；断言仅含内置。
+        assert.deepEqual(
+            view.filter((s) => !BUILTIN_SKILL_NAMES.has(s.name)).map((s) => s.name),
+            [],
+        );
+    });
 });

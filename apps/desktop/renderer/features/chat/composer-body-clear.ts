@@ -6,16 +6,13 @@
 
 /** started/ok 路径是否清正文。恒 false。 */
 export function shouldClearComposerBodyAfterAgentStarted(): boolean {
-  return false;
+    return false;
 }
 
 /**
  * append 推送后是否清 Composer UI（正文 + projected）。
  * 异会话仅清 annotate store（D1），不改当前输入框。
  */
-export function shouldClearComposerBodyOnUserMessageAppended(
-  payloadSessionId: string,
-  viewingSessionId: string,
-): boolean {
-  return payloadSessionId === viewingSessionId;
+export function shouldClearComposerBodyOnUserMessageAppended( payloadSessionId: string, viewingSessionId: string ): boolean {
+    return payloadSessionId === viewingSessionId;
 }

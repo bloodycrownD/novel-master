@@ -12,14 +12,14 @@ import { probeReadOnlyRunEnded } from "./readOnlyRunProbeLogic";
 const READONLY_RUN_PROBE_INTERVAL_MS = 30_000;
 
 type UseReadOnlyRunProbeParams = {
-  /** 仅在 readOnly 分支挂载监听。 */
-  enabled: boolean;
-  /** 子会话 sessionId（readOnly 子面板的 session）。 */
-  sessionId: string | undefined;
-  /** 同步读 uiRunning（false 时跳过校准，主路径已处理）。 */
-  isRunActive(): boolean;
-  /** 走与 readOnlyOnRunFinished 相同的收尾路径（markExternalRunEnded + onStreamReset + reload）。 */
-  onRunEnded(): void;
+    /** 仅在 readOnly 分支挂载监听。 */
+    enabled: boolean;
+    /** 子会话 sessionId（readOnly 子面板的 session）。 */
+    sessionId: string | undefined;
+    /** 同步读 uiRunning（false 时跳过校准，主路径已处理）。 */
+    isRunActive(): boolean;
+    /** 走与 readOnlyOnRunFinished 相同的收尾路径（markExternalRunEnded + onStreamReset + reload）。 */
+    onRunEnded(): void;
 };
 
 /**
@@ -36,46 +36,46 @@ type UseReadOnlyRunProbeParams = {
  * - 低频轮询（READONLY_RUN_PROBE_INTERVAL_MS）为辅，仅 uiRunning 期间启动
  */
 export function useReadOnlyRunProbe({
-  enabled,
-  sessionId,
-  isRunActive,
-  onRunEnded,
+    enabled,
+    sessionId,
+    isRunActive,
+    onRunEnded,
 }: UseReadOnlyRunProbeParams): void {
-  const probe = useCallback(() => {
-    if (!enabled || sessionId == null) {
-      return;
-    }
-    if (!isRunActive()) {
-      return;
-    }
-    void probeReadOnlyRunEnded({
-      sessionId,
-      isActive: () => isRunActive(),
-      queryActive: (sid) => ipcAgentRunIsActive({ sessionId: sid }),
-      onRunEnded,
-    });
-  }, [enabled, sessionId, isRunActive, onRunEnded]);
+    const probe = useCallback(() => {
+        if (!enabled || sessionId == null) {
+            return;
+        }
+        if (!isRunActive()) {
+            return;
+        }
+        void probeReadOnlyRunEnded({
+            sessionId,
+            isActive: () => isRunActive(),
+            queryActive: (sid) => ipcAgentRunIsActive({ sessionId: sid }),
+            onRunEnded,
+        });
+    }, [enabled, sessionId, isRunActive, onRunEnded]);
 
-  // 窗口重新可见为主触发点。
-  useEffect(() => {
-    if (!enabled) {
-      return;
-    }
-    const handler = () => {
-      if (document.visibilityState === "visible") {
-        probe();
-      }
-    };
-    document.addEventListener("visibilitychange", handler);
-    return () => document.removeEventListener("visibilitychange", handler);
-  }, [enabled, probe]);
+    // 窗口重新可见为主触发点。
+    useEffect(() => {
+        if (!enabled) {
+            return;
+        }
+        const handler = () => {
+            if (document.visibilityState === "visible") {
+                probe();
+            }
+        };
+        document.addEventListener("visibilitychange", handler);
+        return () => document.removeEventListener("visibilitychange", handler);
+    }, [enabled, probe]);
 
-  // 低频轮询为辅：enabled 且 uiRunning 期间周期查。
-  useEffect(() => {
-    if (!enabled || !isRunActive()) {
-      return;
-    }
-    const timer = setInterval(probe, READONLY_RUN_PROBE_INTERVAL_MS);
-    return () => clearInterval(timer);
-  }, [enabled, isRunActive, probe]);
+    // 低频轮询为辅：enabled 且 uiRunning 期间周期查。
+    useEffect(() => {
+        if (!enabled || !isRunActive()) {
+            return;
+        }
+        const timer = setInterval(probe, READONLY_RUN_PROBE_INTERVAL_MS);
+        return () => clearInterval(timer);
+    }, [enabled, isRunActive, probe]);
 }

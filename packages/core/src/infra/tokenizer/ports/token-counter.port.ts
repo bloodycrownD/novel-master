@@ -8,31 +8,31 @@ import type { ChatMessageData } from "@/domain/chat/model/message.js";
 
 /** Aligns with SillyTavern `getTokenizerModel` families plus heuristic fallback. */
 export type TokenizerFamily =
-  | "heuristic"
-  | "tiktoken"
-  | "claude"
-  | "llama"
-  | "llama3"
-  | "mistral"
-  | "yi"
-  | "gemma"
-  | "jamba"
-  | "qwen2"
-  | "command-r"
-  | "command-a"
-  | "nemo"
-  | "deepseek"
-  | "glm"
-  | "gpt2";
+    | "heuristic"
+    | "tiktoken"
+    | "claude"
+    | "llama"
+    | "llama3"
+    | "mistral"
+    | "yi"
+    | "gemma"
+    | "jamba"
+    | "qwen2"
+    | "command-r"
+    | "command-a"
+    | "nemo"
+    | "deepseek"
+    | "glm"
+    | "gpt2";
 
 /** Implementation kind for observability (CLI stderr, debug). */
 export type TokenCounterKind = TokenizerFamily;
 
 /** Counts tokens in text or visible chat messages (`MessageBodyText.fromBlocks` per message). */
 export interface TokenCounter {
-  readonly kind: TokenCounterKind;
-  /** Plain text token count (raw encode or heuristic). */
-  countText(text: string): number;
-  /** Uses MessageBodyText.fromBlocks per message (legacy compaction estimate path). */
-  countMessages(messages: readonly ChatMessageData[]): number;
+    readonly kind: TokenCounterKind;
+    /** Plain text token count (raw encode or heuristic). */
+    countText(text: string): number;
+    /** Uses MessageBodyText.fromBlocks per message (legacy compaction estimate path). */
+    countMessages(messages: readonly ChatMessageData[]): number;
 }

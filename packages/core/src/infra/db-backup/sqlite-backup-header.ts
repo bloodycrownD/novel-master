@@ -19,19 +19,19 @@ const SQLITE_HEADER_BYTES = 16;
  * SQLite 备份魔数校验。
  */
 export const SqliteBackupHeader = {
-  /**
+    /**
    * 校验字节流开头的 SQLite 魔数。
    *
    * @param bytes 备份文件的前 16 字节（可短于 16，短则报「文件过小」）
    */
-  assert(bytes: Uint8Array): Result<void, AppError<"INFRA_VALIDATION_FAILED">> {
-    if (bytes.length < SQLITE_HEADER_BYTES) {
-      return Result.err(new AppError("INFRA_VALIDATION_FAILED", { detail: "文件过小，不是有效的数据库备份" }));
-    }
-    const header = String.fromCharCode(...bytes.subarray(0, SQLITE_HEADER_BYTES));
-    if (!header.startsWith(SQLITE_MAGIC)) {
-      return Result.err(new AppError("INFRA_VALIDATION_FAILED", { detail: "不是有效的 SQLite 数据库备份" }));
-    }
-    return Result.ok(undefined);
-  },
+    assert(bytes: Uint8Array): Result<void, AppError<"INFRA_VALIDATION_FAILED">> {
+        if (bytes.length < SQLITE_HEADER_BYTES) {
+            return Result.err(new AppError("INFRA_VALIDATION_FAILED", { detail: "文件过小，不是有效的数据库备份" }));
+        }
+        const header = String.fromCharCode(...bytes.subarray(0, SQLITE_HEADER_BYTES));
+        if (!header.startsWith(SQLITE_MAGIC)) {
+            return Result.err(new AppError("INFRA_VALIDATION_FAILED", { detail: "不是有效的 SQLite 数据库备份" }));
+        }
+        return Result.ok(undefined);
+    },
 } as const;

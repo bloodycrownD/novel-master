@@ -4,49 +4,49 @@ import {  SqlTemplateError  } from "@/infra/sql-template/errors.js";
 import {  SqlTemplateParse  } from "@/infra/sql-template/parser.js";
 
 describe("parser", () => {
-  it("builds AST for nested if", () => {
-    const ast = SqlTemplateParse.parseToAst(
-      '<if test="a">X<if test="b">Y</if></if>',
-    );
-    assert.equal(ast.length, 1);
-    assert.equal(ast[0].type, "if");
-    if (ast[0].type === "if") {
-      assert.equal(ast[0].children.length, 2);
-      assert.equal(ast[0].children[0].type, "text");
-      assert.equal(ast[0].children[1].type, "if");
-    }
-  });
+    it("builds AST for nested if", () => {
+        const ast = SqlTemplateParse.parseToAst(
+            '<if test="a">X<if test="b">Y</if></if>',
+        );
+        assert.equal(ast.length, 1);
+        assert.equal(ast[0].type, "if");
+        if (ast[0].type === "if") {
+            assert.equal(ast[0].children.length, 2);
+            assert.equal(ast[0].children[0].type, "text");
+            assert.equal(ast[0].children[1].type, "if");
+        }
+    });
 
-  it("throws UNKNOWN_TAG for unknown tags", () => {
-    assert.throws(
-      () => SqlTemplateParse.parseToAst("<unknown>x</unknown>"),
-      (err: unknown) => {
-        assert.ok(err instanceof SqlTemplateError);
-        assert.equal(err.code, "UNKNOWN_TAG");
-        assert.equal(err.tagName, "unknown");
-        assert.equal(typeof err.offset, "number");
-        return true;
-      },
-    );
-  });
+    it("throws UNKNOWN_TAG for unknown tags", () => {
+        assert.throws(
+            () => SqlTemplateParse.parseToAst("<unknown>x</unknown>"),
+            (err: unknown) => {
+                assert.ok(err instanceof SqlTemplateError);
+                assert.equal(err.code, "UNKNOWN_TAG");
+                assert.equal(err.tagName, "unknown");
+                assert.equal(typeof err.offset, "number");
+                return true;
+            },
+        );
+    });
 
-  it("throws UNCLOSED_TAG for unclosed if", () => {
-    assert.throws(
-      () => SqlTemplateParse.parseToAst('<if test="x">body'),
-      (err: unknown) => {
-        assert.ok(err instanceof SqlTemplateError);
-        assert.equal(err.code, "UNCLOSED_TAG");
-        return true;
-      },
-    );
-  });
+    it("throws UNCLOSED_TAG for unclosed if", () => {
+        assert.throws(
+            () => SqlTemplateParse.parseToAst('<if test="x">body'),
+            (err: unknown) => {
+                assert.ok(err instanceof SqlTemplateError);
+                assert.equal(err.code, "UNCLOSED_TAG");
+                return true;
+            },
+        );
+    });
 
-  it("preserves static comparison a < b as text", () => {
-    const ast = SqlTemplateParse.parseToAst("SELECT * FROM t WHERE a < b");
-    assert.equal(ast.length, 1);
-    assert.equal(ast[0].type, "text");
-    if (ast[0].type === "text") {
-      assert.equal(ast[0].value, "SELECT * FROM t WHERE a < b");
-    }
-  });
+    it("preserves static comparison a < b as text", () => {
+        const ast = SqlTemplateParse.parseToAst("SELECT * FROM t WHERE a < b");
+        assert.equal(ast.length, 1);
+        assert.equal(ast[0].type, "text");
+        if (ast[0].type === "text") {
+            assert.equal(ast[0].value, "SELECT * FROM t WHERE a < b");
+        }
+    });
 });

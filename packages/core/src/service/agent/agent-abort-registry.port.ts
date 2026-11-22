@@ -19,16 +19,16 @@
  * 所有方法对未注册的 sessionId 静默 no-op。
  */
 export interface AgentAbortRegistry {
-  /**
+    /**
    * 注册某个 sessionId 当前 run 的 controller。
    *
    * 同一 sessionId 再次 register 会覆盖前一条记录——这是预期行为，
    * 因为旧 run 应该已经走完 finally 的 unregister 了。覆盖时由
    * {@link unregister} 的所有权比对兜底（误删新 run 的 controller）。
    */
-  register(sessionId: string, controller: AbortController): void;
+    register(sessionId: string, controller: AbortController): void;
 
-  /**
+    /**
    * 原子 claim：仅在该 sessionId **尚未注册**时登记 controller 并返回 `true`；
    * 已注册则**不覆盖**既有 controller、直接返回 `false`。
    *
@@ -42,26 +42,26 @@ export interface AgentAbortRegistry {
    * 往子会话 append user 消息）。赢家用 finally 的 {@link unregister}
    * 释放（所有权比对保证不误删他人 controller）。
    */
-  tryRegister(sessionId: string, controller: AbortController): boolean;
+    tryRegister(sessionId: string, controller: AbortController): boolean;
 
-  /**
+    /**
    * 中断指定 sessionId 的当前 run。
    *
    * 拿到 controller 调 `.abort()` 后**不删**记录——删除由 finally 的
    * {@link unregister} 完成，避免 abort 与反注册的时序竞态下误判 has()。
    * 未注册的 sessionId 静默 no-op。
    */
-  abort(sessionId: string): void;
+    abort(sessionId: string): void;
 
-  /**
+    /**
    * 反注册：带所有权比对，只有当前 map 里存的 controller 与传入的
    * controller 是**同一引用**时才删除。
    *
    * 这样如果新 run 已经覆盖了旧记录，旧 run 的 finally 不会误删新 run
    * 的 controller——`map.get(sessionId) === controller` 不成立就跳过。
    */
-  unregister(sessionId: string, controller: AbortController): void;
+    unregister(sessionId: string, controller: AbortController): void;
 
-  /** 该 sessionId 当前是否注册了 in-flight controller。 */
-  has(sessionId: string): boolean;
+    /** 该 sessionId 当前是否注册了 in-flight controller。 */
+    has(sessionId: string): boolean;
 }

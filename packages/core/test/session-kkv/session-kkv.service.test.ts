@@ -8,88 +8,88 @@ import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix
 novelMasterTestFixture();
 
 describe("SessionKkvService", () => {
-  it("get/set/listKeys/delete 按 session+domain 隔离", async () => {
-    const ctx = getNovelMasterTestContext();
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    const s1 = `s1-${testIsolationSuffix()}`;
-    const s2 = `s2-${testIsolationSuffix()}`;
+    it("get/set/listKeys/delete 按 session+domain 隔离", async () => {
+        const ctx = getNovelMasterTestContext();
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        const s1 = `s1-${testIsolationSuffix()}`;
+        const s2 = `s2-${testIsolationSuffix()}`;
 
-    await sk.set(s1, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY, "[]");
-    await sk.set(s1, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/a.md", '{"body":"x","mtimeMs":1}');
-    await sk.set(s2, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/a.md", '{"body":"y","mtimeMs":2}');
+        await sk.set(s1, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY, "[]");
+        await sk.set(s1, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/a.md", '{"body":"x","mtimeMs":1}');
+        await sk.set(s2, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/a.md", '{"body":"y","mtimeMs":2}');
 
-    assert.equal(
-      unwrap(await sk.get(s1, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY)),
-      "[]",
-    );
-    assert.equal(
-      unwrap(await sk.get(s1, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/a.md")),
-      '{"body":"x","mtimeMs":1}',
-    );
-    assert.equal(
-      unwrap(await sk.get(s2, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/a.md")),
-      '{"body":"y","mtimeMs":2}',
-    );
+        assert.equal(
+            unwrap(await sk.get(s1, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY)),
+            "[]",
+        );
+        assert.equal(
+            unwrap(await sk.get(s1, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/a.md")),
+            '{"body":"x","mtimeMs":1}',
+        );
+        assert.equal(
+            unwrap(await sk.get(s2, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/a.md")),
+            '{"body":"y","mtimeMs":2}',
+        );
 
-    const keys = await sk.listKeys(s1, SESSION_KKV_DOMAIN_FILE_CACHE);
-    assert.deepEqual(keys, ["full:/a.md"]);
+        const keys = await sk.listKeys(s1, SESSION_KKV_DOMAIN_FILE_CACHE);
+        assert.deepEqual(keys, ["full:/a.md"]);
 
-    unwrap(await sk.delete(s1, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/a.md"));
-    assert.equal(
-      unwrap(await sk.get(s1, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/a.md")),
-      null,
-    );
-  });
+        unwrap(await sk.delete(s1, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/a.md"));
+        assert.equal(
+            unwrap(await sk.get(s1, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/a.md")),
+            null,
+        );
+    });
 
-  it("clearDomain 仅删该 domain", async () => {
-    const ctx = getNovelMasterTestContext();
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    const sid = `dom-${testIsolationSuffix()}`;
-    await sk.set(sid, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY, "[]");
-    await sk.set(sid, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/z.md", '{"body":"z","mtimeMs":1}');
-    await sk.clearDomain(sid, SESSION_KKV_DOMAIN_FILE_CACHE);
-    assert.equal(
-      unwrap(await sk.get(sid, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/z.md")),
-      null,
-    );
-    assert.equal(
-      unwrap(await sk.get(sid, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY)),
-      "[]",
-    );
-  });
+    it("clearDomain 仅删该 domain", async () => {
+        const ctx = getNovelMasterTestContext();
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        const sid = `dom-${testIsolationSuffix()}`;
+        await sk.set(sid, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY, "[]");
+        await sk.set(sid, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/z.md", '{"body":"z","mtimeMs":1}');
+        await sk.clearDomain(sid, SESSION_KKV_DOMAIN_FILE_CACHE);
+        assert.equal(
+            unwrap(await sk.get(sid, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/z.md")),
+            null,
+        );
+        assert.equal(
+            unwrap(await sk.get(sid, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY)),
+            "[]",
+        );
+    });
 
-  it("clearSession 删除该会话全部 domain", async () => {
-    const ctx = getNovelMasterTestContext();
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    const sid = `clr-${testIsolationSuffix()}`;
-    await sk.set(sid, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY, "[]");
-    await sk.set(sid, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/z.md", '{"body":"z","mtimeMs":1}');
-    await sk.clearSession(sid);
-    assert.equal(
-      unwrap(await sk.get(sid, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY)),
-      null,
-    );
-    assert.equal(
-      unwrap(await sk.get(sid, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/z.md")),
-      null,
-    );
-  });
+    it("clearSession 删除该会话全部 domain", async () => {
+        const ctx = getNovelMasterTestContext();
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        const sid = `clr-${testIsolationSuffix()}`;
+        await sk.set(sid, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY, "[]");
+        await sk.set(sid, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/z.md", '{"body":"z","mtimeMs":1}');
+        await sk.clearSession(sid);
+        assert.equal(
+            unwrap(await sk.get(sid, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY)),
+            null,
+        );
+        assert.equal(
+            unwrap(await sk.get(sid, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/z.md")),
+            null,
+        );
+    });
 
-  it("sessions.delete 级联 clearSession", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    await sk.set(
-      session.id,
-      SESSION_KKV_DOMAIN_FILE_CACHE,
-      "full:/a.md",
-      '{"body":"kept-until-delete","mtimeMs":1}',
-    );
-    unwrap(await ctx.sessions.delete(session.id));
-    assert.equal(
-      unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/a.md")),
-      null,
-    );
-  });
+    it("sessions.delete 级联 clearSession", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        await sk.set(
+            session.id,
+            SESSION_KKV_DOMAIN_FILE_CACHE,
+            "full:/a.md",
+            '{"body":"kept-until-delete","mtimeMs":1}',
+        );
+        unwrap(await ctx.sessions.delete(session.id));
+        assert.equal(
+            unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/a.md")),
+            null,
+        );
+    });
 });

@@ -46,9 +46,9 @@ const DETAIL_TITLE_LIMIT = 24;
  * assistant/system 共用中性灰底正文色。
  */
 const TURN_ROLE_LABEL: Record<PromptPreviewTurn['kind'], string> = {
-  user: 'user',
-  assistant: 'assistant',
-  system: 'system',
+    user: 'user',
+    assistant: 'assistant',
+    system: 'system',
 };
 
 /**
@@ -58,133 +58,133 @@ const TURN_ROLE_LABEL: Record<PromptPreviewTurn['kind'], string> = {
  * `FileMarkdownPreview` 的稳定伪 path key），正文永远走模块级单例。
  */
 export function useOpenPromptDetail() {
-  const navigation = useNavigation<Nav>();
-  return useCallback(
-    (payload: {title: string; body: string; leafId?: string; turnId: string}) => {
-      let title = payload.title;
-      if (title.length > DETAIL_TITLE_LIMIT) {
-        title = `${title.slice(0, DETAIL_TITLE_LIMIT - 1)}…`;
-      }
-      if (payload.leafId === undefined) {
-        promptTurnDetailSlot.set({title, body: payload.body});
-      } else {
-        promptTurnDetailSlot.set({title, body: payload.body, leafId: payload.leafId});
-      }
-      navigation.navigate('PromptTurnDetail', {title, turnId: payload.turnId});
-    },
-    [navigation],
-  );
+    const navigation = useNavigation<Nav>();
+    return useCallback(
+        (payload: {title: string; body: string; leafId?: string; turnId: string}) => {
+            let title = payload.title;
+            if (title.length > DETAIL_TITLE_LIMIT) {
+                title = `${title.slice(0, DETAIL_TITLE_LIMIT - 1)}…`;
+            }
+            if (payload.leafId === undefined) {
+                promptTurnDetailSlot.set({title, body: payload.body});
+            } else {
+                promptTurnDetailSlot.set({title, body: payload.body, leafId: payload.leafId});
+            }
+            navigation.navigate('PromptTurnDetail', {title, turnId: payload.turnId});
+        },
+        [navigation],
+    );
 }
 
 type Props = {
-  turn: PromptPreviewTurn;
-  /** 就地展开态由屏级受控（FlatList 虚拟化会卸载 item，组件内 state 会丢）。 */
-  expanded: boolean;
-  /** 展开/收起回调（实参带轮 id，屏级据此增删 `openTurnIds`）。 */
-  onToggle: (turnId: string) => void;
-  /** 展开区内容（卡片流），仅 `expanded` 时挂载。 */
-  children?: React.ReactNode;
+    turn: PromptPreviewTurn;
+    /** 就地展开态由屏级受控（FlatList 虚拟化会卸载 item，组件内 state 会丢）。 */
+    expanded: boolean;
+    /** 展开/收起回调（实参带轮 id，屏级据此增删 `openTurnIds`）。 */
+    onToggle: (turnId: string) => void;
+    /** 展开区内容（卡片流），仅 `expanded` 时挂载。 */
+    children?: React.ReactNode;
 };
 
 export function PromptTurnCard({turn, expanded, onToggle, children}: Props) {
-  const {tokens} = useTheme();
+    const {tokens} = useTheme();
 
-  const roleBadge = {backgroundColor: tokens.bgSecondary, color: tokens.text};
-  if (turn.kind === 'user') {
-    roleBadge.backgroundColor = tokens.primary;
-    roleBadge.color = '#fff';
-  }
-  const roleLabel = TURN_ROLE_LABEL[turn.kind];
-  // 无障碍标签不能只有动作名：多轮多卡时读屏全念同一个词，靠摘要尾巴才区分得开。
-  const summaryTail = coreT(turn.summaryText).slice(0, 20);
-  const headLabel = `${expanded ? '收起' : '展开'}${roleLabel}轮，${summaryTail}`;
+    const roleBadge = {backgroundColor: tokens.bgSecondary, color: tokens.text};
+    if (turn.kind === 'user') {
+        roleBadge.backgroundColor = tokens.primary;
+        roleBadge.color = '#fff';
+    }
+    const roleLabel = TURN_ROLE_LABEL[turn.kind];
+    // 无障碍标签不能只有动作名：多轮多卡时读屏全念同一个词，靠摘要尾巴才区分得开。
+    const summaryTail = coreT(turn.summaryText).slice(0, 20);
+    const headLabel = coreT({key: "ui.prompt.turn_aria", params: {action: expanded ? coreT({key: "ui.common.collapse"}) : coreT({key: "ui.common.expand"}), role: roleLabel, summary: summaryTail}});
 
-  const handleToggle = useCallback(() => {
-    onToggle(turn.id);
-  }, [onToggle, turn.id]);
+    const handleToggle = useCallback(() => {
+        onToggle(turn.id);
+    }, [onToggle, turn.id]);
 
-  return (
-    <View
-      testID="prompt-turn-card"
-      style={[
-        styles.card,
-        {
-          backgroundColor: tokens.surfaceElevated,
-          borderColor: tokens.borderLight,
-        },
-      ]}
-    >
-      <Pressable
-        testID="prompt-turn-head"
-        accessibilityRole="button"
-        accessibilityLabel={headLabel}
-        accessibilityState={{expanded}}
-        onPress={handleToggle}
-        style={styles.header}
-      >
-        <Text
-          testID="prompt-turn-role"
-          style={[styles.role, roleBadge]}
-          numberOfLines={1}>
-          {roleLabel}
-        </Text>
-        <Text
-          testID="prompt-turn-summary"
-          style={[styles.summary, {color: tokens.text}]}
-          numberOfLines={1}>
-          {coreT(turn.summaryText)}
-        </Text>
-        <Text
-          testID="prompt-turn-meta"
-          style={[styles.meta, {color: tokens.textTertiary}]}
-          numberOfLines={1}>
-          {turn.metaText.map(text => coreT(text)).join(' · ')}
-        </Text>
-        <Text
-          testID="prompt-turn-chevron"
-          style={[styles.chevron, {color: tokens.textTertiary}]}>
-          {expanded ? '⌄' : '›'}
-        </Text>
-      </Pressable>
-      {expanded ? (
-        <View testID="prompt-turn-body" style={styles.body}>
-          {children}
+    return (
+        <View
+            testID="prompt-turn-card"
+            style={[
+                styles.card,
+                {
+                    backgroundColor: tokens.surfaceElevated,
+                    borderColor: tokens.borderLight,
+                },
+            ]}
+        >
+            <Pressable
+                testID="prompt-turn-head"
+                accessibilityRole="button"
+                accessibilityLabel={headLabel}
+                accessibilityState={{expanded}}
+                onPress={handleToggle}
+                style={styles.header}
+            >
+                <Text
+                    testID="prompt-turn-role"
+                    style={[styles.role, roleBadge]}
+                    numberOfLines={1}>
+                    {roleLabel}
+                </Text>
+                <Text
+                    testID="prompt-turn-summary"
+                    style={[styles.summary, {color: tokens.text}]}
+                    numberOfLines={1}>
+                    {coreT(turn.summaryText)}
+                </Text>
+                <Text
+                    testID="prompt-turn-meta"
+                    style={[styles.meta, {color: tokens.textTertiary}]}
+                    numberOfLines={1}>
+                    {turn.metaText.map(text => coreT(text)).join(' · ')}
+                </Text>
+                <Text
+                    testID="prompt-turn-chevron"
+                    style={[styles.chevron, {color: tokens.textTertiary}]}>
+                    {expanded ? '⌄' : '›'}
+                </Text>
+            </Pressable>
+            {expanded ? (
+                <View testID="prompt-turn-body" style={styles.body}>
+                    {children}
+                </View>
+            ) : null}
         </View>
-      ) : null}
-    </View>
-  );
+    );
 }
 
 const styles = StyleSheet.create({
-  // 外层轮卡 = FormSectionCard 形态（智能体配置卡片体系）：surfaceElevated 底、
-  // 16 圆角、浅阴影 + elevation 浮起；子卡的 3px 左条负责表达嵌套从属。
-  card: {
-    marginBottom: 12,
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 1},
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  // role 徽标 pill（对齐 .config-block-card__badge：2×8 内衬 / 6 圆角 / 11·600）。
-  role: {
-    fontSize: 11,
-    fontWeight: '600',
-    paddingVertical: 2,
-    paddingHorizontal: 8,
-    borderRadius: 6,
-    overflow: 'hidden',
-  },
-  summary: {fontSize: 13, lineHeight: 18, flexShrink: 1, flexGrow: 1},
-  meta: {fontSize: 11, lineHeight: 16, flexShrink: 1, flexGrow: 1},
-  chevron: {fontSize: 16},
-  body: {marginTop: 12, gap: 12},
+    // 外层轮卡 = FormSectionCard 形态（智能体配置卡片体系）：surfaceElevated 底、
+    // 16 圆角、浅阴影 + elevation 浮起；子卡的 3px 左条负责表达嵌套从属。
+    card: {
+        marginBottom: 12,
+        padding: 16,
+        borderRadius: 16,
+        borderWidth: StyleSheet.hairlineWidth,
+        shadowColor: '#000',
+        shadowOffset: {width: 0, height: 1},
+        shadowOpacity: 0.08,
+        shadowRadius: 3,
+        elevation: 2,
+    },
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    // role 徽标 pill（对齐 .config-block-card__badge：2×8 内衬 / 6 圆角 / 11·600）。
+    role: {
+        fontSize: 11,
+        fontWeight: '600',
+        paddingVertical: 2,
+        paddingHorizontal: 8,
+        borderRadius: 6,
+        overflow: 'hidden',
+    },
+    summary: {fontSize: 13, lineHeight: 18, flexShrink: 1, flexGrow: 1},
+    meta: {fontSize: 11, lineHeight: 16, flexShrink: 1, flexGrow: 1},
+    chevron: {fontSize: 16},
+    body: {marginTop: 12, gap: 12},
 });

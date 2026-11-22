@@ -14,7 +14,7 @@ import { ProjectComposerStatusService } from "./project-composer-status.service.
 export { LogicalPath };
 
 export namespace UserVfsTurnExecuteService {
-  /**
+    /**
    * 经 userVfsTurn 执行；失败沿 `Result` 返回，由调用方转码（handlers/vfs.ts 各
    * handler 的 `ipcErr(formatIpcError(...))`；vfs-batch 侧经 core BatchIngestWriter
    * 协议聚进 Report.failed——错误通道迁移七期起 writer 端口收
@@ -23,14 +23,14 @@ export namespace UserVfsTurnExecuteService {
    * 是异构形态），转码统一走 formatIpcError。成功后轻量 refresh：读 main 侧
    * annotate store 投影推送（无净 diff preview）。
    */
-  export async function executeSessionOp(rt: DesktopNovelMasterRuntime, sessionId: string, op: UserVfsTurnOp): Promise<Result<void, unknown>> {
-    const result = await rt.userVfsTurn.executeOp(sessionId, op);
-    if (!result.ok) return Result.err(result.error);
-    const attachments = await ProjectComposerStatusService.forSession(sessionId);
-    ComposerAttachmentsSuggestForwarder.notify({
-      sessionId,
-      attachments,
-    });
-    return Result.ok(undefined);
-  }
+    export async function executeSessionOp(rt: DesktopNovelMasterRuntime, sessionId: string, op: UserVfsTurnOp): Promise<Result<void, unknown>> {
+        const result = await rt.userVfsTurn.executeOp(sessionId, op);
+        if (!result.ok) return Result.err(result.error);
+        const attachments = await ProjectComposerStatusService.forSession(sessionId);
+        ComposerAttachmentsSuggestForwarder.notify({
+            sessionId,
+            attachments,
+        });
+        return Result.ok(undefined);
+    }
 }

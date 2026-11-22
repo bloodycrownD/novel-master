@@ -21,200 +21,201 @@ import {useMobileScope} from '@/hooks/useMobileScope';
 import {useRuntime} from '@/hooks/useRuntime';
 import {PromptPreviewService} from '@/services/prompt-preview.service';
 import {useTheme} from '@/theme/ThemeProvider';
+import {coreT} from '@/i18n/core';
 import type {RootStackParamList} from '@/navigation/types';
 
 export function RealPromptScreen() {
-  const {tokens} = useTheme();
-  const runtime = useRuntime();
-  // scope 优先取路由参数、缺省回落到全局 scope（AM-3）：
-  // 只读 useMobileScope() 会在「后台通知栈外改 scope、栈顶却还停在别的会话详情页」
-  // 时展示**别的会话**的提示词，而屏上不出现任何会话名、用户无从察觉。
-  // 回落分支是防御性的：无参进栈的存量路径行为与修复前逐字一致。
-  const route = useRoute<RouteProp<RootStackParamList, 'RealPrompt'>>();
-  const params = route.params ?? {};
-  const {projectId: scopeProjectId, sessionId: scopeSessionId} = useMobileScope();
-  const projectId = params.projectId ?? scopeProjectId;
-  const sessionId = params.sessionId ?? scopeSessionId;
-  const [turns, setTurns] = useState<readonly PromptPreviewTurn[]>([]);
-  const [error, setError] = useState<string | undefined>();
-  const [loading, setLoading] = useState(true);
-  /** 展开中的轮 id（屏级受控，见文件头注释）。 */
-  const [openTurnIds, setOpenTurnIds] = useState<ReadonlySet<string>>(() => new Set());
-  /** 展开中的工具组卡 id（同上）。 */
-  const [openGroupIds, setOpenGroupIds] = useState<ReadonlySet<string>>(() => new Set());
-  /**
+    const {tokens} = useTheme();
+    const runtime = useRuntime();
+    // scope 优先取路由参数、缺省回落到全局 scope（AM-3）：
+    // 只读 useMobileScope() 会在「后台通知栈外改 scope、栈顶却还停在别的会话详情页」
+    // 时展示**别的会话**的提示词，而屏上不出现任何会话名、用户无从察觉。
+    // 回落分支是防御性的：无参进栈的存量路径行为与修复前逐字一致。
+    const route = useRoute<RouteProp<RootStackParamList, 'RealPrompt'>>();
+    const params = route.params ?? {};
+    const {projectId: scopeProjectId, sessionId: scopeSessionId} = useMobileScope();
+    const projectId = params.projectId ?? scopeProjectId;
+    const sessionId = params.sessionId ?? scopeSessionId;
+    const [turns, setTurns] = useState<readonly PromptPreviewTurn[]>([]);
+    const [error, setError] = useState<string | undefined>();
+    const [loading, setLoading] = useState(true);
+    /** 展开中的轮 id（屏级受控，见文件头注释）。 */
+    const [openTurnIds, setOpenTurnIds] = useState<ReadonlySet<string>>(() => new Set());
+    /** 展开中的工具组卡 id（同上）。 */
+    const [openGroupIds, setOpenGroupIds] = useState<ReadonlySet<string>>(() => new Set());
+    /**
    * load 请求序号（竞态守卫）：每次发起前 ++，响应回来后对不上号即整轮丢弃。
    * 预览取数没有中止点（`buildSessionPromptInputAdapter` 不传 shouldBail，行为不变），
    * 快速进出聚焦时旧响应可能后到、盖掉新一轮数据，故按序号过滤（与
    * `TokenUsageStatsScreen.reloadSeqRef` 同款）。
    */
-  const requestIdRef = useRef(0);
-  /**
+    const requestIdRef = useRef(0);
+    /**
    * 上一次 load 取的会话 id：**只有换会话才清展开态**。同会话 refocus（点子卡
    * 看全屏详情再返回，是本屏最高频的出栈路径）保留用户刚展开的轮。
    */
-  const lastSessionRef = useRef<string | null>(null);
-  /**
+    const lastSessionRef = useRef<string | null>(null);
+    /**
    * 是否已经取过数（refocus 静默档开关）：首焦走整屏档（`loading` 从 true 起、
    * 整列表换成全屏 spinner），之后一律静默档——refocus 不该让整列表闪成
    * 转圈（对齐仓内 `useFocusListReload.focusSilent` 的惯例）。
    * ⚠️ 只能用 ref 管，勿把 `turns.length` 之类进 useFocusEffect 依赖：回调身份
    * 变 → 效果重跑 → 又 load 一次，取数自己触发的重渲染会把自己套进循环。
    */
-  const hasLoadedRef = useRef(false);
+    const hasLoadedRef = useRef(false);
 
-  const toggleId = useCallback((setter: React.Dispatch<React.SetStateAction<ReadonlySet<string>>>, id: string) => {
-    setter(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  }, []);
+    const toggleId = useCallback((setter: React.Dispatch<React.SetStateAction<ReadonlySet<string>>>, id: string) => {
+        setter(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) {
+                next.delete(id);
+            } else {
+                next.add(id);
+            }
+            return next;
+        });
+    }, []);
 
-  const toggleTurn = useCallback((turnId: string) => toggleId(setOpenTurnIds, turnId), [toggleId]);
-  const toggleGroup = useCallback((groupId: string) => toggleId(setOpenGroupIds, groupId), [toggleId]);
+    const toggleTurn = useCallback((turnId: string) => toggleId(setOpenTurnIds, turnId), [toggleId]);
+    const toggleGroup = useCallback((groupId: string) => toggleId(setOpenGroupIds, groupId), [toggleId]);
 
-  const load = useCallback(
-    async (opts?: {silent?: boolean}) => {
-      // 取号必须在最前面：scope 缺失的早退分支同样要让在途的上一轮作废，
-      // 否则它照样会回来把 turns 写回去。
-      const requestId = ++requestIdRef.current;
-      if (projectId == null || sessionId == null) {
-        setError('请先选择项目与会话');
-        setTurns([]);
-        setLoading(false);
-        return;
-      }
-      // `silent` **只压这一步**：焦点回流时不把整列表换成全屏 spinner，其余
-      // （清 error、重取数、竞态守卫）一律照旧。
-      if (!opts?.silent) {
-        setLoading(true);
-      }
-      setError(undefined);
-      // 换了会话，旧会话的展开态没有意义：跟随数据一起清；同会话 refocus 保留。
-      // ⚠️ 这里可**无条件换新 Set**：原注释里那道「已空则返回原引用」的守卫防的是
-      // load 换引用自激的死循环，而那段前提（load 依赖里不含展开态、每次 load 都
-      // 清一遍）已随本改动消失——现在只在 sessionId 变化时触发，展开态被写成空集
-      // 不会再引起任何额外重渲染。
-      if (lastSessionRef.current !== sessionId) {
-        setOpenTurnIds(new Set());
-        setOpenGroupIds(new Set());
-        lastSessionRef.current = sessionId;
-      }
-      try {
-        const previewScope = {projectId, sessionId};
-        const built = await PromptPreviewService.buildRealTurns(runtime, previewScope);
-        if (requestId !== requestIdRef.current) {
-          return; // 过期响应：新一轮取数已在途，丢弃本轮结果。
-        }
-        // 已知失败走 Result 收口（错误通道迁移四期），未知异常仍走下方 catch。
-        if (!built.ok) {
-          setError(built.error instanceof Error ? built.error.message : String(built.error));
-          setTurns([]);
-          return;
-        }
-        setTurns(built.value);
-      } catch (err) {
-        if (requestId !== requestIdRef.current) {
-          return; // 过期请求的报错不覆盖新一轮状态。
-        }
-        const message = err instanceof Error ? err.message : String(err);
-        setError(message);
-        setTurns([]);
-      } finally {
-        if (requestId === requestIdRef.current) {
-          setLoading(false);
-        }
-      }
-    },
-    [runtime, projectId, sessionId],
-  );
+    const load = useCallback(
+        async (opts?: {silent?: boolean}) => {
+            // 取号必须在最前面：scope 缺失的早退分支同样要让在途的上一轮作废，
+            // 否则它照样会回来把 turns 写回去。
+            const requestId = ++requestIdRef.current;
+            if (projectId == null || sessionId == null) {
+                setError(coreT({key: "ui.prompt.select_project_session"}));
+                setTurns([]);
+                setLoading(false);
+                return;
+            }
+            // `silent` **只压这一步**：焦点回流时不把整列表换成全屏 spinner，其余
+            // （清 error、重取数、竞态守卫）一律照旧。
+            if (!opts?.silent) {
+                setLoading(true);
+            }
+            setError(undefined);
+            // 换了会话，旧会话的展开态没有意义：跟随数据一起清；同会话 refocus 保留。
+            // ⚠️ 这里可**无条件换新 Set**：原注释里那道「已空则返回原引用」的守卫防的是
+            // load 换引用自激的死循环，而那段前提（load 依赖里不含展开态、每次 load 都
+            // 清一遍）已随本改动消失——现在只在 sessionId 变化时触发，展开态被写成空集
+            // 不会再引起任何额外重渲染。
+            if (lastSessionRef.current !== sessionId) {
+                setOpenTurnIds(new Set());
+                setOpenGroupIds(new Set());
+                lastSessionRef.current = sessionId;
+            }
+            try {
+                const previewScope = {projectId, sessionId};
+                const built = await PromptPreviewService.buildRealTurns(runtime, previewScope);
+                if (requestId !== requestIdRef.current) {
+                    return; // 过期响应：新一轮取数已在途，丢弃本轮结果。
+                }
+                // 已知失败走 Result 收口（错误通道迁移四期），未知异常仍走下方 catch。
+                if (!built.ok) {
+                    setError(built.error instanceof Error ? built.error.message : String(built.error));
+                    setTurns([]);
+                    return;
+                }
+                setTurns(built.value);
+            } catch (err) {
+                if (requestId !== requestIdRef.current) {
+                    return; // 过期请求的报错不覆盖新一轮状态。
+                }
+                const message = err instanceof Error ? err.message : String(err);
+                setError(message);
+                setTurns([]);
+            } finally {
+                if (requestId === requestIdRef.current) {
+                    setLoading(false);
+                }
+            }
+        },
+        [runtime, projectId, sessionId],
+    );
 
-  // 重载单通道：只挂 useFocusEffect（依赖 load），不再并挂 useEffect——挂载由
-  // 首焦覆盖，从别的屏返回时再取一次数（手动压缩完 workplace 已重评估，
-  // 旧数据留着就是错的）。双通道会让挂载跑两轮，故这里**替换**而非新增。
-  const onScreenFocus = useCallback(() => {
-    // 首焦整屏档、之后一律静默档（两个口径各管各的：静默只压 setLoading，
-    // 展开态清空由 load 内按会话判，与 loading 档位无关）。
-    const silent = hasLoadedRef.current;
-    hasLoadedRef.current = true;
-    load({silent}).catch(() => undefined);
-  }, [load]);
-  useFocusEffect(onScreenFocus);
+    // 重载单通道：只挂 useFocusEffect（依赖 load），不再并挂 useEffect——挂载由
+    // 首焦覆盖，从别的屏返回时再取一次数（手动压缩完 workplace 已重评估，
+    // 旧数据留着就是错的）。双通道会让挂载跑两轮，故这里**替换**而非新增。
+    const onScreenFocus = useCallback(() => {
+        // 首焦整屏档、之后一律静默档（两个口径各管各的：静默只压 setLoading，
+        // 展开态清空由 load 内按会话判，与 loading 档位无关）。
+        const silent = hasLoadedRef.current;
+        hasLoadedRef.current = true;
+        load({silent}).catch(() => undefined);
+    }, [load]);
+    useFocusEffect(onScreenFocus);
 
-  return (
-    <View style={[styles.root, {backgroundColor: tokens.background}]}>
-      {loading ? (
-        <ActivityIndicator style={styles.loader} />
-      ) : error ? (
-        <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text>
-      ) : (
-        <FlatList
-          data={turns}
-          keyExtractor={item => item.id}
-          style={styles.list}
-          contentContainerStyle={styles.content}
-          initialNumToRender={12}
-          maxToRenderPerBatch={8}
-          windowSize={7}
-          removeClippedSubviews
-          ListEmptyComponent={<Text style={{color: tokens.textSecondary}}>（空提示词）</Text>}
-          ListFooterComponent={<Text style={[styles.hint, {color: tokens.textSecondary}]}>在聊天工作区调整纳入规则可改变预览内容。点轮卡头部就地展开，点子卡进入全屏阅读。</Text>}
-          renderItem={({item}) => <PromptTurnRow turn={item} openTurnIds={openTurnIds} openGroupIds={openGroupIds} onToggleTurn={toggleTurn} onToggleGroup={toggleGroup} />}
-        />
-      )}
-    </View>
-  );
+    return (
+        <View style={[styles.root, {backgroundColor: tokens.background}]}>
+            {loading ? (
+                <ActivityIndicator style={styles.loader} />
+            ) : error ? (
+                <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text>
+            ) : (
+                <FlatList
+                    data={turns}
+                    keyExtractor={item => item.id}
+                    style={styles.list}
+                    contentContainerStyle={styles.content}
+                    initialNumToRender={12}
+                    maxToRenderPerBatch={8}
+                    windowSize={7}
+                    removeClippedSubviews
+                    ListEmptyComponent={<Text style={{color: tokens.textSecondary}}>{coreT({key: "ui.prompt.empty_prompt"})}</Text>}
+                    ListFooterComponent={<Text style={[styles.hint, {color: tokens.textSecondary}]}>{coreT({key: "ui.prompt.viewer_hint_mobile"})}</Text>}
+                    renderItem={({item}) => <PromptTurnRow turn={item} openTurnIds={openTurnIds} openGroupIds={openGroupIds} onToggleTurn={toggleTurn} onToggleGroup={toggleGroup} />}
+                />
+            )}
+        </View>
+    );
 }
 
 /** 一轮的渲染：统一轮卡 + 展开区的有序卡片流（工具组卡 / 叶子卡）。 */
 function PromptTurnRow({
-  turn,
-  openTurnIds,
-  openGroupIds,
-  onToggleTurn,
-  onToggleGroup,
+    turn,
+    openTurnIds,
+    openGroupIds,
+    onToggleTurn,
+    onToggleGroup,
 }: {
-  turn: PromptPreviewTurn;
-  openTurnIds: ReadonlySet<string>;
-  openGroupIds: ReadonlySet<string>;
-  onToggleTurn: (turnId: string) => void;
-  onToggleGroup: (groupId: string) => void;
+    turn: PromptPreviewTurn;
+    openTurnIds: ReadonlySet<string>;
+    openGroupIds: ReadonlySet<string>;
+    onToggleTurn: (turnId: string) => void;
+    onToggleGroup: (groupId: string) => void;
 }) {
-  return (
-    // key 归 FlatList 的 keyExtractor，这里不加。
-    <PromptTurnCard turn={turn} expanded={openTurnIds.has(turn.id)} onToggle={onToggleTurn}>
-      {turn.cards.map(card => {
-        if (card.type === 'toolGroup') {
-          return <PromptToolGroupCard key={card.id} card={card} turnId={turn.id} expanded={openGroupIds.has(card.id)} onToggle={onToggleGroup} />;
-        }
-        if (card.type === 'workplace') {
-          return (
-            <PromptWorkplaceCard
-              key={card.id}
-              card={card}
-              turnId={turn.id}
-              // 文件级展开态共用屏级集合：key=`${card.id}:${path}`，组件内逐行 O(1) 查。
-              openGroupIds={openGroupIds}
-              onToggleFile={path => onToggleGroup(`${card.id}:${path}`)}
-            />
-          );
-        }
-        return <PromptTurnLeafCard key={card.id} card={card} turnId={turn.id} />;
-      })}
-    </PromptTurnCard>
-  );
+    return (
+        // key 归 FlatList 的 keyExtractor，这里不加。
+        <PromptTurnCard turn={turn} expanded={openTurnIds.has(turn.id)} onToggle={onToggleTurn}>
+            {turn.cards.map(card => {
+                if (card.type === 'toolGroup') {
+                    return <PromptToolGroupCard key={card.id} card={card} turnId={turn.id} expanded={openGroupIds.has(card.id)} onToggle={onToggleGroup} />;
+                }
+                if (card.type === 'workplace') {
+                    return (
+                        <PromptWorkplaceCard
+                            key={card.id}
+                            card={card}
+                            turnId={turn.id}
+                            // 文件级展开态共用屏级集合：key=`${card.id}:${path}`，组件内逐行 O(1) 查。
+                            openGroupIds={openGroupIds}
+                            onToggleFile={path => onToggleGroup(`${card.id}:${path}`)}
+                        />
+                    );
+                }
+                return <PromptTurnLeafCard key={card.id} card={card} turnId={turn.id} />;
+            })}
+        </PromptTurnCard>
+    );
 }
 
 const styles = StyleSheet.create({
-  root: {flex: 1},
-  loader: {marginTop: 32},
-  error: {padding: 16, fontSize: 14},
-  list: {flex: 1},
-  content: {padding: 16, paddingBottom: 32},
-  hint: {marginTop: 8, fontSize: 13},
+    root: {flex: 1},
+    loader: {marginTop: 32},
+    error: {padding: 16, fontSize: 14},
+    list: {flex: 1},
+    content: {padding: 16, paddingBottom: 32},
+    hint: {marginTop: 8, fontSize: 13},
 });

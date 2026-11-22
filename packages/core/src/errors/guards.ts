@@ -20,33 +20,51 @@ type AppErrorGuard = (e: unknown) => e is AppError;
  * 域判定与域守卫操作族。
  */
 export const ErrorGuards = {
-  /** 域判定唯一实现：按段表返回 code 归属的域。未登记的码只能来自编程错误（AppError 的 code 恒经码表产生），按不变量破坏 throw。 */
-  domainOf(code: number): ErrorDomain {
-    const matched = (Object.entries(DOMAIN_RANGES) as readonly [ErrorDomain, readonly [number, number]][]).find(([, [lo, hi]]) => code >= lo && code <= hi);
-    if (matched == null) {
-      // nm-throw: keep — 码表外 code 属不变量破坏，返回 undefined 会让错误格式化静默走兜底
-      throw new Error(`domainOf: 未登记的错误码 ${code}（码表外的 code 是不变量破坏）`);
-    }
-    return matched[0];
-  },
+    /** 域判定唯一实现：按段表返回 code 归属的域。未登记的码只能来自编程错误（AppError 的 code 恒经码表产生），按不变量破坏 throw。 */
+    domainOf(code: number): ErrorDomain {
+        const matched = (Object.entries(DOMAIN_RANGES) as readonly [ErrorDomain, readonly [number, number]][]).find(([, [lo, hi]]) => code >= lo && code <= hi);
+        if (matched == null) {
+            // nm-throw: keep — 码表外 code 属不变量破坏，返回 undefined 会让错误格式化静默走兜底
+            throw new Error(`domainOf: 未登记的错误码 ${code}（码表外的 code 是不变量破坏）`);
+        }
+        return matched[0];
+    },
 
-  /**
+    /**
    * 域守卫唯一组合：e 自身或 cause 链上任一环是 AppError 且 `code` 落在给定域段
    * 之一。域判定按段号而非 key 命名约定——语义属某域、前缀不同的 key 不会静默漏判。
    */
-  inDomain(e: unknown, ...domains: ErrorDomain[]): e is AppError {
-    // 沿 cause 链逐环判中（自引用与环由 visited 拦住），任一环命中即 true。
-    const visited = new Set<unknown>();
-    let cur: unknown = e;
-    while (typeof cur === "object" && cur !== null && !visited.has(cur)) {
-      visited.add(cur);
-      if (AppErrorOps.is(cur) && domains.includes(ErrorGuards.domainOf(cur.code))) {
-        return true;
-      }
-      cur = (cur as {cause?: unknown}).cause;
-    }
-    return false;
-  },
+    inDomain(e: unknown, ...domains: ErrorDomain[]): e is AppError {
+        // 沿 cause 链逐环判中（自引用与环由 visited 拦住），任一环命中即 true。
+        const visited = new Set<unknown>();
+        let cur: unknown = e;
+        while (typeof cur === "object" && cur !== null && !visited.has(cur)) {
+            visited.add(cur);
+            if (AppErrorOps.is(cur) && domains.includes(ErrorGuards.domainOf(cur.code))) {
+                return true;
+            }
+            cur = (cur as {cause?: unknown}).cause;
+        }
+        return false;
+    },
+
+    /**
+   * 驱动事务边界的域错误解包：事务回调内抛出的 AppError 过 tdbc 驱动事务边界会被包成
+   * TdbcError（原错误挂 cause，实测可能叠层——T-SC11b 教训：裸 `AppErrorOps.is` 判不中）
+   * ——沿 cause 链取第一个 AppError 本体，供边界 catch 把可容忍的域失败收进 `Result.err`
+   * 或转码 rethrow；链上无 AppError 返回 undefined（调用方原样上抛未知异常）。
+   * {@link ErrorGuards.inDomain} 的取值版同族（同一 cause 链回溯 + visited 防环）。
+   */
+    unwrapTxDomainError(e: unknown): AppError | undefined {
+        const visited = new Set<unknown>();
+        let cur: unknown = e;
+        while (typeof cur === "object" && cur !== null && !visited.has(cur)) {
+            visited.add(cur);
+            if (AppErrorOps.is(cur)) return cur;
+            cur = (cur as { cause?: unknown }).cause;
+        }
+        return undefined;
+    },
 } as const;
 
 /**

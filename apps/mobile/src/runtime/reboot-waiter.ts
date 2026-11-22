@@ -27,8 +27,8 @@
 
 /** 单个调用方的兑现口（对应 `new Promise` 的 resolve / reject）。 */
 export interface RebootSettler<T> {
-  resolve: (rt: T) => void;
-  reject: (err: unknown) => void;
+    resolve: (rt: T) => void;
+    reject: (err: unknown) => void;
 }
 
 /**
@@ -38,10 +38,10 @@ export interface RebootSettler<T> {
  * 挂到同一个 waiter 上，兑现时一起兑现，谁都不失主。
  */
 export interface RebootWaiter<T> {
-  /** 归属代号 = 登记时的 bootToken 代次。 */
-  generation: number;
-  /** 仍在等这一代兑现的调用方（复用时追加）。 */
-  settlers: RebootSettler<T>[];
+    /** 归属代号 = 登记时的 bootToken 代次。 */
+    generation: number;
+    /** 仍在等这一代兑现的调用方（复用时追加）。 */
+    settlers: RebootSettler<T>[];
 }
 
 /**
@@ -49,7 +49,7 @@ export interface RebootWaiter<T> {
  * 里可以直接 `useRef(RebootWaiter.createSlot())`，测试里直接传字面量。
  */
 export interface RebootWaiterSlot<T> {
-  current: RebootWaiter<T> | null;
+    current: RebootWaiter<T> | null;
 }
 
 /**
@@ -66,27 +66,27 @@ type ArmRebootWaiterOutcome = 'armed' | 'joined';
  * 重建 waiter 挂起槽的登记 / 改绑 / 兑现收口（代际归属规则的唯一真源）。
  */
 export const RebootWaiter = {
-  createSlot: <T>(): RebootWaiterSlot<T> => {
-    return {current: null};
-  },
+    createSlot: <T>(): RebootWaiterSlot<T> => {
+        return {current: null};
+    },
 
-  /**
+    /**
    * 登记一个等待方。
    *
    * 槽已被占用时**一律复用**（追加到 `settlers`），永不覆盖、不改既有代号：
    * 覆盖会让先到那个调用方的 promise 失主。
    */
-  arm: <T>(slot: RebootWaiterSlot<T>, generation: number, settler: RebootSettler<T>): ArmRebootWaiterOutcome => {
-    const existing = slot.current;
-    if (existing != null) {
-      existing.settlers.push(settler);
-      return 'joined';
-    }
-    slot.current = {generation, settlers: [settler]};
-    return 'armed';
-  },
+    arm: <T>(slot: RebootWaiterSlot<T>, generation: number, settler: RebootSettler<T>): ArmRebootWaiterOutcome => {
+        const existing = slot.current;
+        if (existing != null) {
+            existing.settlers.push(settler);
+            return 'joined';
+        }
+        slot.current = {generation, settlers: [settler]};
+        return 'armed';
+    },
 
-  /**
+    /**
    * 把槽内 waiter 的归属代号改绑到新代号（**不**新建 waiter、**不**换 settlers）。
    *
    * 用于无参 {@link retry} 这类「只推进代号、不新增等待方」的路径：槽里正挂着
@@ -97,51 +97,51 @@ export const RebootWaiter = {
    *
    * 槽为空时返回 false（无等待方需要改绑）。
    */
-  rebindGeneration: <T>(slot: RebootWaiterSlot<T>, generation: number): boolean => {
-    const waiter = slot.current;
-    if (waiter == null) {
-      return false;
-    }
-    waiter.generation = generation;
-    return true;
-  },
+    rebindGeneration: <T>(slot: RebootWaiterSlot<T>, generation: number): boolean => {
+        const waiter = slot.current;
+        if (waiter == null) {
+            return false;
+        }
+        waiter.generation = generation;
+        return true;
+    },
 
-  /**
+    /**
    * 取出并清空槽内 waiter —— **仅当代号一致**。
    *
    * 代号不符（调用方是被取代的旧代）时返回 null 且**完全不动槽**，这是
    * 「旧代不得碰新代 waiter」这条规则的落点。
    */
-  claim: <T>(slot: RebootWaiterSlot<T>, generation: number): RebootWaiter<T> | null => {
-    const waiter = slot.current;
-    if (waiter == null || waiter.generation !== generation) {
-      return null;
-    }
-    slot.current = null;
-    return waiter;
-  },
+    claim: <T>(slot: RebootWaiterSlot<T>, generation: number): RebootWaiter<T> | null => {
+        const waiter = slot.current;
+        if (waiter == null || waiter.generation !== generation) {
+            return null;
+        }
+        slot.current = null;
+        return waiter;
+    },
 
-  /**
+    /**
    * 按代号兑现挂起的等待方。
    *
    * 代号一致 → 清空槽并把该代所有等待方（复用时可能不止一个）一起兑现；
    * 代号不一致或槽已空 → 返回 false 且不动槽（被取代的旧代 effect 到这里
    * 就是安全的 no-op）。
    */
-  settle: <T>(slot: RebootWaiterSlot<T>, generation: number, outcome: RebootOutcome<T>): boolean => {
-    const waiter = RebootWaiter.claim(slot, generation);
-    if (waiter == null) {
-      return false;
-    }
-    for (const settler of waiter.settlers) {
-      if (outcome.kind === 'resolve') {
-        settler.resolve(outcome.runtime);
-      } else {
-        settler.reject(outcome.error);
-      }
-    }
-    return true;
-  },
+    settle: <T>(slot: RebootWaiterSlot<T>, generation: number, outcome: RebootOutcome<T>): boolean => {
+        const waiter = RebootWaiter.claim(slot, generation);
+        if (waiter == null) {
+            return false;
+        }
+        for (const settler of waiter.settlers) {
+            if (outcome.kind === 'resolve') {
+                settler.resolve(outcome.runtime);
+            } else {
+                settler.reject(outcome.error);
+            }
+        }
+        return true;
+    },
 } as const;
 
 /** `RebootWaiter.settle` 的兑现内容。 */

@@ -19,15 +19,15 @@ import type { SessionRunStateService } from "./session-run-state.port.js";
  * nm-style: keep-bare — session/project 两服务事务内按需构造的端口适配器工厂（单文件单函数），p23 重复组与 p24 主体桶均不在收口范围。
  */
 export function createSessionRunStateService(conn: TdbcConnection): SessionRunStateService {
-  const repo = new SqliteSessionRunStateRepository(conn);
-  return {
-    get: repo.get.bind(repo),
-    upsert: repo.upsert.bind(repo),
-    settle: async (input) => {
-      await repo.upsert({ ...input, status: "settled", partialText: null, partialThinking: null, pendingChildrenJson: null });
-    },
-    listByStatuses: repo.listByStatuses.bind(repo),
-    deleteBySession: repo.deleteBySession.bind(repo),
-    deleteByProject: repo.deleteByProject.bind(repo),
-  };
+    const repo = new SqliteSessionRunStateRepository(conn);
+    return {
+        get: repo.get.bind(repo),
+        upsert: repo.upsert.bind(repo),
+        settle: async (input) => {
+            await repo.upsert({ ...input, status: "settled", partialText: null, partialThinking: null, pendingChildrenJson: null });
+        },
+        listByStatuses: repo.listByStatuses.bind(repo),
+        deleteBySession: repo.deleteBySession.bind(repo),
+        deleteByProject: repo.deleteByProject.bind(repo),
+    };
 }

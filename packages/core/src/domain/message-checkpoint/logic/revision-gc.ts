@@ -16,7 +16,7 @@ import { RevisionRefCount } from "@/domain/vfs/logic/revision-ref-count.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 
 export const RevisionGc = {
-  /**
+    /**
    * 仅 revision 行打扫（scope 前缀 ref_count<=0 DELETE + 全局孤儿兜底）。
    *
    * 历史上本函数会依据 `vfs-revision-ref-count-v1` 是否登记而 fallback 到可达集路径；
@@ -44,21 +44,21 @@ export const RevisionGc = {
    *
    * @returns Count of deleted revision rows (scoped + global orphans).
    */
-  async sweepSession(revisionRepo: VfsRevisionRepository, projectId: string, sessionId: string, options?: { includeGlobalOrphans?: boolean }): Promise<number> {
-    const scope: VfsScope = {
-      kind: "session",
-      projectId,
-      sessionId,
-    };
-    const scopeKeyStr = LogicalPath.scopeKey(scope);
-    const scoped = await RevisionRefCount.deleteUnreferencedUnderScope(revisionRepo, scopeKeyStr, "/");
-    if (options?.includeGlobalOrphans === false) {
-      // scoped-only：全局孤儿兜底由调用方在事务提交后 deferred 调度。
-      return scoped;
-    }
-    // path-scoped 清扫靠 JOIN vfs_entry 圈定范围，扫不到「删文件后 entry 已删」的
-    // revision 孤儿；这里追加一次全局清扫兜底（同一 connection 上顺序执行）。
-    const globalOrphans = await revisionRepo.deleteGlobalOrphans();
-    return scoped + globalOrphans;
-  },
+    async sweepSession(revisionRepo: VfsRevisionRepository, projectId: string, sessionId: string, options?: { includeGlobalOrphans?: boolean }): Promise<number> {
+        const scope: VfsScope = {
+            kind: "session",
+            projectId,
+            sessionId,
+        };
+        const scopeKeyStr = LogicalPath.scopeKey(scope);
+        const scoped = await RevisionRefCount.deleteUnreferencedUnderScope(revisionRepo, scopeKeyStr, "/");
+        if (options?.includeGlobalOrphans === false) {
+            // scoped-only：全局孤儿兜底由调用方在事务提交后 deferred 调度。
+            return scoped;
+        }
+        // path-scoped 清扫靠 JOIN vfs_entry 圈定范围，扫不到「删文件后 entry 已删」的
+        // revision 孤儿；这里追加一次全局清扫兜底（同一 connection 上顺序执行）。
+        const globalOrphans = await revisionRepo.deleteGlobalOrphans();
+        return scoped + globalOrphans;
+    },
 } as const;

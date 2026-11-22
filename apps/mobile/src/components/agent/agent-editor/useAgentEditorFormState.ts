@@ -18,6 +18,7 @@ import {SavedModelDisplayName} from '@novel-master/core/provider';
 import {type AppError, Result} from '@novel-master/core/errors';
 
 import {useRuntime} from '@/hooks/useRuntime';
+import {coreT} from '@/i18n/core';
 
 type MobileRuntime = ReturnType<typeof useRuntime>;
 
@@ -25,27 +26,27 @@ type MobileRuntime = ReturnType<typeof useRuntime>;
 type SavedModelEntry = Extract<Awaited<ReturnType<MobileRuntime['providerModels']['savedList']>>, {ok: true}>['value'][number];
 
 type SavedProviderOption = {
-  id: string;
-  label: string;
-  protocol: string;
+    id: string;
+    label: string;
+    protocol: string;
 };
 
 type InvalidAgentConfig = {
-  code: storedConfig.StoredConfigInvalidCode;
-  message: string;
+    code: storedConfig.StoredConfigInvalidCode;
+    message: string;
 };
 
 type InvalidConfigState = InvalidAgentConfig | null;
 
 /** 表单全量状态：AgentEditorFormInput 的可变数组、必有字段版本（制控输入直接用）。 */
 export type AgentEditorFormState = Omit<AgentEditorFormInput, 'persist' | 'dynamic' | 'customAttachEnabled' | 'customAttachText' | 'skillsEnabled' | 'skillsPrefixText' | 'description'> & {
-  customAttachEnabled: boolean;
-  customAttachText: string;
-  skillsEnabled: boolean;
-  skillsPrefixText: string;
-  description: string;
-  persist: PersistPromptBlock[];
-  dynamic: DynamicPromptBlock[];
+    customAttachEnabled: boolean;
+    customAttachText: string;
+    skillsEnabled: boolean;
+    skillsPrefixText: string;
+    description: string;
+    persist: PersistPromptBlock[];
+    dynamic: DynamicPromptBlock[];
 };
 
 /** patch 入参：不含 persist/dynamic（这两个走函数式 setPersist/setDynamic）。 */
@@ -54,80 +55,80 @@ export type AgentEditorFormPatch = Partial<Omit<AgentEditorFormInput, 'persist' 
 // 偏离登记：文件名 useAgentEditorFormState 是 React hook 名（hook 豁免收口且不能当 namespace 名），
 // helper 按内容主体（表单状态构建/映射）起名 AgentEditorFormState，与本文件同名 type 值/类型空间分离共存。
 export namespace AgentEditorFormState {
-  export function createInitialFormState(): AgentEditorFormState {
-    return {
-      name: '',
-      mode: 'all',
-      maxSteps: '20',
-      modelEnabled: false,
-      providerId: '',
-      savedModelId: '',
-      toolsMode: 'default',
-      toolsSelected: [],
-      systemEnabled: false,
-      systemContent: '',
-      persistEnabled: false,
-      dynamicEnabled: false,
-      workplaceEnabled: false,
-      workplaceAssistantText: '',
-      customAttachEnabled: false,
-      customAttachText: '',
-      // 技能能力总开关（缺省开）：关 = 不注入技能索引且不注册 skill 工具。
-      skillsEnabled: true,
-      // 技能索引前缀语（索引段首行，缺省默认文案）。
-      skillsPrefixText: DEFAULT_SKILLS_INDEX_PREFIX,
-      // 人类可读的 agent 描述（对应域 description，多行文本）。
-      description: '',
-      persist: [],
-      dynamic: [],
-    };
-  }
+    export function createInitialFormState(): AgentEditorFormState {
+        return {
+            name: '',
+            mode: 'all',
+            maxSteps: '20',
+            modelEnabled: false,
+            providerId: '',
+            savedModelId: '',
+            toolsMode: 'default',
+            toolsSelected: [],
+            systemEnabled: false,
+            systemContent: '',
+            persistEnabled: false,
+            dynamicEnabled: false,
+            workplaceEnabled: false,
+            workplaceAssistantText: '',
+            customAttachEnabled: false,
+            customAttachText: '',
+            // 技能能力总开关（缺省开）：关 = 不注入技能索引且不注册 skill 工具。
+            skillsEnabled: true,
+            // 技能索引前缀语（索引段首行，缺省默认文案）。
+            skillsPrefixText: DEFAULT_SKILLS_INDEX_PREFIX,
+            // 人类可读的 agent 描述（对应域 description，多行文本）。
+            description: '',
+            persist: [],
+            dynamic: [],
+        };
+    }
 
-  /**
+    /**
    * 同步把 definition 映射为完整表单状态（不经 registry/providers 装载）。
    * 只读详情（内置 general）用出厂定义常量直接初始化表单走这里；
    * loadAgent 路径复用同一映射后再异步回填模型三件套，两路不漂移。
    */
-  export function formStateFromDefinition(def: AgentDefinition): AgentEditorFormState {
-    const promptForm = AgentEditorState.definitionToForm(def);
-    const toolsWire = AgentToolCatalog.toolsSelectionFromDefinition(def);
-    return {
-      ...AgentEditorFormState.createInitialFormState(),
-      name: def.name,
-      mode: def.mode ?? 'all',
-      maxSteps: String(def.runtime?.maxSteps ?? 20),
-      // 模型三件套先按 wire 简单回填；loadAgent 路径在 savedModels 装载后
-      // 会再精确覆盖（providerId 需查表），只读路径则不 pin（false/''）。
-      modelEnabled: Boolean(def.model),
-      providerId: '',
-      savedModelId: def.model ?? '',
-      systemEnabled: promptForm.systemEnabled,
-      systemContent: promptForm.systemContent,
-      persistEnabled: promptForm.persistEnabled,
-      dynamicEnabled: promptForm.dynamicEnabled,
-      workplaceEnabled: promptForm.workplaceEnabled,
-      workplaceAssistantText: promptForm.workplaceAssistantText,
-      customAttachEnabled: promptForm.customAttachEnabled ?? false,
-      customAttachText: promptForm.customAttachText ?? '',
-      skillsEnabled: promptForm.skillsEnabled ?? true,
-      skillsPrefixText: promptForm.skillsPrefixText ?? DEFAULT_SKILLS_INDEX_PREFIX,
-      description: promptForm.description ?? '',
-      persist: [...promptForm.persist],
-      dynamic: [...promptForm.dynamic],
-      toolsMode: toolsWire.mode,
-      toolsSelected: [...toolsWire.selected],
-    };
-  }
-
-  export function agentDisplayNameFromWire(raw: unknown, id: string): string {
-    if (raw != null && typeof raw === 'object' && 'name' in raw && typeof (raw as {name: unknown}).name === 'string') {
-      const trimmed = (raw as {name: string}).name.trim();
-      if (trimmed.length > 0) {
-        return trimmed;
-      }
+    export function formStateFromDefinition(def: AgentDefinition): AgentEditorFormState {
+        const promptForm = AgentEditorState.definitionToForm(def);
+        const toolsWire = AgentToolCatalog.toolsSelectionFromDefinition(def);
+        return {
+            ...AgentEditorFormState.createInitialFormState(),
+            name: def.name,
+            mode: def.mode ?? 'all',
+            maxSteps: String(def.runtime?.maxSteps ?? 20),
+            // 模型三件套先按 wire 简单回填；loadAgent 路径在 savedModels 装载后
+            // 会再精确覆盖（providerId 需查表），只读路径则不 pin（false/''）。
+            modelEnabled: Boolean(def.model),
+            providerId: '',
+            savedModelId: def.model ?? '',
+            systemEnabled: promptForm.systemEnabled,
+            systemContent: promptForm.systemContent,
+            persistEnabled: promptForm.persistEnabled,
+            dynamicEnabled: promptForm.dynamicEnabled,
+            workplaceEnabled: promptForm.workplaceEnabled,
+            workplaceAssistantText: promptForm.workplaceAssistantText,
+            customAttachEnabled: promptForm.customAttachEnabled ?? false,
+            customAttachText: promptForm.customAttachText ?? '',
+            skillsEnabled: promptForm.skillsEnabled ?? true,
+            skillsPrefixText: promptForm.skillsPrefixText ?? DEFAULT_SKILLS_INDEX_PREFIX,
+            description: promptForm.description ?? '',
+            persist: [...promptForm.persist],
+            dynamic: [...promptForm.dynamic],
+            toolsMode: toolsWire.mode,
+            toolsSelected: [...toolsWire.selected],
+        };
     }
-    return id;
-  }
+
+    export function agentDisplayNameFromWire(raw: unknown, id: string): string {
+        if (raw != null && typeof raw === 'object' && 'name' in raw && typeof (raw as {name: unknown}).name === 'string') {
+            const trimmed = (raw as {name: string}).name.trim();
+            if (trimmed.length > 0) {
+                return trimmed;
+            }
+        }
+        return id;
+    }
 }
 
 /**
@@ -136,297 +137,297 @@ export namespace AgentEditorFormState {
  */
 // nm-style: keep-public — React hook 状态边界（300 行表单状态机，comp-rest/C-3 有意拆分的独立状态容器；内联会把 AgentEditorForm 推回拆分前的巨石组件）
 export function useAgentEditorFormState(agentId: string, runtime: MobileRuntime, showToast: (message: string) => void, initialDefinition?: AgentDefinition) {
-  const [form, setForm] = useState<AgentEditorFormState>(() => (initialDefinition ? AgentEditorFormState.formStateFromDefinition(initialDefinition) : AgentEditorFormState.createInitialFormState()));
-  const [providers, setProviders] = useState<SavedProviderOption[]>([]);
-  const [savedModels, setSavedModels] = useState<SavedModelEntry[]>([]);
-  const [savedBaseline, setSavedBaseline] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  // 直填路径首帧即有数据，不走 loading；依赖拉取的路径保持原加载态。
-  const [loading, setLoading] = useState(initialDefinition == null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [invalidConfig, setInvalidConfig] = useState<InvalidConfigState>(null);
-  const [displayName, setDisplayName] = useState<string | null>(null);
-  const [recovering, setRecovering] = useState(false);
+    const [form, setForm] = useState<AgentEditorFormState>(() => (initialDefinition ? AgentEditorFormState.formStateFromDefinition(initialDefinition) : AgentEditorFormState.createInitialFormState()));
+    const [providers, setProviders] = useState<SavedProviderOption[]>([]);
+    const [savedModels, setSavedModels] = useState<SavedModelEntry[]>([]);
+    const [savedBaseline, setSavedBaseline] = useState<string | null>(null);
+    const [saving, setSaving] = useState(false);
+    // 直填路径首帧即有数据，不走 loading；依赖拉取的路径保持原加载态。
+    const [loading, setLoading] = useState(initialDefinition == null);
+    const [loadError, setLoadError] = useState<string | null>(null);
+    const [invalidConfig, setInvalidConfig] = useState<InvalidConfigState>(null);
+    const [displayName, setDisplayName] = useState<string | null>(null);
+    const [recovering, setRecovering] = useState(false);
 
-  /** 单字段/少字段补丁更新（受控输入用，等价于原先的独立 setter）。 */
-  // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
-  const patch = useCallback((partial: AgentEditorFormPatch) => {
-    setForm(prev => ({...prev, ...partial}));
-  }, []);
+    /** 单字段/少字段补丁更新（受控输入用，等价于原先的独立 setter）。 */
+    // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
+    const patch = useCallback((partial: AgentEditorFormPatch) => {
+        setForm(prev => ({...prev, ...partial}));
+    }, []);
 
-  /**
+    /**
    * persist 块的函数式更新：更新返回同引用时保持 form 引用不变，
    * 维持原先 setState 同引用 bail-out 的渲染语义。
    */
-  // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
-  const setPersist = useCallback((apply: (prev: PersistPromptBlock[]) => PersistPromptBlock[]) => {
-    setForm(prev => {
-      const next = apply(prev.persist);
-      return next === prev.persist ? prev : {...prev, persist: next};
-    });
-  }, []);
+    // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
+    const setPersist = useCallback((apply: (prev: PersistPromptBlock[]) => PersistPromptBlock[]) => {
+        setForm(prev => {
+            const next = apply(prev.persist);
+            return next === prev.persist ? prev : {...prev, persist: next};
+        });
+    }, []);
 
-  // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
-  const setDynamic = useCallback((apply: (prev: DynamicPromptBlock[]) => DynamicPromptBlock[]) => {
-    setForm(prev => {
-      const next = apply(prev.dynamic);
-      return next === prev.dynamic ? prev : {...prev, dynamic: next};
-    });
-  }, []);
+    // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
+    const setDynamic = useCallback((apply: (prev: DynamicPromptBlock[]) => DynamicPromptBlock[]) => {
+        setForm(prev => {
+            const next = apply(prev.dynamic);
+            return next === prev.dynamic ? prev : {...prev, dynamic: next};
+        });
+    }, []);
 
-  // formSnapshotJson 只收一个 state 对象；mode 等全部字段纳入依赖
-  // （原实现依赖数组漏了 mode，收敛后顺带修正）。
-  const snapshot = useMemo(() => AgentEditorState.formSnapshotJson(form), [form]);
+    // formSnapshotJson 只收一个 state 对象；mode 等全部字段纳入依赖
+    // （原实现依赖数组漏了 mode，收敛后顺带修正）。
+    const snapshot = useMemo(() => AgentEditorState.formSnapshotJson(form), [form]);
 
-  // 渲染期同步派生：与 snapshot 同帧计算，外部「有未保存的更改」标记不依赖
-  // effect 时序（全屏保存回填、表单保存后均与内容同帧刷新）；effect 仅向
-  // 外层同步 useUnsavedGuard 需要的脏状态。
-  const isDirty = savedBaseline != null && snapshot !== savedBaseline;
+    // 渲染期同步派生：与 snapshot 同帧计算，外部「有未保存的更改」标记不依赖
+    // effect 时序（全屏保存回填、表单保存后均与内容同帧刷新）；effect 仅向
+    // 外层同步 useUnsavedGuard 需要的脏状态。
+    const isDirty = savedBaseline != null && snapshot !== savedBaseline;
 
-  // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
-  const loadProviders = useCallback(async () => {
-    const loaded = await runtime.providers.list();
-    if (!loaded.ok) return Result.err(loaded.error);
-    const list = loaded.value;
-    const options = list.map(p => ({
-      id: p.id,
-      label: p.displayName,
-      protocol: p.protocol,
-    }));
-    setProviders(options);
-    return Result.ok(list);
-  }, [runtime]);
+    // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
+    const loadProviders = useCallback(async () => {
+        const loaded = await runtime.providers.list();
+        if (!loaded.ok) return Result.err(loaded.error);
+        const list = loaded.value;
+        const options = list.map(p => ({
+            id: p.id,
+            label: p.displayName,
+            protocol: p.protocol,
+        }));
+        setProviders(options);
+        return Result.ok(list);
+    }, [runtime]);
 
-  // 扁平化：聚合所有服务商下的 savedModels，供「专属模型」下拉直接选。
-  // 替代旧的「服务商二级联动」UI——模型 label 已含服务商前缀，无需单独选服务商。
-  // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
-  const loadAllSavedModels = useCallback(async (): Promise<Result<SavedModelEntry[], AppError>> => {
-    const loaded = await runtime.providers.list();
-    if (!loaded.ok) return Result.err(loaded.error);
-    const list = loaded.value;
-    const lists = list.map(p => runtime.providerModels.savedList(p.id));
-    const all = await Promise.all(lists);
-    // 已知失败沿 Result 接力（错误通道迁移四期）：首个失败服务商即短路，
-    // 与旧解包抛错同口径（收口在 loadAgentImpl 的 !ok 分支）。
-    const flat: SavedModelEntry[] = [];
-    for (const r of all) {
-      if (!r.ok) return Result.err(r.error);
-      flat.push(...r.value);
-    }
-    setSavedModels(flat);
-    return Result.ok(flat);
-  }, [runtime]);
-
-  // nm-style: keep-local — 回调承载定义 → 表单/基线映射的状态链，内联回 useCallback 会让调用参数跨行
-  const fillForm = async (def: AgentDefinition): Promise<Result<void, AppError>> => {
-    // 字段映射与只读直填同源（formStateFromDefinition）；模型三件套
-    // 在下方 savedModels 装载后精确覆盖（providerId 依赖查表）。
-    const promptForm = AgentEditorState.definitionToForm(def);
-    const toolsWire = AgentToolCatalog.toolsSelectionFromDefinition(def);
-    setForm(prev => ({...prev, ...AgentEditorFormState.formStateFromDefinition(def)}));
-    // 扁平化：一次性加载全服务商 savedModels，下拉直接选模型，不再二级联动。
-    await loadProviders();
-    const allModels = await loadAllSavedModels();
-    if (!allModels.ok) return Result.err(allModels.error);
-    const modelEnabledWire = Boolean(def.model);
-    let baselineProviderId = '';
-    let baselineSavedModelId = '';
-    if (modelEnabledWire && def.model) {
-      const saved = allModels.value.find(m => m.id === def.model);
-      if (saved) {
-        baselineProviderId = saved.providerId;
-        baselineSavedModelId = def.model;
-      }
-    }
-    // 跟随聊天模型时下拉停在「默认(跟随)」，不预填具体模型。
-    setForm(prev => ({
-      ...prev,
-      modelEnabled: modelEnabledWire,
-      providerId: baselineProviderId,
-      savedModelId: baselineSavedModelId,
-    }));
-    const baseline = AgentEditorState.formSnapshotJson({
-      name: def.name,
-      maxSteps: String(def.runtime?.maxSteps ?? 20),
-      modelEnabled: modelEnabledWire,
-      providerId: baselineProviderId,
-      savedModelId: baselineSavedModelId,
-      toolsMode: toolsWire.mode,
-      toolsSelected: [...toolsWire.selected],
-      ...promptForm,
-      // 基线侧必须显式带 mode（对齐 formStateFromDefinition 的口径）：
-      // core 的 formSnapshotJson 已把 mode 无条件纳入输出，此处不传 ⇒
-      // 基线 JSON 缺 mode 键、实时快照有 mode ⇒ 打开即显示「未保存」。
-      // ⚠️ 必须放在 `...promptForm` **之后**：`definitionToForm` 已经带了
-      // `mode: def.mode ?? "all"`，写在前面会被展开覆盖（TS2783）。
-      mode: def.mode ?? 'all',
-      persist: [...promptForm.persist],
-    });
-    setSavedBaseline(baseline);
-    return Result.ok(undefined);
-  };
-  const populateFormDeps = [loadProviders, loadAllSavedModels];
-  const populateFormFromDefinition = useCallback(fillForm, populateFormDeps);
-
-  // nm-style: keep-local — 回调承载 Agent 配置装载与损坏分支的状态机，内联回 useCallback 会让调用参数跨行
-  const loadAgentImpl = async () => {
-    setLoading(true);
-    setLoadError(null);
-    setInvalidConfig(null);
-    setDisplayName(null);
-    try {
-      const raw = await runtime.agentRegistry.getRawWire(agentId);
-      if (raw === null) {
-        setLoadError(`未找到 Agent：${agentId}`);
-        return;
-      }
-      const health = storedConfig.AgentDefinitionWire.assess(raw);
-      if (health.status === 'invalid') {
-        setDisplayName(AgentEditorFormState.agentDisplayNameFromWire(raw, agentId));
-        setInvalidConfig({code: health.code, message: health.message});
-        return;
-      }
-      const populated = await populateFormFromDefinition(health.value);
-      // 已知失败收 loadError（错误通道迁移四期）：与旧 catch 的 message 口径一致。
-      if (!populated.ok) {
-        setLoadError(populated.error.message);
-        return;
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setLoadError(message);
-    } finally {
-      setLoading(false);
-    }
-  };
-  const loadAgentDeps = [agentId, populateFormFromDefinition, runtime];
-  const loadAgent = useCallback(loadAgentImpl, loadAgentDeps);
-
-  /** 当前渲染帧的三区表单切片（persist 删除守卫用）。 */
-  const promptRegionForm = () => ({
-    systemEnabled: form.systemEnabled,
-    systemContent: form.systemContent,
-    persistEnabled: form.persistEnabled,
-    dynamicEnabled: form.dynamicEnabled,
-    workplaceEnabled: form.workplaceEnabled,
-    workplaceAssistantText: form.workplaceAssistantText,
-    customAttachEnabled: form.customAttachEnabled,
-    customAttachText: form.customAttachText,
-    skillsEnabled: form.skillsEnabled,
-    skillsPrefixText: form.skillsPrefixText,
-    persist: form.persist,
-    dynamic: form.dynamic,
-  });
-
-  // 块级操作保持拆分前的普通函数形态（每帧重建，闭包读当前渲染帧的 form）。
-
-  // 扁平化后只有一个下拉：选「默认(跟随)」或某个具体模型。
-  // 空串代表默认(跟随)——与 def.model 缺省语义对齐（buildAgentDefinitionFromForm
-  // 只看 modelEnabled + savedModelId，core 零改动）。
-  // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
-  const handleModelSelect = useCallback(
-    (id: string) => {
-      if (id === '') {
-        patch({modelEnabled: false, savedModelId: ''});
-        return;
-      }
-      const selected = savedModels.find(m => m.id === id);
-      patch({
-        modelEnabled: true,
-        savedModelId: id,
-        providerId: selected?.providerId ?? '',
-      });
-    },
-    [patch, savedModels],
-  );
-
-  // 重复计数与 ModelPickerModal 同口径：按 providerId+modelName 统计。
-  // 不能只按 modelName 全局计数——同一模型名挂在两个服务商下时各算一条，
-  // 否则会误判重复、每行都露出与模型名相同的 vendorModelId 副标题，
-  // 看起来像一行展示了两个模型 id。
-  // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
-  const modelNameCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const model of savedModels) {
-      const key = `${model.providerId}\0${model.modelName}`;
-      counts.set(key, (counts.get(key) ?? 0) + 1);
-    }
-    return counts;
-  }, [savedModels]);
-  // 下拉选项：「默认(跟随)」恒在首位，后面是全服务商已保存模型（label 含服务商前缀，
-  // 按字母排序与工作区模型下拉一致）。
-  // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
-  const modelSelectOptions = useMemo(() => {
-    const modelOptions = savedModels
-      .map(m => {
-        const found = providers.find(p => p.id === m.providerId);
-        const providerLabel = found?.label ?? '未知服务商';
-        return {
-          value: m.id,
-          label: SavedModelDisplayName.format(providerLabel, m.modelName),
-          subtitle: (modelNameCounts.get(`${m.providerId}\0${m.modelName}`) ?? 0) > 1 ? m.vendorModelId : undefined,
-        };
-      })
-      .sort((a, b) => a.label.localeCompare(b.label));
-    return [{value: '', label: '默认(跟随)'}, ...modelOptions];
-  }, [savedModels, providers, modelNameCounts]);
-
-  return {
-    // 表单值（单对象）与更新入口
-    form,
-    patch,
-    setPersist,
-    setDynamic,
-    // 块级操作
-    movePersist: (textIndex: number, dir: -1 | 1) => setPersist(prev => AgentEditorState.movePersistTextBlock(prev, textIndex, dir)),
-    moveDynamic: (index: number, dir: -1 | 1) => {
-      setDynamic(prev => {
-        const next = [...prev];
-        const target = index + dir;
-        if (target < 0 || target >= next.length) {
-          return prev;
+    // 扁平化：聚合所有服务商下的 savedModels，供「专属模型」下拉直接选。
+    // 替代旧的「服务商二级联动」UI——模型 label 已含服务商前缀，无需单独选服务商。
+    // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
+    const loadAllSavedModels = useCallback(async (): Promise<Result<SavedModelEntry[], AppError>> => {
+        const loaded = await runtime.providers.list();
+        if (!loaded.ok) return Result.err(loaded.error);
+        const list = loaded.value;
+        const lists = list.map(p => runtime.providerModels.savedList(p.id));
+        const all = await Promise.all(lists);
+        // 已知失败沿 Result 接力（错误通道迁移四期）：首个失败服务商即短路，
+        // 与旧解包抛错同口径（收口在 loadAgentImpl 的 !ok 分支）。
+        const flat: SavedModelEntry[] = [];
+        for (const r of all) {
+            if (!r.ok) return Result.err(r.error);
+            flat.push(...r.value);
         }
-        const tmp = next[target]!;
-        next[target] = next[index]!;
-        next[index] = tmp;
-        return next;
-      });
-    },
-    deletePersist: (textIndex: number) => {
-      const nextPersist = AgentEditorState.deletePersistTextBlock(form.persist, textIndex);
-      const nextForm = {...promptRegionForm(), persist: nextPersist};
-      if (!AgentEditorState.hasAnyPromptRegionEnabled(promptRegionForm())) {
-        setPersist(() => nextPersist);
-        return;
-      }
-      if (AgentEditorState.countFormPromptSources(nextForm) < 1) {
-        showToast('至少保留一个 Prompt 块');
-        return;
-      }
-      setPersist(() => nextPersist);
-    },
-    deleteDynamic: (index: number) => setDynamic(prev => prev.filter((_, i) => i !== index)),
-    addPersistTextBlock: () => setPersist(prev => [...prev, AgentEditorState.createDefaultPersistTextBlock(prev.length)]),
-    addDynamicBlock: () => setDynamic(prev => [...prev, AgentEditorState.createDefaultDynamicTextBlock(prev.length)]),
-    // 模型下拉
-    handleModelSelect,
-    modelSelectOptions,
-    savedModels,
-    providers,
-    // dirty 链路
-    snapshot,
-    isDirty,
-    savedBaseline,
-    setSavedBaseline,
-    // 加载与保存状态
-    loadAgent,
-    loading,
-    loadError,
-    invalidConfig,
-    displayName,
-    recovering,
-    setRecovering,
-    saving,
-    setSaving,
-  };
+        setSavedModels(flat);
+        return Result.ok(flat);
+    }, [runtime]);
+
+    // nm-style: keep-local — 回调承载定义 → 表单/基线映射的状态链，内联回 useCallback 会让调用参数跨行
+    const fillForm = async (def: AgentDefinition): Promise<Result<void, AppError>> => {
+        // 字段映射与只读直填同源（formStateFromDefinition）；模型三件套
+        // 在下方 savedModels 装载后精确覆盖（providerId 依赖查表）。
+        const promptForm = AgentEditorState.definitionToForm(def);
+        const toolsWire = AgentToolCatalog.toolsSelectionFromDefinition(def);
+        setForm(prev => ({...prev, ...AgentEditorFormState.formStateFromDefinition(def)}));
+        // 扁平化：一次性加载全服务商 savedModels，下拉直接选模型，不再二级联动。
+        await loadProviders();
+        const allModels = await loadAllSavedModels();
+        if (!allModels.ok) return Result.err(allModels.error);
+        const modelEnabledWire = Boolean(def.model);
+        let baselineProviderId = '';
+        let baselineSavedModelId = '';
+        if (modelEnabledWire && def.model) {
+            const saved = allModels.value.find(m => m.id === def.model);
+            if (saved) {
+                baselineProviderId = saved.providerId;
+                baselineSavedModelId = def.model;
+            }
+        }
+        // 跟随聊天模型时下拉停在「默认(跟随)」，不预填具体模型。
+        setForm(prev => ({
+            ...prev,
+            modelEnabled: modelEnabledWire,
+            providerId: baselineProviderId,
+            savedModelId: baselineSavedModelId,
+        }));
+        const baseline = AgentEditorState.formSnapshotJson({
+            name: def.name,
+            maxSteps: String(def.runtime?.maxSteps ?? 20),
+            modelEnabled: modelEnabledWire,
+            providerId: baselineProviderId,
+            savedModelId: baselineSavedModelId,
+            toolsMode: toolsWire.mode,
+            toolsSelected: [...toolsWire.selected],
+            ...promptForm,
+            // 基线侧必须显式带 mode（对齐 formStateFromDefinition 的口径）：
+            // core 的 formSnapshotJson 已把 mode 无条件纳入输出，此处不传 ⇒
+            // 基线 JSON 缺 mode 键、实时快照有 mode ⇒ 打开即显示「未保存」。
+            // ⚠️ 必须放在 `...promptForm` **之后**：`definitionToForm` 已经带了
+            // `mode: def.mode ?? "all"`，写在前面会被展开覆盖（TS2783）。
+            mode: def.mode ?? 'all',
+            persist: [...promptForm.persist],
+        });
+        setSavedBaseline(baseline);
+        return Result.ok(undefined);
+    };
+    const populateFormDeps = [loadProviders, loadAllSavedModels];
+    const populateFormFromDefinition = useCallback(fillForm, populateFormDeps);
+
+    // nm-style: keep-local — 回调承载 Agent 配置装载与损坏分支的状态机，内联回 useCallback 会让调用参数跨行
+    const loadAgentImpl = async () => {
+        setLoading(true);
+        setLoadError(null);
+        setInvalidConfig(null);
+        setDisplayName(null);
+        try {
+            const raw = await runtime.agentRegistry.getRawWire(agentId);
+            if (raw === null) {
+                setLoadError(coreT({key: "ui.agent.not_found", params: {agent_id: agentId}}));
+                return;
+            }
+            const health = storedConfig.AgentDefinitionWire.assess(raw);
+            if (health.status === 'invalid') {
+                setDisplayName(AgentEditorFormState.agentDisplayNameFromWire(raw, agentId));
+                setInvalidConfig({code: health.code, message: health.message});
+                return;
+            }
+            const populated = await populateFormFromDefinition(health.value);
+            // 已知失败收 loadError（错误通道迁移四期）：与旧 catch 的 message 口径一致。
+            if (!populated.ok) {
+                setLoadError(populated.error.message);
+                return;
+            }
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            setLoadError(message);
+        } finally {
+            setLoading(false);
+        }
+    };
+    const loadAgentDeps = [agentId, populateFormFromDefinition, runtime];
+    const loadAgent = useCallback(loadAgentImpl, loadAgentDeps);
+
+    /** 当前渲染帧的三区表单切片（persist 删除守卫用）。 */
+    const promptRegionForm = () => ({
+        systemEnabled: form.systemEnabled,
+        systemContent: form.systemContent,
+        persistEnabled: form.persistEnabled,
+        dynamicEnabled: form.dynamicEnabled,
+        workplaceEnabled: form.workplaceEnabled,
+        workplaceAssistantText: form.workplaceAssistantText,
+        customAttachEnabled: form.customAttachEnabled,
+        customAttachText: form.customAttachText,
+        skillsEnabled: form.skillsEnabled,
+        skillsPrefixText: form.skillsPrefixText,
+        persist: form.persist,
+        dynamic: form.dynamic,
+    });
+
+    // 块级操作保持拆分前的普通函数形态（每帧重建，闭包读当前渲染帧的 form）。
+
+    // 扁平化后只有一个下拉：选「默认(跟随)」或某个具体模型。
+    // 空串代表默认(跟随)——与 def.model 缺省语义对齐（buildAgentDefinitionFromForm
+    // 只看 modelEnabled + savedModelId，core 零改动）。
+    // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
+    const handleModelSelect = useCallback(
+        (id: string) => {
+            if (id === '') {
+                patch({modelEnabled: false, savedModelId: ''});
+                return;
+            }
+            const selected = savedModels.find(m => m.id === id);
+            patch({
+                modelEnabled: true,
+                savedModelId: id,
+                providerId: selected?.providerId ?? '',
+            });
+        },
+        [patch, savedModels],
+    );
+
+    // 重复计数与 ModelPickerModal 同口径：按 providerId+modelName 统计。
+    // 不能只按 modelName 全局计数——同一模型名挂在两个服务商下时各算一条，
+    // 否则会误判重复、每行都露出与模型名相同的 vendorModelId 副标题，
+    // 看起来像一行展示了两个模型 id。
+    // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
+    const modelNameCounts = useMemo(() => {
+        const counts = new Map<string, number>();
+        for (const model of savedModels) {
+            const key = `${model.providerId}\0${model.modelName}`;
+            counts.set(key, (counts.get(key) ?? 0) + 1);
+        }
+        return counts;
+    }, [savedModels]);
+    // 下拉选项：「默认(跟随)」恒在首位，后面是全服务商已保存模型（label 含服务商前缀，
+    // 按字母排序与工作区模型下拉一致）。
+    // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
+    const modelSelectOptions = useMemo(() => {
+        const modelOptions = savedModels
+            .map(m => {
+                const found = providers.find(p => p.id === m.providerId);
+                const providerLabel = found?.label ?? coreT({key: "ui.provider.unknown_provider"});
+                return {
+                    value: m.id,
+                    label: SavedModelDisplayName.format(providerLabel, m.modelName),
+                    subtitle: (modelNameCounts.get(`${m.providerId}\0${m.modelName}`) ?? 0) > 1 ? m.vendorModelId : undefined,
+                };
+            })
+            .sort((a, b) => a.label.localeCompare(b.label));
+        return [{value: '', label: coreT({key: "ui.agent.model_follow_option"})}, ...modelOptions];
+    }, [savedModels, providers, modelNameCounts]);
+
+    return {
+        // 表单值（单对象）与更新入口
+        form,
+        patch,
+        setPersist,
+        setDynamic,
+        // 块级操作
+        movePersist: (textIndex: number, dir: -1 | 1) => setPersist(prev => AgentEditorState.movePersistTextBlock(prev, textIndex, dir)),
+        moveDynamic: (index: number, dir: -1 | 1) => {
+            setDynamic(prev => {
+                const next = [...prev];
+                const target = index + dir;
+                if (target < 0 || target >= next.length) {
+                    return prev;
+                }
+                const tmp = next[target]!;
+                next[target] = next[index]!;
+                next[index] = tmp;
+                return next;
+            });
+        },
+        deletePersist: (textIndex: number) => {
+            const nextPersist = AgentEditorState.deletePersistTextBlock(form.persist, textIndex);
+            const nextForm = {...promptRegionForm(), persist: nextPersist};
+            if (!AgentEditorState.hasAnyPromptRegionEnabled(promptRegionForm())) {
+                setPersist(() => nextPersist);
+                return;
+            }
+            if (AgentEditorState.countFormPromptSources(nextForm) < 1) {
+                showToast(coreT({key: "ui.agent.prompt_block_min"}));
+                return;
+            }
+            setPersist(() => nextPersist);
+        },
+        deleteDynamic: (index: number) => setDynamic(prev => prev.filter((_, i) => i !== index)),
+        addPersistTextBlock: () => setPersist(prev => [...prev, AgentEditorState.createDefaultPersistTextBlock(prev.length)]),
+        addDynamicBlock: () => setDynamic(prev => [...prev, AgentEditorState.createDefaultDynamicTextBlock(prev.length)]),
+        // 模型下拉
+        handleModelSelect,
+        modelSelectOptions,
+        savedModels,
+        providers,
+        // dirty 链路
+        snapshot,
+        isDirty,
+        savedBaseline,
+        setSavedBaseline,
+        // 加载与保存状态
+        loadAgent,
+        loading,
+        loadError,
+        invalidConfig,
+        displayName,
+        recovering,
+        setRecovering,
+        saving,
+        setSaving,
+    };
 }

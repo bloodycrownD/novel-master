@@ -34,8 +34,8 @@ import {HostMessageChannel} from '@web/shared/host-message-channel';
 import {Factory} from '@web/chat-transcript/webview/runtime/factory';
 import {HostDowntranslate, TRANSCRIPT_ENTRY_BRIDGE_V} from './host-downtranslate';
 import {
-  TRANSCRIPT_CAPABILITIES,
-  TRANSCRIPT_READY_VERSION,
+    TRANSCRIPT_CAPABILITIES,
+    TRANSCRIPT_READY_VERSION,
 } from '@web/chat-transcript/transcript-capabilities';
 
 // 新入口自有上行出口（v:2）：仅 ready 一条（dockAction 随 dock 退役，无此上行）。
@@ -56,29 +56,29 @@ Factory.create({bindChannel: false, emitReady: false});
 
 /* ---- 单条 v:2 ready：壳装配成功后发；失败不发，交宿主 8s 超时兜底。 ---- */
 function emitTranscriptReady(): void {
-  // ready 闸门：转录装配面唯一可检的壳锚是 #rows（行列表挂载点；#menu-portal /
-  // #mermaid-viewer-portal 缺失只影响菜单/全屏，不构成白屏级失败，不设闸）。
-  // 壳 id 漂移时 renderRows 会静默跳过——同合成包闸门一样，此处直接返回把信号
-  // 交回宿主超时兜底，「ready 不来」本身就是最有效的装配失败诊断。
-  if (document.getElementById('rows') == null) {
-    // web bundle 无 logger 依赖：装配失败诊断只能走 console（src/web 不在
-    // log 守卫扫描面，spec C31）。
-    // prettier-ignore
-    console.error('[chat-transcript] 装配未完成，不发 ready：壳元素未命中（#rows），交由宿主 8s 超时兜底落错误态。');
-    return;
-  }
-  post('ready', {
-    version: TRANSCRIPT_READY_VERSION,
-    capabilities: TRANSCRIPT_CAPABILITIES,
-    readyState: document.readyState,
-  });
+    // ready 闸门：转录装配面唯一可检的壳锚是 #rows（行列表挂载点；#menu-portal /
+    // #mermaid-viewer-portal 缺失只影响菜单/全屏，不构成白屏级失败，不设闸）。
+    // 壳 id 漂移时 renderRows 会静默跳过——同合成包闸门一样，此处直接返回把信号
+    // 交回宿主超时兜底，「ready 不来」本身就是最有效的装配失败诊断。
+    if (document.getElementById('rows') == null) {
+        // web bundle 无 logger 依赖：装配失败诊断只能走 console（src/web 不在
+        // log 守卫扫描面，spec C31）。
+        // prettier-ignore
+        console.error('[chat-transcript] 装配未完成，不发 ready：壳元素未命中（#rows），交由宿主 8s 超时兜底落错误态。');
+        return;
+    }
+    post('ready', {
+        version: TRANSCRIPT_READY_VERSION,
+        capabilities: TRANSCRIPT_CAPABILITIES,
+        readyState: document.readyState,
+    });
 }
 
 if (document.readyState === 'loading') {
-  // createTranscriptRuntime 内部经 startTranscriptBoot 先注册自己的 DOMContentLoaded
-  // 回调（bindChannel 同步执行），本回调注册序在其后——同一次 DOMContentLoaded 里
-  // boot 一定先于 ready 跑完，顺序由注册序保证，不需要模块级可变 flag。
-  document.addEventListener('DOMContentLoaded', emitTranscriptReady);
+    // createTranscriptRuntime 内部经 startTranscriptBoot 先注册自己的 DOMContentLoaded
+    // 回调（bindChannel 同步执行），本回调注册序在其后——同一次 DOMContentLoaded 里
+    // boot 一定先于 ready 跑完，顺序由注册序保证，不需要模块级可变 flag。
+    document.addEventListener('DOMContentLoaded', emitTranscriptReady);
 } else {
-  emitTranscriptReady();
+    emitTranscriptReady();
 }

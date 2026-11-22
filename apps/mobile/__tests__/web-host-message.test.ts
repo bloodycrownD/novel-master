@@ -8,57 +8,57 @@ import {join} from 'node:path';
 import {HostMessageChannel} from '../src/web/shared/host-message-channel';
 
 describe('shared/host-message-channel 纯函数', () => {
-  it('parseHostMessage：JSON 字符串解析（chat 宽容口径）', () => {
-    expect(
-      HostMessageChannel.parse('{"v":1,"type":"init","payload":{"theme":{}}}'),
-    ).toEqual({
-      v: 1,
-      type: 'init',
-      payload: {theme: {}},
+    it('parseHostMessage：JSON 字符串解析（chat 宽容口径）', () => {
+        expect(
+            HostMessageChannel.parse('{"v":1,"type":"init","payload":{"theme":{}}}'),
+        ).toEqual({
+            v: 1,
+            type: 'init',
+            payload: {theme: {}},
+        });
     });
-  });
 
-  it('parseHostMessage：对象型 raw 直通（宿主直接 postMessage 对象不丢消息）', () => {
-    const raw = {v: 1, type: 'init', payload: {}};
-    expect(HostMessageChannel.parse(raw)).toBe(raw);
-  });
+    it('parseHostMessage：对象型 raw 直通（宿主直接 postMessage 对象不丢消息）', () => {
+        const raw = {v: 1, type: 'init', payload: {}};
+        expect(HostMessageChannel.parse(raw)).toBe(raw);
+    });
 
-  it('parseHostMessage：坏 JSON / 非对象 / null 一律丢弃返回 null', () => {
-    expect(HostMessageChannel.parse('not json')).toBeNull();
-    expect(HostMessageChannel.parse('123')).toBeNull();
-    expect(HostMessageChannel.parse('null')).toBeNull();
-    expect(HostMessageChannel.parse(null)).toBeNull();
-    expect(HostMessageChannel.parse(undefined)).toBeNull();
-  });
+    it('parseHostMessage：坏 JSON / 非对象 / null 一律丢弃返回 null', () => {
+        expect(HostMessageChannel.parse('not json')).toBeNull();
+        expect(HostMessageChannel.parse('123')).toBeNull();
+        expect(HostMessageChannel.parse('null')).toBeNull();
+        expect(HostMessageChannel.parse(null)).toBeNull();
+        expect(HostMessageChannel.parse(undefined)).toBeNull();
+    });
 
-  it('matchHostMessage：v 不匹配被丢弃（字符串与对象两形态）', () => {
-    expect(
-      HostMessageChannel.match(JSON.stringify({v: 2, type: 'init'}), 1),
-    ).toBeNull();
-    expect(HostMessageChannel.match({v: 2, type: 'init'}, 1)).toBeNull();
-    expect(HostMessageChannel.match({v: undefined, type: 'init'}, 1)).toBeNull();
-  });
+    it('matchHostMessage：v 不匹配被丢弃（字符串与对象两形态）', () => {
+        expect(
+            HostMessageChannel.match(JSON.stringify({v: 2, type: 'init'}), 1),
+        ).toBeNull();
+        expect(HostMessageChannel.match({v: 2, type: 'init'}, 1)).toBeNull();
+        expect(HostMessageChannel.match({v: undefined, type: 'init'}, 1)).toBeNull();
+    });
 
-  it('matchHostMessage：type 缺失被丢弃（web/A-2 对齐另两域）', () => {
-    expect(HostMessageChannel.match({v: 1}, 1)).toBeNull();
-    expect(HostMessageChannel.match({v: 1, type: ''}, 1)).toBeNull();
-    expect(HostMessageChannel.match(JSON.stringify({v: 1, payload: {}}), 1)).toBeNull();
-  });
+    it('matchHostMessage：type 缺失被丢弃（web/A-2 对齐另两域）', () => {
+        expect(HostMessageChannel.match({v: 1}, 1)).toBeNull();
+        expect(HostMessageChannel.match({v: 1, type: ''}, 1)).toBeNull();
+        expect(HostMessageChannel.match(JSON.stringify({v: 1, payload: {}}), 1)).toBeNull();
+    });
 
-  it('matchHostMessage：合法 envelope 直通（v/type/payload 齐全）', () => {
-    const msg = {v: 1, type: 'init', payload: {theme: {}}};
-    expect(HostMessageChannel.match(msg, 1)).toEqual(msg);
-    expect(HostMessageChannel.match(JSON.stringify(msg), 1)).toEqual(msg);
-  });
+    it('matchHostMessage：合法 envelope 直通（v/type/payload 齐全）', () => {
+        const msg = {v: 1, type: 'init', payload: {theme: {}}};
+        expect(HostMessageChannel.match(msg, 1)).toEqual(msg);
+        expect(HostMessageChannel.match(JSON.stringify(msg), 1)).toEqual(msg);
+    });
 });
 
 describe('shared/host-message-channel 源码契约（双注册）', () => {
-  it('bindHostMessageChannel 统一 document + window 双注册', () => {
-    const src = readFileSync(
-      join(__dirname, '../src/web/shared/host-message-channel.ts'),
-      'utf8',
-    );
-    expect(src).toContain("document.addEventListener('message'");
-    expect(src).toContain("window.addEventListener('message'");
-  });
+    it('bindHostMessageChannel 统一 document + window 双注册', () => {
+        const src = readFileSync(
+            join(__dirname, '../src/web/shared/host-message-channel.ts'),
+            'utf8',
+        );
+        expect(src).toContain("document.addEventListener('message'");
+        expect(src).toContain("window.addEventListener('message'");
+    });
 });

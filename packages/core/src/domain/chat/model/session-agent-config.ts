@@ -16,8 +16,8 @@
  * - `modelId`：可选，覆盖 agent pin 的模型。
  */
 export type SessionAgentConfig = {
-  readonly agentId: string;
-  readonly modelId?: string;
+    readonly agentId: string;
+    readonly modelId?: string;
 };
 
 /**
@@ -33,6 +33,6 @@ export type SessionAgentConfig = {
  * 调用方不用自己保证。
  */
 export type SessionAgentConfigPatch = {
-  readonly agentId?: string;
-  readonly modelId?: string | null;
+    readonly agentId?: string;
+    readonly modelId?: string | null;
 };

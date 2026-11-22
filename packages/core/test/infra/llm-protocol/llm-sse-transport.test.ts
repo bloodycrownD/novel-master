@@ -5,511 +5,446 @@ import {  LlmSseTransport  } from "../../../src/infra/llm-protocol/logic/llm-sse
 import {  DEFAULT_TICK_MS  } from "../../../src/infra/llm-protocol/logic/sse-chunk-emitter.js";
 
 afterEach(() => {
-  LlmSseTransport.resetShouldUseXhrCacheForTests();
-  mock.timers.reset();
+    LlmSseTransport.resetShouldUseXhrCacheForTests();
+    mock.timers.reset();
 });
 
 describe("llm-sse-transport", () => {
-  it("TRANS-01: fetch path delivers multiple onChunk calls", async () => {
-    LlmSseTransport.setShouldUseXhrOverrideForTests(false);
+    it("TRANS-01: fetch path delivers multiple onChunk calls", async () => {
+        LlmSseTransport.setShouldUseXhrOverrideForTests(false);
 
-    const ssePart1 = 'data: {"choices":[{"delta":{"content":"A"}}]}\n\n';
-    const ssePart2 = 'data: {"choices":[{"delta":{"content":"B"}}]}\n\n';
-    const encoder = new TextEncoder();
+        const ssePart1 = 'data: {"choices":[{"delta":{"content":"A"}}]}\n\n';
+        const ssePart2 = 'data: {"choices":[{"delta":{"content":"B"}}]}\n\n';
+        const encoder = new TextEncoder();
 
-    const fetchFn = mock.fn(async () => {
-      const body = new ReadableStream<Uint8Array>({
-        start(controller) {
-          controller.enqueue(encoder.encode(ssePart1));
-          controller.enqueue(encoder.encode(ssePart2));
-          controller.close();
-        },
-      });
-      return new Response(body, {
-        status: 200,
-        headers: { "Content-Type": "text/event-stream" },
-      });
-    });
-
-    const chunks: string[] = [];
-    const result = await LlmSseTransport.post(
-      "https://api.example.com/v1/chat/completions",
-      {
-        method: "POST",
-        headers: { Authorization: "Bearer sk-test" },
-        body: "{}",
-      },
-      (chunk) => chunks.push(chunk),
-      undefined,
-      { fetchFn: fetchFn as typeof fetch },
-    );
-
-    assert.equal(result.status, 200);
-    assert.equal(chunks.length, 2);
-    assert.ok(chunks[0]!.includes('"content":"A"'));
-    assert.ok(chunks[1]!.includes('"content":"B"'));
-  });
-
-  it("TRANS-02: XHR onprogress delivers incremental chunks", async () => {
-    mock.timers.enable({ apis: ["setInterval"] });
-    LlmSseTransport.setShouldUseXhrOverrideForTests(true);
-
-    type XhrInstance = {
-      open: ReturnType<typeof mock.fn>;
-      setRequestHeader: ReturnType<typeof mock.fn>;
-      send: ReturnType<typeof mock.fn>;
-      onprogress: (() => void) | null;
-      onload: (() => void) | null;
-      onerror: (() => void) | null;
-      responseText: string;
-      status: number;
-      getResponseHeader: (name: string) => string | null;
-    };
-
-    let lastXhr: XhrInstance | undefined;
-
-    class MockXMLHttpRequest {
-      open = mock.fn();
-      setRequestHeader = mock.fn();
-      send = mock.fn(() => {
-        lastXhr!.responseText = 'data: {"x":1}\n\n';
-        lastXhr!.onprogress?.();
-        mock.timers.tick(DEFAULT_TICK_MS);
-        lastXhr!.responseText += 'data: {"x":2}\n\n';
-        lastXhr!.onprogress?.();
-        mock.timers.tick(DEFAULT_TICK_MS);
-        lastXhr!.status = 200;
-        lastXhr!.onload?.();
-      });
-      onprogress: (() => void) | null = null;
-      onload: (() => void) | null = null;
-      onerror: (() => void) | null = null;
-      responseText = "";
-      status = 0;
-      getResponseHeader = mock.fn(() => "text/event-stream");
-
-      constructor() {
-        lastXhr = this;
-      }
-    }
-
-    const origXhr = globalThis.XMLHttpRequest;
-    (globalThis as { XMLHttpRequest: typeof XMLHttpRequest }).XMLHttpRequest =
-      MockXMLHttpRequest as unknown as typeof XMLHttpRequest;
-
-    try {
-      const chunks: string[] = [];
-      const promise = LlmSseTransport.post(
-        "https://api.example.com/v1/chat/completions",
-        {
-          method: "POST",
-          headers: { Authorization: "Bearer sk-test" },
-          body: "{}",
-        },
-        (chunk) => chunks.push(chunk),
-      );
-      await promise;
-
-      assert.equal(chunks.length, 2);
-      assert.ok(chunks[0]!.includes('"x":1'));
-      assert.ok(chunks[1]!.includes('"x":2'));
-      assert.equal(lastXhr!.open.mock.calls[0]?.arguments[0], "POST");
-    } finally {
-      (globalThis as { XMLHttpRequest: typeof XMLHttpRequest }).XMLHttpRequest =
-        origXhr;
-    }
-  });
-
-  it("U-04: burst onprogress throttles onChunk and onload preserves full text", async () => {
-    mock.timers.enable({ apis: ["setInterval"] });
-    LlmSseTransport.setShouldUseXhrOverrideForTests(true);
-
-    const burst = "x".repeat(100 * 1024);
-
-    class MockXMLHttpRequest {
-      open = mock.fn();
-      setRequestHeader = mock.fn();
-      send = mock.fn(function (this: MockXMLHttpRequest) {
-        this.responseText = burst;
-        this.onprogress?.();
-        for (let i = 0; i < 10; i++) {
-          mock.timers.tick(DEFAULT_TICK_MS);
-        }
-        this.status = 200;
-        this.onload?.();
-      });
-      onprogress: (() => void) | null = null;
-      onload: (() => void) | null = null;
-      onerror: (() => void) | null = null;
-      responseText = "";
-      status = 0;
-      getResponseHeader = mock.fn(() => "text/event-stream");
-    }
-
-    const origXhr = globalThis.XMLHttpRequest;
-    (globalThis as { XMLHttpRequest: typeof XMLHttpRequest }).XMLHttpRequest =
-      MockXMLHttpRequest as unknown as typeof XMLHttpRequest;
-
-    try {
-      const chunks: string[] = [];
-      await LlmSseTransport.post(
-        "https://api.example.com/v1/chat/completions",
-        { method: "POST", body: "{}" },
-        (chunk) => chunks.push(chunk),
-      );
-
-      assert.ok(chunks.length < burst.length);
-      assert.equal(chunks.join(""), burst);
-    } finally {
-      (globalThis as { XMLHttpRequest: typeof XMLHttpRequest }).XMLHttpRequest =
-        origXhr;
-    }
-  });
-
-  it("U-05: onload-only delivery emits full responseText", async () => {
-    LlmSseTransport.setShouldUseXhrOverrideForTests(true);
-
-    const fullText = 'data: {"done":true}\n\n';
-
-    class MockXMLHttpRequest {
-      open = mock.fn();
-      setRequestHeader = mock.fn();
-      send = mock.fn(function (this: MockXMLHttpRequest) {
-        this.responseText = fullText;
-        this.status = 200;
-        this.onload?.();
-      });
-      onprogress: (() => void) | null = null;
-      onload: (() => void) | null = null;
-      onerror: (() => void) | null = null;
-      responseText = "";
-      status = 0;
-      getResponseHeader = mock.fn(() => "text/event-stream");
-    }
-
-    const origXhr = globalThis.XMLHttpRequest;
-    (globalThis as { XMLHttpRequest: typeof XMLHttpRequest }).XMLHttpRequest =
-      MockXMLHttpRequest as unknown as typeof XMLHttpRequest;
-
-    try {
-      const chunks: string[] = [];
-      await LlmSseTransport.post(
-        "https://api.example.com/v1/chat/completions",
-        { method: "POST", body: "{}" },
-        (chunk) => chunks.push(chunk),
-      );
-
-      assert.equal(chunks.join(""), fullText);
-    } finally {
-      (globalThis as { XMLHttpRequest: typeof XMLHttpRequest }).XMLHttpRequest =
-        origXhr;
-    }
-  });
-
-  it("U-08: signal.abort before or during XHR rejects with ProviderError", async () => {
-    mock.timers.enable({ apis: ["setInterval"] });
-    LlmSseTransport.setShouldUseXhrOverrideForTests(true);
-
-    type XhrInstance = {
-      abort: ReturnType<typeof mock.fn>;
-      send: ReturnType<typeof mock.fn>;
-      onabort: (() => void) | null;
-    };
-
-    let lastXhr: XhrInstance | undefined;
-
-    class MockXMLHttpRequest {
-      open = mock.fn();
-      setRequestHeader = mock.fn();
-      abort = mock.fn(function (this: MockXMLHttpRequest) {
-        this.onabort?.();
-      });
-      send = mock.fn(function (this: MockXMLHttpRequest) {
-        // Leave request in-flight until aborted.
-      });
-      onprogress: (() => void) | null = null;
-      onload: (() => void) | null = null;
-      onerror: (() => void) | null = null;
-      onabort: (() => void) | null = null;
-      responseText = "";
-      status = 0;
-      getResponseHeader = mock.fn(() => "text/event-stream");
-
-      constructor() {
-        lastXhr = this;
-      }
-    }
-
-    const origXhr = globalThis.XMLHttpRequest;
-    (globalThis as { XMLHttpRequest: typeof XMLHttpRequest }).XMLHttpRequest =
-      MockXMLHttpRequest as unknown as typeof XMLHttpRequest;
-
-    try {
-      const preAborted = new AbortController();
-      preAborted.abort();
-      await assert.rejects(
-        () =>
-          LlmSseTransport.post(
-            "https://api.example.com/v1/chat/completions",
-            { method: "POST", body: "{}" },
-            () => {},
-            "test-provider",
-            { signal: preAborted.signal },
-          ),
-        (err: unknown) => {
-          assert.ok(AppErrorOps.is(err, "PROVIDER_HTTP_ERROR"));
-          assert.match(String(err.message), /Request aborted/);
-          return true;
-        },
-      );
-
-      const controller = new AbortController();
-      const promise = LlmSseTransport.post(
-        "https://api.example.com/v1/chat/completions",
-        { method: "POST", body: "{}" },
-        () => {},
-        "test-provider",
-        { signal: controller.signal },
-      );
-
-      controller.abort();
-
-      await assert.rejects(
-        promise,
-        (err: unknown) => {
-          assert.ok(AppErrorOps.is(err, "PROVIDER_HTTP_ERROR"));
-          assert.match(String(err.message), /Request aborted/);
-          return true;
-        },
-      );
-
-      assert.equal(lastXhr!.abort.mock.calls.length, 1);
-      assert.equal(lastXhr!.send.mock.calls.length, 1);
-    } finally {
-      (globalThis as { XMLHttpRequest: typeof XMLHttpRequest }).XMLHttpRequest =
-        origXhr;
-    }
-  });
-
-  it("U-06: no stall abort after long idle without onprogress", async () => {
-    mock.timers.enable({ apis: ["setInterval"] });
-    LlmSseTransport.setShouldUseXhrOverrideForTests(true);
-
-    type XhrInstance = {
-      abort: ReturnType<typeof mock.fn>;
-      onload: (() => void) | null;
-      responseText: string;
-      status: number;
-      getResponseHeader: (name: string) => string | null;
-    };
-
-    let lastXhr: XhrInstance | undefined;
-
-    class MockXMLHttpRequest {
-      open = mock.fn();
-      setRequestHeader = mock.fn();
-      abort = mock.fn();
-      send = mock.fn(() => {
-        // Simulate extended thinking silence: no onprogress for 120s.
-      });
-      onprogress: (() => void) | null = null;
-      onload: (() => void) | null = null;
-      onerror: (() => void) | null = null;
-      onabort: (() => void) | null = null;
-      responseText = "";
-      status = 0;
-      getResponseHeader = mock.fn(() => "text/event-stream");
-
-      constructor() {
-        lastXhr = this;
-      }
-    }
-
-    const origXhr = globalThis.XMLHttpRequest;
-    (globalThis as { XMLHttpRequest: typeof XMLHttpRequest }).XMLHttpRequest =
-      MockXMLHttpRequest as unknown as typeof XMLHttpRequest;
-
-    try {
-      const chunks: string[] = [];
-      const promise = LlmSseTransport.post(
-        "https://api.example.com/v1/chat/completions",
-        { method: "POST", body: "{}" },
-        (chunk) => chunks.push(chunk),
-      );
-
-      // Advance past the old v1.0.2 90s stall window; transport must not auto-abort.
-      mock.timers.tick(120_000);
-      assert.equal(lastXhr!.abort.mock.calls.length, 0);
-
-      lastXhr!.responseText = "data: late\n\n";
-      lastXhr!.status = 200;
-      lastXhr!.onload?.();
-
-      const result = await promise;
-      assert.equal(result.status, 200);
-      assert.equal(chunks.join(""), "data: late\n\n");
-    } finally {
-      (globalThis as { XMLHttpRequest: typeof XMLHttpRequest }).XMLHttpRequest =
-        origXhr;
-    }
-  });
-
-  it("TRANS-03b: XHR HTTP 401 throws ProviderError", async () => {
-    LlmSseTransport.setShouldUseXhrOverrideForTests(true);
-
-    class MockXMLHttpRequest {
-      open = mock.fn();
-      setRequestHeader = mock.fn();
-      send = mock.fn(function (this: MockXMLHttpRequest) {
-        this.responseText = "Unauthorized";
-        this.status = 401;
-        this.onload?.();
-      });
-      onprogress: (() => void) | null = null;
-      onload: (() => void) | null = null;
-      onerror: (() => void) | null = null;
-      responseText = "";
-      status = 0;
-      getResponseHeader = mock.fn(() => "application/json");
-    }
-
-    const origXhr = globalThis.XMLHttpRequest;
-    (globalThis as { XMLHttpRequest: typeof XMLHttpRequest }).XMLHttpRequest =
-      MockXMLHttpRequest as unknown as typeof XMLHttpRequest;
-
-    try {
-      await assert.rejects(
-        () =>
-          LlmSseTransport.post(
-            "https://api.example.com/v1/chat/completions",
-            { method: "POST", body: "{}" },
-            () => {},
-            "openai-test",
-          ),
-        (err: unknown) => {
-          assert.ok(AppErrorOps.is(err, "PROVIDER_HTTP_ERROR"));
-          assert.match(String(err.message), /401/);
-          return true;
-        },
-      );
-    } finally {
-      (globalThis as { XMLHttpRequest: typeof XMLHttpRequest }).XMLHttpRequest =
-        origXhr;
-    }
-  });
-
-  it("TRANS-03: HTTP 401 throws ProviderError", async () => {
-    LlmSseTransport.setShouldUseXhrOverrideForTests(false);
-
-    const fetchFn = mock.fn(async () => {
-      return new Response("Unauthorized", { status: 401 });
-    });
-
-    await assert.rejects(
-      () =>
-        LlmSseTransport.post(
-          "https://api.example.com/v1/chat/completions",
-          { method: "POST", body: "{}" },
-          () => {},
-          "openai-test",
-          { fetchFn: fetchFn as typeof fetch },
-        ),
-      (err: unknown) => {
-        assert.ok(AppErrorOps.is(err, "PROVIDER_HTTP_ERROR"));
-        assert.match(String(err.message), /401/);
-        return true;
-      },
-    );
-  });
-
-  it("TRANS-04: React Native navigator uses XHR not fetch", async () => {
-    const origNav = globalThis.navigator;
-    const origXhr = globalThis.XMLHttpRequest;
-
-    class MockXMLHttpRequest {
-      open = mock.fn();
-      setRequestHeader = mock.fn();
-      send = mock.fn(function (this: MockXMLHttpRequest) {
-        this.responseText = "data: ok\n\n";
-        this.status = 200;
-        this.onload?.();
-      });
-      onprogress: (() => void) | null = null;
-      onload: (() => void) | null = null;
-      onerror: (() => void) | null = null;
-      responseText = "";
-      status = 0;
-      getResponseHeader = mock.fn(() => "text/event-stream");
-    }
-
-    Object.defineProperty(globalThis, "navigator", {
-      value: { product: "ReactNative" },
-      configurable: true,
-      writable: true,
-    });
-    (globalThis as { XMLHttpRequest: typeof XMLHttpRequest }).XMLHttpRequest =
-      MockXMLHttpRequest as unknown as typeof XMLHttpRequest;
-
-    LlmSseTransport.resetShouldUseXhrCacheForTests();
-    assert.equal(LlmSseTransport.shouldUseXhr(), true);
-
-    const fetchFn = mock.fn(async () => {
-      throw new Error("fetch must not be called on React Native");
-    });
-
-    try {
-      const chunks: string[] = [];
-      await LlmSseTransport.post(
-        "https://api.example.com/v1/chat/completions",
-        { method: "POST", body: "{}" },
-        (chunk) => chunks.push(chunk),
-        undefined,
-        { fetchFn: fetchFn as typeof fetch },
-      );
-
-      assert.equal(fetchFn.mock.calls.length, 0);
-      assert.equal(chunks.length, 1);
-      assert.ok(chunks[0]!.includes("ok"));
-    } finally {
-      if (origNav === undefined) {
-        Reflect.deleteProperty(globalThis, "navigator");
-      } else {
-        Object.defineProperty(globalThis, "navigator", {
-          value: origNav,
-          configurable: true,
-          writable: true,
+        const fetchFn = mock.fn(async () => {
+            const body = new ReadableStream<Uint8Array>({
+                start(controller) {
+                    controller.enqueue(encoder.encode(ssePart1));
+                    controller.enqueue(encoder.encode(ssePart2));
+                    controller.close();
+                },
+            });
+            return new Response(body, {
+                status: 200,
+                headers: { "Content-Type": "text/event-stream" },
+            });
         });
-      }
-      (globalThis as { XMLHttpRequest: typeof XMLHttpRequest }).XMLHttpRequest =
-        origXhr;
-      LlmSseTransport.resetShouldUseXhrCacheForTests();
-    }
-  });
 
-  it("fetch path throws when response body is null", async () => {
-    LlmSseTransport.setShouldUseXhrOverrideForTests(false);
+        const chunks: string[] = [];
+        const result = await LlmSseTransport.post({ url: "https://api.example.com/v1/chat/completions", init: { method: "POST", headers: { Authorization: "Bearer sk-test" }, body: "{}" }, onChunk: (chunk) => chunks.push(chunk), fetchFn: fetchFn as typeof fetch });
 
-    const fetchFn = mock.fn(async () => {
-      return new Response(null, {
-        status: 200,
-        headers: { "Content-Type": "text/event-stream" },
-      });
+        assert.equal(result.status, 200);
+        assert.equal(chunks.length, 2);
+        assert.ok(chunks[0]!.includes('"content":"A"'));
+        assert.ok(chunks[1]!.includes('"content":"B"'));
     });
 
-    await assert.rejects(
-      () =>
-        LlmSseTransport.post(
-          "https://api.example.com/v1/chat/completions",
-          { method: "POST", body: "{}" },
-          () => {},
-          undefined,
-          { fetchFn: fetchFn as typeof fetch },
-        ),
-      (err: unknown) => {
-        assert.ok(AppErrorOps.is(err, "PROVIDER_HTTP_ERROR"));
-        assert.match(String(err.message), /does not support fetch stream bodies/);
-        return true;
-      },
-    );
-  });
+    it("TRANS-02: XHR onprogress delivers incremental chunks", async () => {
+        mock.timers.enable({ apis: ["setInterval"] });
+        LlmSseTransport.setShouldUseXhrOverrideForTests(true);
+
+        type XhrInstance = {
+            open: ReturnType<typeof mock.fn>;
+            setRequestHeader: ReturnType<typeof mock.fn>;
+            send: ReturnType<typeof mock.fn>;
+            onprogress: (() => void) | null;
+            onload: (() => void) | null;
+            onerror: (() => void) | null;
+            responseText: string;
+            status: number;
+            getResponseHeader: (name: string) => string | null;
+        };
+
+        let lastXhr: XhrInstance | undefined;
+
+        class MockXMLHttpRequest {
+            open = mock.fn();
+            setRequestHeader = mock.fn();
+            send = mock.fn(() => {
+                lastXhr!.responseText = 'data: {"x":1}\n\n';
+                lastXhr!.onprogress?.();
+                mock.timers.tick(DEFAULT_TICK_MS);
+                lastXhr!.responseText += 'data: {"x":2}\n\n';
+                lastXhr!.onprogress?.();
+                mock.timers.tick(DEFAULT_TICK_MS);
+                lastXhr!.status = 200;
+                lastXhr!.onload?.();
+            });
+            onprogress: (() => void) | null = null;
+            onload: (() => void) | null = null;
+            onerror: (() => void) | null = null;
+            responseText = "";
+            status = 0;
+            getResponseHeader = mock.fn(() => "text/event-stream");
+
+            constructor() {
+                lastXhr = this;
+            }
+        }
+
+        const origXhr = globalThis.XMLHttpRequest;
+        (globalThis as { XMLHttpRequest: typeof XMLHttpRequest }).XMLHttpRequest =
+            MockXMLHttpRequest as unknown as typeof XMLHttpRequest;
+
+        try {
+            const chunks: string[] = [];
+            const promise = LlmSseTransport.post({ url: "https://api.example.com/v1/chat/completions", init: { method: "POST", headers: { Authorization: "Bearer sk-test" }, body: "{}" }, onChunk: (chunk) => chunks.push(chunk) });
+            await promise;
+
+            assert.equal(chunks.length, 2);
+            assert.ok(chunks[0]!.includes('"x":1'));
+            assert.ok(chunks[1]!.includes('"x":2'));
+            assert.equal(lastXhr!.open.mock.calls[0]?.arguments[0], "POST");
+        } finally {
+            (globalThis as { XMLHttpRequest: typeof XMLHttpRequest }).XMLHttpRequest =
+                origXhr;
+        }
+    });
+
+    it("U-04: burst onprogress throttles onChunk and onload preserves full text", async () => {
+        mock.timers.enable({ apis: ["setInterval"] });
+        LlmSseTransport.setShouldUseXhrOverrideForTests(true);
+
+        const burst = "x".repeat(100 * 1024);
+
+        class MockXMLHttpRequest {
+            open = mock.fn();
+            setRequestHeader = mock.fn();
+            send = mock.fn(function (this: MockXMLHttpRequest) {
+                this.responseText = burst;
+                this.onprogress?.();
+                for (let i = 0; i < 10; i++) {
+                    mock.timers.tick(DEFAULT_TICK_MS);
+                }
+                this.status = 200;
+                this.onload?.();
+            });
+            onprogress: (() => void) | null = null;
+            onload: (() => void) | null = null;
+            onerror: (() => void) | null = null;
+            responseText = "";
+            status = 0;
+            getResponseHeader = mock.fn(() => "text/event-stream");
+        }
+
+        const origXhr = globalThis.XMLHttpRequest;
+        (globalThis as { XMLHttpRequest: typeof XMLHttpRequest }).XMLHttpRequest =
+            MockXMLHttpRequest as unknown as typeof XMLHttpRequest;
+
+        try {
+            const chunks: string[] = [];
+            await LlmSseTransport.post({ url: "https://api.example.com/v1/chat/completions", init: { method: "POST", body: "{}" }, onChunk: (chunk) => chunks.push(chunk) });
+
+            assert.ok(chunks.length < burst.length);
+            assert.equal(chunks.join(""), burst);
+        } finally {
+            (globalThis as { XMLHttpRequest: typeof XMLHttpRequest }).XMLHttpRequest =
+                origXhr;
+        }
+    });
+
+    it("U-05: onload-only delivery emits full responseText", async () => {
+        LlmSseTransport.setShouldUseXhrOverrideForTests(true);
+
+        const fullText = 'data: {"done":true}\n\n';
+
+        class MockXMLHttpRequest {
+            open = mock.fn();
+            setRequestHeader = mock.fn();
+            send = mock.fn(function (this: MockXMLHttpRequest) {
+                this.responseText = fullText;
+                this.status = 200;
+                this.onload?.();
+            });
+            onprogress: (() => void) | null = null;
+            onload: (() => void) | null = null;
+            onerror: (() => void) | null = null;
+            responseText = "";
+            status = 0;
+            getResponseHeader = mock.fn(() => "text/event-stream");
+        }
+
+        const origXhr = globalThis.XMLHttpRequest;
+        (globalThis as { XMLHttpRequest: typeof XMLHttpRequest }).XMLHttpRequest =
+            MockXMLHttpRequest as unknown as typeof XMLHttpRequest;
+
+        try {
+            const chunks: string[] = [];
+            await LlmSseTransport.post({ url: "https://api.example.com/v1/chat/completions", init: { method: "POST", body: "{}" }, onChunk: (chunk) => chunks.push(chunk) });
+
+            assert.equal(chunks.join(""), fullText);
+        } finally {
+            (globalThis as { XMLHttpRequest: typeof XMLHttpRequest }).XMLHttpRequest =
+                origXhr;
+        }
+    });
+
+    it("U-08: signal.abort before or during XHR rejects with ProviderError", async () => {
+        mock.timers.enable({ apis: ["setInterval"] });
+        LlmSseTransport.setShouldUseXhrOverrideForTests(true);
+
+        type XhrInstance = {
+            abort: ReturnType<typeof mock.fn>;
+            send: ReturnType<typeof mock.fn>;
+            onabort: (() => void) | null;
+        };
+
+        let lastXhr: XhrInstance | undefined;
+
+        class MockXMLHttpRequest {
+            open = mock.fn();
+            setRequestHeader = mock.fn();
+            abort = mock.fn(function (this: MockXMLHttpRequest) {
+                this.onabort?.();
+            });
+            send = mock.fn(function (this: MockXMLHttpRequest) {
+                // Leave request in-flight until aborted.
+            });
+            onprogress: (() => void) | null = null;
+            onload: (() => void) | null = null;
+            onerror: (() => void) | null = null;
+            onabort: (() => void) | null = null;
+            responseText = "";
+            status = 0;
+            getResponseHeader = mock.fn(() => "text/event-stream");
+
+            constructor() {
+                lastXhr = this;
+            }
+        }
+
+        const origXhr = globalThis.XMLHttpRequest;
+        (globalThis as { XMLHttpRequest: typeof XMLHttpRequest }).XMLHttpRequest =
+            MockXMLHttpRequest as unknown as typeof XMLHttpRequest;
+
+        try {
+            const preAborted = new AbortController();
+            preAborted.abort();
+            await assert.rejects(
+                () =>
+                    LlmSseTransport.post({ url: "https://api.example.com/v1/chat/completions", init: { method: "POST", body: "{}" }, onChunk: () => {}, providerId: "test-provider", signal: preAborted.signal }),
+                (err: unknown) => {
+                    assert.ok(AppErrorOps.is(err, "PROVIDER_HTTP_ERROR"));
+                    assert.match(String(err.message), /Request aborted/);
+                    return true;
+                },
+            );
+
+            const controller = new AbortController();
+            const promise = LlmSseTransport.post({ url: "https://api.example.com/v1/chat/completions", init: { method: "POST", body: "{}" }, onChunk: () => {}, providerId: "test-provider", signal: controller.signal });
+
+            controller.abort();
+
+            await assert.rejects(
+                promise,
+                (err: unknown) => {
+                    assert.ok(AppErrorOps.is(err, "PROVIDER_HTTP_ERROR"));
+                    assert.match(String(err.message), /Request aborted/);
+                    return true;
+                },
+            );
+
+            assert.equal(lastXhr!.abort.mock.calls.length, 1);
+            assert.equal(lastXhr!.send.mock.calls.length, 1);
+        } finally {
+            (globalThis as { XMLHttpRequest: typeof XMLHttpRequest }).XMLHttpRequest =
+                origXhr;
+        }
+    });
+
+    it("U-06: no stall abort after long idle without onprogress", async () => {
+        mock.timers.enable({ apis: ["setInterval"] });
+        LlmSseTransport.setShouldUseXhrOverrideForTests(true);
+
+        type XhrInstance = {
+            abort: ReturnType<typeof mock.fn>;
+            onload: (() => void) | null;
+            responseText: string;
+            status: number;
+            getResponseHeader: (name: string) => string | null;
+        };
+
+        let lastXhr: XhrInstance | undefined;
+
+        class MockXMLHttpRequest {
+            open = mock.fn();
+            setRequestHeader = mock.fn();
+            abort = mock.fn();
+            send = mock.fn(() => {
+                // Simulate extended thinking silence: no onprogress for 120s.
+            });
+            onprogress: (() => void) | null = null;
+            onload: (() => void) | null = null;
+            onerror: (() => void) | null = null;
+            onabort: (() => void) | null = null;
+            responseText = "";
+            status = 0;
+            getResponseHeader = mock.fn(() => "text/event-stream");
+
+            constructor() {
+                lastXhr = this;
+            }
+        }
+
+        const origXhr = globalThis.XMLHttpRequest;
+        (globalThis as { XMLHttpRequest: typeof XMLHttpRequest }).XMLHttpRequest =
+            MockXMLHttpRequest as unknown as typeof XMLHttpRequest;
+
+        try {
+            const chunks: string[] = [];
+            const promise = LlmSseTransport.post({ url: "https://api.example.com/v1/chat/completions", init: { method: "POST", body: "{}" }, onChunk: (chunk) => chunks.push(chunk) });
+
+            // Advance past the old v1.0.2 90s stall window; transport must not auto-abort.
+            mock.timers.tick(120_000);
+            assert.equal(lastXhr!.abort.mock.calls.length, 0);
+
+            lastXhr!.responseText = "data: late\n\n";
+            lastXhr!.status = 200;
+            lastXhr!.onload?.();
+
+            const result = await promise;
+            assert.equal(result.status, 200);
+            assert.equal(chunks.join(""), "data: late\n\n");
+        } finally {
+            (globalThis as { XMLHttpRequest: typeof XMLHttpRequest }).XMLHttpRequest =
+                origXhr;
+        }
+    });
+
+    it("TRANS-03b: XHR HTTP 401 throws ProviderError", async () => {
+        LlmSseTransport.setShouldUseXhrOverrideForTests(true);
+
+        class MockXMLHttpRequest {
+            open = mock.fn();
+            setRequestHeader = mock.fn();
+            send = mock.fn(function (this: MockXMLHttpRequest) {
+                this.responseText = "Unauthorized";
+                this.status = 401;
+                this.onload?.();
+            });
+            onprogress: (() => void) | null = null;
+            onload: (() => void) | null = null;
+            onerror: (() => void) | null = null;
+            responseText = "";
+            status = 0;
+            getResponseHeader = mock.fn(() => "application/json");
+        }
+
+        const origXhr = globalThis.XMLHttpRequest;
+        (globalThis as { XMLHttpRequest: typeof XMLHttpRequest }).XMLHttpRequest =
+            MockXMLHttpRequest as unknown as typeof XMLHttpRequest;
+
+        try {
+            await assert.rejects(
+                () =>
+                    LlmSseTransport.post({ url: "https://api.example.com/v1/chat/completions", init: { method: "POST", body: "{}" }, onChunk: () => {}, providerId: "openai-test" }),
+                (err: unknown) => {
+                    assert.ok(AppErrorOps.is(err, "PROVIDER_HTTP_ERROR"));
+                    assert.match(String(err.message), /401/);
+                    return true;
+                },
+            );
+        } finally {
+            (globalThis as { XMLHttpRequest: typeof XMLHttpRequest }).XMLHttpRequest =
+                origXhr;
+        }
+    });
+
+    it("TRANS-03: HTTP 401 throws ProviderError", async () => {
+        LlmSseTransport.setShouldUseXhrOverrideForTests(false);
+
+        const fetchFn = mock.fn(async () => {
+            return new Response("Unauthorized", { status: 401 });
+        });
+
+        await assert.rejects(
+            () =>
+                LlmSseTransport.post({ url: "https://api.example.com/v1/chat/completions", init: { method: "POST", body: "{}" }, onChunk: () => {}, providerId: "openai-test", fetchFn: fetchFn as typeof fetch }),
+            (err: unknown) => {
+                assert.ok(AppErrorOps.is(err, "PROVIDER_HTTP_ERROR"));
+                assert.match(String(err.message), /401/);
+                return true;
+            },
+        );
+    });
+
+    it("TRANS-04: React Native navigator uses XHR not fetch", async () => {
+        const origNav = globalThis.navigator;
+        const origXhr = globalThis.XMLHttpRequest;
+
+        class MockXMLHttpRequest {
+            open = mock.fn();
+            setRequestHeader = mock.fn();
+            send = mock.fn(function (this: MockXMLHttpRequest) {
+                this.responseText = "data: ok\n\n";
+                this.status = 200;
+                this.onload?.();
+            });
+            onprogress: (() => void) | null = null;
+            onload: (() => void) | null = null;
+            onerror: (() => void) | null = null;
+            responseText = "";
+            status = 0;
+            getResponseHeader = mock.fn(() => "text/event-stream");
+        }
+
+        Object.defineProperty(globalThis, "navigator", {
+            value: { product: "ReactNative" },
+            configurable: true,
+            writable: true,
+        });
+        (globalThis as { XMLHttpRequest: typeof XMLHttpRequest }).XMLHttpRequest =
+            MockXMLHttpRequest as unknown as typeof XMLHttpRequest;
+
+        LlmSseTransport.resetShouldUseXhrCacheForTests();
+        assert.equal(LlmSseTransport.shouldUseXhr(), true);
+
+        const fetchFn = mock.fn(async () => {
+            throw new Error("fetch must not be called on React Native");
+        });
+
+        try {
+            const chunks: string[] = [];
+            await LlmSseTransport.post({ url: "https://api.example.com/v1/chat/completions", init: { method: "POST", body: "{}" }, onChunk: (chunk) => chunks.push(chunk), fetchFn: fetchFn as typeof fetch });
+
+            assert.equal(fetchFn.mock.calls.length, 0);
+            assert.equal(chunks.length, 1);
+            assert.ok(chunks[0]!.includes("ok"));
+        } finally {
+            if (origNav === undefined) {
+                Reflect.deleteProperty(globalThis, "navigator");
+            } else {
+                Object.defineProperty(globalThis, "navigator", {
+                    value: origNav,
+                    configurable: true,
+                    writable: true,
+                });
+            }
+            (globalThis as { XMLHttpRequest: typeof XMLHttpRequest }).XMLHttpRequest =
+                origXhr;
+            LlmSseTransport.resetShouldUseXhrCacheForTests();
+        }
+    });
+
+    it("fetch path throws when response body is null", async () => {
+        LlmSseTransport.setShouldUseXhrOverrideForTests(false);
+
+        const fetchFn = mock.fn(async () => {
+            return new Response(null, {
+                status: 200,
+                headers: { "Content-Type": "text/event-stream" },
+            });
+        });
+
+        await assert.rejects(
+            () =>
+                LlmSseTransport.post({ url: "https://api.example.com/v1/chat/completions", init: { method: "POST", body: "{}" }, onChunk: () => {}, fetchFn: fetchFn as typeof fetch }),
+            (err: unknown) => {
+                assert.ok(AppErrorOps.is(err, "PROVIDER_HTTP_ERROR"));
+                assert.match(String(err.message), /does not support fetch stream bodies/);
+                return true;
+            },
+        );
+    });
 });

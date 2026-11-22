@@ -13,70 +13,70 @@ import type { ChatMessageData } from "@/domain/chat/model/message.js";
 export type LlmProtocolKind = "openai" | "anthropic" | "gemini";
 
 export interface LlmListModelsResult {
-  readonly models: ReadonlyArray<{
-    readonly vendorModelId: string;
-    readonly displayName?: string;
-  }>;
+    readonly models: ReadonlyArray<{
+        readonly vendorModelId: string;
+        readonly displayName?: string;
+    }>;
 }
 
 export interface LlmToolDefinition {
-  readonly name: string;
-  readonly description: string;
-  readonly inputSchema: Record<string, unknown>;
+    readonly name: string;
+    readonly description: string;
+    readonly inputSchema: Record<string, unknown>;
 }
 
 export type LlmStreamEvent =
-  | { readonly type: "text-delta"; readonly text: string }
-  | { readonly type: "thinking-delta"; readonly text: string }
-  | {
-      /**
+    | { readonly type: "text-delta"; readonly text: string }
+    | { readonly type: "thinking-delta"; readonly text: string }
+    | {
+            /**
        * 流式对话中，当某次 tool call 的 input 对象已完整且 JSON 解析成功时 emit，
        * 每种协议每个 tool call 至多一次。Anthropic 在 content block 结束；
        * OpenAI/Gemini 在 arguments 字符串首次成为合法 JSON 时。
        * Stream 正常结束前可能已收到 `tool-use`；`done` 事件仍携带完整 `blocks`。
        */
-      readonly type: "tool-use";
-      readonly id: string;
-      readonly name: string;
-      readonly input: Record<string, unknown>;
-    }
-  | {
-      /**
+            readonly type: "tool-use";
+            readonly id: string;
+            readonly name: string;
+            readonly input: Record<string, unknown>;
+        }
+    | {
+            /**
        * 流中 token usage（本 step 请求口径的输出侧累计值）：anthropic 在
        * message_delta、gemini 在每个候选块到达且 `completionTokens` 累计值
        * 发生变化时 emit；openai 协议流中不 emit（仅 done 终值，由 runner
        * 在 step done 后补发事件）。消费侧取 `usage.completionTokens` 作
        * step 内累计，协议层不节流（上层合批/节流吸收）。
        */
-      readonly type: "usage";
-      readonly usage: LlmTokenUsage;
-    }
-  | { readonly type: "done"; readonly result: LlmChatResult };
+            readonly type: "usage";
+            readonly usage: LlmTokenUsage;
+        }
+    | { readonly type: "done"; readonly result: LlmChatResult };
 
 export interface LlmChatRequest {
-  readonly baseUrl: string;
-  readonly apiKey: string;
-  readonly vendorModelId: string;
-  readonly userContent: string;
-  readonly extraHeaders?: Readonly<Record<string, string>>;
-  /** When set, used instead of a single user message built from `userContent`. */
-  readonly history?: readonly ChatMessageData[];
-  /** Full session messages (including hidden) for Gemini tool_use id → name resolution. */
-  readonly toolUseLookupMessages?: readonly ChatMessageData[];
-  readonly system?: string;
-  readonly tools?: readonly LlmToolDefinition[];
-  readonly stream?: boolean;
-  readonly onStream?: (event: LlmStreamEvent) => void;
-  readonly sampling?: ModelSamplingParams;
-  /** 协议级思考参数；关闭或未传时 adapter 不写 wire 字段。 */
-  readonly thinking?: ModelThinkingParams;
-  /** 自定义参数：请求体组装最后一步原样合并进顶层，覆盖同名字段（含标准字段）。 */
-  readonly extraBody?: Readonly<Record<string, unknown>>;
-  /**
+    readonly baseUrl: string;
+    readonly apiKey: string;
+    readonly vendorModelId: string;
+    readonly userContent: string;
+    readonly extraHeaders?: Readonly<Record<string, string>>;
+    /** When set, used instead of a single user message built from `userContent`. */
+    readonly history?: readonly ChatMessageData[];
+    /** Full session messages (including hidden) for Gemini tool_use id → name resolution. */
+    readonly toolUseLookupMessages?: readonly ChatMessageData[];
+    readonly system?: string;
+    readonly tools?: readonly LlmToolDefinition[];
+    readonly stream?: boolean;
+    readonly onStream?: (event: LlmStreamEvent) => void;
+    readonly sampling?: ModelSamplingParams;
+    /** 协议级思考参数；关闭或未传时 adapter 不写 wire 字段。 */
+    readonly thinking?: ModelThinkingParams;
+    /** 自定义参数：请求体组装最后一步原样合并进顶层，覆盖同名字段（含标准字段）。 */
+    readonly extraBody?: Readonly<Record<string, unknown>>;
+    /**
    * 取消作用域（必填）：adapter 只消费 `scope.signal` 驱动 fetch / SSE 传输，
    * 不读 `scope.reason`（原因归上层判断）。`listModels` 同样把它透给网络请求。
    */
-  readonly scope: AbortScope;
+    readonly scope: AbortScope;
 }
 
 /**
@@ -90,38 +90,38 @@ export type LlmTokenUsage = MessageUsage;
 
 /** finish 路径 arguments JSON 解析失败时收集的元数据；不进入 ToolRunner。 */
 export interface DegradedToolCall {
-  readonly id: string;
-  readonly name: string;
-  /** 原始 arguments 片段（截断），供 tool_result content / 调试。 */
-  readonly rawArguments: string;
-  /** 固定为 ProviderError code。 */
-  readonly reason: "INVALID_TOOL_ARGUMENTS";
+    readonly id: string;
+    readonly name: string;
+    /** 原始 arguments 片段（截断），供 tool_result content / 调试。 */
+    readonly rawArguments: string;
+    /** 固定为 ProviderError code。 */
+    readonly reason: "INVALID_TOOL_ARGUMENTS";
 }
 
 export interface LlmChatResult {
-  readonly assistantText: string;
-  readonly blocks: readonly ContentBlock[];
-  readonly raw: unknown;
-  readonly usage?: LlmTokenUsage;
-  /** finish 降级项；与 blocks 中对应 tool_use（input={}）按 id 对齐。 */
-  readonly degradedToolCalls?: readonly DegradedToolCall[];
+    readonly assistantText: string;
+    readonly blocks: readonly ContentBlock[];
+    readonly raw: unknown;
+    readonly usage?: LlmTokenUsage;
+    /** finish 降级项；与 blocks 中对应 tool_use（input={}）按 id 对齐。 */
+    readonly degradedToolCalls?: readonly DegradedToolCall[];
 }
 
 export interface LlmProtocolAdapter {
-  readonly kind: LlmProtocolKind;
-  listModels(
-    req: Omit<
-      LlmChatRequest,
-      | "vendorModelId"
-      | "userContent"
-      | "history"
-      | "system"
-      | "tools"
-      | "stream"
-      | "onStream"
-    >
-  ): Promise<LlmListModelsResult>;
-  chat(req: LlmChatRequest): Promise<LlmChatResult>;
+    readonly kind: LlmProtocolKind;
+    listModels(
+        req: Omit<
+            LlmChatRequest,
+            | "vendorModelId"
+            | "userContent"
+            | "history"
+            | "system"
+            | "tools"
+            | "stream"
+            | "onStream"
+        >
+    ): Promise<LlmListModelsResult>;
+    chat(req: LlmChatRequest): Promise<LlmChatResult>;
 }
 
 export type FetchFn = typeof globalThis.fetch;

@@ -16,7 +16,7 @@ import {join} from 'node:path';
 const root = join(__dirname, '..');
 
 function readSrc(...parts: string[]): string {
-  return readFileSync(join(root, ...parts), 'utf8');
+    return readFileSync(join(root, ...parts), 'utf8');
 }
 
 /**
@@ -24,115 +24,116 @@ function readSrc(...parts: string[]): string {
  * 排版一改就假红，这里统一归一空白后再断言接线。
  */
 function flatSrc(...parts: string[]): string {
-  return readSrc(...parts).replace(/\s+/g, ' ');
+    return readSrc(...parts).replace(/\s+/g, ' ');
 }
 
 describe('vfs 导入导出菜单源码契约（vfs-import-export-menu / Step 5）', () => {
-  it('T-MM1：「导入」「导出」为模块级同源常量，旧三项字面量全部退役', () => {
-    const src = readSrc('src/components/vfs/VfsFileManager.tsx');
-    // 同源常量：一份 items，行菜单与 more 菜单各引用一次。
-    expect(src).toContain(
-      "const IMPORT_MENU_ITEM: SheetMenuItem = {label: '导入', action: 'import'};",
-    );
-    expect(src).toContain(
-      "const EXPORT_MENU_ITEM: SheetMenuItem = {label: '导出', action: 'export'};",
-    );
-    // 两处菜单各引用同源常量（不再是两套字面量）。
-    expect(src.match(/EXPORT_MENU_ITEM,/g)?.length).toBe(3);
-    expect(src.match(/IMPORT_MENU_ITEM,/g)?.length).toBe(2);
-    // 旧三项（导出 ZIP / 导入 ZIP / 导入角色卡）与其 action 全部退役。
-    expect(src).not.toContain("label: '导出 ZIP'");
-    expect(src).not.toContain("label: '导入 ZIP'");
-    expect(src).not.toContain("label: '导入角色卡'");
-    expect(src).not.toContain("action: 'export-zip'");
-    expect(src).not.toContain("action: 'import-zip'");
-    expect(src).not.toContain("action: 'import-character-card'");
-  });
+    it('T-MM1：「导入」「导出」为模块级同源常量，旧三项字面量全部退役', () => {
+        const src = readSrc('src/components/vfs/VfsFileManager.tsx');
+        // 同源常量：一份 items，行菜单与 more 菜单各引用一次（i18n 后锁 coreT 形态+键名，文案由 catalog 保证）。
+        expect(src).toContain(
+            `const IMPORT_MENU_ITEM: SheetMenuItem = {label: coreT({key: "ui.common.import"}), action: 'import'};`,
+        );
+        expect(src).toContain(
+            `const EXPORT_MENU_ITEM: SheetMenuItem = {label: coreT({key: "ui.common.export"}), action: 'export'};`,
+        );
+        // 两处菜单各引用同源常量（不再是两套字面量）。
+        expect(src.match(/EXPORT_MENU_ITEM,/g)?.length).toBe(3);
+        expect(src.match(/IMPORT_MENU_ITEM,/g)?.length).toBe(2);
+        // 旧三项（导出 ZIP / 导入 ZIP / 导入角色卡）与其 action 全部退役。
+        expect(src).not.toContain("label: '导出 ZIP'");
+        expect(src).not.toContain("label: '导入 ZIP'");
+        expect(src).not.toContain("label: '导入角色卡'");
+        expect(src).not.toContain("action: 'export-zip'");
+        expect(src).not.toContain("action: 'import-zip'");
+        expect(src).not.toContain("action: 'import-character-card'");
+    });
 
-  it('T-MM4：第三张 BottomSheetMenu 是导入形式三选（单文件 / ZIP 包 / 角色卡）', () => {
-    const src = readSrc('src/components/vfs/VfsFileManager.tsx');
-    expect(src).toContain("const IMPORT_FORM_SHEET_TITLE = '导入';");
-    expect(src).toContain('const IMPORT_FORM_SHEET_ITEMS: SheetMenuItem[] = [');
-    expect(src).toContain("{label: '单文件', action: 'file'}");
-    expect(src).toContain("{label: 'ZIP 包', action: 'zip'}");
-    expect(src).toContain("{label: '角色卡', action: 'character-card'}");
-    // 三张 sheet 同时在场（第三张 visible 绑 importSheetTarget）。
-    expect(src.match(/<BottomSheetMenu/g)?.length).toBe(3);
-    expect(src).toContain('visible={!readOnly && importSheetTarget != null}');
-    expect(src).toContain('title={IMPORT_FORM_SHEET_TITLE}');
-    // readOnly 下三项 sheet items 必须为空（只读屏不留写入口）。
-    const flat = flatSrc('src/components/vfs/VfsFileManager.tsx');
-    expect(flat).toContain(
-      'const importFormSheetItems: SheetMenuItem[] = readOnly ? [] : IMPORT_FORM_SHEET_ITEMS;',
-    );
-    // 新 state 进 dismissAllOverlays，切 Tab 不残留。
-    expect(flat).toContain('setImportSheetTarget(null); vfsBatchExit();');
-  });
+    it('T-MM4：第三张 BottomSheetMenu 是导入形式三选（单文件 / ZIP 包 / 角色卡）', () => {
+        const src = readSrc('src/components/vfs/VfsFileManager.tsx');
+        expect(src).toContain('const IMPORT_FORM_SHEET_TITLE = coreT({key: "ui.common.import"});');
+        expect(src).toContain('const IMPORT_FORM_SHEET_ITEMS: SheetMenuItem[] = [');
+        expect(src).toContain(`{label: coreT({key: "ui.vfs.import_kind_file"}), action: 'file'}`);
+        expect(src).toContain(`{label: coreT({key: "ui.vfs.import_kind_zip"}), action: 'zip'}`);
+        expect(src).toContain(`{label: coreT({key: "ui.vfs.import_kind_card"}), action: 'character-card'}`);
+        // 三张 sheet 同时在场（第三张 visible 绑 importSheetTarget）。
+        expect(src.match(/<BottomSheetMenu/g)?.length).toBe(3);
+        expect(src).toContain('visible={!readOnly && importSheetTarget != null}');
+        expect(src).toContain('title={IMPORT_FORM_SHEET_TITLE}');
+        // readOnly 下三项 sheet items 必须为空（只读屏不留写入口）。
+        const flat = flatSrc('src/components/vfs/VfsFileManager.tsx');
+        expect(flat).toContain(
+            'const importFormSheetItems: SheetMenuItem[] = readOnly ? [] : IMPORT_FORM_SHEET_ITEMS;',
+        );
+        // 新 state 进 dismissAllOverlays，切 Tab 不残留。
+        expect(flat).toContain('setImportSheetTarget(null); vfsBatchExit();');
+    });
 
-  it('T-MM5：导入三种形式的确认文案各自独立（zip / 角色卡 / 单文件）', () => {
-    const src = readSrc('src/components/vfs/VfsFileManager.tsx');
-    const flat = flatSrc('src/components/vfs/VfsFileManager.tsx');
-    expect(src).toContain('function zipImportConfirmCopy(path: string)');
-    expect(src).toContain('function characterCardImportConfirmCopy(path: string)');
-    expect(src).toContain(
-      'function singleFileImportConfirmCopy(conflictCount: number)',
-    );
-    // 三份文案语义各异：ZIP 覆盖全部文件、角色卡只覆盖同名角色卡、单文件报数量。
-    expect(src).toContain('下的全部文件，同级其他内容不受影响');
-    expect(src).toContain('下的同名角色卡文件，同级其他文件不受影响');
-    expect(src).toContain('目标处已有 ${conflictCount} 个同名文件，覆盖后不可撤销');
-    // runImport 按 kind 选文案（不再与角色卡共用 zipImportConfirmCopy）。
-    expect(flat).toContain(
-      "kind === 'zip' ? zipImportConfirmCopy(targetPath) : characterCardImportConfirmCopy(targetPath);",
-    );
-    expect(src).toContain('Alert.alert(title, confirmCopy, [');
-    expect(src).toContain("'ZIP 导入完成'");
-    expect(src).toContain("'已导入角色卡'");
-    // 单文件分支独立 Alert：needs-confirm 才问，确认回调走服务挂上来的 confirm。
-    expect(flat).toContain(
-      "'导入单文件', singleFileImportConfirmCopy(conflictCount),",
-    );
-    expect(src).toContain('const {conflictCount, confirm} = result;');
-    expect(src).toContain('const applied = await confirm();');
-    expect(flat).toContain(
-      'VfsSingleFileService.importFile(runtime, scope, {targetDir: targetPath});',
-    );
-    // 二进制跳过明示（D6）。
-    expect(src).toContain('跳过 ${skippedBinary.length} 个非 UTF-8 文件');
-  });
+    it('T-MM5：导入三种形式的确认文案各自独立（zip / 角色卡 / 单文件）', () => {
+        const src = readSrc('src/components/vfs/VfsFileManager.tsx');
+        const flat = flatSrc('src/components/vfs/VfsFileManager.tsx');
+        expect(src).toContain('function zipImportConfirmCopy(path: string)');
+        expect(src).toContain('function characterCardImportConfirmCopy(path: string)');
+        expect(src).toContain(
+            'function singleFileImportConfirmCopy(conflictCount: number)',
+        );
+        // 三份文案语义各异（i18n 后锁三份 coreT 取模板的调用形态+键名+占位实参）：
+        // ZIP 覆盖全部文件、角色卡只覆盖同名角色卡、单文件报数量。
+        expect(src).toContain(`coreT({key: "ui.vfs.import_overwrite_confirm", params: {target: importTargetLabel(path)}})`);
+        expect(src).toContain(`coreT({key: "ui.vfs.import_card_confirm", params: {target: importTargetLabel(path)}})`);
+        expect(src).toContain(`coreT({key: "ui.vfs.conflict_confirm", params: {count: conflictCount}})`);
+        // runImport 按 kind 选文案（不再与角色卡共用 zipImportConfirmCopy）。
+        expect(flat).toContain(
+            "kind === 'zip' ? zipImportConfirmCopy(targetPath) : characterCardImportConfirmCopy(targetPath);",
+        );
+        expect(src).toContain('Alert.alert(title, confirmCopy, [');
+        expect(src).toContain(`coreT({key: "ui.vfs.zip_import_done"})`);
+        expect(src).toContain(`coreT({key: "ui.vfs.card_import_done"})`);
+        // 单文件分支独立 Alert：needs-confirm 才问，确认回调走服务挂上来的 confirm。
+        expect(flat).toContain(
+            `coreT({key: "ui.vfs.import_single_title"}), singleFileImportConfirmCopy(conflictCount),`,
+        );
+        expect(src).toContain('const {conflictCount, confirm} = result;');
+        expect(src).toContain('const applied = await confirm();');
+        expect(flat).toContain(
+            'VfsSingleFileService.importFile(runtime, scope, {targetDir: targetPath});',
+        );
+        // 二进制跳过明示（D6，i18n 后锁 skipped 分支的 coreT 形态+键名）。
+        expect(src).toContain(`coreT({key: "ui.vfs.single_import_skipped", params: {count: skippedBinary.length}})`);
+    });
 
-  it('T-MM2/T-MM5：导出收敛为单一 runExport(kind, targetPath)，守卫与 toast 骨架共用', () => {
-    const src = readSrc('src/components/vfs/VfsFileManager.tsx');
-    const flat = flatSrc('src/components/vfs/VfsFileManager.tsx');
-    // 旧的两份复制已退役，只剩单一 runExport(kind: 'zip' | 'file', targetPath)。
-    expect(src).not.toContain('runExportZip');
-    expect(src).not.toContain('runExportFile');
-    expect(src).toContain(
-      "const runExport = (kind: 'zip' | 'file', targetPath: string) => {",
-    );
-    // 行菜单：按行类型选 kind（file 行单文件，其余 ZIP），路径恒为 menuPath。
-    expect(flat).toContain(
-      "runExport(menuRow.kind === 'file' ? 'file' : 'zip', menuPath);",
-    );
-    // more 菜单只出现在目录列表，目标恒为当前目录 → ZIP。
-    expect(flat).toContain("runExport('zip', currentPath);");
-    // 守卫改名 exporting：两个分支共用同一把（收敛后计数为 1）。
-    expect(src).not.toContain('exportingZip');
-    expect(flat.match(/if \(exporting\) \{ return; \}/g)?.length).toBe(1);
-    // 服务调用与成功文案：形参名钉死为 targetPath（收敛后不再叫 logicalPath）。
-    expect(flat).toContain(
-      'kind === \'zip\' ? VfsZipService.exportZip(runtime, scope, {directoryPath: targetPath}) : VfsSingleFileService.exportFile(runtime, scope, targetPath);',
-    );
-    expect(src).not.toContain('VfsSingleFileService.exportFile(runtime, scope, logicalPath)');
-    expect(src).toContain("'文件已保存到所选位置'");
-    expect(src).toContain("'ZIP 已保存到所选位置'");
-  });
+    it('T-MM2/T-MM5：导出收敛为单一 runExport(kind, targetPath)，守卫与 toast 骨架共用', () => {
+        const src = readSrc('src/components/vfs/VfsFileManager.tsx');
+        const flat = flatSrc('src/components/vfs/VfsFileManager.tsx');
+        // 旧的两份复制已退役，只剩单一 runExport(kind: 'zip' | 'file', targetPath)。
+        expect(src).not.toContain('runExportZip');
+        expect(src).not.toContain('runExportFile');
+        expect(src).toContain(
+            "const runExport = (kind: 'zip' | 'file', targetPath: string) => {",
+        );
+        // 行菜单：按行类型选 kind（file 行单文件，其余 ZIP），路径恒为 menuPath。
+        expect(flat).toContain(
+            "runExport(menuRow.kind === 'file' ? 'file' : 'zip', menuPath);",
+        );
+        // more 菜单只出现在目录列表，目标恒为当前目录 → ZIP。
+        expect(flat).toContain("runExport('zip', currentPath);");
+        // 守卫改名 exporting：两个分支共用同一把（收敛后计数为 1）。
+        expect(src).not.toContain('exportingZip');
+        expect(flat.match(/if \(exporting\) \{ return; \}/g)?.length).toBe(1);
+        // 服务调用与成功文案：形参名钉死为 targetPath（收敛后不再叫 logicalPath）。
+        expect(flat).toContain(
+            'kind === \'zip\' ? VfsZipService.exportZip(runtime, scope, {directoryPath: targetPath}) : VfsSingleFileService.exportFile(runtime, scope, targetPath);',
+        );
+        expect(src).not.toContain('VfsSingleFileService.exportFile(runtime, scope, logicalPath)');
+        expect(src).toContain(`coreT({key: "ui.vfs.file_saved_location"})`);
+        expect(src).toContain(`coreT({key: "ui.common.zip_saved"})`);
+    });
 
-  it('format-error 走 AppError 统一分支', () => {
-    const src = readSrc('src/errors/format-error.ts');
-    // 错误类已退役（AppErrorOps.is 判 key 收窄），不再有 instanceof 类分支。
-    expect(src).toContain('AppErrorOps.is(error');
-    expect(src).not.toContain('instanceof AppError');
-    expect(src).not.toContain('CharacterCardError');
-  });
+    it('format-error 走 AppError 统一分支', () => {
+        const src = readSrc('src/errors/format-error.ts');
+        // 错误类已退役（AppErrorOps.is 判 key 收窄），不再有 instanceof 类分支。
+        expect(src).toContain('AppErrorOps.is(error');
+        expect(src).not.toContain('instanceof AppError');
+        expect(src).not.toContain('CharacterCardError');
+    });
 });

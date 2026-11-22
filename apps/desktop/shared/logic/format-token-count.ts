@@ -5,17 +5,17 @@
  * 两份实现需保持行为一致：修改任一份时同步另一份。
  */
 export function formatTokenCount(n: number): string {
-  if (!Number.isFinite(n) || n < 0) {
-    return "—";
-  }
-  const rounded = Math.round(n);
-  if (rounded < 1000) {
-    return String(rounded);
-  }
-  if (rounded < 1_000_000) {
-    const k = rounded / 1000;
-    return k >= 100 ? `${Math.round(k)}K` : `${k.toFixed(1).replace(/\.0$/, "")}K`;
-  }
-  const m = rounded / 1_000_000;
-  return m >= 100 ? `${Math.round(m)}M` : `${m.toFixed(1).replace(/\.0$/, "")}M`;
+    if (!Number.isFinite(n) || n < 0) {
+        return "—";
+    }
+    const rounded = Math.round(n);
+    if (rounded < 1000) {
+        return String(rounded);
+    }
+    if (rounded < 1_000_000) {
+        const k = rounded / 1000;
+        return k >= 100 ? `${Math.round(k)}K` : `${k.toFixed(1).replace(/\.0$/, "")}K`;
+    }
+    const m = rounded / 1_000_000;
+    return m >= 100 ? `${Math.round(m)}M` : `${m.toFixed(1).replace(/\.0$/, "")}M`;
 }

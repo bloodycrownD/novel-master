@@ -6,8 +6,8 @@
 import {StyleSheet} from 'react-native';
 
 export const listScreenStyles = StyleSheet.create({
-  root: {flex: 1},
-  listContent: {paddingBottom: 24},
-  loader: {marginTop: 32},
-  empty: {textAlign: 'center', padding: 32},
+    root: {flex: 1},
+    listContent: {paddingBottom: 24},
+    loader: {marginTop: 32},
+    empty: {textAlign: 'center', padding: 32},
 });

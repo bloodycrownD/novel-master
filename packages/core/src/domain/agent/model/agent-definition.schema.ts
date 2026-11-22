@@ -29,55 +29,55 @@ const promptsCustomAttachSchema = z.string().refine((s) => s.trim().length > 0, 
 const promptsSkillsPrefixSchema = z.string().refine((s) => s.trim().length > 0, { message: "error.agent.invalid_schema.skills_prefix_nonempty_string" }).optional();
 
 const promptsObjectShape = {
-  system: z.string().optional(),
-  persist: z.record(z.string().min(1), textBlockValueSchema).default({}),
-  dynamic: z.record(z.string().min(1), textBlockValueSchema).default({}),
-  persistEnabled: z.boolean().default(false),
-  dynamicEnabled: z.boolean().default(false),
-  /** wire：关 omit；开为非空 string；兼容旧 `true`（空串 / 仅空白非法）。 */
-  workplace: promptsWorkplaceSchema,
-  /** wire：关 omit；开为 trim 后非空 string（新字段，无历史值，无需 boolean 兼容）。 */
-  customAttach: promptsCustomAttachSchema,
-  /** 技能能力总开关：wire 缺省 = 开；仅显式 false 表示关闭。 */
-  skillsEnabled: z.boolean().optional(),
-  /** 技能索引前缀语：wire 缺省/空 = 默认前缀；trim 后须非空。 */
-  skillsPrefix: promptsSkillsPrefixSchema,
+    system: z.string().optional(),
+    persist: z.record(z.string().min(1), textBlockValueSchema).default({}),
+    dynamic: z.record(z.string().min(1), textBlockValueSchema).default({}),
+    persistEnabled: z.boolean().default(false),
+    dynamicEnabled: z.boolean().default(false),
+    /** wire：关 omit；开为非空 string；兼容旧 `true`（空串 / 仅空白非法）。 */
+    workplace: promptsWorkplaceSchema,
+    /** wire：关 omit；开为 trim 后非空 string（新字段，无历史值，无需 boolean 兼容）。 */
+    customAttach: promptsCustomAttachSchema,
+    /** 技能能力总开关：wire 缺省 = 开；仅显式 false 表示关闭。 */
+    skillsEnabled: z.boolean().optional(),
+    /** 技能索引前缀语：wire 缺省/空 = 默认前缀；trim 后须非空。 */
+    skillsPrefix: promptsSkillsPrefixSchema,
 };
 
 const promptsObjectSchema = z.object(promptsObjectShape).strict();
 
 export const promptsDocumentSchema = z.preprocess((raw, ctx) => {
-  const stripped = AgentDefinitionPreprocess.stripLegacyPrompts(raw);
-  if (!stripped.ok) {
-    // zod 回调签名由框架锁定，无法返 Result（五期门⑦同款）：removed-feature
-    // 拦截的域 AppError 挂进 issue params 走**数据通道**出 zod 管道，decode()
-    // 失败分支原样提取进 Err——key / detail 零漂移。
-    ctx.addIssue({ code: "custom", message: stripped.error.message, params: { appError: stripped.error } });
-    return z.NEVER;
-  }
-  return stripped.value;
+    const stripped = AgentDefinitionPreprocess.stripLegacyPrompts(raw);
+    if (!stripped.ok) {
+        // zod 回调签名由框架锁定，无法返 Result（五期门⑦同款）：removed-feature
+        // 拦截的域 AppError 挂进 issue params 走**数据通道**出 zod 管道，decode()
+        // 失败分支原样提取进 Err——key / detail 零漂移。
+        ctx.addIssue({ code: "custom", message: stripped.error.message, params: { appError: stripped.error } });
+        return z.NEVER;
+    }
+    return stripped.value;
 }, promptsObjectSchema);
 
 const agentToolPolicyDocumentSchema = z.object({ allow: z.array(z.string().min(1)).optional(), deny: z.array(z.string().min(1)).optional() }).strict();
 
 const agentRuntimeShape = {
-  maxSteps: z.number().int().positive().optional(),
-  doomLoopThreshold: z.number().int().positive().optional(),
-  doomLoopCrossRoundWindow: z.number().int().positive().optional(),
+    maxSteps: z.number().int().positive().optional(),
+    doomLoopThreshold: z.number().int().positive().optional(),
+    doomLoopCrossRoundWindow: z.number().int().positive().optional(),
 };
 
 const agentRuntimeSchema = z.object(agentRuntimeShape).strict().optional();
 
 const agentDefinitionDocumentShape = {
-  schemaVersion: z.literal(1),
-  name: z.string().min(1),
-  description: z.string().optional(),
-  /** 暴露范围：缺省按 "all" 解释（消费侧 fallback）。 */
-  mode: z.enum(["primary", "subagent", "all"]).optional(),
-  prompts: promptsDocumentSchema,
-  model: z.string().uuid().optional(),
-  runtime: agentRuntimeSchema,
-  tools: agentToolPolicyDocumentSchema.optional(),
+    schemaVersion: z.literal(1),
+    name: z.string().min(1),
+    description: z.string().optional(),
+    /** 暴露范围：缺省按 "all" 解释（消费侧 fallback）。 */
+    mode: z.enum(["primary", "subagent", "all"]).optional(),
+    prompts: promptsDocumentSchema,
+    model: z.string().uuid().optional(),
+    runtime: agentRuntimeSchema,
+    tools: agentToolPolicyDocumentSchema.optional(),
 };
 
 /** Root agent definition wire document schema (strict — rejects legacy keys). */
@@ -86,102 +86,102 @@ export const agentDefinitionDocumentSchema = z.object(agentDefinitionDocumentSha
 type AgentDefinitionDocument = z.infer<typeof agentDefinitionDocumentSchema>;
 
 const agentDefinitionWireSchema = z.preprocess((raw, ctx) => {
-  const stripped = AgentDefinitionPreprocess.stripLegacyAgentWire(raw);
-  if (!stripped.ok) {
-    // 数据通道同款（见 promptsDocumentSchema）：preferredModelId / legacy nested
-    // model 拦截的 AppError 原样进 decode() 的 Err。
-    ctx.addIssue({ code: "custom", message: stripped.error.message, params: { appError: stripped.error } });
-    return z.NEVER;
-  }
-  return stripped.value;
+    const stripped = AgentDefinitionPreprocess.stripLegacyAgentWire(raw);
+    if (!stripped.ok) {
+        // 数据通道同款（见 promptsDocumentSchema）：preferredModelId / legacy nested
+        // model 拦截的 AppError 原样进 decode() 的 Err。
+        ctx.addIssue({ code: "custom", message: stripped.error.message, params: { appError: stripped.error } });
+        return z.NEVER;
+    }
+    return stripped.value;
 }, agentDefinitionDocumentSchema);
 
 /** Domain parser: wire document → {@link AgentDefinition}（toWire 由下面的 {@link agentDefinitionSchema} 挂载）。 */
 const agentDefinitionBaseSchema = agentDefinitionWireSchema
-  .superRefine((doc, ctx) => {
-    const prompts = AgentPromptLayoutValidate.validateFromMaps(doc.prompts.persist, doc.prompts.dynamic, doc.prompts.system, {
-      persistEnabled: doc.prompts.persistEnabled,
-      dynamicEnabled: doc.prompts.dynamicEnabled,
-      workplace: doc.prompts.workplace,
-      customAttach: doc.prompts.customAttach,
-      skillsEnabled: doc.prompts.skillsEnabled,
-      skillsPrefix: doc.prompts.skillsPrefix,
+    .superRefine((doc, ctx) => {
+        const prompts = AgentPromptLayoutValidate.validateFromMaps(doc.prompts.persist, doc.prompts.dynamic, doc.prompts.system, {
+            persistEnabled: doc.prompts.persistEnabled,
+            dynamicEnabled: doc.prompts.dynamicEnabled,
+            workplace: doc.prompts.workplace,
+            customAttach: doc.prompts.customAttach,
+            skillsEnabled: doc.prompts.skillsEnabled,
+            skillsPrefix: doc.prompts.skillsPrefix,
+        });
+        if (!prompts.ok) {
+            // zod 回调签名由框架锁定，无法返 Result（五期门⑦）：布局校验的域 AppError
+            // 挂进 issue params 走**数据通道**出 zod 管道，decode() 失败分支原样提取进
+            // Err——key / detail / descriptor 零漂移，替代旧「transform 内 throw 解包」
+            // 的异常通道。superRefine 有 issue 时后续 transform 不执行。
+            ctx.addIssue({ code: "custom", message: prompts.error.message, params: { appError: prompts.error } });
+        }
+    })
+    .transform((doc) => {
+        // superRefine 段已用同一入参跑过同一校验并拒绝非法布局（纯函数，两遍同结果），
+        // 此处恒 Ok；unwrapOr 的空布局仅为类型兜底，不会出现在输出里。
+        const prompts = AgentPromptLayoutValidate.validateFromMaps(doc.prompts.persist, doc.prompts.dynamic, doc.prompts.system, {
+            persistEnabled: doc.prompts.persistEnabled,
+            dynamicEnabled: doc.prompts.dynamicEnabled,
+            workplace: doc.prompts.workplace,
+            customAttach: doc.prompts.customAttach,
+            skillsEnabled: doc.prompts.skillsEnabled,
+            skillsPrefix: doc.prompts.skillsPrefix,
+        });
+        return {
+            name: doc.name,
+            ...(doc.description != null && doc.description.length > 0 ? { description: doc.description } : {}),
+            ...(doc.mode != null ? { mode: doc.mode } : {}),
+            prompts: prompts.unwrapOr({ persist: [], dynamic: [] }),
+            model: doc.model,
+            runtime: doc.runtime,
+            ...(doc.tools != null ? { tools: doc.tools } : {}),
+        };
     });
-    if (!prompts.ok) {
-      // zod 回调签名由框架锁定，无法返 Result（五期门⑦）：布局校验的域 AppError
-      // 挂进 issue params 走**数据通道**出 zod 管道，decode() 失败分支原样提取进
-      // Err——key / detail / descriptor 零漂移，替代旧「transform 内 throw 解包」
-      // 的异常通道。superRefine 有 issue 时后续 transform 不执行。
-      ctx.addIssue({ code: "custom", message: prompts.error.message, params: { appError: prompts.error } });
-    }
-  })
-  .transform((doc) => {
-    // superRefine 段已用同一入参跑过同一校验并拒绝非法布局（纯函数，两遍同结果），
-    // 此处恒 Ok；unwrapOr 的空布局仅为类型兜底，不会出现在输出里。
-    const prompts = AgentPromptLayoutValidate.validateFromMaps(doc.prompts.persist, doc.prompts.dynamic, doc.prompts.system, {
-      persistEnabled: doc.prompts.persistEnabled,
-      dynamicEnabled: doc.prompts.dynamicEnabled,
-      workplace: doc.prompts.workplace,
-      customAttach: doc.prompts.customAttach,
-      skillsEnabled: doc.prompts.skillsEnabled,
-      skillsPrefix: doc.prompts.skillsPrefix,
-    });
-    return {
-      name: doc.name,
-      ...(doc.description != null && doc.description.length > 0 ? { description: doc.description } : {}),
-      ...(doc.mode != null ? { mode: doc.mode } : {}),
-      prompts: prompts.unwrapOr({ persist: [], dynamic: [] }),
-      model: doc.model,
-      runtime: doc.runtime,
-      ...(doc.tools != null ? { tools: doc.tools } : {}),
-    };
-  });
 
 /** Domain parser + serializer（decode / encode 共用）。 */
 export const agentDefinitionSchema = Object.assign(agentDefinitionBaseSchema, {
-  toWire: (def: AgentDefinition): Result<AgentDefinitionDocument, AppError> => {
-    // 块名唯一性门禁（RT-04）：wire 形态是「块名 → 块」的对象映射，同名块在这里
-    // 会被后写静默覆盖（正文永久丢失、零报错）。读侧 AgentPromptLayoutValidate.validateFromMaps
-    // 天然唯一、写侧此前是裸的 ⇒ 只补写侧这一处。
-    // 落点选这里而不是 configToWire：toWire 的三个调用点（AgentDefinitionValidator.validate /
-    // ProjectAgentConfig.updateAgentConfig / 注册表持久化）唯一收敛在 toWire，
-    // 一处改动全覆盖，同一条规则插两遍将来必漏改一处。
-    const validated = AgentPromptLayoutValidate.validate(def.prompts);
-    if (!validated.ok) return Result.err(validated.error);
-    const persist: AgentDefinitionDocument["prompts"]["persist"] = {};
-    for (const block of def.prompts.persist) {
-      persist[block.name] = AgentPromptLayoutWire.persistBlock(block);
-    }
-    const dynamic: AgentDefinitionDocument["prompts"]["dynamic"] = {};
-    for (const block of def.prompts.dynamic) {
-      dynamic[block.name] = AgentPromptLayoutWire.dynamicBlock(block);
-    }
-    return Result.ok({
-      schemaVersion: 1,
-      name: def.name,
-      ...(def.description != null && def.description.trim().length > 0 ? { description: def.description } : {}),
-      ...(def.mode != null ? { mode: def.mode } : {}),
-      prompts: {
-        ...(def.prompts.system != null ? { system: def.prompts.system } : {}),
-        persistEnabled: def.prompts.persistEnabled ?? false,
-        dynamicEnabled: def.prompts.dynamicEnabled ?? false,
-        ...(typeof def.prompts.workplace === "string" && def.prompts.workplace.length > 0 ? { workplace: def.prompts.workplace } : {}),
-        ...(typeof def.prompts.customAttach === "string" && def.prompts.customAttach.trim().length > 0 ? { customAttach: def.prompts.customAttach } : {}),
-        ...(def.prompts.skillsEnabled === false ? { skillsEnabled: false } : {}),
-        ...(typeof def.prompts.skillsPrefix === "string" && def.prompts.skillsPrefix.trim().length > 0 ? { skillsPrefix: def.prompts.skillsPrefix } : {}),
-        persist,
-        dynamic,
-      },
-      ...(def.model != null ? { model: def.model } : {}),
-      ...(def.runtime != null ? { runtime: def.runtime } : {}),
-      ...(def.tools != null
-        ? {
-            tools: {
-              ...(def.tools.allow != null ? { allow: [...def.tools.allow] } : {}),
-              ...(def.tools.deny != null ? { deny: [...def.tools.deny] } : {}),
+    toWire: (def: AgentDefinition): Result<AgentDefinitionDocument, AppError> => {
+        // 块名唯一性门禁（RT-04）：wire 形态是「块名 → 块」的对象映射，同名块在这里
+        // 会被后写静默覆盖（正文永久丢失、零报错）。读侧 AgentPromptLayoutValidate.validateFromMaps
+        // 天然唯一、写侧此前是裸的 ⇒ 只补写侧这一处。
+        // 落点选这里而不是 configToWire：toWire 的三个调用点（AgentDefinitionValidator.validate /
+        // ProjectAgentConfig.updateAgentConfig / 注册表持久化）唯一收敛在 toWire，
+        // 一处改动全覆盖，同一条规则插两遍将来必漏改一处。
+        const validated = AgentPromptLayoutValidate.validate(def.prompts);
+        if (!validated.ok) return Result.err(validated.error);
+        const persist: AgentDefinitionDocument["prompts"]["persist"] = {};
+        for (const block of def.prompts.persist) {
+            persist[block.name] = AgentPromptLayoutWire.persistBlock(block);
+        }
+        const dynamic: AgentDefinitionDocument["prompts"]["dynamic"] = {};
+        for (const block of def.prompts.dynamic) {
+            dynamic[block.name] = AgentPromptLayoutWire.dynamicBlock(block);
+        }
+        return Result.ok({
+            schemaVersion: 1,
+            name: def.name,
+            ...(def.description != null && def.description.trim().length > 0 ? { description: def.description } : {}),
+            ...(def.mode != null ? { mode: def.mode } : {}),
+            prompts: {
+                ...(def.prompts.system != null ? { system: def.prompts.system } : {}),
+                persistEnabled: def.prompts.persistEnabled ?? false,
+                dynamicEnabled: def.prompts.dynamicEnabled ?? false,
+                ...(typeof def.prompts.workplace === "string" && def.prompts.workplace.length > 0 ? { workplace: def.prompts.workplace } : {}),
+                ...(typeof def.prompts.customAttach === "string" && def.prompts.customAttach.trim().length > 0 ? { customAttach: def.prompts.customAttach } : {}),
+                ...(def.prompts.skillsEnabled === false ? { skillsEnabled: false } : {}),
+                ...(typeof def.prompts.skillsPrefix === "string" && def.prompts.skillsPrefix.trim().length > 0 ? { skillsPrefix: def.prompts.skillsPrefix } : {}),
+                persist,
+                dynamic,
             },
-          }
-        : {}),
-    });
-  },
+            ...(def.model != null ? { model: def.model } : {}),
+            ...(def.runtime != null ? { runtime: def.runtime } : {}),
+            ...(def.tools != null
+                ? {
+                        tools: {
+                            ...(def.tools.allow != null ? { allow: [...def.tools.allow] } : {}),
+                            ...(def.tools.deny != null ? { deny: [...def.tools.deny] } : {}),
+                        },
+                    }
+                : {}),
+        });
+    },
 });

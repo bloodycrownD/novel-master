@@ -3,27 +3,27 @@ import {View} from 'react-native';
 import {notifyAnimatedValuesChanged} from './animated-value-registry';
 
 export function KeyboardProvider({children}: {children: React.ReactNode}) {
-  return <>{children}</>;
+    return <>{children}</>;
 }
 
 export function KeyboardStickyView({children}: {children: React.ReactNode}) {
-  return <>{children}</>;
+    return <>{children}</>;
 }
 
 export function KeyboardAvoidingView({
-  children,
-  style,
-  ...rest
+    children,
+    style,
+    ...rest
 }: {
-  children?: React.ReactNode;
-  style?: unknown;
-  [key: string]: unknown;
+    children?: React.ReactNode;
+    style?: unknown;
+    [key: string]: unknown;
 }) {
-  return (
-    <View style={style as never} {...rest}>
-      {children}
-    </View>
-  );
+    return (
+        <View style={style as never} {...rest}>
+            {children}
+        </View>
+    );
 }
 
 // 测试注入用：默认 0（与真实环境键盘收起时一致），既有用例不注入则行为不变。
@@ -36,36 +36,34 @@ export function KeyboardAvoidingView({
 // `useReanimatedKeyboardAnimation` 都现造一个 `{value: 快照}`，那么渲染时捕获的那个
 // 对象里的 `.value` 就永远停在渲染那一刻——`useAnimatedReaction` 的 prepare 读到的是
 // 旧快照，值翻转永远不触发。上面「跨渲染存活」这句不是洁癖，是这条链能不能被测的唯一前提。
-let keyboardHeightForTests = 0;
+const testState: { keyboardHeight: number } = { keyboardHeight: 0 };
 const keyboardHeightSV = {value: 0};
 const keyboardProgressSV = {value: 0};
 
 /** 仅测试用：注入键盘高度（弹起传负值，与真实 hook 语义一致）。 */
 export function __setKeyboardHeightForTests(height: number) {
-  keyboardHeightForTests = height;
-  keyboardHeightSV.value = height;
-  notifyAnimatedValuesChanged();
+    testState.keyboardHeight = height;
+    keyboardHeightSV.value = height;
+    notifyAnimatedValuesChanged();
 }
 
 export function useReanimatedKeyboardAnimation() {
-  return {
-    height: keyboardHeightSV,
-    progress: keyboardProgressSV,
-  };
+    return {
+        height: keyboardHeightSV,
+        progress: keyboardProgressSV,
+    };
 }
 
 export function useKeyboardAnimation() {
-  return {
-    height: keyboardHeightSV,
-    progress: keyboardProgressSV,
-  };
+    return {
+        height: keyboardHeightSV,
+        progress: keyboardProgressSV,
+    };
 }
 
-export function useKeyboardState<T = {height: number}>(
-  selector?: (state: {height: number; isVisible: boolean}) => T,
-): T {
-  const state = {height: 0, isVisible: false};
-  return (selector ? selector(state) : state) as T;
+export function useKeyboardState<T = {height: number}>(selector?: (state: {height: number; isVisible: boolean}) => T): T {
+    const state = {height: 0, isVisible: false};
+    return (selector ? selector(state) : state) as T;
 }
 
 export function useGenericKeyboardHandler() {}

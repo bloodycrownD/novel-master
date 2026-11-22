@@ -9,8 +9,9 @@
  * 退役，三项菜单只剩「复制」有消费语义（原完整形态三项常量
  * `CHAT_CONVERSATION_SELECTION_MENU_ITEMS` 已随死导出清除）。
  */
+import {coreT} from '@/i18n/core';
 
 /** 转录宿主用：仅「复制」。 */
 export const CHAT_TRANSCRIPT_SELECTION_MENU_ITEMS = [
-  {label: '复制', key: 'copy'},
+    {label: coreT({key: "ui.transcript.menu.copy"}), key: 'copy'},
 ] as const;

@@ -15,19 +15,19 @@ import { AppError } from "@/errors/app-error.js";
 
 /** 导入失败包装集合（原始失败 → `VFS_IMPORT_FAILED`）。 */
 export const ImportFailure = {
-  /**
+    /**
    * 把导入失败包成 `VFS_IMPORT_FAILED`：有分片进度时走 `.with_progress` descriptor
    * （已提交 N 片 / 失败在第 K 片），否则把原始 message 落 `detail`。
    */
-  create(error: unknown, committedShards?: number, failedShard?: number): AppError {
-    const base = error instanceof Error ? error.message : "import transaction failed";
-    // 进度段拆独立 key（spec keyRule 可选片段）：有进度时 descriptor 随 messageKey 流动
-    if (committedShards != null && failedShard != null) {
-      return new AppError("VFS_IMPORT_FAILED", {
-        descriptor: { key: "error.vfs.import_failed.with_progress", params: { committed: committedShards, failed_shard: failedShard } },
-        base,
-      });
-    }
-    return new AppError("VFS_IMPORT_FAILED", { detail: base });
-  },
+    create(error: unknown, committedShards?: number, failedShard?: number): AppError {
+        const base = error instanceof Error ? error.message : "import transaction failed";
+        // 进度段拆独立 key（spec keyRule 可选片段）：有进度时 descriptor 随 messageKey 流动
+        if (committedShards != null && failedShard != null) {
+            return new AppError("VFS_IMPORT_FAILED", {
+                descriptor: { key: "error.vfs.import_failed.with_progress", params: { committed: committedShards, failed_shard: failedShard } },
+                base,
+            });
+        }
+        return new AppError("VFS_IMPORT_FAILED", { detail: base });
+    },
 } as const;

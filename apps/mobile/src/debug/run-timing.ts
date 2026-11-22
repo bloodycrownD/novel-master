@@ -14,44 +14,50 @@
 
 /** 一条打点轴：`reset()` 定 t0，`log(label)` 打相对 t0 的耗时。 */
 type TimingAxis = {
-  readonly reset: () => void;
-  readonly log: (message: string) => void;
+    readonly reset: () => void;
+    readonly log: (message: string) => void;
 };
 
 type TimingAxisOptions = {
-  /** reset 时输出 `[<label>] t0 <resetMessage>`。 */
-  readonly resetMessage?: string;
-  /**
+    /** reset 时输出 `[<label>] t0 <resetMessage>`。 */
+    readonly resetMessage?: string;
+    /**
    * 窗口上限（毫秒）：超窗后首个站点把 t0 复位为 0（自愈关窗），后续站点
    * 保持 no-op。不设上限时 reset 后窗口永久打开。
    */
-  readonly windowMs?: number;
-  /** t0 取模块求值时刻（冷启动轴），不等待 reset。 */
-  readonly startAtModuleEval?: boolean;
+    readonly windowMs?: number;
+    /** t0 取模块求值时刻（冷启动轴），不等待 reset。 */
+    readonly startAtModuleEval?: boolean;
 };
+
+/** dev 环境判定：__DEV__ 未定义（生产/测试）时恒 false。 */
+function isDevEnabled(): boolean {
+    return typeof __DEV__ !== 'undefined' && __DEV__;
+}
 
 /** 造一条打点轴；t0 与窗口状态收在闭包里，不散成模块级 let。 */
 function createTimingAxis(label: string, options: TimingAxisOptions = {}): TimingAxis {
-  let t0 = options.startAtModuleEval === true ? Date.now() : 0;
-  const enabled = (): boolean => typeof __DEV__ !== 'undefined' && __DEV__;
-  const reset = (): void => {
-    if (!enabled()) {
-      return;
-    }
-    t0 = Date.now();
-    console.log(`[${label}] t0 ${options.resetMessage ?? ''}`);
-  };
-  const log = (message: string): void => {
-    if (!enabled() || t0 === 0) {
-      return;
-    }
-    if (options.windowMs != null && Date.now() - t0 > options.windowMs) {
-      t0 = 0;
-      return;
-    }
-    console.log(`[${label}] ${message} +${Date.now() - t0}ms`);
-  };
-  return {reset, log};
+    let t0 = options.startAtModuleEval === true ? Date.now() : 0;
+    // nm-style: keep-closure — t0 是可重绑时间游标且三条轴多实例各自持游标，槽化产出与现有 TimingAxis 同构、无复用收益
+    const reset = (): void => {
+        if (!isDevEnabled()) {
+            return;
+        }
+        t0 = Date.now();
+        console.log(`[${label}] t0 ${options.resetMessage ?? ''}`);
+    };
+    // nm-style: keep-closure — t0 重绑 + 超窗自愈（置 0 后续 no-op）是三实例各自的状态机，闭包是既定设计
+    const log = (message: string): void => {
+        if (!isDevEnabled() || t0 === 0) {
+            return;
+        }
+        if (options.windowMs != null && Date.now() - t0 > options.windowMs) {
+            t0 = 0;
+            return;
+        }
+        console.log(`[${label}] ${message} +${Date.now() - t0}ms`);
+    };
+    return {reset, log};
 }
 
 /**

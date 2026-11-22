@@ -25,7 +25,7 @@ type VfsEntryNameValidation = { readonly ok: true } | { readonly ok: false; read
 const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f]/;
 
 export const EntryNameValidator = {
-  /**
+    /**
    * 校验单个 VFS 条目名（不含 `/` 的路径末段）。
    *
    * @remarks
@@ -34,35 +34,35 @@ export const EntryNameValidator = {
    * `String.prototype.trim` 同时覆盖半角与全角空白（U+3000 等），纯空白与首尾空白
    * 判断均以它为准。
    */
-  validate(name: string): VfsEntryNameValidation {
-    if (name === "." || name === "..") {
-      return { ok: false, reason: {key: "error.vfs.invalid_name.dotdot"} };
-    }
-    if (name.trim() === "") {
-      return { ok: false, reason: {key: "error.vfs.invalid_name.blank"} };
-    }
-    if (CONTROL_CHARS.test(name)) {
-      return { ok: false, reason: {key: "error.vfs.invalid_name.control_chars"} };
-    }
-    if (name !== name.trim()) {
-      return { ok: false, reason: {key: "error.vfs.invalid_name.edge_spaces"} };
-    }
-    return { ok: true };
-  },
+    validate(name: string): VfsEntryNameValidation {
+        if (name === "." || name === "..") {
+            return { ok: false, reason: {key: "error.vfs.invalid_name.dotdot"} };
+        }
+        if (name.trim() === "") {
+            return { ok: false, reason: {key: "error.vfs.invalid_name.blank"} };
+        }
+        if (CONTROL_CHARS.test(name)) {
+            return { ok: false, reason: {key: "error.vfs.invalid_name.control_chars"} };
+        }
+        if (name !== name.trim()) {
+            return { ok: false, reason: {key: "error.vfs.invalid_name.edge_spaces"} };
+        }
+        return { ok: true };
+    },
 
-  /**
+    /**
    * 创建/重命名入口的断言式校验：末段名不合法时返回 VFS_INVALID_NAME。
    *
    * 只在「新条目诞生」的时机调用（mkdir、write 创建分支、renamePath/renamePrefix
    * 的新路径）——存量条目的内容更新不重新审判名字（zip 导入的历史名可继续编辑）。
    */
-  assertValid(normalizedPath: string): Result<void, VfsInvalidNameError> {
-    const idx = normalizedPath.lastIndexOf("/");
-    const name = idx === -1 ? normalizedPath : normalizedPath.slice(idx + 1) || "/";
-    const result = EntryNameValidator.validate(name);
-    if (!result.ok) {
-      return Result.err(new AppError("VFS_INVALID_NAME", { descriptor: result.reason, path: name }));
-    }
-    return Result.ok(undefined);
-  },
+    assertValid(normalizedPath: string): Result<void, VfsInvalidNameError> {
+        const idx = normalizedPath.lastIndexOf("/");
+        const name = idx === -1 ? normalizedPath : normalizedPath.slice(idx + 1) || "/";
+        const result = EntryNameValidator.validate(name);
+        if (!result.ok) {
+            return Result.err(new AppError("VFS_INVALID_NAME", { descriptor: result.reason, path: name }));
+        }
+        return Result.ok(undefined);
+    },
 } as const;

@@ -11,15 +11,15 @@ import type { ComposerDraftTokenRange } from '@shared/logic/chat';
 
 /** 水化快照：正文 + 持久化确认区间（`undefined` = 旧草稿，允许兜底扫描）。 */
 export type HydratedComposerDraft = {
-  readonly text: string;
-  readonly tokenRanges?: readonly ComposerDraftTokenRange[];
+    readonly text: string;
+    readonly tokenRanges?: readonly ComposerDraftTokenRange[];
 };
 
 /** 写回 payload（`ComposerDraftSchema.serializeJson` 的入参；draft attach 恒空）。 */
 type ComposerDraftPersistPayload = {
-  readonly text: string;
-  readonly attachments: readonly [];
-  readonly tokenRanges?: readonly ComposerDraftTokenRange[];
+    readonly text: string;
+    readonly attachments: readonly [];
+    readonly tokenRanges?: readonly ComposerDraftTokenRange[];
 };
 
 /**
@@ -31,19 +31,16 @@ type ComposerDraftPersistPayload = {
  * 不能被写成 `[]`（`[]` 表示确认无胶囊、禁止扫描）。
  */
 // nm-style: keep-local — composer-draft-passthrough.test 直引断言透传/省略语义（8 个调用点）；内联会破坏测试锁名。
-export function resolveComposerDraftPersistPayload(
-  hydrated: HydratedComposerDraft | null,
-  composerText: string,
-): ComposerDraftPersistPayload {
-  const base: ComposerDraftPersistPayload = {
-    text: composerText,
-    attachments: [],
-  };
-  if (hydrated == null || composerText !== hydrated.text) {
-    return base;
-  }
-  if (hydrated.tokenRanges === undefined) {
-    return base;
-  }
-  return { ...base, tokenRanges: hydrated.tokenRanges };
+export function resolveComposerDraftPersistPayload( hydrated: HydratedComposerDraft | null, composerText: string ): ComposerDraftPersistPayload {
+    const base: ComposerDraftPersistPayload = {
+        text: composerText,
+        attachments: [],
+    };
+    if (hydrated == null || composerText !== hydrated.text) {
+        return base;
+    }
+    if (hydrated.tokenRanges === undefined) {
+        return base;
+    }
+    return { ...base, tokenRanges: hydrated.tokenRanges };
 }

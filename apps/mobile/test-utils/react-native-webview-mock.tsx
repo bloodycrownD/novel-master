@@ -24,12 +24,12 @@ import {View, type ViewProps} from 'react-native';
 import type {ReactTestInstance, ReactTestRenderer} from 'react-test-renderer';
 
 export type WebViewMessageEvent = {
-  nativeEvent: {data: string};
+    nativeEvent: {data: string};
 };
 
 type WebViewProps = ViewProps & {
-  onMessage?: (event: WebViewMessageEvent) => void;
-  source?: {html?: string; uri?: string; baseUrl?: string};
+    onMessage?: (event: WebViewMessageEvent) => void;
+    source?: {html?: string; uri?: string; baseUrl?: string};
 };
 
 /**
@@ -39,10 +39,10 @@ type WebViewProps = ViewProps & {
 export type MockWebViewDomain = string;
 
 export type MockWebViewInstance = {
-  readonly id: number;
-  readonly domain: MockWebViewDomain;
-  /** 该实例自己的下行消息（`postMessage` 原样字符串，按时间序）。 */
-  readonly posts: string[];
+    readonly id: number;
+    readonly domain: MockWebViewDomain;
+    /** 该实例自己的下行消息（`postMessage` 原样字符串，按时间序）。 */
+    readonly posts: string[];
 };
 
 /** Captured postMessage payloads across all instances (cleared via clearMockWebViewPostMessages). */
@@ -50,48 +50,46 @@ export const mockWebViewPostMessages: string[] = [];
 
 /** 当前已挂载的 mock 实例（按挂载序；卸载即摘除，避免旧树跨用例污染）。 */
 const instances: MockWebViewInstance[] = [];
-let nextInstanceId = 1;
+const counters: { nextInstanceId: number } = { nextInstanceId: 1 };
 
 /** 从 `source` 解析域：uri 里的包名优先，其次内联 html，最后 unknown。 */
 function resolveDomain(source: WebViewProps['source']): MockWebViewDomain {
-  const uri = source?.uri;
-  if (typeof uri === 'string') {
-    const match = uri.match(/\/(?:webview|WebViewDist)\/([^/]+)\//);
-    if (match != null) {
-      return match[1]!;
+    const uri = source?.uri;
+    if (typeof uri === 'string') {
+        const match = uri.match(/\/(?:webview|WebViewDist)\/([^/]+)\//);
+        if (match != null) {
+            return match[1]!;
+        }
+        return 'unknown';
     }
-    return 'unknown';
-  }
-  return source?.html != null ? 'inline' : 'unknown';
+    return source?.html != null ? 'inline' : 'unknown';
 }
 
 /** 取已挂载实例；传 domain 则只取该域（保持挂载序）。 */
-export function getMockWebViewInstances(
-  domain?: MockWebViewDomain,
-): MockWebViewInstance[] {
-  return domain == null
-    ? instances.slice()
-    : instances.filter(item => item.domain === domain);
+export function getMockWebViewInstances(domain?: MockWebViewDomain): MockWebViewInstance[] {
+    return domain == null
+        ? instances.slice()
+        : instances.filter(item => item.domain === domain);
 }
 
 /** 取消息；传 domain 则只取该域实例的消息（保持实例序 + 实例内时间序）。 */
 export function getMockWebViewPosts(domain?: MockWebViewDomain): string[] {
-  return getMockWebViewInstances(domain).flatMap(item => item.posts);
+    return getMockWebViewInstances(domain).flatMap(item => item.posts);
 }
 
 /** 清消息：传 domain 则只清该域；不传则连同聚合缓冲一起全清。 */
 export function clearMockWebViewPosts(domain?: MockWebViewDomain): void {
-  for (const item of getMockWebViewInstances(domain)) {
-    item.posts.length = 0;
-  }
-  if (domain == null) {
-    mockWebViewPostMessages.length = 0;
-  }
+    for (const item of getMockWebViewInstances(domain)) {
+        item.posts.length = 0;
+    }
+    if (domain == null) {
+        mockWebViewPostMessages.length = 0;
+    }
 }
 
 /** 全清（保留原名，全量用例仍在用）。 */
 export function clearMockWebViewPostMessages(): void {
-  clearMockWebViewPosts();
+    clearMockWebViewPosts();
 }
 
 /**
@@ -99,55 +97,53 @@ export function clearMockWebViewPostMessages(): void {
  * 同域多台时取**挂载序第一台**——与「取第一个 WebView」的旧写法在单实例场景等价，
  * 但在同屏多 WebView 场景下不会误取到别的域。
  */
-export function findMockWebViewByDomain(
-  root: ReactTestInstance | ReactTestRenderer['root'],
-  domain: MockWebViewDomain,
-): ReactTestInstance {
-  const node = root
-    .findAllByType(WebViewMock as unknown as React.ComponentType<unknown>)
-    .find(item => {
-      const uri = (item.props as WebViewProps).source?.uri;
-      return uri != null && resolveDomain({uri}) === domain;
-    });
-  if (node == null) {
-    throw new Error(`WebView mock 未找到域「${domain}」的实例`);
-  }
-  return node;
+export function findMockWebViewByDomain(root: ReactTestInstance | ReactTestRenderer['root'], domain: MockWebViewDomain): ReactTestInstance {
+    const node = root
+        .findAllByType(WebViewMock as unknown as React.ComponentType<unknown>)
+        .find(item => {
+            const uri = (item.props as WebViewProps).source?.uri;
+            return uri != null && resolveDomain({uri}) === domain;
+        });
+    if (node == null) {
+        // nm-throw: keep — 测试夹具断言：定位不到 mock 实例必须打断测试，非业务错误。
+        throw new Error(`WebView mock 未找到域「${domain}」的实例`);
+    }
+    return node;
 }
 
 const WebViewMock = React.forwardRef<
-  {postMessage: (data: string) => void},
-  WebViewProps
+    {postMessage: (data: string) => void},
+    WebViewProps
 >(function WebViewMock(props, ref) {
-  const instanceRef = React.useRef<MockWebViewInstance | null>(null);
-  if (instanceRef.current == null) {
-    instanceRef.current = {
-      id: nextInstanceId++,
-      domain: resolveDomain(props.source),
-      posts: [],
-    };
-  }
-  const instance = instanceRef.current;
+    const instanceRef = React.useRef<MockWebViewInstance | null>(null);
+    if (instanceRef.current == null) {
+        instanceRef.current = {
+            id: counters.nextInstanceId++,
+            domain: resolveDomain(props.source),
+            posts: [],
+        };
+    }
+    const instance = instanceRef.current;
 
-  React.useEffect(() => {
-    instances.push(instance);
-    return () => {
-      const index = instances.indexOf(instance);
-      if (index >= 0) {
-        instances.splice(index, 1);
-      }
-    };
-  }, [instance]);
+    React.useEffect(() => {
+        instances.push(instance);
+        return () => {
+            const index = instances.indexOf(instance);
+            if (index >= 0) {
+                instances.splice(index, 1);
+            }
+        };
+    }, [instance]);
 
-  const postMessage = React.useCallback(
-    (data: string) => {
-      instance.posts.push(data);
-      mockWebViewPostMessages.push(data);
-    },
-    [instance],
-  );
-  React.useImperativeHandle(ref, () => ({postMessage}), [postMessage]);
-  return <View ref={ref as React.Ref<View>} {...props} />;
+    const postMessage = React.useCallback(
+        (data: string) => {
+            instance.posts.push(data);
+            mockWebViewPostMessages.push(data);
+        },
+        [instance],
+    );
+    React.useImperativeHandle(ref, () => ({postMessage}), [postMessage]);
+    return <View ref={ref as React.Ref<View>} {...props} />;
 });
 
 export default WebViewMock;

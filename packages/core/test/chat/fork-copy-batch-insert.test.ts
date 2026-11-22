@@ -22,33 +22,33 @@ import type { NovelMasterTestContext } from "../helpers/novel-master.js";
 import {  testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 type CountingCtx = NovelMasterTestContext & {
-  readonly counter: import("../helpers/sql-counting-connection.js").SqlCounter;
+    readonly counter: import("../helpers/sql-counting-connection.js").SqlCounter;
 };
 
 let ctx: CountingCtx | undefined;
 
 before(async () => {
-  ctx = (await openSqlCountingNovelMasterTestConnection()) as CountingCtx;
+    ctx = (await openSqlCountingNovelMasterTestConnection()) as CountingCtx;
 });
 after(async () => {
-  if (ctx != null) {
-    await ctx.conn.close();
-    ctx = undefined;
-  }
+    if (ctx != null) {
+        await ctx.conn.close();
+        ctx = undefined;
+    }
 });
 
 function getCtx(): CountingCtx {
-  if (ctx == null) {
-    throw new Error("before hook did not run");
-  }
-  return ctx;
+    if (ctx == null) {
+        throw new Error("before hook did not run");
+    }
+    return ctx;
 }
 
 const MSG_COUNT = 40;
 
 /** 把 SQL 文本归一化（小写 + 压空白），方便用 includes 子串匹配业务语句。 */
 function norm(sql: string): string {
-  return sql.toLowerCase().replace(/\s+/g, " ").trim();
+    return sql.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
 /**
@@ -58,113 +58,113 @@ function norm(sql: string): string {
  * 必须逐条对齐——只看条数会漏掉「内容被篡改」的回归。
  */
 function assertMessagesClone(
-  source: ReadonlyArray<{ seq: number; role: string; content: unknown; hidden: boolean }>,
-  target: ReadonlyArray<{ seq: number; role: string; content: unknown; hidden: boolean }>,
-  label: string,
+    source: ReadonlyArray<{ seq: number; role: string; content: unknown; hidden: boolean }>,
+    target: ReadonlyArray<{ seq: number; role: string; content: unknown; hidden: boolean }>,
+    label: string,
 ): void {
-  assert.equal(target.length, source.length, `${label}: 条数应一致`);
-  for (let i = 0; i < source.length; i++) {
-    const s = source[i]!;
-    const t = target[i]!;
-    assert.equal(t.seq, s.seq, `${label}#${i}: seq 应一致`);
-    assert.equal(t.role, s.role, `${label}#${i}: role 应一致`);
-    assert.deepEqual(t.content, s.content, `${label}#${i}: content 应一致`);
-    assert.equal(t.hidden, s.hidden, `${label}#${i}: hidden 应一致`);
-  }
+    assert.equal(target.length, source.length, `${label}: 条数应一致`);
+    for (let i = 0; i < source.length; i++) {
+        const s = source[i]!;
+        const t = target[i]!;
+        assert.equal(t.seq, s.seq, `${label}#${i}: seq 应一致`);
+        assert.equal(t.role, s.role, `${label}#${i}: role 应一致`);
+        assert.deepEqual(t.content, s.content, `${label}#${i}: content 应一致`);
+        assert.equal(t.hidden, s.hidden, `${label}#${i}: hidden 应一致`);
+    }
 }
 
 describe("T-FK2 fork/copy 消息批量化", () => {
-  it(`fork ${MSG_COUNT} 条消息：INSERT INTO chat_message 只发 1 条（batch）`, async () => {
-    const c = getCtx();
-    const project = unwrap(await c.projects.create(`P-fk2-${testIsolationSuffix()}`));
-    const session = unwrap(await c.sessions.create(project.id));
+    it(`fork ${MSG_COUNT} 条消息：INSERT INTO chat_message 只发 1 条（batch）`, async () => {
+        const c = getCtx();
+        const project = unwrap(await c.projects.create(`P-fk2-${testIsolationSuffix()}`));
+        const session = unwrap(await c.sessions.create(project.id));
 
-    // 准备阶段：append 40 条消息。这段 SQL 不计入统计。
-    let lastId = "";
-    for (let i = 0; i < MSG_COUNT; i++) {
-      const m = unwrap(await c.messages.append(
-        session.id,
-        i % 2 === 0 ? "user" : "assistant",
-        TextBlocks.of(`m${i}`),
-      ));
-      lastId = m.id;
-    }
+        // 准备阶段：append 40 条消息。这段 SQL 不计入统计。
+        let lastId = "";
+        for (let i = 0; i < MSG_COUNT; i++) {
+            const m = unwrap(await c.messages.append(
+                session.id,
+                i % 2 === 0 ? "user" : "assistant",
+                TextBlocks.of(`m${i}`),
+            ));
+            lastId = m.id;
+        }
 
-    // 清掉准备阶段的 SQL，只统计 fork 这一段。
-    c.counter.clear();
+        // 清掉准备阶段的 SQL，只统计 fork 这一段。
+        c.counter.clear();
 
-    const forked = unwrap(await c.messages.fork(session.id, lastId));
+        const forked = unwrap(await c.messages.fork(session.id, lastId));
 
-    // fork 内部除了消息 INSERT，还有 session insert / VFS copy / checkpoint seed 等，
-    // 但只有 batchInsert 这一条会碰 chat_message 表——找出所有 chat_message 的 INSERT。
-    const chatInserts = c.counter
-      .all()
-      .filter((r) => norm(r.sql).includes("insert into chat_message"));
+        // fork 内部除了消息 INSERT，还有 session insert / VFS copy / checkpoint seed 等，
+        // 但只有 batchInsert 这一条会碰 chat_message 表——找出所有 chat_message 的 INSERT。
+        const chatInserts = c.counter
+            .all()
+            .filter((r) => norm(r.sql).includes("insert into chat_message"));
 
-    if (chatInserts.length !== 1) {
-      for (const r of c.counter.all()) {
-        console.log(`[${r.via}] ${r.kind}: ${r.sql.slice(0, 140)}`);
-      }
-    }
-    assert.equal(
-      chatInserts.length,
-      1,
-      `fork 应只发 1 条 chat_message INSERT，实际 ${chatInserts.length}（改造前 ${MSG_COUNT}）`,
-    );
-    assert.equal(
-      chatInserts[0]!.via,
-      "batch",
-      "chat_message INSERT 应走 batch 路径（batchInsert）",
-    );
+        if (chatInserts.length !== 1) {
+            for (const r of c.counter.all()) {
+                console.log(`[${r.via}] ${r.kind}: ${r.sql.slice(0, 140)}`);
+            }
+        }
+        assert.equal(
+            chatInserts.length,
+            1,
+            `fork 应只发 1 条 chat_message INSERT，实际 ${chatInserts.length}（改造前 ${MSG_COUNT}）`,
+        );
+        assert.equal(
+            chatInserts[0]!.via,
+            "batch",
+            "chat_message INSERT 应走 batch 路径（batchInsert）",
+        );
 
-    // 正确性：fork 出的会话消息数 = 源会话，且逐条 seq/role/content/hidden 一致。
-    const sourceMsgs = outcomeValue(await c.messages.listBySession(session.id));
-    const forkedMsgs = outcomeValue(await c.messages.listBySession(forked.id));
-    assert.equal(forkedMsgs.length, MSG_COUNT);
-    assertMessagesClone(sourceMsgs, forkedMsgs, "fork");
-  });
+        // 正确性：fork 出的会话消息数 = 源会话，且逐条 seq/role/content/hidden 一致。
+        const sourceMsgs = outcomeValue(await c.messages.listBySession(session.id));
+        const forkedMsgs = outcomeValue(await c.messages.listBySession(forked.id));
+        assert.equal(forkedMsgs.length, MSG_COUNT);
+        assertMessagesClone(sourceMsgs, forkedMsgs, "fork");
+    });
 
-  it(`copy ${MSG_COUNT} 条消息：INSERT INTO chat_message 只发 1 条（batch）`, async () => {
-    const c = getCtx();
-    const project = unwrap(await c.projects.create(`P-fk2cp-${testIsolationSuffix()}`));
-    const session = unwrap(await c.sessions.create(project.id));
+    it(`copy ${MSG_COUNT} 条消息：INSERT INTO chat_message 只发 1 条（batch）`, async () => {
+        const c = getCtx();
+        const project = unwrap(await c.projects.create(`P-fk2cp-${testIsolationSuffix()}`));
+        const session = unwrap(await c.sessions.create(project.id));
 
-    for (let i = 0; i < MSG_COUNT; i++) {
-      unwrap(await c.messages.append(
-        session.id,
-        i % 2 === 0 ? "user" : "assistant",
-        TextBlocks.of(`c${i}`),
-      ));
-    }
+        for (let i = 0; i < MSG_COUNT; i++) {
+            unwrap(await c.messages.append(
+                session.id,
+                i % 2 === 0 ? "user" : "assistant",
+                TextBlocks.of(`c${i}`),
+            ));
+        }
 
-    c.counter.clear();
+        c.counter.clear();
 
-    const copied = unwrap(await c.sessions.copy(session.id));
+        const copied = unwrap(await c.sessions.copy(session.id));
 
-    const chatInserts = c.counter
-      .all()
-      .filter((r) => norm(r.sql).includes("insert into chat_message"));
+        const chatInserts = c.counter
+            .all()
+            .filter((r) => norm(r.sql).includes("insert into chat_message"));
 
-    if (chatInserts.length !== 1) {
-      for (const r of c.counter.all()) {
-        console.log(`[${r.via}] ${r.kind}: ${r.sql.slice(0, 140)}`);
-      }
-    }
-    assert.equal(
-      chatInserts.length,
-      1,
-      `copy 应只发 1 条 chat_message INSERT，实际 ${chatInserts.length}（改造前 ${MSG_COUNT}）`,
-    );
-    assert.equal(
-      chatInserts[0]!.via,
-      "batch",
-      "chat_message INSERT 应走 batch 路径（batchInsert）",
-    );
+        if (chatInserts.length !== 1) {
+            for (const r of c.counter.all()) {
+                console.log(`[${r.via}] ${r.kind}: ${r.sql.slice(0, 140)}`);
+            }
+        }
+        assert.equal(
+            chatInserts.length,
+            1,
+            `copy 应只发 1 条 chat_message INSERT，实际 ${chatInserts.length}（改造前 ${MSG_COUNT}）`,
+        );
+        assert.equal(
+            chatInserts[0]!.via,
+            "batch",
+            "chat_message INSERT 应走 batch 路径（batchInsert）",
+        );
 
-    const copiedMsgs = outcomeValue(await c.messages.listBySession(copied.id));
-    assert.equal(copiedMsgs.length, MSG_COUNT);
-    // 逐条校验 copy 也保留 seq/role/content/hidden。
-    const sourceMsgs = outcomeValue(await c.messages.listBySession(session.id));
-    assertMessagesClone(sourceMsgs, copiedMsgs, "copy");
-  });
+        const copiedMsgs = outcomeValue(await c.messages.listBySession(copied.id));
+        assert.equal(copiedMsgs.length, MSG_COUNT);
+        // 逐条校验 copy 也保留 seq/role/content/hidden。
+        const sourceMsgs = outcomeValue(await c.messages.listBySession(session.id));
+        assertMessagesClone(sourceMsgs, copiedMsgs, "copy");
+    });
 });

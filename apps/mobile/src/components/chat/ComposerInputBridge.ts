@@ -11,9 +11,9 @@ import {TypedMessageBridge} from '@/webview-host/typed-message-bridge';
 export const COMPOSER_INPUT_BRIDGE_VERSION = 1 as const;
 
 export type BridgeEnvelope<T extends string, P> = {
-  readonly v: typeof COMPOSER_INPUT_BRIDGE_VERSION;
-  readonly type: T;
-  readonly payload: P;
+    readonly v: typeof COMPOSER_INPUT_BRIDGE_VERSION;
+    readonly type: T;
+    readonly payload: P;
 };
 
 /** 高亮分段来源（单包双模式）：chat 链 token / 宏链白名单宏。 */
@@ -24,12 +24,12 @@ export type ComposerInputMode = 'composer-token' | 'prompt-macro';
  * 当前无生产消费方（原 chat 全屏已改走 PromptEditor 编辑屏），保留为协议能力。
  */
 export type ComposerInputMetrics = {
-  readonly fontSize: number;
-  readonly lineHeight: number;
-  readonly paddingH: number;
-  readonly paddingV: number;
-  readonly minHeight: number;
-  readonly maxHeight: number | null;
+    readonly fontSize: number;
+    readonly lineHeight: number;
+    readonly paddingH: number;
+    readonly paddingV: number;
+    readonly minHeight: number;
+    readonly maxHeight: number | null;
 };
 
 /**
@@ -37,50 +37,50 @@ export type ComposerInputMetrics = {
  * primaryMuted 由宿主拼好下发（mobile 侧 = `${primary}22`），web 不做颜色计算。
  */
 export type ComposerInputTheme = {
-  readonly background: string;
-  readonly text: string;
-  readonly textSecondary: string;
-  readonly primary: string;
-  readonly primaryMuted: string;
-  readonly selection: string;
+    readonly background: string;
+    readonly text: string;
+    readonly textSecondary: string;
+    readonly primary: string;
+    readonly primaryMuted: string;
+    readonly selection: string;
 };
 
 export type ComposerInputSelection = {
-  readonly start: number;
-  readonly end: number;
+    readonly start: number;
+    readonly end: number;
 };
 
 export type ComposerInputInitPayload = {
-  readonly mode: ComposerInputMode;
-  readonly disabled: boolean;
-  readonly theme: ComposerInputTheme;
-  readonly metrics: ComposerInputMetrics;
-  readonly placeholder: string;
+    readonly mode: ComposerInputMode;
+    readonly disabled: boolean;
+    readonly theme: ComposerInputTheme;
+    readonly metrics: ComposerInputMetrics;
+    readonly placeholder: string;
 };
 
 type ComposerInputSetTextPayload = {
-  readonly text: string;
-  /** 省略时光标保持内核写值后的位置（value 赋值后落末位）。 */
-  readonly selectionStart?: number;
-  readonly selectionEnd?: number;
+    readonly text: string;
+    /** 省略时光标保持内核写值后的位置（value 赋值后落末位）。 */
+    readonly selectionStart?: number;
+    readonly selectionEnd?: number;
 };
 
 /** Host → composer 输入框 WebView */
 export type HostToComposerInputMessage =
-  | BridgeEnvelope<'init', ComposerInputInitPayload>
-  | BridgeEnvelope<'themeUpdate', {theme: ComposerInputTheme}>
-  | BridgeEnvelope<'setText', ComposerInputSetTextPayload>
-  | BridgeEnvelope<'setSelection', ComposerInputSelection>
-  | BridgeEnvelope<'setDisabled', {disabled: boolean}>
-  | BridgeEnvelope<'blur', Record<string, never>>;
+    | BridgeEnvelope<'init', ComposerInputInitPayload>
+    | BridgeEnvelope<'themeUpdate', {theme: ComposerInputTheme}>
+    | BridgeEnvelope<'setText', ComposerInputSetTextPayload>
+    | BridgeEnvelope<'setSelection', ComposerInputSelection>
+    | BridgeEnvelope<'setDisabled', {disabled: boolean}>
+    | BridgeEnvelope<'blur', Record<string, never>>;
 
 /** composer 输入框 WebView → host */
 export type ComposerInputToHostMessage =
-  | BridgeEnvelope<'ready', {version: number}>
-  | BridgeEnvelope<'change', {text: string}>
-  | BridgeEnvelope<'selectionChange', ComposerInputSelection>
-  | BridgeEnvelope<'focus', Record<string, never>>
-  | BridgeEnvelope<'blur', Record<string, never>>
-  | BridgeEnvelope<'heightChange', {height: number}>;
+    | BridgeEnvelope<'ready', {version: number}>
+    | BridgeEnvelope<'change', {text: string}>
+    | BridgeEnvelope<'selectionChange', ComposerInputSelection>
+    | BridgeEnvelope<'focus', Record<string, never>>
+    | BridgeEnvelope<'blur', Record<string, never>>
+    | BridgeEnvelope<'heightChange', {height: number}>;
 
 export const composerInputBridge = TypedMessageBridge.create<HostToComposerInputMessage, ComposerInputToHostMessage>(COMPOSER_INPUT_BRIDGE_VERSION, 'composer-input');

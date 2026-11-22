@@ -21,204 +21,204 @@ novelMasterTestFixture();
 
 /** 最小 stub：记录调用参数，可注入返回值 / 抛错。 */
 function makeStubs(options?: {
-  directories?: string[];
-  existingRules?: WorkplaceDirRule[];
-  listDirRulesError?: Error;
-  upsertError?: Error;
+    directories?: string[];
+    existingRules?: WorkplaceDirRule[];
+    listDirRulesError?: Error;
+    upsertError?: Error;
 }) {
-  const calls = {
-    vfsPrefix: [] as Array<{ scopeKey: string; prefix: string }>,
-    listDirRulesScopeKeys: [] as string[],
-    upserted: [] as WorkplaceDirRule[],
-  };
-  const vfsRepo = {
-    listDirectoryPathsUnderPrefix: async (scopeKey: string, prefix: string) => {
-      calls.vfsPrefix.push({ scopeKey, prefix });
-      return options?.directories ?? [];
-    },
-  } as unknown as VfsEntryRepository;
-  const workplaceRepo = {
-    listDirRules: async (scopeKey: string) => {
-      calls.listDirRulesScopeKeys.push(scopeKey);
-      if (options?.listDirRulesError) {
-        throw options.listDirRulesError;
-      }
-      return options?.existingRules ?? [];
-    },
-    upsertDirRule: async (rule: WorkplaceDirRule) => {
-      if (options?.upsertError) {
-        throw options.upsertError;
-      }
-      calls.upserted.push(rule);
-    },
-  } as unknown as WorkplaceRepository;
-  return { vfsRepo, workplaceRepo, calls };
+    const calls = {
+        vfsPrefix: [] as Array<{ scopeKey: string; prefix: string }>,
+        listDirRulesScopeKeys: [] as string[],
+        upserted: [] as WorkplaceDirRule[],
+    };
+    const vfsRepo = {
+        listDirectoryPathsUnderPrefix: async (scopeKey: string, prefix: string) => {
+            calls.vfsPrefix.push({ scopeKey, prefix });
+            return options?.directories ?? [];
+        },
+    } as unknown as VfsEntryRepository;
+    const workplaceRepo = {
+        listDirRules: async (scopeKey: string) => {
+            calls.listDirRulesScopeKeys.push(scopeKey);
+            if (options?.listDirRulesError) {
+                throw options.listDirRulesError;
+            }
+            return options?.existingRules ?? [];
+        },
+        upsertDirRule: async (rule: WorkplaceDirRule) => {
+            if (options?.upsertError) {
+                throw options.upsertError;
+            }
+            calls.upserted.push(rule);
+        },
+    } as unknown as WorkplaceRepository;
+    return { vfsRepo, workplaceRepo, calls };
 }
 
 const SESSION_SCOPE = {
-  kind: "session" as const,
-  projectId: "p1",
-  sessionId: "s1",
+    kind: "session" as const,
+    projectId: "p1",
+    sessionId: "s1",
 };
 
 describe("ensureImportDirRules（stub 单测）", () => {
-  it("T-I6: 导入到根——子目录补行、根自身无规则行", async () => {
-    const { vfsRepo, workplaceRepo, calls } = makeStubs({
-      directories: ["/", "/a", "/a/b"],
+    it("T-I6: 导入到根——子目录补行、根自身无规则行", async () => {
+        const { vfsRepo, workplaceRepo, calls } = makeStubs({
+            directories: ["/", "/a", "/a/b"],
+        });
+        await ImportDirRules.ensure({
+            vfsRepo,
+            workplaceRepo,
+            scope: SESSION_SCOPE,
+            directoryPath: "/",
+        });
+        // 根前缀不再整体短路：照常查目录全集并求差
+        assert.deepEqual(calls.vfsPrefix, [
+            { scopeKey: "session:p1:s1", prefix: "/" },
+        ]);
+        assert.deepEqual(calls.listDirRulesScopeKeys, ["session:s1"]);
+        // 根自身 / 不补规则行，前缀下子目录全部补默认启用行
+        assert.deepEqual(
+            calls.upserted.map((rule) => rule.logicalPath),
+            ["/a", "/a/b"]
+        );
     });
-    await ImportDirRules.ensure({
-      vfsRepo,
-      workplaceRepo,
-      scope: SESSION_SCOPE,
-      directoryPath: "/",
-    });
-    // 根前缀不再整体短路：照常查目录全集并求差
-    assert.deepEqual(calls.vfsPrefix, [
-      { scopeKey: "session:p1:s1", prefix: "/" },
-    ]);
-    assert.deepEqual(calls.listDirRulesScopeKeys, ["session:s1"]);
-    // 根自身 / 不补规则行，前缀下子目录全部补默认启用行
-    assert.deepEqual(
-      calls.upserted.map((rule) => rule.logicalPath),
-      ["/a", "/a/b"]
-    );
-  });
 
-  it("T-I6: 空差集零写入——已有行（含 rule_off）全部跳过", async () => {
-    const { vfsRepo, workplaceRepo, calls } = makeStubs({
-      directories: ["/角色", "/角色/开场"],
-      existingRules: [
-        ImportDirRules.buildDefault("session:s1", "/角色"),
-        { ...ImportDirRules.buildDefault("session:s1", "/角色/开场"), ruleEnabled: false },
-      ],
+    it("T-I6: 空差集零写入——已有行（含 rule_off）全部跳过", async () => {
+        const { vfsRepo, workplaceRepo, calls } = makeStubs({
+            directories: ["/角色", "/角色/开场"],
+            existingRules: [
+                ImportDirRules.buildDefault("session:s1", "/角色"),
+                { ...ImportDirRules.buildDefault("session:s1", "/角色/开场"), ruleEnabled: false },
+            ],
+        });
+        await ImportDirRules.ensure({
+            vfsRepo,
+            workplaceRepo,
+            scope: SESSION_SCOPE,
+            directoryPath: "/角色",
+        });
+        assert.equal(calls.upserted.length, 0);
     });
-    await ImportDirRules.ensure({
-      vfsRepo,
-      workplaceRepo,
-      scope: SESSION_SCOPE,
-      directoryPath: "/角色",
-    });
-    assert.equal(calls.upserted.length, 0);
-  });
 
-  it("T-I6: 吞错路径——listDirRules 抛错时 doesNotReject 且 console.warn 一次", async () => {
-    const { vfsRepo, workplaceRepo } = makeStubs({
-      listDirRulesError: new Error("workplace-boom"),
+    it("T-I6: 吞错路径——listDirRules 抛错时 doesNotReject 且 console.warn 一次", async () => {
+        const { vfsRepo, workplaceRepo } = makeStubs({
+            listDirRulesError: new Error("workplace-boom"),
+        });
+        const originalWarn = console.warn;
+        const warnCalls: unknown[][] = [];
+        console.warn = (...args: unknown[]) => {
+            warnCalls.push(args);
+        };
+        try {
+            await assert.doesNotReject(
+                ImportDirRules.ensure({
+                    vfsRepo,
+                    workplaceRepo,
+                    scope: SESSION_SCOPE,
+                    directoryPath: "/角色",
+                })
+            );
+        } finally {
+            console.warn = originalWarn;
+        }
+        assert.equal(warnCalls.length, 1);
     });
-    const originalWarn = console.warn;
-    const warnCalls: unknown[][] = [];
-    console.warn = (...args: unknown[]) => {
-      warnCalls.push(args);
-    };
-    try {
-      await assert.doesNotReject(
-        ImportDirRules.ensure({
-          vfsRepo,
-          workplaceRepo,
-          scope: SESSION_SCOPE,
-          directoryPath: "/角色",
-        })
-      );
-    } finally {
-      console.warn = originalWarn;
-    }
-    assert.equal(warnCalls.length, 1);
-  });
 
-  it("T-I4: scope 键空间分开算——查 VFS 用 vfs sk，读写 workplace 用 workplace sk", async () => {
-    const { vfsRepo, workplaceRepo, calls } = makeStubs({
-      directories: ["/角色", "/角色/世界书"],
+    it("T-I4: scope 键空间分开算——查 VFS 用 vfs sk，读写 workplace 用 workplace sk", async () => {
+        const { vfsRepo, workplaceRepo, calls } = makeStubs({
+            directories: ["/角色", "/角色/世界书"],
+        });
+        await ImportDirRules.ensure({
+            vfsRepo,
+            workplaceRepo,
+            scope: SESSION_SCOPE,
+            directoryPath: "/角色",
+        });
+        // VFS 表查询用 vfs 键空间：session:${projectId}:${sessionId}
+        assert.deepEqual(calls.vfsPrefix, [
+            { scopeKey: "session:p1:s1", prefix: "/角色" },
+        ]);
+        // workplace 表读写用 workplace 键空间：session:${sessionId}
+        assert.deepEqual(calls.listDirRulesScopeKeys, ["session:s1"]);
+        assert.ok(calls.upserted.length > 0);
+        for (const rule of calls.upserted) {
+            assert.equal(rule.scopeKey, "session:s1");
+        }
     });
-    await ImportDirRules.ensure({
-      vfsRepo,
-      workplaceRepo,
-      scope: SESSION_SCOPE,
-      directoryPath: "/角色",
-    });
-    // VFS 表查询用 vfs 键空间：session:${projectId}:${sessionId}
-    assert.deepEqual(calls.vfsPrefix, [
-      { scopeKey: "session:p1:s1", prefix: "/角色" },
-    ]);
-    // workplace 表读写用 workplace 键空间：session:${sessionId}
-    assert.deepEqual(calls.listDirRulesScopeKeys, ["session:s1"]);
-    assert.ok(calls.upserted.length > 0);
-    for (const rule of calls.upserted) {
-      assert.equal(rule.scopeKey, "session:s1");
-    }
-  });
 
-  it("补行只覆盖无行目录，写入顺序无关且行内字段为默认启用", async () => {
-    const { vfsRepo, workplaceRepo, calls } = makeStubs({
-      directories: ["/角色", "/角色/开场", "/角色/世界书"],
-      existingRules: [
-        { ...unwrap(ImportDirRules.buildDefault("session:s1", "/角色/世界书")), ruleEnabled: false },
-      ],
+    it("补行只覆盖无行目录，写入顺序无关且行内字段为默认启用", async () => {
+        const { vfsRepo, workplaceRepo, calls } = makeStubs({
+            directories: ["/角色", "/角色/开场", "/角色/世界书"],
+            existingRules: [
+                { ...unwrap(ImportDirRules.buildDefault("session:s1", "/角色/世界书")), ruleEnabled: false },
+            ],
+        });
+        await ImportDirRules.ensure({
+            vfsRepo,
+            workplaceRepo,
+            scope: SESSION_SCOPE,
+            directoryPath: "/角色",
+        });
+        assert.deepEqual(
+            calls.upserted.map((rule) => rule.logicalPath),
+            ["/角色", "/角色/开场"]
+        );
+        for (const rule of calls.upserted) {
+            assert.equal(rule.ruleEnabled, true);
+            assert.equal(rule.headCount, 0);
+            assert.equal(rule.tailCount, 1000);
+            assert.equal(rule.fillPolicy, "header");
+        }
     });
-    await ImportDirRules.ensure({
-      vfsRepo,
-      workplaceRepo,
-      scope: SESSION_SCOPE,
-      directoryPath: "/角色",
-    });
-    assert.deepEqual(
-      calls.upserted.map((rule) => rule.logicalPath),
-      ["/角色", "/角色/开场"]
-    );
-    for (const rule of calls.upserted) {
-      assert.equal(rule.ruleEnabled, true);
-      assert.equal(rule.headCount, 0);
-      assert.equal(rule.tailCount, 1000);
-      assert.equal(rule.fillPolicy, "header");
-    }
-  });
 });
 
 describe("ensureImportDirRules（真实 DB 等价性）", () => {
-  it("helper 补入行与 WorkplaceService.setDirRule({logicalPath}) 产物逐字段等价", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-eq-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const scope = {
-      kind: "session" as const,
-      projectId: project.id,
-      sessionId: session.id,
-    };
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    unwrap(await vfs.mkdir("/角色"));
-    unwrap(await vfs.mkdir("/角色/开场"));
+    it("helper 补入行与 WorkplaceService.setDirRule({logicalPath}) 产物逐字段等价", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-eq-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const scope = {
+            kind: "session" as const,
+            projectId: project.id,
+            sessionId: session.id,
+        };
+        const vfs = ctx.sessionVfs(project.id, session.id);
+        unwrap(await vfs.mkdir("/角色"));
+        unwrap(await vfs.mkdir("/角色/开场"));
 
-    // 左边：helper 直构补行
-    await ImportDirRules.ensure({
-      vfsRepo: new SqliteVfsEntryRepository(ctx.conn),
-      workplaceRepo: new SqliteWorkplaceRepository(ctx.conn),
-      scope,
-      directoryPath: "/角色",
+        // 左边：helper 直构补行
+        await ImportDirRules.ensure({
+            vfsRepo: new SqliteVfsEntryRepository(ctx.conn),
+            workplaceRepo: new SqliteWorkplaceRepository(ctx.conn),
+            scope,
+            directoryPath: "/角色",
+        });
+
+        // 右边：另一个 session 走 WorkplaceService.setDirRule 逐目录设置
+        const session2 = unwrap(await ctx.sessions.create(project.id));
+        const scope2 = {
+            kind: "session" as const,
+            projectId: project.id,
+            sessionId: session2.id,
+        };
+        const vfs2 = ctx.sessionVfs(project.id, session2.id);
+        unwrap(await vfs2.mkdir("/角色"));
+        unwrap(await vfs2.mkdir("/角色/开场"));
+        const wt2 = WorkplaceServiceFactory.create(ctx.conn, scope2);
+        await wt2.setDirRule({ logicalPath: "/角色" });
+        await wt2.setDirRule({ logicalPath: "/角色/开场" });
+
+        const repo1 = new SqliteWorkplaceRepository(ctx.conn);
+        const repo2 = new SqliteWorkplaceRepository(ctx.conn);
+        // 两个 session 的 scopeKey 必然不同，归一化后对比其余全部字段
+        const stripScopeKey = (rules: WorkplaceDirRule[]) =>
+            rules
+                .map(({ scopeKey: _sk, ...rest }) => rest)
+                .sort((a, b) => a.logicalPath.localeCompare(b.logicalPath));
+        assert.deepEqual(
+            stripScopeKey(await repo1.listDirRules(`session:${session.id}`)),
+            stripScopeKey(await repo2.listDirRules(`session:${session2.id}`))
+        );
     });
-
-    // 右边：另一个 session 走 WorkplaceService.setDirRule 逐目录设置
-    const session2 = unwrap(await ctx.sessions.create(project.id));
-    const scope2 = {
-      kind: "session" as const,
-      projectId: project.id,
-      sessionId: session2.id,
-    };
-    const vfs2 = ctx.sessionVfs(project.id, session2.id);
-    unwrap(await vfs2.mkdir("/角色"));
-    unwrap(await vfs2.mkdir("/角色/开场"));
-    const wt2 = WorkplaceServiceFactory.create(ctx.conn, scope2);
-    await wt2.setDirRule({ logicalPath: "/角色" });
-    await wt2.setDirRule({ logicalPath: "/角色/开场" });
-
-    const repo1 = new SqliteWorkplaceRepository(ctx.conn);
-    const repo2 = new SqliteWorkplaceRepository(ctx.conn);
-    // 两个 session 的 scopeKey 必然不同，归一化后对比其余全部字段
-    const stripScopeKey = (rules: WorkplaceDirRule[]) =>
-      rules
-        .map(({ scopeKey: _sk, ...rest }) => rest)
-        .sort((a, b) => a.logicalPath.localeCompare(b.logicalPath));
-    assert.deepEqual(
-      stripScopeKey(await repo1.listDirRules(`session:${session.id}`)),
-      stripScopeKey(await repo2.listDirRules(`session:${session2.id}`))
-    );
-  });
 });

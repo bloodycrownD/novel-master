@@ -9,37 +9,37 @@ import { ToolPolicyPicker } from "@/features/settings/ToolPolicyPicker";
  * 展开态/交互行为靠类型检查 + 手工覆盖。
  */
 test("T-P4: 折叠态渲染 trigger 文案且不常驻弹层", () => {
-  const html = renderToStaticMarkup(
-    <ToolPolicyPicker selected={["read"]} onChange={() => {}} />,
-  );
-  // trigger 文案反映选择数量（内置工具目录含 curl/search 共 11 个）
-  assert.match(html, /已选工具（1\/11）/);
-  assert.match(html, /▼/);
-  // 折叠态下不渲染弹层（picker-modal 由 open=true 才挂）
-  assert.doesNotMatch(html, /picker-modal/);
+    const html = renderToStaticMarkup(
+        <ToolPolicyPicker selected={["read"]} onChange={() => {}} />,
+    );
+    // trigger 文案反映选择数量（内置工具目录含 curl/search 共 11 个）
+    assert.match(html, /已选工具（1\/11）/);
+    assert.match(html, /▼/);
+    // 折叠态下不渲染弹层（picker-modal 由 open=true 才挂）
+    assert.doesNotMatch(html, /picker-modal/);
 });
 
 test("T-P4: trigger 文案边界——未选择与全选", () => {
-  const none = renderToStaticMarkup(
-    <ToolPolicyPicker selected={[]} onChange={() => {}} />,
-  );
-  assert.match(none, /未选择工具（0\/11）/);
+    const none = renderToStaticMarkup(
+        <ToolPolicyPicker selected={[]} onChange={() => {}} />,
+    );
+    assert.match(none, /未选择工具（0\/11）/);
 
-  const all = [
-    "task",
-    "read",
-    "write",
-    "edit",
-    "fs",
-    "glob",
-    "grep",
-    "skill",
-    "agent",
-    "curl",
-    "search",
-  ];
-  const full = renderToStaticMarkup(
-    <ToolPolicyPicker selected={all} onChange={() => {}} />,
-  );
-  assert.match(full, /全部工具（11\/11）/);
+    const all = [
+        "task",
+        "read",
+        "write",
+        "edit",
+        "fs",
+        "glob",
+        "grep",
+        "skill",
+        "agent",
+        "curl",
+        "search",
+    ];
+    const full = renderToStaticMarkup(
+        <ToolPolicyPicker selected={all} onChange={() => {}} />,
+    );
+    assert.match(full, /全部工具（11\/11）/);
 });

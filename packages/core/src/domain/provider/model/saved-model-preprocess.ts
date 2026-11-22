@@ -7,21 +7,21 @@
 import type { ThinkingLevel } from "./saved-model-settings.js";
 
 export const SavedModelPreprocess = {
-  /** dev-only：将未发布的 `thinking.enabled` 形态映射为 `thinkingLevel`。 */
-  migrateLegacyThinkingShape(raw: unknown): unknown {
-    if (typeof raw !== "object" || raw == null) {
-      return raw;
-    }
-    const generation = raw as Record<string, unknown>;
-    if ("thinkingLevel" in generation) {
-      return raw;
-    }
-    const thinking = generation.thinking;
-    if (typeof thinking !== "object" || thinking == null || !("enabled" in thinking)) {
-      return raw;
-    }
-    const { thinking: _removed, ...rest } = generation;
-    const thinkingLevel: ThinkingLevel = (thinking as { enabled: boolean }).enabled ? "medium" : "off";
-    return { ...rest, thinkingLevel };
-  },
+    /** dev-only：将未发布的 `thinking.enabled` 形态映射为 `thinkingLevel`。 */
+    migrateLegacyThinkingShape(raw: unknown): unknown {
+        if (typeof raw !== "object" || raw == null) {
+            return raw;
+        }
+        const generation = raw as Record<string, unknown>;
+        if ("thinkingLevel" in generation) {
+            return raw;
+        }
+        const thinking = generation.thinking;
+        if (typeof thinking !== "object" || thinking == null || !("enabled" in thinking)) {
+            return raw;
+        }
+        const { thinking: _removed, ...rest } = generation;
+        const thinkingLevel: ThinkingLevel = (thinking as { enabled: boolean }).enabled ? "medium" : "off";
+        return { ...rest, thinkingLevel };
+    },
 } as const;

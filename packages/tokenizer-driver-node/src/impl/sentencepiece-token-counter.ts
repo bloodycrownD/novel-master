@@ -25,7 +25,7 @@ const heuristic = new HeuristicTokenCounter();
 
 // nm-style 注记：文件名 PascalCase（SentencepieceTokenCounter）与同文件非导出类 SentencePieceTokenCounter 仅一字母大小写之差，判定撞名，按「SP 家族计数入口」主体起名（SentencePieceFamilyCount）。
 export namespace SentencePieceFamilyCount {
-  /**
+    /**
    * 真 tokenizer 加载失败时的**兜底计数**（stream-metrics-native ④）。
    *
    * 与 web 家族同一条口径：字符折算 `ceil(字符数 / 3.35)` 是英文口径，对中文正文
@@ -35,82 +35,82 @@ export namespace SentencePieceFamilyCount {
    *
    * 只有 cl100k 表也建不起来（环境级故障）才退回字符折算。
    */
-  // nm-style 注记：本应保持 namespace 私有，但顶层类 SentencePieceTokenCounter（不收口）的兜底路径依赖它，须以 namespace 成员形态暴露（不经 barrel，包外不可见）。
-  export function fallbackCount(text: string): number {
-    const real = EncodingCache.countText(text);
-    return real ?? heuristic.countText(text);
-  }
+    // nm-style 注记：本应保持 namespace 私有，但顶层类 SentencePieceTokenCounter（不收口）的兜底路径依赖它，须以 namespace 成员形态暴露（不经 barrel，包外不可见）。
+    export function fallbackCount(text: string): number {
+        const real = EncodingCache.countText(text);
+        return real ?? heuristic.countText(text);
+    }
 
-  export async function countPrompt(family: TokenizerFamily, serialized: string): Promise<TokenCountEstimate> {
-    const counter = new SentencePieceTokenCounter(family as SentencePieceFamily);
-    const count = await counter.countSerializedPrompt(serialized);
-    return { count, estimated: counter.failedLoad };
-  }
+    export async function countPrompt(family: TokenizerFamily, serialized: string): Promise<TokenCountEstimate> {
+        const counter = new SentencePieceTokenCounter(family as SentencePieceFamily);
+        const count = await counter.countSerializedPrompt(serialized);
+        return { count, estimated: counter.failedLoad };
+    }
 }
 
 /** SentencePiece `.model` counter — encodes plain serialized prompt text (ST body path). */
 class SentencePieceTokenCounter implements TokenCounter {
-  readonly kind: TokenizerFamily;
-  private processor: SentencePieceProcessor | null = null;
-  private loadError = false;
+    readonly kind: TokenizerFamily;
+    private processor: SentencePieceProcessor | null = null;
+    private loadError = false;
 
-  constructor(private readonly family: SentencePieceFamily) {
-    this.kind = family;
-  }
+    constructor(private readonly family: SentencePieceFamily) {
+        this.kind = family;
+    }
 
-  /** nm-style: keep-local — 懒加载状态机（processor 缓存 + loadError 锁存），内联会把错误缓存塞进计数路径。 */
-  private async getProcessor(): Promise<SentencePieceProcessor | null> {
-    if (this.processor != null) {
-      return this.processor;
+    /** nm-style: keep-local — 懒加载状态机（processor 缓存 + loadError 锁存），内联会把错误缓存塞进计数路径。 */
+    private async getProcessor(): Promise<SentencePieceProcessor | null> {
+        if (this.processor != null) {
+            return this.processor;
+        }
+        if (this.loadError) {
+            return null;
+        }
+        const paths = TokenizerAssetPaths.forFamily(this.family);
+        if (paths == null || paths.kind !== "model") {
+            this.loadError = true;
+            return null;
+        }
+        try {
+            const loader = NodeTokenizerLoader.get();
+            const proc = new SentencePieceProcessor();
+            await proc.load(loader.readModel(paths.primary));
+            this.processor = proc;
+            return proc;
+        } catch {
+            this.loadError = true;
+            return null;
+        }
     }
-    if (this.loadError) {
-      return null;
-    }
-    const paths = TokenizerAssetPaths.forFamily(this.family);
-    if (paths == null || paths.kind !== "model") {
-      this.loadError = true;
-      return null;
-    }
-    try {
-      const loader = NodeTokenizerLoader.get();
-      const proc = new SentencePieceProcessor();
-      await proc.load(loader.readModel(paths.primary));
-      this.processor = proc;
-      return proc;
-    } catch {
-      this.loadError = true;
-      return null;
-    }
-  }
 
-  // 同步 port 实现保持字符折算不变（原因同 `WebTokenizerCounter` 的同名注释）：
-  // 契约是同步的，而真编码表只能惰性异步构造；需要读数的路径都在 async 侧。
-  countText(text: string): number {
-    return Math.ceil(text.length / CHARACTERS_PER_TOKEN_RATIO);
-  }
-
-  /** nm-style: keep-public — TokenCounter 端口实现（经接口分发调用，检查器按方法名计数漏计）。 */
-  countMessages(messages: readonly ChatMessage[]): number {
-    let chars = 0;
-    for (const m of messages) {
-      chars += MessageBodyText.fromBlocks(m.content.blocks).length;
+    // 同步 port 实现保持字符折算不变（原因同 `WebTokenizerCounter` 的同名注释）：
+    // 契约是同步的，而真编码表只能惰性异步构造；需要读数的路径都在 async 侧。
+    countText(text: string): number {
+        return Math.ceil(text.length / CHARACTERS_PER_TOKEN_RATIO);
     }
-    return Math.ceil(chars / CHARACTERS_PER_TOKEN_RATIO);
-  }
 
-  /**
+    /** nm-style: keep-public — TokenCounter 端口实现（经接口分发调用，检查器按方法名计数漏计）。 */
+    countMessages(messages: readonly ChatMessage[]): number {
+        let chars = 0;
+        for (const m of messages) {
+            chars += MessageBodyText.fromBlocks(m.content.blocks).length;
+        }
+        return Math.ceil(chars / CHARACTERS_PER_TOKEN_RATIO);
+    }
+
+    /**
    * Encodes serialized prompt body (ST `countSentencepieceArrayTokens` on plain text);
    * 加载失败时兜底到默认 cl100k 真计数（见 {@link fallbackCount}）。
    */
-  async countSerializedPrompt(serialized: string): Promise<number> {
-    const proc = await this.getProcessor();
-    if (proc == null) {
-      return SentencePieceFamilyCount.fallbackCount(serialized);
+    async countSerializedPrompt(serialized: string): Promise<number> {
+        const proc = await this.getProcessor();
+        if (proc == null) {
+            return SentencePieceFamilyCount.fallbackCount(serialized);
+        }
+        return proc.encodeIds(serialized).length;
     }
-    return proc.encodeIds(serialized).length;
-  }
 
-  get failedLoad(): boolean {
-    return this.loadError;
-  }
+    get failedLoad(): boolean {
+        return this.loadError;
+    }
 }

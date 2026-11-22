@@ -1,8 +1,9 @@
 /**
  * SQLite `sksp_secrets` 编排抽象基类。
  *
- * 模板方法模式：base 负责校验 ref、拼 SQL、跑 SELECT/INSERT/DELETE，
- * 加密/解密通过 {@link SkspCryptoStrategy} 委托给子类。
+ * 模板方法模式：base 负责校验 ref、跑 SELECT/INSERT/DELETE（SQL 文本见
+ * resources/sql/sksp.mapper.xml 的 sksp 语句），加密/解密通过
+ * {@link SkspCryptoStrategy} 委托给子类。
  *
  * 三端 `has`/`delete` 逐字相同；`get` 前半段（SELECT + algo 校验）也相同，
  * 密文/iv 的解码与 null 检查全部下放 strategy；`set` 后半段
@@ -14,6 +15,7 @@
 import type { TdbcConnection } from "../../tdbc/ports/connection.port.js";
 import { TdbcTemplate } from "../../tdbc/logic/template-helper.js";
 import { SqlTemplateParser } from "../../sql-template/index.js";
+import { SkspSql } from "@/infra/sql-template/generated/sksp.mapper.generated.js";
 import { SkspError, SkspRefAssert } from "../sksp-error.js";
 import type { SecretStore } from "../ports/secret-store.port.js";
 import type { SkspCryptoStrategy } from "./sksp-strategy.port.js";
@@ -23,51 +25,40 @@ import type { SkspCryptoStrategy } from "./sksp-strategy.port.js";
  * 子类只要传一个 {@link SkspCryptoStrategy} 进来，就拿到了完整的 SecretStore。
  */
 export abstract class BaseSqliteSecretStore implements SecretStore {
-  private readonly parser = new SqlTemplateParser();
+    private readonly parser = new SqlTemplateParser();
 
-  constructor(protected readonly conn: TdbcConnection, protected readonly strategy: SkspCryptoStrategy) {}
+    constructor(protected readonly conn: TdbcConnection, protected readonly strategy: SkspCryptoStrategy) {}
 
-  async get(ref: string): Promise<string | null> {
-    SkspRefAssert.validRef(ref);
-    const rows = await TdbcTemplate.query(this.conn, this.parser, `SELECT ciphertext, iv, algo, version FROM sksp_secrets WHERE ref = #{ref}`, { ref });
-    if (rows.length === 0) {
-      return null;
+    async get(ref: string): Promise<string | null> {
+        SkspRefAssert.validRef(ref);
+        const rows = await TdbcTemplate.query(this.conn, this.parser, SkspSql.get, { ref });
+        if (rows.length === 0) {
+            return null;
+        }
+        const row = rows[0]!;
+        if (String(row.algo) !== this.strategy.algo) {
+            throw new SkspError("DECRYPT_FAILED", `Unsupported algo for ${ref}. Re-run: nm provider edit --apiKey`, { ref });
+        }
+        return this.strategy.decrypt(ref, row);
     }
-    const row = rows[0]!;
-    if (String(row.algo) !== this.strategy.algo) {
-      throw new SkspError("DECRYPT_FAILED", `Unsupported algo for ${ref}. Re-run: nm provider edit --apiKey`, { ref });
+
+    async has(ref: string): Promise<boolean> {
+        SkspRefAssert.validRef(ref);
+        const rows = await TdbcTemplate.query(this.conn, this.parser, SkspSql.has, { ref });
+        return rows.length > 0;
     }
-    return this.strategy.decrypt(ref, row);
-  }
 
-  async has(ref: string): Promise<boolean> {
-    SkspRefAssert.validRef(ref);
-    const rows = await TdbcTemplate.query(this.conn, this.parser, `SELECT 1 AS n FROM sksp_secrets WHERE ref = #{ref} LIMIT 1`, { ref });
-    return rows.length > 0;
-  }
+    async set(ref: string, plain: string): Promise<void> {
+        SkspRefAssert.validRef(ref);
+        // strategy 返回的 iv 允许为 null（Windows DPAPI），模板 `#{iv}` 原样绑定。
+        const { ciphertext, iv } = await this.strategy.encrypt(ref, plain);
+        const now = Date.now();
+        await TdbcTemplate.execute(this.conn, this.parser, SkspSql.set, { ref, ciphertext, iv, algo: this.strategy.algo, updatedAtMs: now });
+    }
 
-  async set(ref: string, plain: string): Promise<void> {
-    SkspRefAssert.validRef(ref);
-    // strategy 返回的 iv 允许为 null（Windows DPAPI），模板 `#{iv}` 原样绑定。
-    const { ciphertext, iv } = await this.strategy.encrypt(ref, plain);
-    const now = Date.now();
-    const insertSqlParts = [
-      "INSERT INTO sksp_secrets (ref, ciphertext, iv, algo, version, updated_at_ms)",
-      "       VALUES (#{ref}, #{ciphertext}, #{iv}, #{algo}, 1, #{updatedAtMs})",
-      "       ON CONFLICT(ref) DO UPDATE SET",
-      "         ciphertext = excluded.ciphertext,",
-      "         iv = excluded.iv,",
-      "         algo = excluded.algo,",
-      "         version = excluded.version,",
-      "         updated_at_ms = excluded.updated_at_ms",
-    ];
-    const insertSql = insertSqlParts.join("\n");
-    await TdbcTemplate.execute(this.conn, this.parser, insertSql, { ref, ciphertext, iv, algo: this.strategy.algo, updatedAtMs: now });
-  }
-
-  async delete(ref: string): Promise<boolean> {
-    SkspRefAssert.validRef(ref);
-    const result = await TdbcTemplate.execute(this.conn, this.parser, `DELETE FROM sksp_secrets WHERE ref = #{ref}`, { ref });
-    return result.changes > 0;
-  }
+    async delete(ref: string): Promise<boolean> {
+        SkspRefAssert.validRef(ref);
+        const result = await TdbcTemplate.execute(this.conn, this.parser, SkspSql.delete, { ref });
+        return result.changes > 0;
+    }
 }

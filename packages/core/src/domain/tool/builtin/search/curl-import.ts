@@ -13,6 +13,7 @@
  * @module domain/tool/builtin/search/curl-import
  */
 
+import { Arrays } from "@/common/arrays.js";
 import type { MessageDescriptor } from "@/common/i18n.js";
 import { Result } from "@/errors/either.js";
 import type { CoreMessageKey } from "@/i18n/keys.js";
@@ -20,21 +21,21 @@ import type { CoreMessageKey } from "@/i18n/keys.js";
 // nm-style: keep-public — parseCommand 的公开 DTO：desktop shared 层（apps/desktop/shared/logic/search-engines.ts）按此类型再导出给 renderer。
 /** curl 解析成功后的表单草稿（method/url/headers/defaultBody 预填；响应映射配置已废除，无需补填）。 */
 export interface CurlCommandDraft {
-  readonly method: "GET" | "POST";
-  /** 请求 URL（含 `-G` 时已并入 data 查询串）。 */
-  readonly url: string;
-  /** 请求头；疑似密钥值已替换为 `{{apiKey}}`。 */
-  readonly headers: Readonly<Record<string, string>>;
-  /** 请求体原文（`-d` / `--data-raw`；疑似密钥值已替换为 `{{apiKey}}`；预填模板 defaultBody）。 */
-  readonly defaultBody?: string;
-  /** 识别出的明文密钥值（保存时落 SKSP；模板里只有 `{{apiKey}}` 占位符）。 */
-  readonly apiKey?: string;
+    readonly method: "GET" | "POST";
+    /** 请求 URL（含 `-G` 时已并入 data 查询串）。 */
+    readonly url: string;
+    /** 请求头；疑似密钥值已替换为 `{{apiKey}}`。 */
+    readonly headers: Readonly<Record<string, string>>;
+    /** 请求体原文（`-d` / `--data-raw`；疑似密钥值已替换为 `{{apiKey}}`；预填模板 defaultBody）。 */
+    readonly defaultBody?: string;
+    /** 识别出的明文密钥值（保存时落 SKSP；模板里只有 `{{apiKey}}` 占位符）。 */
+    readonly apiKey?: string;
 }
 
 // nm-style: keep-public — parseCommand 返回值的错误侧 DTO：desktop shared 层按此类型再导出给 renderer。
 /** curl 解析失败载荷（key `error.tool.search_curl_parse_failed`，params 带原因）。 */
 export interface CurlParseError {
-  readonly message: MessageDescriptor<CoreMessageKey>;
+    readonly message: MessageDescriptor<CoreMessageKey>;
 }
 
 /** `sk-` 前缀 token（OpenAI 系密钥形态；短至 3 字符也按密钥识别）。 */
@@ -46,6 +47,15 @@ const BEARER_TOKEN_PATTERN = /\bBearer\s+([A-Za-z0-9._~+/=-]{20,})/gi;
 /** 鉴权头 / 参数赋值形态：`Authorization`、`X-API-KEY`、`X-Subscription-Token`、`api_key` 等。 */
 const ASSIGNMENT_SECRET_PATTERN = /(?:Authorization|X-API-Key|X-Subscription-Token|api[-_]?key|subscription-token)["']?\s*[:=]\s*["']?(?:Bearer\s+)?([A-Za-z0-9._~+/=-]{20,})/gi;
 
+/** curl 解析失败的统一错误载荷（key `error.tool.search_curl_parse_failed`，params 带英文 reason）。 */
+const parseFail = (reason: string): Result<CurlCommandDraft, CurlParseError> =>
+  Result.err({
+    message: {
+      key: "error.tool.search_curl_parse_failed",
+      params: { reason },
+    },
+  });
+
 export const CurlImport = {
   /**
    * 明文密钥启发式检测：返回文本中命中的密钥原文（去重、按出现序）。
@@ -54,12 +64,9 @@ export const CurlImport = {
    */
   findPlaintextSecrets(text: string): readonly string[] {
     const secrets: string[] = [];
-    const collect = (value: string | undefined): void => {
-      if (value != null && value.length > 0 && !secrets.includes(value)) secrets.push(value);
-    };
-    for (const match of text.matchAll(SK_TOKEN_PATTERN)) collect(match[0]);
-    for (const match of text.matchAll(BEARER_TOKEN_PATTERN)) collect(match[1]);
-    for (const match of text.matchAll(ASSIGNMENT_SECRET_PATTERN)) collect(match[1]);
+    for (const match of text.matchAll(SK_TOKEN_PATTERN)) Arrays.pushIfAbsent(secrets, match[0]);
+    for (const match of text.matchAll(BEARER_TOKEN_PATTERN)) Arrays.pushIfAbsent(secrets, match[1]);
+    for (const match of text.matchAll(ASSIGNMENT_SECRET_PATTERN)) Arrays.pushIfAbsent(secrets, match[1]);
     return secrets;
   },
 
@@ -89,13 +96,6 @@ export const CurlImport = {
    * nm-style: keep-public — spec §8 双端共用的 curl 解析入口（desktop / mobile 新建页直接消费）。
    */
   parseCommand(text: string): Result<CurlCommandDraft, CurlParseError> {
-    const fail = (reason: string): Result<CurlCommandDraft, CurlParseError> =>
-      Result.err({
-        message: {
-          key: "error.tool.search_curl_parse_failed",
-          params: { reason },
-        },
-      });
     const tokens: string[] = [];
     let current = "";
     let quote: "'" | '"' | null = null;
@@ -114,7 +114,7 @@ export const CurlImport = {
         }
         if (char === "\\") {
           const next = text[index + 1];
-          if (next == null) return fail("unterminated escape in double-quoted string");
+          if (next == null) return parseFail("unterminated escape in double-quoted string");
           index += 1;
           if (next === "\n") continue;
           if (next === "\r" && text[index + 1] === "\n") {
@@ -160,11 +160,11 @@ export const CurlImport = {
       current += char;
       started = true;
     }
-    if (quote != null) return fail(quote === "'" ? "unterminated single quote" : "unterminated double quote");
+    if (quote != null) return parseFail(quote === "'" ? "unterminated single quote" : "unterminated double quote");
     if (started) tokens.push(current);
-    if (tokens.length === 0) return fail("empty command");
+    if (tokens.length === 0) return parseFail("empty command");
     const executable = tokens[0].split(/[\\/]/).pop()?.toLowerCase();
-    if (executable !== "curl" && executable !== "curl.exe") return fail("command must start with curl");
+    if (executable !== "curl" && executable !== "curl.exe") return parseFail("command must start with curl");
 
     let method: string | undefined;
     let url: string | undefined;
@@ -177,7 +177,7 @@ export const CurlImport = {
         case "-X":
         case "--request": {
           const value = CurlImport.readOptionValue(tokens, index);
-          if (value == null) return fail(`missing value for ${token}`);
+          if (value == null) return parseFail(`missing value for ${token}`);
           method = value;
           index += 1;
           break;
@@ -185,9 +185,9 @@ export const CurlImport = {
         case "-H":
         case "--header": {
           const value = CurlImport.readOptionValue(tokens, index);
-          if (value == null) return fail(`missing value for ${token}`);
+          if (value == null) return parseFail(`missing value for ${token}`);
           const separator = value.indexOf(":");
-          if (separator <= 0) return fail(`invalid header (expected "Name: Value"): ${value}`);
+          if (separator <= 0) return parseFail(`invalid header (expected "Name: Value"): ${value}`);
           headerPairs.push({
             name: value.slice(0, separator).trim(),
             value: value.slice(separator + 1).trim(),
@@ -200,7 +200,7 @@ export const CurlImport = {
         case "--data-raw":
         case "--data-binary": {
           const value = CurlImport.readOptionValue(tokens, index);
-          if (value == null) return fail(`missing value for ${token}`);
+          if (value == null) return parseFail(`missing value for ${token}`);
           data = data == null ? value : `${data}&${value}`;
           index += 1;
           break;
@@ -211,39 +211,38 @@ export const CurlImport = {
           break;
         case "--url": {
           const value = CurlImport.readOptionValue(tokens, index);
-          if (value == null) return fail(`missing value for ${token}`);
+          if (value == null) return parseFail(`missing value for ${token}`);
           url = value;
           index += 1;
           break;
         }
         default:
-          if (token.startsWith("-")) return fail(`unsupported option: ${token}`);
-          if (url != null) return fail(`unexpected argument: ${token}`);
+          if (token.startsWith("-")) return parseFail(`unsupported option: ${token}`);
+          if (url != null) return parseFail(`unexpected argument: ${token}`);
           url = token;
       }
     }
 
-    if (url == null || url.trim().length === 0) return fail("missing request URL");
+    if (url == null || url.trim().length === 0) return parseFail("missing request URL");
     if (getForm) {
-      if (method != null && method.toUpperCase() !== "GET") return fail("-G conflicts with a non-GET -X method");
+      if (method != null && method.toUpperCase() !== "GET") return parseFail("-G conflicts with a non-GET -X method");
       method = "GET";
       if (data != null && data.length > 0) url = `${url}${url.includes("?") ? "&" : "?"}${data}`;
       data = undefined;
     }
     const normalizedMethod = (method ?? (data == null ? "GET" : "POST")).toUpperCase();
-    if (normalizedMethod !== "GET" && normalizedMethod !== "POST") return fail(`unsupported method: ${normalizedMethod} (only GET / POST)`);
-    if (normalizedMethod === "GET" && data != null) return fail("GET requests cannot carry a body (use -G to convert -d into query parameters)");
+    if (normalizedMethod !== "GET" && normalizedMethod !== "POST") return parseFail(`unsupported method: ${normalizedMethod} (only GET / POST)`);
+    if (normalizedMethod === "GET" && data != null) return parseFail("GET requests cannot carry a body (use -G to convert -d into query parameters)");
 
     const secrets: string[] = [];
-    const collectSecrets = (candidates: readonly string[]): void => {
-      for (const secret of candidates) if (!secrets.includes(secret)) secrets.push(secret);
-    };
-    collectSecrets(CurlImport.findPlaintextSecrets(url));
+    for (const secret of CurlImport.findPlaintextSecrets(url)) Arrays.pushIfAbsent(secrets, secret);
     for (const header of headerPairs) {
-      collectSecrets(CurlImport.findPlaintextSecrets(`${header.name}: ${header.value}`));
+      for (const secret of CurlImport.findPlaintextSecrets(`${header.name}: ${header.value}`)) Arrays.pushIfAbsent(secrets, secret);
     }
-    if (data != null) collectSecrets(CurlImport.findPlaintextSecrets(data));
-    if (secrets.length > 1) return fail("multiple distinct plaintext secrets detected; import them one at a time");
+    if (data != null) {
+      for (const secret of CurlImport.findPlaintextSecrets(data)) Arrays.pushIfAbsent(secrets, secret);
+    }
+    if (secrets.length > 1) return parseFail("multiple distinct plaintext secrets detected; import them one at a time");
 
     const headers: Record<string, string> = {};
     for (const header of headerPairs) headers[header.name] = CurlImport.replaceSecrets(header.value, secrets);

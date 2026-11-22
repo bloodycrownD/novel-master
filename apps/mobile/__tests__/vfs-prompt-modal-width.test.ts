@@ -9,12 +9,12 @@ import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
 
 const src = readFileSync(
-  join(__dirname, '../src/components/vfs/vfs-file-manager/VfsPromptModal.tsx'),
-  'utf8',
+    join(__dirname, '../src/components/vfs/vfs-file-manager/VfsPromptModal.tsx'),
+    'utf8',
 );
 
 describe('VfsPromptModal 宽度契约（regression: 弹窗宽度塌陷）', () => {
-  it('promptBox 显式声明 width，防止 center 容器 alignItems 收缩包裹', () => {
-    expect(src).toMatch(/promptBox:\s*\{[^}]*width:\s*'100%'/);
-  });
+    it('promptBox 显式声明 width，防止 center 容器 alignItems 收缩包裹', () => {
+        expect(src).toMatch(/promptBox:\s*\{[^}]*width:\s*'100%'/);
+    });
 });

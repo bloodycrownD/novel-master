@@ -3,14 +3,14 @@ import {View} from 'react-native';
 import {subscribeAnimatedValues} from './animated-value-registry';
 
 const Animated = {
-  View,
-  createAnimatedComponent: (Component: unknown) => Component,
+    View,
+    createAnimatedComponent: (Component: unknown) => Component,
 };
 
 export default Animated;
 
 export function useAnimatedStyle(factory: () => object) {
-  return typeof factory === 'function' ? factory() : {};
+    return typeof factory === 'function' ? factory() : {};
 }
 
 /**
@@ -23,8 +23,8 @@ export function useAnimatedStyle(factory: () => object) {
  * 渲染都从新对象里读到最新值），动画驱动这条线零覆盖。故此处必须用 ref 固定。
  */
 export function useSharedValue<T>(value: T) {
-  const ref = React.useRef({value});
-  return ref.current;
+    const ref = React.useRef({value});
+    return ref.current;
 }
 
 /**
@@ -40,44 +40,40 @@ export function useSharedValue<T>(value: T) {
  * 首帧只记录基线不回调（对齐真 reanimated：首帧 previous 为 null，reaction 收到
  * null 后由业务自己决定要不要上报——controller 正是这么判的）。
  */
-export function useAnimatedReaction<T>(
-  prepare: () => T,
-  react: (current: T, previous: T | null) => void,
-  _deps?: readonly unknown[],
-): void {
-  const prevRef = React.useRef<{value: T; seeded: boolean} | null>(null);
-  const reactRef = React.useRef(react);
-  reactRef.current = react;
+export function useAnimatedReaction<T>(prepare: () => T, react: (current: T, previous: T | null) => void, _deps?: readonly unknown[]): void {
+    const prevRef = React.useRef<{value: T; seeded: boolean} | null>(null);
+    const reactRef = React.useRef(react);
+    reactRef.current = react;
 
-  const evaluate = React.useCallback(() => {
-    const next = prepare();
-    const prev = prevRef.current;
-    if (prev == null) {
-      prevRef.current = {value: next, seeded: true};
-      return;
-    }
-    if (prev.seeded && Object.is(prev.value, next)) {
-      return;
-    }
-    const previous = prev.seeded ? prev.value : null;
-    prevRef.current = {value: next, seeded: true};
-    reactRef.current(next, previous);
-  }, [prepare]);
+    const evaluate = React.useCallback(() => {
+        const next = prepare();
+        const prev = prevRef.current;
+        if (prev == null) {
+            prevRef.current = {value: next, seeded: true};
+            return;
+        }
+        if (prev.seeded && Object.is(prev.value, next)) {
+            return;
+        }
+        const previous = prev.seeded ? prev.value : null;
+        prevRef.current = {value: next, seeded: true};
+        reactRef.current(next, previous);
+    }, [prepare]);
 
-  React.useEffect(() => {
-    evaluate();
-  });
+    React.useEffect(() => {
+        evaluate();
+    });
 
-  React.useEffect(() => subscribeAnimatedValues(evaluate), [evaluate]);
+    React.useEffect(() => subscribeAnimatedValues(evaluate), [evaluate]);
 }
 
 /** UI 线程 → JS 线程过桥桩：jest 里没有真正的线程边界，直接透传。 */
 export function runOnJS<T extends (...args: never[]) => unknown>(fn: T): T {
-  return fn;
+    return fn;
 }
 
 export function useAnimatedProps(factory: () => object) {
-  return typeof factory === 'function' ? factory() : {};
+    return typeof factory === 'function' ? factory() : {};
 }
 
 /**
@@ -85,23 +81,23 @@ export function useAnimatedProps(factory: () => object) {
  * 组件在目标值上一次性落位（与显式读终值的断言口径一致）。
  */
 export function withTiming<T>(value: T) {
-  return value;
+    return value;
 }
 
 export function withSpring<T>(value: T) {
-  return value;
+    return value;
 }
 
 export function withDelay<T>(_delay: number, value: T) {
-  return value;
+    return value;
 }
 
 /** 缓动函数桩：只保证调用链不断（`Easing.out(Easing.quad)` 形态）。 */
 export const Easing = {
-  out: (fn: (t: number) => number) => fn,
-  in: (fn: (t: number) => number) => fn,
-  inOut: (fn: (t: number) => number) => fn,
-  quad: (t: number) => t,
-  cubic: (t: number) => t,
-  ease: (t: number) => t,
+    out: (fn: (t: number) => number) => fn,
+    in: (fn: (t: number) => number) => fn,
+    inOut: (fn: (t: number) => number) => fn,
+    quad: (t: number) => t,
+    cubic: (t: number) => t,
+    ease: (t: number) => t,
 };

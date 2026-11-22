@@ -1,360 +1,342 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
-  VfsScopeRequest,
-  WorkplaceListRowDto,
-  WorkspacePanelScope,
+    VfsScopeRequest,
+    WorkplaceListRowDto,
+    WorkspacePanelScope,
 } from "@shared/ipc-types";
 import {
-  ipcPhysicalList,
-  ipcWorkplaceBuildListRows,
-  vfsScope,
+    ipcPhysicalList,
+    ipcWorkplaceBuildListRows,
+    vfsScope,
 } from "@/ipc/client";
 import { useShellNav } from "@/providers/ShellNavProvider";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { batchIngestOverwriteMessage, type WorkspaceContextTarget } from "./workspace-context";
+import { coreT } from "@shared/logic/core-i18n";
 import {
-  entryName,
-  ancestorDirPaths,
-  isTreeRowVisible,
-  pathDepth,
-  vfsEntryStatusText,
+    entryName,
+    ancestorDirPaths,
+    isTreeRowVisible,
+    pathDepth,
+    vfsEntryStatusText,
 } from "./vfs-tree-utils";
 import {
-  confirmAndApplyBatchIngest,
-  finalizeRowDrag,
-  handleTreeDrop,
-  moveVfsPathsToDir,
-  prefetchExportStage,
-  resolveDropTargetDir,
-  startPrefetchedNativeDrag,
-  type BatchIngestConfirmRequest,
+    confirmAndApplyBatchIngest,
+    finalizeRowDrag,
+    handleTreeDrop,
+    moveVfsPathsToDir,
+    prefetchExportStage,
+    resolveDropTargetDir,
+    startPrefetchedNativeDrag,
+    type BatchIngestConfirmRequest,
 } from "./workspace-batch-dnd";
 import {
-  decodeVfsDragPayload,
-  encodeVfsDragPayload,
-  NM_VFS_PATHS_MIME,
+    decodeVfsDragPayload,
+    encodeVfsDragPayload,
+    NM_VFS_PATHS_MIME,
 } from "./vfs-tree-dnd";
 
 export type { WorkspaceContextTarget } from "./workspace-context";
 
 interface WorkspaceTreeProps {
-  panelScope: WorkspacePanelScope;
-  refreshToken: number;
-  onOpenContextMenu: (target: WorkspaceContextTarget) => void;
-  /** 列表重载成功后回调，用于同步预览 tab 删除态 */
-  onRowsLoaded?: (rows: WorkplaceListRowDto[]) => void;
-  /** Blank-area menu is handled on `.explorer-tree` in ExplorerPane. */
-  onBlankContextMenu?: (target: Extract<WorkspaceContextTarget, { kind: "blank" }>) => void;
+    panelScope: WorkspacePanelScope;
+    refreshToken: number;
+    onOpenContextMenu: (target: WorkspaceContextTarget) => void;
+    /** 列表重载成功后回调，用于同步预览 tab 删除态 */
+    onRowsLoaded?: (rows: WorkplaceListRowDto[]) => void;
+    /** Blank-area menu is handled on `.explorer-tree` in ExplorerPane. */
+    onBlankContextMenu?: (target: Extract<WorkspaceContextTarget, { kind: "blank" }>) => void;
 }
 
-function scopeRequest(
-  panelScope: WorkspacePanelScope,
-  projectId?: string,
-  sessionId?: string,
-): VfsScopeRequest {
-  return vfsScope(panelScope, projectId, sessionId);
+function scopeRequest( panelScope: WorkspacePanelScope, projectId?: string, sessionId?: string ): VfsScopeRequest {
+    return vfsScope(panelScope, projectId, sessionId);
 }
 
 export function WorkspaceTree({
-  panelScope,
-  refreshToken,
-  onOpenContextMenu,
-  onRowsLoaded,
+    panelScope,
+    refreshToken,
+    onOpenContextMenu,
+    onRowsLoaded,
 }: WorkspaceTreeProps) {
-  const {
-    projectId,
-    workspaceSessionId,
-    previewFile,
-    selectPreviewFile,
-    treeExpandRequest,
-    notifyWorkspaceMutated,
-  } = useShellNav();
-  const [rows, setRows] = useState<WorkplaceListRowDto[]>([]);
-  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(
-    () => new Set(["/"]),
-  );
-  const [loading, setLoading] = useState(true);
-  const [dropHighlight, setDropHighlight] = useState<string | null>(null);
-  const [ingestConfirm, setIngestConfirm] =
-    useState<BatchIngestConfirmRequest | null>(null);
-  const [ingestBusy, setIngestBusy] = useState(false);
-
-  const req = useMemo(
-    () => scopeRequest(panelScope, projectId, workspaceSessionId),
-    [panelScope, projectId, workspaceSessionId],
-  );
-
-  // physical 面板只读：数据源换物理树（跨域拼接视图），不依赖 projectId/sessionId
-  const isPhysical = panelScope === "physical";
-
-  const reload = useCallback(async () => {
-    setLoading(true);
-    try {
-      const result = isPhysical
-        ? await ipcPhysicalList({ path: "/" })
-        : await ipcWorkplaceBuildListRows(req);
-      if (result.ok) {
-        setRows(result.data);
-        onRowsLoaded?.(result.data);
-        setExpandedDirs(
-          new Set(
-            result.data
-              .filter((row) => row.kind === "dir")
-              .map((row) => row.path),
-          ),
-        );
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [isPhysical, req, onRowsLoaded]);
-
-  useEffect(() => {
-    void reload();
-  }, [reload, refreshToken]);
-
-  useEffect(() => {
-    if (!treeExpandRequest) {
-      return;
-    }
-    setExpandedDirs((prev) => {
-      const next = new Set(prev);
-      for (const dir of ancestorDirPaths(treeExpandRequest.path)) {
-        next.add(dir);
-      }
-      return next;
-    });
-  }, [treeExpandRequest]);
-
-  const visibleRows = useMemo(
-    () => rows.filter((row) => isTreeRowVisible(row.path, expandedDirs)),
-    [rows, expandedDirs],
-  );
-
-  const toggleDir = useCallback((dirPath: string) => {
-    setExpandedDirs((prev) => {
-      const next = new Set(prev);
-      if (next.has(dirPath)) {
-        next.delete(dirPath);
-      } else {
-        next.add(dirPath);
-      }
-      return next;
-    });
-  }, []);
-
-  const onMutated = useCallback(() => {
-    notifyWorkspaceMutated();
-  }, [notifyWorkspaceMutated]);
-
-  const handleRowDragOver = useCallback(
-    (e: React.DragEvent, row: WorkplaceListRowDto) => {
-      const types = Array.from(e.dataTransfer.types);
-      if (
-        types.includes("Files") ||
-        types.includes(NM_VFS_PATHS_MIME)
-      ) {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = types.includes(NM_VFS_PATHS_MIME)
-          ? "move"
-          : "copy";
-        setDropHighlight(resolveDropTargetDir(row.path, row.kind));
-      }
-    },
-    [],
-  );
-
-  const handleRowDrop = useCallback(
-    async (e: React.DragEvent, row: WorkplaceListRowDto) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setDropHighlight(null);
-      const targetDir = resolveDropTargetDir(row.path, row.kind);
-
-      const mimeRaw = e.dataTransfer.getData(NM_VFS_PATHS_MIME);
-      const mimePayload = mimeRaw ? decodeVfsDragPayload(mimeRaw) : null;
-      if (mimePayload != null) {
-        await moveVfsPathsToDir({
-          scope: req,
-          targetDir,
-          sourcePaths: mimePayload.paths,
-          onMoved: onMutated,
-        });
-        return;
-      }
-
-      await handleTreeDrop({
-        scope: req,
-        targetDir,
-        dataTransfer: e.dataTransfer,
-        onNeedsConfirm: setIngestConfirm,
-        onMutated,
-      });
-    },
-    [req, onMutated],
-  );
-
-  const handleRowPointerDown = useCallback(
-    (e: React.PointerEvent, row: WorkplaceListRowDto) => {
-      if (isPhysical) {
-        return;
-      }
-      e.stopPropagation();
-      // 失败时 prefetchExportStage 内部已 toast
-      void prefetchExportStage({ scope: req, logicalPath: row.path });
-    },
-    [isPhysical, req],
-  );
-
-  const handleRowDragStart = useCallback(
-    (e: React.DragEvent, row: WorkplaceListRowDto) => {
-      if (isPhysical) {
-        return;
-      }
-      try {
-        e.dataTransfer.setData(
-          NM_VFS_PATHS_MIME,
-          encodeVfsDragPayload([row.path]),
-        );
-        e.dataTransfer.effectAllowed = "copyMove";
-      } catch {
-        // ignore
-      }
-      // 主验收路径：同步 startDrag（依赖 pointerdown prefetch）
-      startPrefetchedNativeDrag({
-        logicalPath: row.path,
-        dragEvent: e.nativeEvent,
-      });
-    },
-    [isPhysical],
-  );
-
-  if (loading) {
-    return (
-      <div className="explorer-tree__body explorer-tree__body--fill">
-        <p className="tree-empty">加载中…</p>
-      </div>
+    const {
+        projectId,
+        workspaceSessionId,
+        previewFile,
+        selectPreviewFile,
+        treeExpandRequest,
+        notifyWorkspaceMutated,
+    } = useShellNav();
+    const [rows, setRows] = useState<WorkplaceListRowDto[]>([]);
+    const [expandedDirs, setExpandedDirs] = useState<Set<string>>(
+        () => new Set(["/"]),
     );
-  }
+    const [loading, setLoading] = useState(true);
+    const [dropHighlight, setDropHighlight] = useState<string | null>(null);
+    const [ingestConfirm, setIngestConfirm] =
+        useState<BatchIngestConfirmRequest | null>(null);
+    const [ingestBusy, setIngestBusy] = useState(false);
 
-  return (
-    <div className="explorer-tree__body explorer-tree__body--fill">
-      {rows.length === 0 ? (
-        <p className="tree-empty">空目录</p>
-      ) : (
-        visibleRows.map((row) => {
-          const isDir = row.kind === "dir";
-          const depth = pathDepth(row.path);
-          const expanded = isDir && expandedDirs.has(row.path);
-          const active =
-            previewFile?.path === row.path &&
-            previewFile.workspaceScope === panelScope;
-          const targetDir = resolveDropTargetDir(row.path, row.kind);
-          const isDropTarget = dropHighlight === targetDir;
-          return (
-            <div
-              key={row.path}
-              className={`tree-node${isDir ? " tree-node--folder" : ""}${active ? " is-active" : ""}${isDropTarget ? " is-drop-target" : ""}`}
-              data-vfs-scope={panelScope}
-              data-vfs-kind={row.kind}
-              style={{ paddingLeft: `${10 + depth * 14}px` }}
-              role="button"
-              tabIndex={0}
-              draggable={!isPhysical}
-              aria-expanded={isDir ? expanded : undefined}
-              onPointerDown={(e) => handleRowPointerDown(e, row)}
-              onDragStart={(e) => handleRowDragStart(e, row)}
-              onDragEnd={() => {
-                finalizeRowDrag(row.path);
-                setDropHighlight(null);
-              }}
-              onDragOver={(e) => {
-                if (isPhysical) {
-                  return;
-                }
-                handleRowDragOver(e, row);
-              }}
-              onDragLeave={() => setDropHighlight(null)}
-              onDrop={(e) => {
-                if (isPhysical) {
-                  return;
-                }
-                void handleRowDrop(e, row);
-              }}
-              onClick={() => {
-                if (isDir) {
-                  toggleDir(row.path);
-                  return;
-                }
-                selectPreviewFile(panelScope, row.path);
-              }}
-              onContextMenu={(e) => {
-                if (isPhysical) {
-                  // 只读浏览：不弹任何写操作菜单
-                  return;
-                }
-                e.preventDefault();
-                e.stopPropagation();
-                onOpenContextMenu({
-                  kind: "row",
-                  panelScope,
-                  row,
-                  x: e.clientX,
-                  y: e.clientY,
-                });
-              }}
-              onKeyDown={(e) => {
-                if (e.key !== "Enter" && e.key !== " ") {
-                  return;
-                }
-                e.preventDefault();
-                if (isDir) {
-                  toggleDir(row.path);
-                  return;
-                }
-                selectPreviewFile(panelScope, row.path);
-              }}
-            >
-              <span
-                className={`tree-node__chevron${isDir ? "" : " tree-node__chevron--leaf"}${expanded ? "" : " tree-node__chevron--collapsed"}`}
-                aria-hidden
-              >
-                {isDir ? "▾" : ""}
-              </span>
-              <span className="tree-node__icon">{isDir ? "📁" : "📄"}</span>
-              <span className="tree-node__label">{(row.kind === 'dir' && row.label) || entryName(row.path)}</span>
-              <span className="tree-node__meta">
-                {isPhysical ? "" : vfsEntryStatusText(row)}
-              </span>
-            </div>
-          );
-        })
-      )}
-      <ConfirmModal
-        open={ingestConfirm != null}
-        title="覆盖确认"
-        message={
-          ingestConfirm == null
-            ? ""
-            : batchIngestOverwriteMessage(ingestConfirm.conflictCount)
+    const req = useMemo(
+        () => scopeRequest(panelScope, projectId, workspaceSessionId),
+        [panelScope, projectId, workspaceSessionId],
+    );
+
+    // physical 面板只读：数据源换物理树（跨域拼接视图），不依赖 projectId/sessionId
+    const isPhysical = panelScope === "physical";
+
+    const reload = useCallback(async () => {
+        setLoading(true);
+        try {
+            const result = isPhysical ? await ipcPhysicalList({ path: "/" }) : await ipcWorkplaceBuildListRows(req);
+            if (result.ok) {
+                setRows(result.data);
+                onRowsLoaded?.(result.data);
+                setExpandedDirs( new Set( result.data .filter((row) => row.kind === "dir") .map((row) => row.path) ) );
+            }
+        } finally {
+            setLoading(false);
         }
-        confirmLabel="覆盖"
-        danger
-        busy={ingestBusy}
-        onCancel={() => setIngestConfirm(null)}
-        onConfirm={async () => {
-          if (ingestConfirm == null) {
+    }, [isPhysical, req, onRowsLoaded]);
+
+    useEffect(() => {
+        void reload();
+    }, [reload, refreshToken]);
+
+    useEffect(() => {
+        if (!treeExpandRequest) {
             return;
-          }
-          setIngestBusy(true);
-          try {
-            await confirmAndApplyBatchIngest(ingestConfirm, onMutated);
-            setIngestConfirm(null);
-          } finally {
-            setIngestBusy(false);
-          }
-        }}
-      />
-    </div>
-  );
+        }
+        setExpandedDirs((prev) => {
+            const next = new Set(prev);
+            for (const dir of ancestorDirPaths(treeExpandRequest.path)) {
+                next.add(dir);
+            }
+            return next;
+        });
+    }, [treeExpandRequest]);
+
+    const visibleRows = useMemo(
+        () => rows.filter((row) => isTreeRowVisible(row.path, expandedDirs)),
+        [rows, expandedDirs],
+    );
+
+    const toggleDir = useCallback((dirPath: string) => {
+        setExpandedDirs((prev) => {
+            const next = new Set(prev);
+            if (next.has(dirPath)) {
+                next.delete(dirPath);
+            } else {
+                next.add(dirPath);
+            }
+            return next;
+        });
+    }, []);
+
+    const onMutated = useCallback(() => {
+        notifyWorkspaceMutated();
+    }, [notifyWorkspaceMutated]);
+
+    const handleRowDragOver = useCallback(
+        (e: React.DragEvent, row: WorkplaceListRowDto) => {
+            const types = Array.from(e.dataTransfer.types);
+            if (
+                types.includes("Files") ||
+                types.includes(NM_VFS_PATHS_MIME)
+            ) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = types.includes(NM_VFS_PATHS_MIME) ? "move" : "copy";
+                setDropHighlight(resolveDropTargetDir(row.path, row.kind));
+            }
+        },
+        [],
+    );
+
+    const handleRowDrop = useCallback(
+        async (e: React.DragEvent, row: WorkplaceListRowDto) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setDropHighlight(null);
+            const targetDir = resolveDropTargetDir(row.path, row.kind);
+
+            const mimeRaw = e.dataTransfer.getData(NM_VFS_PATHS_MIME);
+            const mimePayload = mimeRaw ? decodeVfsDragPayload(mimeRaw) : null;
+            if (mimePayload != null) {
+                await moveVfsPathsToDir({
+                    scope: req,
+                    targetDir,
+                    sourcePaths: mimePayload.paths,
+                    onMoved: onMutated,
+                });
+                return;
+            }
+
+            await handleTreeDrop({
+                scope: req,
+                targetDir,
+                dataTransfer: e.dataTransfer,
+                onNeedsConfirm: setIngestConfirm,
+                onMutated,
+            });
+        },
+        [req, onMutated],
+    );
+
+    const handleRowPointerDown = useCallback(
+        (e: React.PointerEvent, row: WorkplaceListRowDto) => {
+            if (isPhysical) {
+                return;
+            }
+            e.stopPropagation();
+            // 失败时 prefetchExportStage 内部已 toast
+            void prefetchExportStage({ scope: req, logicalPath: row.path });
+        },
+        [isPhysical, req],
+    );
+
+    const handleRowDragStart = useCallback(
+        (e: React.DragEvent, row: WorkplaceListRowDto) => {
+            if (isPhysical) {
+                return;
+            }
+            try {
+                e.dataTransfer.setData( NM_VFS_PATHS_MIME, encodeVfsDragPayload([row.path]) );
+                e.dataTransfer.effectAllowed = "copyMove";
+            } catch {
+                // ignore
+            }
+            // 主验收路径：同步 startDrag（依赖 pointerdown prefetch）
+            startPrefetchedNativeDrag({
+                logicalPath: row.path,
+                dragEvent: e.nativeEvent,
+            });
+        },
+        [isPhysical],
+    );
+
+    if (loading) {
+        return (
+            <div className="explorer-tree__body explorer-tree__body--fill">
+                <p className="tree-empty">{coreT({key: "ui.common.loading"})}</p>
+            </div>
+        );
+    }
+
+    return (
+        <div className="explorer-tree__body explorer-tree__body--fill">
+            {rows.length === 0 ? (
+                <p className="tree-empty">{coreT({key: "ui.vfs.empty_dir"})}</p>
+            ) : (
+                visibleRows.map((row) => {
+                    const isDir = row.kind === "dir";
+                    const depth = pathDepth(row.path);
+                    const expanded = isDir && expandedDirs.has(row.path);
+                    const active = previewFile?.path === row.path && previewFile.workspaceScope === panelScope;
+                    const targetDir = resolveDropTargetDir(row.path, row.kind);
+                    const isDropTarget = dropHighlight === targetDir;
+                    return (
+                        <div
+                            key={row.path}
+                            className={`tree-node${isDir ? " tree-node--folder" : ""}${active ? " is-active" : ""}${isDropTarget ? " is-drop-target" : ""}`}
+                            data-vfs-scope={panelScope}
+                            data-vfs-kind={row.kind}
+                            style={{ paddingLeft: `${10 + depth * 14}px` }}
+                            role="button"
+                            tabIndex={0}
+                            draggable={!isPhysical}
+                            aria-expanded={isDir ? expanded : undefined}
+                            onPointerDown={(e) => handleRowPointerDown(e, row)}
+                            onDragStart={(e) => handleRowDragStart(e, row)}
+                            onDragEnd={() => {
+                                finalizeRowDrag(row.path);
+                                setDropHighlight(null);
+                            }}
+                            onDragOver={(e) => {
+                                if (isPhysical) {
+                                    return;
+                                }
+                                handleRowDragOver(e, row);
+                            }}
+                            onDragLeave={() => setDropHighlight(null)}
+                            onDrop={(e) => {
+                                if (isPhysical) {
+                                    return;
+                                }
+                                void handleRowDrop(e, row);
+                            }}
+                            onClick={() => {
+                                if (isDir) {
+                                    toggleDir(row.path);
+                                    return;
+                                }
+                                selectPreviewFile(panelScope, row.path);
+                            }}
+                            onContextMenu={(e) => {
+                                if (isPhysical) {
+                                    // 只读浏览：不弹任何写操作菜单
+                                    return;
+                                }
+                                e.preventDefault();
+                                e.stopPropagation();
+                                onOpenContextMenu({
+                                    kind: "row",
+                                    panelScope,
+                                    row,
+                                    x: e.clientX,
+                                    y: e.clientY,
+                                });
+                            }}
+                            onKeyDown={(e) => {
+                                if (e.key !== "Enter" && e.key !== " ") {
+                                    return;
+                                }
+                                e.preventDefault();
+                                if (isDir) {
+                                    toggleDir(row.path);
+                                    return;
+                                }
+                                selectPreviewFile(panelScope, row.path);
+                            }}
+                        >
+                            <span
+                                className={`tree-node__chevron${isDir ? "" : " tree-node__chevron--leaf"}${expanded ? "" : " tree-node__chevron--collapsed"}`}
+                                aria-hidden
+                            >
+                                {isDir ? "▾" : ""}
+                            </span>
+                            <span className="tree-node__icon">{isDir ? "📁" : "📄"}</span>
+                            <span className="tree-node__label">{(row.kind === 'dir' && row.label) || entryName(row.path)}</span>
+                            <span className="tree-node__meta">
+                                {isPhysical ? "" : vfsEntryStatusText(row)}
+                            </span>
+                        </div>
+                    );
+                })
+            )}
+            <ConfirmModal
+                open={ingestConfirm != null}
+                title={coreT({key: "ui.common.overwrite_confirm_title"})}
+                message={
+                    ingestConfirm == null
+                        ? ""
+                        : batchIngestOverwriteMessage(ingestConfirm.conflictCount)
+                }
+                confirmLabel={coreT({key: "ui.common.overwrite"})}
+                danger
+                busy={ingestBusy}
+                onCancel={() => setIngestConfirm(null)}
+                onConfirm={async () => {
+                    if (ingestConfirm == null) {
+                        return;
+                    }
+                    setIngestBusy(true);
+                    try {
+                        await confirmAndApplyBatchIngest(ingestConfirm, onMutated);
+                        setIngestConfirm(null);
+                    } finally {
+                        setIngestBusy(false);
+                    }
+                }}
+            />
+        </div>
+    );
 }

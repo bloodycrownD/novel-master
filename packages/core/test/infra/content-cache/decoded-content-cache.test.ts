@@ -15,137 +15,137 @@ import {  describe, it  } from "node:test";
 import {  DecodedContentPool, decodedContentCache  } from "@/infra/content-cache/logic/decoded-content-cache.js";
 
 describe("DecodedContentPool", () => {
-  it("miss → set → hit；命中刷新 LRU 序（最久未用先逐出）", () => {
-    const pool = new DecodedContentPool({
-      name: "t",
-      maxEntries: 3,
-      maxChars: 1000,
+    it("miss → set → hit；命中刷新 LRU 序（最久未用先逐出）", () => {
+        const pool = new DecodedContentPool({
+            name: "t",
+            maxEntries: 3,
+            maxChars: 1000,
+        });
+
+        assert.equal(pool.get("a"), null, "空池必 miss");
+        pool.set("a", "AAA");
+        pool.set("b", "BBB");
+        pool.set("c", "CCC");
+        assert.equal(pool.get("a"), "AAA");
+
+        // a 刚被命中 → 最久未用的是 b，先被逐出
+        pool.set("d", "DDD");
+        assert.equal(pool.get("b"), null);
+        assert.equal(pool.get("a"), "AAA");
+        assert.equal(pool.get("c"), "CCC");
+        assert.equal(pool.get("d"), "DDD");
     });
 
-    assert.equal(pool.get("a"), null, "空池必 miss");
-    pool.set("a", "AAA");
-    pool.set("b", "BBB");
-    pool.set("c", "CCC");
-    assert.equal(pool.get("a"), "AAA");
+    it("字符上界：超限时逐出最旧，char 记账跟着减", () => {
+        const pool = new DecodedContentPool({
+            name: "t",
+            maxEntries: 100,
+            maxChars: 10,
+        });
+        pool.set("a", "12345"); // 5 字符
+        pool.set("b", "67890"); // 5 字符 → 共 10，恰好卡线不逐出
+        assert.equal(pool.stats().chars, 10);
+        assert.equal(pool.get("b"), "67890"); // 序仍是 [a, b]
+        assert.equal(pool.get("a"), "12345"); // 刷新 a → 序变 [b, a]
 
-    // a 刚被命中 → 最久未用的是 b，先被逐出
-    pool.set("d", "DDD");
-    assert.equal(pool.get("b"), null);
-    assert.equal(pool.get("a"), "AAA");
-    assert.equal(pool.get("c"), "CCC");
-    assert.equal(pool.get("d"), "DDD");
-  });
-
-  it("字符上界：超限时逐出最旧，char 记账跟着减", () => {
-    const pool = new DecodedContentPool({
-      name: "t",
-      maxEntries: 100,
-      maxChars: 10,
+        pool.set("c", "XYZ"); // 13 > 10 → 逐出最旧的 b
+        assert.equal(pool.get("b"), null);
+        assert.equal(pool.get("a"), "12345");
+        assert.equal(pool.stats().chars, 8);
+        assert.equal(pool.stats().evictions, 1);
     });
-    pool.set("a", "12345"); // 5 字符
-    pool.set("b", "67890"); // 5 字符 → 共 10，恰好卡线不逐出
-    assert.equal(pool.stats().chars, 10);
-    assert.equal(pool.get("b"), "67890"); // 序仍是 [a, b]
-    assert.equal(pool.get("a"), "12345"); // 刷新 a → 序变 [b, a]
 
-    pool.set("c", "XYZ"); // 13 > 10 → 逐出最旧的 b
-    assert.equal(pool.get("b"), null);
-    assert.equal(pool.get("a"), "12345");
-    assert.equal(pool.stats().chars, 8);
-    assert.equal(pool.stats().evictions, 1);
-  });
+    it("单条超过整池预算：不收录，且不逐出既有条目", () => {
+        const pool = new DecodedContentPool({
+            name: "t",
+            maxEntries: 10,
+            maxChars: 10,
+        });
+        pool.set("a", "12345");
+        pool.set("huge", "x".repeat(11)); // 超预算 → 直接不收录
 
-  it("单条超过整池预算：不收录，且不逐出既有条目", () => {
-    const pool = new DecodedContentPool({
-      name: "t",
-      maxEntries: 10,
-      maxChars: 10,
+        assert.equal(pool.get("huge"), null);
+        assert.equal(pool.get("a"), "12345", "既有条目不被牵连逐出");
+        assert.equal(pool.stats().evictions, 0);
     });
-    pool.set("a", "12345");
-    pool.set("huge", "x".repeat(11)); // 超预算 → 直接不收录
 
-    assert.equal(pool.get("huge"), null);
-    assert.equal(pool.get("a"), "12345", "既有条目不被牵连逐出");
-    assert.equal(pool.stats().evictions, 0);
-  });
+    it("超预算值覆盖同键旧值：旧值被清掉（宁可 miss，不留陈旧值）", () => {
+        const pool = new DecodedContentPool({
+            name: "t",
+            maxEntries: 10,
+            maxChars: 10,
+        });
+        pool.set("k", "12345");
+        assert.equal(pool.get("k"), "12345");
 
-  it("超预算值覆盖同键旧值：旧值被清掉（宁可 miss，不留陈旧值）", () => {
-    const pool = new DecodedContentPool({
-      name: "t",
-      maxEntries: 10,
-      maxChars: 10,
+        // 同键写入超预算值：该键的旧值必须消失——同键换了值只可能是调用方
+        // 拿错了 contentHash（喂错键等于投毒），此时留着旧值就是返回陈旧正文
+        // （宁可退化成一次 miss，让调用方下次重新解压）。
+        pool.set("k", "x".repeat(11));
+        assert.equal(pool.get("k"), null);
+        assert.equal(pool.stats().chars, 0, "旧值的 char 记账一并减掉");
     });
-    pool.set("k", "12345");
-    assert.equal(pool.get("k"), "12345");
 
-    // 同键写入超预算值：该键的旧值必须消失——同键换了值只可能是调用方
-    // 拿错了 contentHash（喂错键等于投毒），此时留着旧值就是返回陈旧正文
-    // （宁可退化成一次 miss，让调用方下次重新解压）。
-    pool.set("k", "x".repeat(11));
-    assert.equal(pool.get("k"), null);
-    assert.equal(pool.stats().chars, 0, "旧值的 char 记账一并减掉");
-  });
-
-  it("同键覆盖写：char 记账按新值重算（不重复累加）", () => {
-    const pool = new DecodedContentPool({
-      name: "t",
-      maxEntries: 10,
-      maxChars: 100,
+    it("同键覆盖写：char 记账按新值重算（不重复累加）", () => {
+        const pool = new DecodedContentPool({
+            name: "t",
+            maxEntries: 10,
+            maxChars: 100,
+        });
+        pool.set("a", "12345");
+        pool.set("a", "1234567890");
+        assert.equal(pool.stats().entries, 1);
+        assert.equal(pool.stats().chars, 10);
     });
-    pool.set("a", "12345");
-    pool.set("a", "1234567890");
-    assert.equal(pool.stats().entries, 1);
-    assert.equal(pool.stats().chars, 10);
-  });
 
-  it("delete / clear / stats：条目与计数口径", () => {
-    const pool = new DecodedContentPool({
-      name: "t",
-      maxEntries: 10,
-      maxChars: 100,
+    it("delete / clear / stats：条目与计数口径", () => {
+        const pool = new DecodedContentPool({
+            name: "t",
+            maxEntries: 10,
+            maxChars: 100,
+        });
+        pool.set("a", "AAA");
+        assert.equal(pool.get("a"), "AAA");
+        assert.equal(pool.get("miss"), null);
+        let stats = pool.stats();
+        assert.equal(stats.hits, 1);
+        assert.equal(stats.misses, 1);
+
+        pool.delete("a");
+        assert.equal(pool.get("a"), null);
+
+        pool.set("b", "BBB");
+        pool.clear();
+        stats = pool.stats();
+        assert.equal(stats.entries, 0);
+        assert.equal(stats.chars, 0);
+        assert.equal(stats.hits, 0, "clear 把计数一并归零（用例隔离用）");
+        assert.equal(stats.misses, 0);
     });
-    pool.set("a", "AAA");
-    assert.equal(pool.get("a"), "AAA");
-    assert.equal(pool.get("miss"), null);
-    let stats = pool.stats();
-    assert.equal(stats.hits, 1);
-    assert.equal(stats.misses, 1);
-
-    pool.delete("a");
-    assert.equal(pool.get("a"), null);
-
-    pool.set("b", "BBB");
-    pool.clear();
-    stats = pool.stats();
-    assert.equal(stats.entries, 0);
-    assert.equal(stats.chars, 0);
-    assert.equal(stats.hits, 0, "clear 把计数一并归零（用例隔离用）");
-    assert.equal(stats.misses, 0);
-  });
 });
 
 describe("统一层单例池", () => {
-  it("内容正文池：存取往返命中，清空后归零", () => {
-    decodedContentCache.clear();
-    decodedContentCache.set("hash-1", "文件正文");
+    it("内容正文池：存取往返命中，清空后归零", () => {
+        decodedContentCache.clear();
+        decodedContentCache.set("hash-1", "文件正文");
 
-    assert.equal(decodedContentCache.get("hash-1"), "文件正文");
+        assert.equal(decodedContentCache.get("hash-1"), "文件正文");
 
-    decodedContentCache.clear();
-    assert.equal(decodedContentCache.get("hash-1"), null);
-  });
+        decodedContentCache.clear();
+        assert.equal(decodedContentCache.get("hash-1"), null);
+    });
 
-  it("空串是合法值：存取往返仍是「命中」而不是 miss", () => {
-    decodedContentCache.clear();
-    decodedContentCache.set("empty", "");
-    assert.equal(decodedContentCache.get("empty"), "", "空文件正文要能缓存");
+    it("空串是合法值：存取往返仍是「命中」而不是 miss", () => {
+        decodedContentCache.clear();
+        decodedContentCache.set("empty", "");
+        assert.equal(decodedContentCache.get("empty"), "", "空文件正文要能缓存");
 
-    const stats = decodedContentCache.stats();
-    assert.equal(stats.name, "content-body");
-    assert.equal(stats.hits, 1);
-    decodedContentCache.clear();
-    const cleared = decodedContentCache.stats();
-    assert.equal(cleared.hits, 0);
-    assert.equal(cleared.entries, 0);
-  });
+        const stats = decodedContentCache.stats();
+        assert.equal(stats.name, "content-body");
+        assert.equal(stats.hits, 1);
+        decodedContentCache.clear();
+        const cleared = decodedContentCache.stats();
+        assert.equal(cleared.hits, 0);
+        assert.equal(cleared.entries, 0);
+    });
 });

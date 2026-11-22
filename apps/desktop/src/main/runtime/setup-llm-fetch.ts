@@ -14,24 +14,25 @@ import { LogFactory } from "@novel-master/core/log";
 import { LlmDebugFlag } from "../log/llm-debug-flag.js";
 
 const log = LogFactory.create("desktop.llm-fetch");
-let configured = false;
+/** 装配闩锁（模块内 holder，对象管理）：每主进程只装一次。 */
+const setupState = { configured: false };
 
 // nm-style 注记：文件名 setup- 动词前缀，按内容主体起名（LlmFetchSetup，镜像 mobile 同名文件）。
 export namespace LlmFetchSetup {
-  /** Registers logging fetch for protocol adapters once per main process. */
-  export function ensureConfigured(): void {
-    if (configured) {
-      return;
+    /** Registers logging fetch for protocol adapters once per main process. */
+    export function ensureConfigured(): void {
+        if (setupState.configured) {
+            return;
+        }
+        const debugLlm = process.env.NM_DEBUG_LLM_FETCH === "1" || LlmDebugFlag.is();
+        if (debugLlm) {
+            (globalThis as { __NM_DEBUG_LLM_FETCH__?: boolean }).__NM_DEBUG_LLM_FETCH__ = true;
+            Registry.configureLlmFetch(DebugFetch.createLoggingFetch(globalThis.fetch));
+            log.info("LLM fetch debug enabled", {
+                nmDebugLlmFetch: process.env.NM_DEBUG_LLM_FETCH === "1",
+                nmDebugDesktop: process.env.NM_DEBUG_DESKTOP === "1",
+            });
+        }
+        setupState.configured = true;
     }
-    const debugLlm = process.env.NM_DEBUG_LLM_FETCH === "1" || LlmDebugFlag.is();
-    if (debugLlm) {
-      (globalThis as { __NM_DEBUG_LLM_FETCH__?: boolean }).__NM_DEBUG_LLM_FETCH__ = true;
-      Registry.configureLlmFetch(DebugFetch.createLoggingFetch(globalThis.fetch));
-      log.info("LLM fetch debug enabled", {
-        nmDebugLlmFetch: process.env.NM_DEBUG_LLM_FETCH === "1",
-        nmDebugDesktop: process.env.NM_DEBUG_DESKTOP === "1",
-      });
-    }
-    configured = true;
-  }
 }

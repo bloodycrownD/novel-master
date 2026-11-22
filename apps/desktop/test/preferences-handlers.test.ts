@@ -3,60 +3,60 @@ import { after, before, describe, it } from "node:test";
 import { Preferences } from "../src/main/ipc/handlers/preferences.js";
 import { DesktopRuntimeSingleton } from "../src/main/runtime/desktop-runtime-singleton.js";
 import {
-  setupDesktopDbTestEnv,
-  teardownDesktopDbTestEnv,
+    setupDesktopDbTestEnv,
+    teardownDesktopDbTestEnv,
 } from "./desktop-db-test-env.js";
 
 // subagent-stream-toggle Step 4（T-D1）：直调 IPC handler，验证
 // chat.subagentStream 偏好经 desktop runtime 的 get/set/reset 全链可用。
 describe("preferences IPC handlers — subagentStream（T-D1）", () => {
-  let tempDir: string;
+    let tempDir: string;
 
-  before(async () => {
-    ({ tempDir } = await setupDesktopDbTestEnv("nm-prefs-subagent-"));
-  });
+    before(async () => {
+        ({ tempDir } = await setupDesktopDbTestEnv("nm-prefs-subagent-"));
+    });
 
-  after(async () => {
-    await teardownDesktopDbTestEnv(tempDir);
-  });
+    after(async () => {
+        await teardownDesktopDbTestEnv(tempDir);
+    });
 
-  it("get 默认 true（未 set 过键）", async () => {
-    const got = await Preferences.get("subagentStream");
-    assert.equal(got.ok, true);
-    if (!got.ok) {
-      return;
-    }
-    assert.equal(got.data, true);
-  });
+    it("get 默认 true（未 set 过键）", async () => {
+        const got = await Preferences.get("subagentStream");
+        assert.equal(got.ok, true);
+        if (!got.ok) {
+            return;
+        }
+        assert.equal(got.data, true);
+    });
 
-  it("set false 后回读 false", async () => {
-    const set = await Preferences.set("subagentStream", false);
-    assert.equal(set.ok, true);
-    if (!set.ok) {
-      return;
-    }
-    assert.equal(set.data, undefined);
+    it("set false 后回读 false", async () => {
+        const set = await Preferences.set("subagentStream", false);
+        assert.equal(set.ok, true);
+        if (!set.ok) {
+            return;
+        }
+        assert.equal(set.data, undefined);
 
-    const got = await Preferences.get("subagentStream");
-    assert.equal(got.ok, true);
-    if (!got.ok) {
-      return;
-    }
-    assert.equal(got.data, false);
-  });
+        const got = await Preferences.get("subagentStream");
+        assert.equal(got.ok, true);
+        if (!got.ok) {
+            return;
+        }
+        assert.equal(got.data, false);
+    });
 
-  it("reset 后恢复默认 true（依赖上一用例已 set false）", async () => {
-    // 直接经共享 runtime 调 core 的 reset（IPC 五件套不含 reset 通道）。
-    const rtR = await DesktopRuntimeSingleton.get();
-    if (!rtR.ok) throw rtR.error;
-    const rt = rtR.value;
-    await rt.preferences.resetSubagentStreamEnabled();
+    it("reset 后恢复默认 true（依赖上一用例已 set false）", async () => {
+        // 直接经共享 runtime 调 core 的 reset（IPC 五件套不含 reset 通道）。
+        const rtR = await DesktopRuntimeSingleton.get();
+        if (!rtR.ok) throw rtR.error;
+        const rt = rtR.value;
+        await rt.preferences.resetSubagentStreamEnabled();
 
-    const got = await Preferences.get("subagentStream");
-    assert.equal(got.ok, true);
-    if (!got.ok) {
-      return;
-    }
-    assert.equal(got.data, true);
-  });
+        const got = await Preferences.get("subagentStream");
+        assert.equal(got.ok, true);
+        if (!got.ok) {
+            return;
+        }
+        assert.equal(got.data, true);
+    });
 });

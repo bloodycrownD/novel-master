@@ -17,186 +17,186 @@ const mockPush = jest.fn();
 
 const longSystem = '一\n二\n三\n四\n五\n六\n七';
 const validWire = {
-  schemaVersion: 1,
-  name: '写作助手',
-  prompts: {system: longSystem, persist: {}, dynamic: {}},
+    schemaVersion: 1,
+    name: '写作助手',
+    prompts: {system: longSystem, persist: {}, dynamic: {}},
 };
 
 const mockRuntime = {
-  agentRegistry: {
-    getRawWire: mockGetRawWire,
-    listAgentIds: jest.fn(),
-    delete: jest.fn(),
-    upsert: jest.fn().mockResolvedValue(undefined),
-  },
-  providers: {list: jest.fn().mockResolvedValue(Result.ok([]))},
-  providerModels: {
-    savedList: jest.fn().mockResolvedValue([]),
-    getSavedById: jest.fn().mockResolvedValue(null),
-  },
-  state: {getCurrentModelId: jest.fn().mockResolvedValue(null)},
+    agentRegistry: {
+        getRawWire: mockGetRawWire,
+        listAgentIds: jest.fn(),
+        delete: jest.fn(),
+        upsert: jest.fn().mockResolvedValue(undefined),
+    },
+    providers: {list: jest.fn().mockResolvedValue(Result.ok([]))},
+    providerModels: {
+        savedList: jest.fn().mockResolvedValue([]),
+        getSavedById: jest.fn().mockResolvedValue(null),
+    },
+    state: {getCurrentModelId: jest.fn().mockResolvedValue(null)},
 };
 
 jest.mock('@novel-master/core', () => ({
-  BuiltinTools: {register: jest.fn()},
-  ToolRegistry: class {
-    list() {
-      return ['read'];
-    }
-  },
+    BuiltinTools: {register: jest.fn()},
+    ToolRegistry: class {
+        list() {
+            return ['read'];
+        }
+    },
 }));
 
 jest.mock('@/theme/ThemeProvider', () => ({
-  useTheme: () => ({
-    tokens: {
-      text: '#111',
-      textSecondary: '#666',
-      textTertiary: '#999',
-      surface: '#fff',
-      bgSecondary: '#f5f5f5',
-      border: '#ddd',
-      borderLight: '#ddd',
-      primary: '#007aff',
-      danger: '#ff3b30',
-    },
-  }),
+    useTheme: () => ({
+        tokens: {
+            text: '#111',
+            textSecondary: '#666',
+            textTertiary: '#999',
+            surface: '#fff',
+            bgSecondary: '#f5f5f5',
+            border: '#ddd',
+            borderLight: '#ddd',
+            primary: '#007aff',
+            danger: '#ff3b30',
+        },
+    }),
 }));
 
 const mockShowToast = jest.fn();
 
 jest.mock('@/errors/toast-message', () => {
-  const legacy = {
-  toastMessage: (_title: string, err: unknown) => String(err),
+    const legacy = {
+    toastMessage: (_title: string, err: unknown) => String(err),
 };
-  return {...legacy, ToastMessage: {toast: legacy.toastMessage}};
+    return {...legacy, ToastMessage: {toast: legacy.toastMessage}};
 });
 
 jest.mock('@/components/chrome/ToastHost', () => ({
-  useToast: () => ({showToast: mockShowToast}),
+    useToast: () => ({showToast: mockShowToast}),
 }));
 
 jest.mock('@/hooks/useRuntime', () => ({
-  useRuntime: () => mockRuntime,
+    useRuntime: () => mockRuntime,
 }));
 
 const mockRouteParams: {
-  agentId?: string;
-  title?: string;
-  initialText?: string;
+    agentId?: string;
+    title?: string;
+    initialText?: string;
 } = {agentId: 'agent-a'};
 
 jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({
-    goBack: mockGoBack,
-    push: mockPush,
-    addListener: jest.fn(() => () => undefined),
-    removeListener: jest.fn(),
-  }),
-  useRoute: () => ({params: mockRouteParams}),
+    useNavigation: () => ({
+        goBack: mockGoBack,
+        push: mockPush,
+        addListener: jest.fn(() => () => undefined),
+        removeListener: jest.fn(),
+    }),
+    useRoute: () => ({params: mockRouteParams}),
 }));
 
 jest.mock('react-native-safe-area-context', () => ({
-  useSafeAreaInsets: () => ({top: 0, bottom: 0, left: 0, right: 0}),
+    useSafeAreaInsets: () => ({top: 0, bottom: 0, left: 0, right: 0}),
 }));
 
 jest.mock('@/components/form/FormOverlayHost', () => ({
-  useFormOverlay: () => ({openOverlay: jest.fn()}),
+    useFormOverlay: () => ({openOverlay: jest.fn()}),
 }));
 
 jest.mock('@/components/form/FormField', () => {
-  const mockReact = require('react');
-  return {
-    FormField: ({children}: {children?: React.ReactNode}) =>
-      mockReact.createElement('View', null, children),
-  };
+    const mockReact = require('react');
+    return {
+        FormField: ({children}: {children?: React.ReactNode}) =>
+            mockReact.createElement('View', null, children),
+    };
 });
 
 jest.mock('@/components/form/FormSwitchRow', () => ({
-  FormSwitchRow: () => null,
+    FormSwitchRow: () => null,
 }));
 
 jest.mock('@/components/form/FormSectionCard', () => {
-  const mockReact = require('react');
-  return {
-    FormSectionCard: ({children}: {children?: React.ReactNode}) =>
-      mockReact.createElement('View', null, children),
-  };
+    const mockReact = require('react');
+    return {
+        FormSectionCard: ({children}: {children?: React.ReactNode}) =>
+            mockReact.createElement('View', null, children),
+    };
 });
 
 jest.mock('@/components/form/FormSelectField', () => ({
-  FormSelectField: () => null,
+    FormSelectField: () => null,
 }));
 
 jest.mock('@/components/form/ScreenFormLayout', () => {
-  const mockReact = require('react');
-  return {
-    ScreenFormLayout: ({
-      children,
-      footer,
-    }: {
-      children?: React.ReactNode;
-      footer?: React.ReactNode;
-    }) => mockReact.createElement('View', null, children, footer),
-  };
+    const mockReact = require('react');
+    return {
+        ScreenFormLayout: ({
+            children,
+            footer,
+        }: {
+            children?: React.ReactNode;
+            footer?: React.ReactNode;
+        }) => mockReact.createElement('View', null, children, footer),
+    };
 });
 
 jest.mock('@/components/form/StickyFormFooter', () => {
-  const mockReact = require('react');
-  return {
-    StickyFormFooter: ({onPress}: {onPress: () => void}) =>
-      mockReact.createElement('Pressable', {onPress, testID: 'form-save'}),
-  };
+    const mockReact = require('react');
+    return {
+        StickyFormFooter: ({onPress}: {onPress: () => void}) =>
+            mockReact.createElement('Pressable', {onPress, testID: 'form-save'}),
+    };
 });
 
 jest.mock('@/components/agent/ToolPolicyPicker', () => ({
-  ToolPolicyPicker: () => null,
+    ToolPolicyPicker: () => null,
 }));
 
 jest.mock('@/services/agent-yaml.service', () => {
-  const legacy = {
-  exportAgentYaml: jest.fn(),
-  importAgentYaml: jest.fn(),
+    const legacy = {
+    exportAgentYaml: jest.fn(),
+    importAgentYaml: jest.fn(),
 };
-  return {...legacy, AgentYamlService: {exportYaml: legacy.exportAgentYaml, importYaml: legacy.importAgentYaml}};
+    return {...legacy, AgentYamlService: {exportYaml: legacy.exportAgentYaml, importYaml: legacy.importAgentYaml}};
 });
 
 // PromptEditor 的编辑器 stub：记录 onChange 供测试驱动（forwardRef：真组件接 codeEditorRef）。
 const mockEditorProps: {
-  value: string;
-  onChange: (text: string) => void;
+    value: string;
+    onChange: (text: string) => void;
 }[] = [];
 
 jest.mock('@/components/vfs/CodeEditorWebView', () => {
-  const mockReact = require('react');
-  return {
-    CodeEditorWebView: mockReact.forwardRef(function CodeEditorWebViewStub(
-      props: {value: string; onChange: (t: string) => void},
-      _ref: unknown,
-    ) {
-      mockEditorProps[0] = props;
-      return null;
-    }),
-  };
+    const mockReact = require('react');
+    return {
+        CodeEditorWebView: mockReact.forwardRef(function CodeEditorWebViewStub(
+            props: {value: string; onChange: (t: string) => void},
+            _ref: unknown,
+        ) {
+            mockEditorProps[0] = props;
+            return null;
+        }),
+    };
 });
 
 // PromptEditorScreen 的选择器可用判据走 useNovelMaster（composer 变体专用；
 // 本文件只测 form 变体，stub 成「runtime 未就绪」即可——选择器静默降级）。
 jest.mock('@/runtime/novel-master-context', () => ({
-  useNovelMaster: () => ({status: 'loading', runtime: null}),
+    useNovelMaster: () => ({status: 'loading', runtime: null}),
 }));
 
 // R5：PromptEditorScreen 预览态依赖（内部 RichDocumentWebView/core 依赖重，stub 掉）。
 jest.mock('@/components/vfs/FileMarkdownPreview', () => ({
-  FileMarkdownPreview: () => null,
+    FileMarkdownPreview: () => null,
 }));
 
 jest.mock('@/components/ui/SegmentedControl', () => ({
-  SegmentedControl: () => null,
+    SegmentedControl: () => null,
 }));
 
 jest.mock('@/navigation/HeaderContext', () => ({
-  useHeaderContext: () => ({setStackOverride: jest.fn()}),
-  useStackOverrideSetter: () => jest.fn(),
+    useHeaderContext: () => ({setStackOverride: jest.fn()}),
+    useStackOverrideSetter: () => jest.fn(),
 }));
 
 import {AgentEditorScreen} from '@/screens/stack/AgentEditorScreen';
@@ -207,207 +207,207 @@ import {FormTextInput} from '@/components/form/FormTextInput';
 import {DEFAULT_SUBAGENT_DEFINITION} from '@novel-master/core/agent';
 
 function findBanner(root: TestRenderer.ReactTestInstance) {
-  return root
-    .findAll(node => typeof node.children?.[0] === 'string')
-    .filter(node => String(node.children[0]).includes('有未保存的更改'));
+    return root
+        .findAll(node => typeof node.children?.[0] === 'string')
+        .filter(node => String(node.children[0]).includes('有未保存的更改'));
 }
 
 function pressFullscreenButton(root: TestRenderer.ReactTestInstance) {
-  // accessibilityLabel 在 RN preset 会传播到多层节点，取带 onPress 的那层。
-  const buttons = root.findAllByProps({accessibilityLabel: '全屏编辑'});
-  const button = buttons.find(node => typeof node.props.onPress === 'function');
-  expect(button).toBeDefined();
-  act(() => {
-    button!.props.onPress();
-  });
+    // accessibilityLabel 在 RN preset 会传播到多层节点，取带 onPress 的那层。
+    const buttons = root.findAllByProps({accessibilityLabel: '全屏编辑'});
+    const button = buttons.find(node => typeof node.props.onPress === 'function');
+    expect(button).toBeDefined();
+    act(() => {
+        button!.props.onPress();
+    });
 }
 
 async function renderAgentEditor() {
-  mockGetRawWire.mockResolvedValue(validWire);
-  let tree!: TestRenderer.ReactTestRenderer;
-  await act(async () => {
-    tree = TestRenderer.create(<AgentEditorScreen />);
-  });
-  await act(async () => {
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
-  });
-  return tree!;
+    mockGetRawWire.mockResolvedValue(validWire);
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+        tree = TestRenderer.create(<AgentEditorScreen />);
+    });
+    await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+    });
+    return tree!;
 }
 
 describe('AgentEditor dirty 链路（T-AD1）', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockEditorProps.length = 0;
-    mockRouteParams.agentId = 'agent-a';
-    mockRouteParams.title = undefined;
-    mockRouteParams.initialText = undefined;
-    // 清空模块级回调残留（回调不走路由参数，改由 openPromptEditor 写入）。
-    promptEditorOnSavedSlot.take();
-  });
-
-  it('初始无标记；全屏保存回填后标记出现；表单保存后标记消失', async () => {
-    const editorTree = await renderAgentEditor();
-
-    // 初始：与已保存基线一致，无「有未保存的更改」
-    expect(findBanner(editorTree.root)).toHaveLength(0);
-
-    // 常驻「全屏编辑」按钮 → push 全屏页（回调已写进模块级存取，路由参数只传可序列化字段）
-    pressFullscreenButton(editorTree.root);
-    expect(mockPush).toHaveBeenCalledWith(
-      'PromptEditor',
-      expect.objectContaining({initialText: longSystem}),
-    );
-    const route = mockPush.mock.calls[0]![1] as {
-      title?: string;
-      initialText: string;
-    };
-
-    // 全屏页（栈顶）：改稿并保存 → 回填栈底表单
-    mockRouteParams.initialText = route.initialText;
-    let promptTree!: TestRenderer.ReactTestRenderer;
-    await act(async () => {
-      promptTree = TestRenderer.create(<PromptEditorScreen />);
+    beforeEach(() => {
+        jest.clearAllMocks();
+        mockEditorProps.length = 0;
+        mockRouteParams.agentId = 'agent-a';
+        mockRouteParams.title = undefined;
+        mockRouteParams.initialText = undefined;
+        // 清空模块级回调残留（回调不走路由参数，改由 openPromptEditor 写入）。
+        promptEditorOnSavedSlot.take();
     });
-    const edited = '改后的长内容\n2\n3\n4\n5\n6';
-    await act(async () => {
-      mockEditorProps[0]!.onChange(edited);
-    });
-    await act(async () => {
-      promptTree.root
-        .findByProps({testID: 'prompt-editor-save'})
-        .props.onPress();
-    });
-    // 工作区语义：保存后停留在全屏页，不自动 goBack。
-    expect(mockGoBack).not.toHaveBeenCalled();
 
-    // 回填后：标记与内容同帧出现
-    expect(findBanner(editorTree.root)).toHaveLength(1);
+    it('初始无标记；全屏保存回填后标记出现；表单保存后标记消失', async () => {
+        const editorTree = await renderAgentEditor();
 
-    // 表单保存成功后：标记随 savedBaseline 同帧消失
-    await act(async () => {
-      editorTree.root.findByProps({testID: 'form-save'}).props.onPress();
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    expect(mockRuntime.agentRegistry.upsert).toHaveBeenCalledTimes(1);
-    expect(findBanner(editorTree.root)).toHaveLength(0);
-  });
+        // 初始：与已保存基线一致，无「有未保存的更改」
+        expect(findBanner(editorTree.root)).toHaveLength(0);
 
-  it('全屏未保存离开（不保存直接退出）不回填，标记不出现', async () => {
-    const editorTree = await renderAgentEditor();
-    pressFullscreenButton(editorTree.root);
-    const route = mockPush.mock.calls[0]![1] as {
-      title?: string;
-      initialText: string;
-    };
+        // 常驻「全屏编辑」按钮 → push 全屏页（回调已写进模块级存取，路由参数只传可序列化字段）
+        pressFullscreenButton(editorTree.root);
+        expect(mockPush).toHaveBeenCalledWith(
+            'PromptEditor',
+            expect.objectContaining({initialText: longSystem}),
+        );
+        const route = mockPush.mock.calls[0]![1] as {
+            title?: string;
+            initialText: string;
+        };
 
-    mockRouteParams.initialText = route.initialText;
-    let promptTree!: TestRenderer.ReactTestRenderer;
-    await act(async () => {
-      promptTree = TestRenderer.create(<PromptEditorScreen />);
-    });
-    await act(async () => {
-      mockEditorProps[0]!.onChange('不会落盘的改动');
-    });
-    // R6：取消按钮已删（退出走返回 + 未保存拦截）；未保存直接卸载离开 = 确认离开丢弃。
-    await act(async () => {
-      promptTree.unmount();
-    });
-    expect(findBanner(editorTree.root)).toHaveLength(0);
-  });
+        // 全屏页（栈顶）：改稿并保存 → 回填栈底表单
+        mockRouteParams.initialText = route.initialText;
+        let promptTree!: TestRenderer.ReactTestRenderer;
+        await act(async () => {
+            promptTree = TestRenderer.create(<PromptEditorScreen />);
+        });
+        const edited = '改后的长内容\n2\n3\n4\n5\n6';
+        await act(async () => {
+            mockEditorProps[0]!.onChange(edited);
+        });
+        await act(async () => {
+            promptTree.root
+                .findByProps({testID: 'prompt-editor-save'})
+                .props.onPress();
+        });
+        // 工作区语义：保存后停留在全屏页，不自动 goBack。
+        expect(mockGoBack).not.toHaveBeenCalled();
 
-  it('onDirtyChange 通知外层（useUnsavedGuard 数据源）：内联修改后 true、保存后 false', async () => {
-    mockGetRawWire.mockResolvedValue(validWire);
-    const onDirtyChange = jest.fn();
-    let tree!: TestRenderer.ReactTestRenderer;
-    await act(async () => {
-      tree = TestRenderer.create(
-        <AgentEditorForm agentId="agent-a" onDirtyChange={onDirtyChange} />,
-      );
-    });
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+        // 回填后：标记与内容同帧出现
+        expect(findBanner(editorTree.root)).toHaveLength(1);
 
-    // 驱动系统区内联输入（表单里第一个 multiline TextInput 即 systemContent）
-    const multilineInputs = tree.root.findAllByProps({multiline: true});
-    expect(multilineInputs.length).toBeGreaterThanOrEqual(1);
-    await act(async () => {
-      multilineInputs[0]!.props.onChangeText('内联改了一笔');
+        // 表单保存成功后：标记随 savedBaseline 同帧消失
+        await act(async () => {
+            editorTree.root.findByProps({testID: 'form-save'}).props.onPress();
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        expect(mockRuntime.agentRegistry.upsert).toHaveBeenCalledTimes(1);
+        expect(findBanner(editorTree.root)).toHaveLength(0);
     });
-    expect(onDirtyChange).toHaveBeenLastCalledWith(true);
 
-    // 表单保存后回 false
-    await act(async () => {
-      tree.root.findByProps({testID: 'form-save'}).props.onPress();
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
+    it('全屏未保存离开（不保存直接退出）不回填，标记不出现', async () => {
+        const editorTree = await renderAgentEditor();
+        pressFullscreenButton(editorTree.root);
+        const route = mockPush.mock.calls[0]![1] as {
+            title?: string;
+            initialText: string;
+        };
+
+        mockRouteParams.initialText = route.initialText;
+        let promptTree!: TestRenderer.ReactTestRenderer;
+        await act(async () => {
+            promptTree = TestRenderer.create(<PromptEditorScreen />);
+        });
+        await act(async () => {
+            mockEditorProps[0]!.onChange('不会落盘的改动');
+        });
+        // R6：取消按钮已删（退出走返回 + 未保存拦截）；未保存直接卸载离开 = 确认离开丢弃。
+        await act(async () => {
+            promptTree.unmount();
+        });
+        expect(findBanner(editorTree.root)).toHaveLength(0);
     });
-    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
-  });
+
+    it('onDirtyChange 通知外层（useUnsavedGuard 数据源）：内联修改后 true、保存后 false', async () => {
+        mockGetRawWire.mockResolvedValue(validWire);
+        const onDirtyChange = jest.fn();
+        let tree!: TestRenderer.ReactTestRenderer;
+        await act(async () => {
+            tree = TestRenderer.create(
+                <AgentEditorForm agentId="agent-a" onDirtyChange={onDirtyChange} />,
+            );
+        });
+        await act(async () => {
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+
+        // 驱动系统区内联输入（表单里第一个 multiline TextInput 即 systemContent）
+        const multilineInputs = tree.root.findAllByProps({multiline: true});
+        expect(multilineInputs.length).toBeGreaterThanOrEqual(1);
+        await act(async () => {
+            multilineInputs[0]!.props.onChangeText('内联改了一笔');
+        });
+        expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+
+        // 表单保存后回 false
+        await act(async () => {
+            tree.root.findByProps({testID: 'form-save'}).props.onPress();
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+    });
 });
 
 describe('AgentEditor general sentinel 只读表单（内置智能体详情）', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockRouteParams.agentId = 'general';
-    // 清空模块级回调残留（回调不走路由参数，改由 openPromptEditor 写入）。
-    promptEditorOnSavedSlot.take();
-  });
-
-  it('以出厂定义直填全禁用编辑器：只读横幅在、无保存栏、不拉 registry、不误报未保存', async () => {
-    let tree!: TestRenderer.ReactTestRenderer;
-    await act(async () => {
-      tree = TestRenderer.create(<AgentEditorScreen />);
+    beforeEach(() => {
+        jest.clearAllMocks();
+        mockRouteParams.agentId = 'general';
+        // 清空模块级回调残留（回调不走路由参数，改由 openPromptEditor 写入）。
+        promptEditorOnSavedSlot.take();
     });
-    // flush ExpandablePromptInput 的挂载置顶 timer（落在 act 内，避免 teardown 后触发）。
-    await act(async () => {
-      await new Promise(resolve => setTimeout(resolve, 0));
+
+    it('以出厂定义直填全禁用编辑器：只读横幅在、无保存栏、不拉 registry、不误报未保存', async () => {
+        let tree!: TestRenderer.ReactTestRenderer;
+        await act(async () => {
+            tree = TestRenderer.create(<AgentEditorScreen />);
+        });
+        // flush ExpandablePromptInput 的挂载置顶 timer（落在 act 内，避免 teardown 后触发）。
+        await act(async () => {
+            await new Promise(resolve => setTimeout(resolve, 0));
+        });
+        const root = tree.root;
+
+        // 顶部只读横幅（替代原 BuiltinAgentDetail 独立卡片）。
+        const readonlyBanner = root
+            .findAll(node => typeof node.children?.[0] === 'string')
+            .filter(node =>
+                String(node.children[0]).includes('内置智能体，不可编辑'),
+            );
+        expect(readonlyBanner).toHaveLength(1);
+
+        // 不误报「有未保存的更改」（savedBaseline 恒 null + 无输入通路）。
+        expect(findBanner(root)).toHaveLength(0);
+
+        // 保存栏不渲染（readOnly 免 StickyFormFooter）。
+        expect(root.findAllByProps({testID: 'form-save'})).toHaveLength(0);
+
+        // sentinel 不走 registry 拉取（出厂定义直填）。
+        expect(mockGetRawWire).not.toHaveBeenCalled();
+
+        // 名称字段以出厂 name 直填且挂禁用（readOnly 通路到达底层输入）。
+        const nameField = root
+            .findAllByType(FormTextInput)
+            .find(node => node.props.value === DEFAULT_SUBAGENT_DEFINITION.name);
+        expect(nameField).toBeDefined();
+        expect(nameField!.props.disabled).toBe(true);
+
+        // 全屏编辑按钮全部禁点（label 在 RN preset 会传播多层，取带 onPress 的那层）。
+        const fullscreenBtns = root
+            .findAllByProps({accessibilityLabel: '全屏编辑'})
+            .filter(node => typeof node.props.onPress === 'function');
+        expect(fullscreenBtns.length).toBeGreaterThan(0);
+        for (const btn of fullscreenBtns) {
+            expect(btn.props.disabled).toBe(true);
+        }
+
+        await act(async () => {
+            tree.unmount();
+        });
     });
-    const root = tree.root;
-
-    // 顶部只读横幅（替代原 BuiltinAgentDetail 独立卡片）。
-    const readonlyBanner = root
-      .findAll(node => typeof node.children?.[0] === 'string')
-      .filter(node =>
-        String(node.children[0]).includes('内置智能体，不可编辑'),
-      );
-    expect(readonlyBanner).toHaveLength(1);
-
-    // 不误报「有未保存的更改」（savedBaseline 恒 null + 无输入通路）。
-    expect(findBanner(root)).toHaveLength(0);
-
-    // 保存栏不渲染（readOnly 免 StickyFormFooter）。
-    expect(root.findAllByProps({testID: 'form-save'})).toHaveLength(0);
-
-    // sentinel 不走 registry 拉取（出厂定义直填）。
-    expect(mockGetRawWire).not.toHaveBeenCalled();
-
-    // 名称字段以出厂 name 直填且挂禁用（readOnly 通路到达底层输入）。
-    const nameField = root
-      .findAllByType(FormTextInput)
-      .find(node => node.props.value === DEFAULT_SUBAGENT_DEFINITION.name);
-    expect(nameField).toBeDefined();
-    expect(nameField!.props.disabled).toBe(true);
-
-    // 全屏编辑按钮全部禁点（label 在 RN preset 会传播多层，取带 onPress 的那层）。
-    const fullscreenBtns = root
-      .findAllByProps({accessibilityLabel: '全屏编辑'})
-      .filter(node => typeof node.props.onPress === 'function');
-    expect(fullscreenBtns.length).toBeGreaterThan(0);
-    for (const btn of fullscreenBtns) {
-      expect(btn.props.disabled).toBe(true);
-    }
-
-    await act(async () => {
-      tree.unmount();
-    });
-  });
 });

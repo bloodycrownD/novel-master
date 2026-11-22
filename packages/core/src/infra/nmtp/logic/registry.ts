@@ -9,6 +9,6 @@ import { createDriverRegistry } from "../../create-driver-registry.js";
 
 /** NMTP driver registry. */
 export const TokenizerRegistry = createDriverRegistry<TokenizerDriver>({
-  label: "Tokenizer",
-  hint: "Call registerTokenizerNodeDriver() (CLI/Electron) or registerTokenizerRnDriver() (React Native).",
+    label: "Tokenizer",
+    hint: "Call registerTokenizerNodeDriver() (CLI/Electron) or registerTokenizerRnDriver() (React Native).",
 });

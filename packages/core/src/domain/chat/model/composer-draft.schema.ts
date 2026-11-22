@@ -26,8 +26,8 @@ type ComposerDraftAttachment = z.infer<typeof composerDraftAttachmentSchema>;
  * `text.length` 越界、区间有序性、重叠都不在 schema 层校验——越界由消费侧防御。
  */
 const composerDraftTokenRangeShape = z.object({
-  start: z.number().int().nonnegative(),
-  end: z.number().int().nonnegative(),
+    start: z.number().int().nonnegative(),
+    end: z.number().int().nonnegative(),
 });
 
 const composerDraftTokenRangeSchema = composerDraftTokenRangeShape.refine((range) => range.start < range.end, { message: "error.chat.composer_token_range_order" });
@@ -43,13 +43,13 @@ export type ComposerDraftTokenRange = z.infer<typeof composerDraftTokenRangeSche
  * nm-style: keep-public — composer_draft_json 写侧 schema 与单测入口。
  */
 export const composerDraftSchema = z.object({
-  text: z.string(),
-  attachments: z.array(messageAttachmentSchema).transform((items) => items.filter((item): item is ComposerDraftAttachment => item.source === "attach")),
-  /**
+    text: z.string(),
+    attachments: z.array(messageAttachmentSchema).transform((items) => items.filter((item): item is ComposerDraftAttachment => item.source === "attach")),
+    /**
    * 确认胶囊区间。**不设 default**：`undefined`（旧草稿，允许消费侧兜底扫描）
    * 与 `[]`（确认无胶囊，禁止扫描）语义不同，不能被默认值抹平。
    */
-  tokenRanges: composerDraftTokenRangesSchema.optional(),
+    tokenRanges: composerDraftTokenRangesSchema.optional(),
 }).strict();
 
 /**
@@ -61,25 +61,25 @@ export type ComposerDraft = z.infer<typeof composerDraftSchema>;
 
 /** 空草稿（等价于列 NULL / 缺省）。 */
 const EMPTY_COMPOSER_DRAFT: ComposerDraft = {
-  text: "",
-  attachments: [],
+    text: "",
+    attachments: [],
 };
 
 /** `composer_draft_json` 写侧入参（`tokenRanges` 缺失表示不写该字段）。 */
 type ComposerDraftInput = {
-  text: string;
-  attachments: readonly MessageAttachment[];
-  /** 确认胶囊区间；`undefined` 表示不写字段，见 D1 的 undefined ≠ `[]` 口径。 */
-  tokenRanges?: readonly ComposerDraftTokenRange[];
+    text: string;
+    attachments: readonly MessageAttachment[];
+    /** 确认胶囊区间；`undefined` 表示不写字段，见 D1 的 undefined ≠ `[]` 口径。 */
+    tokenRanges?: readonly ComposerDraftTokenRange[];
 };
 
 export const ComposerDraftSchema = {
-  /** 类型守卫：附件是否为 attach 源。 */
-  isAttachment(item: MessageAttachment): item is ComposerDraftAttachment {
-    return item.source === "attach";
-  },
+    /** 类型守卫：附件是否为 attach 源。 */
+    isAttachment(item: MessageAttachment): item is ComposerDraftAttachment {
+        return item.source === "attach";
+    },
 
-  /**
+    /**
    * 解析 `composer_draft_json`；NULL/空/非法 → 空草稿。
    * 含非 attach 的附件会被剥掉。
    *
@@ -91,40 +91,40 @@ export const ComposerDraftSchema = {
    * `tokenRanges` 同属「坏了只丢自己」：字段缺失或非法 → 结果对象**不含该自有键**
    * （等价于「旧草稿，允许兜底扫描」），text/attachments 照常保留。
    */
-  parseJson(raw: string | null | undefined): ComposerDraft {
-    if (raw == null || raw === "") {
-      return { ...EMPTY_COMPOSER_DRAFT, attachments: [] };
-    }
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      return { ...EMPTY_COMPOSER_DRAFT, attachments: [] };
-    }
-    // 守卫：parsed 可能是 number / string / array / null，形状不对时无粒度可 salv。
-    if (!Guards.isRecord(parsed)) {
-      return { ...EMPTY_COMPOSER_DRAFT, attachments: [] };
-    }
-    // text 单独取，让「正文不因附件而丢」成为结构性保证，而不是靠运气。
-    const text = typeof parsed.text === "string" ? parsed.text : "";
-    const items = Array.isArray(parsed.attachments) ? parsed.attachments : [];
-    // 逐条降级，并在收窄时完成来源分档：非 attach 源直接丢掉，正文永不因附件而丢。
-    const attachments = items.flatMap((item) => {
-      const result = messageAttachmentSchema.safeParse(item);
-      return result.success && ComposerDraftSchema.isAttachment(result.data) ? [result.data] : [];
-    });
-    // 逐字段重建而不直接回解析结果：tokenRanges 缺失/非法时**不写自有键**，
-    // 否则 zod optional 自带的 `tokenRanges: undefined` 会让既有
-    // `node:assert/strict` deepEqual 断言（`{ text, attachments }` 形状）翻红。
-    const draft: ComposerDraft = { text, attachments };
-    if (parsed.tokenRanges !== undefined) {
-      const ranges = composerDraftTokenRangesSchema.safeParse(parsed.tokenRanges);
-      if (ranges.success) draft.tokenRanges = ranges.data;
-    }
-    return draft;
-  },
+    parseJson(raw: string | null | undefined): ComposerDraft {
+        if (raw == null || raw === "") {
+            return { ...EMPTY_COMPOSER_DRAFT, attachments: [] };
+        }
+        let parsed: unknown;
+        try {
+            parsed = JSON.parse(raw);
+        } catch {
+            return { ...EMPTY_COMPOSER_DRAFT, attachments: [] };
+        }
+        // 守卫：parsed 可能是 number / string / array / null，形状不对时无粒度可 salv。
+        if (!Guards.isRecord(parsed)) {
+            return { ...EMPTY_COMPOSER_DRAFT, attachments: [] };
+        }
+        // text 单独取，让「正文不因附件而丢」成为结构性保证，而不是靠运气。
+        const text = typeof parsed.text === "string" ? parsed.text : "";
+        const items = Array.isArray(parsed.attachments) ? parsed.attachments : [];
+        // 逐条降级，并在收窄时完成来源分档：非 attach 源直接丢掉，正文永不因附件而丢。
+        const attachments = items.flatMap((item) => {
+            const result = messageAttachmentSchema.safeParse(item);
+            return result.success && ComposerDraftSchema.isAttachment(result.data) ? [result.data] : [];
+        });
+        // 逐字段重建而不直接回解析结果：tokenRanges 缺失/非法时**不写自有键**，
+        // 否则 zod optional 自带的 `tokenRanges: undefined` 会让既有
+        // `node:assert/strict` deepEqual 断言（`{ text, attachments }` 形状）翻红。
+        const draft: ComposerDraft = { text, attachments };
+        if (parsed.tokenRanges !== undefined) {
+            const ranges = composerDraftTokenRangesSchema.safeParse(parsed.tokenRanges);
+            if (ranges.success) draft.tokenRanges = ranges.data;
+        }
+        return draft;
+    },
 
-  /**
+    /**
    * 序列化草稿；空正文且无附件 → `null`（写入 SQL NULL）。
    * 写入前规范化：仅保留 `source === 'attach'`。
    *
@@ -132,18 +132,18 @@ export const ComposerDraftSchema = {
    * 其余照写；全被过滤写 `[]`，**不抛错**——落库链永不被 ranges 炸，与 parse 同口径。
    * `undefined`（旧草稿语义，允许兜底扫描）不写该字段；`[]`（确认无胶囊）照写。
    */
-  serializeJson(draft: ComposerDraftInput | null | undefined): string | null {
-    if (draft == null) {
-      return null;
-    }
-    const attachments = draft.attachments.filter(ComposerDraftSchema.isAttachment);
-    if (draft.text === "" && attachments.length === 0) {
-      return null;
-    }
-    const normalized: ComposerDraft = { text: draft.text, attachments };
-    if (draft.tokenRanges !== undefined) {
-      normalized.tokenRanges = draft.tokenRanges.filter((range): range is ComposerDraftTokenRange => composerDraftTokenRangeSchema.safeParse(range).success);
-    }
-    return JSON.stringify(normalized);
-  },
+    serializeJson(draft: ComposerDraftInput | null | undefined): string | null {
+        if (draft == null) {
+            return null;
+        }
+        const attachments = draft.attachments.filter(ComposerDraftSchema.isAttachment);
+        if (draft.text === "" && attachments.length === 0) {
+            return null;
+        }
+        const normalized: ComposerDraft = { text: draft.text, attachments };
+        if (draft.tokenRanges !== undefined) {
+            normalized.tokenRanges = draft.tokenRanges.filter((range): range is ComposerDraftTokenRange => composerDraftTokenRangeSchema.safeParse(range).success);
+        }
+        return JSON.stringify(normalized);
+    },
 } as const;

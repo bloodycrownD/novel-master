@@ -21,168 +21,169 @@ import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
 import type {ThemeTokens} from '@/theme/tokens';
 import {SegmentedControl, type SegmentOption} from '@/components/ui/SegmentedControl';
 import {AndroidKeyboardClipBody} from '@/components/chrome/AndroidKeyboardClipBody';
+import {coreT} from '@/i18n/core';
 
 type EditorScreenShellProps<T extends string> = {
-  tokens: ThemeTokens;
-  /** toolbar 底部分隔线颜色（各屏分别取 tokens.border / borderLight）。 */
-  toolbarBorderColor: string;
-  /** 标题（含 danger 着色）；**不传且无 save/toggle/titlePress 时整个 toolbar 不渲染**
+    tokens: ThemeTokens;
+    /** toolbar 底部分隔线颜色（各屏分别取 tokens.border / borderLight）。 */
+    toolbarBorderColor: string;
+    /** 标题（含 danger 着色）；**不传且无 save/toggle/titlePress 时整个 toolbar 不渲染**
    * ——导航栏已有标题、页面内又只有一个重复标题的场景（chat 输入框全屏纯编辑态）。 */
-  title?: string;
-  /** 有未保存改动时调用方改传「未保存」，由 shell 统一 danger 着色。 */
-  titleDanger?: boolean;
-  /** 不提供则不渲染左位保存按钮（如 chat 输入框全屏：退出即回填）。 */
-  save?: {
-    testID?: string;
-    accessibilityLabel?: string;
-    /** 如「保存 / 保存中…」。 */
-    label: string;
-    disabled: boolean;
-    onPress: () => void;
-  };
-  /** 标题字号，默认 13（旧 PromptEditor 值）；文件屏传 14 还原旧默认字号。 */
-  titleFontSize?: number;
-  /** 提供时标题区渲染为可点按（收起键盘）变体，如文件编辑聚焦态。 */
-  titlePress?: {
-    testID?: string;
-    onPress: () => void;
-  };
-  /** 不提供则不渲染右侧编辑/预览切换（如文件编辑只读分支）。 */
-  toggle?: {
-    testID?: string;
-    accessibilityLabel?: string;
-    previewMode: boolean;
-    onPress: () => void;
-  };
-  /** toolbar 与 SegmentedControl 之间的附加行（如更新时间/字数统计）。 */
-  toolbarExtra?: React.ReactNode;
-  /** 预览态渲染档位（markdown/文本），两屏共用同一组选项；纯编辑态可不传。 */
-  segmented?: {
-    options: readonly SegmentOption<T>[];
-    value: T;
-    onChange: (value: T) => void;
-  };
-  /** 缺省 false = 纯编辑态（不渲染预览区，见下方 preview 说明）。 */
-  previewMode?: boolean;
-  /** 预览内容；与 `previewMode` 一起提供才渲染预览分支。 */
-  preview?: React.ReactNode;
-  editor: React.ReactNode;
+    title?: string;
+    /** 有未保存改动时调用方改传「未保存」，由 shell 统一 danger 着色。 */
+    titleDanger?: boolean;
+    /** 不提供则不渲染左位保存按钮（如 chat 输入框全屏：退出即回填）。 */
+    save?: {
+        testID?: string;
+        accessibilityLabel?: string;
+        /** 如「保存 / 保存中…」。 */
+        label: string;
+        disabled: boolean;
+        onPress: () => void;
+    };
+    /** 标题字号，默认 13（旧 PromptEditor 值）；文件屏传 14 还原旧默认字号。 */
+    titleFontSize?: number;
+    /** 提供时标题区渲染为可点按（收起键盘）变体，如文件编辑聚焦态。 */
+    titlePress?: {
+        testID?: string;
+        onPress: () => void;
+    };
+    /** 不提供则不渲染右侧编辑/预览切换（如文件编辑只读分支）。 */
+    toggle?: {
+        testID?: string;
+        accessibilityLabel?: string;
+        previewMode: boolean;
+        onPress: () => void;
+    };
+    /** toolbar 与 SegmentedControl 之间的附加行（如更新时间/字数统计）。 */
+    toolbarExtra?: React.ReactNode;
+    /** 预览态渲染档位（markdown/文本），两屏共用同一组选项；纯编辑态可不传。 */
+    segmented?: {
+        options: readonly SegmentOption<T>[];
+        value: T;
+        onChange: (value: T) => void;
+    };
+    /** 缺省 false = 纯编辑态（不渲染预览区，见下方 preview 说明）。 */
+    previewMode?: boolean;
+    /** 预览内容；与 `previewMode` 一起提供才渲染预览分支。 */
+    preview?: React.ReactNode;
+    editor: React.ReactNode;
 };
 
 export function EditorScreenShell<T extends string>({
-  tokens,
-  toolbarBorderColor,
-  save,
-  title,
-  titleDanger,
-  titleFontSize = 13,
-  titlePress,
-  toggle,
-  toolbarExtra,
-  segmented,
-  previewMode,
-  preview,
-  editor,
+    tokens,
+    toolbarBorderColor,
+    save,
+    title,
+    titleDanger,
+    titleFontSize = 13,
+    titlePress,
+    toggle,
+    toolbarExtra,
+    segmented,
+    previewMode,
+    preview,
+    editor,
 }: EditorScreenShellProps<T>) {
-  const titleColor = titleDanger ? tokens.danger : tokens.textSecondary;
-  /** 无标题、无动作位 → 整行不渲染：导航栏已有标题时别在页内再叠一个重复标题。 */
-  const hasToolbar = save != null || title != null || titlePress != null || toggle != null;
+    const titleColor = titleDanger ? tokens.danger : tokens.textSecondary;
+    /** 无标题、无动作位 → 整行不渲染：导航栏已有标题时别在页内再叠一个重复标题。 */
+    const hasToolbar = save != null || title != null || titlePress != null || toggle != null;
 
-  const body = (
-    <>
-      {hasToolbar ? (
-        <View testID="editor-screen-toolbar" style={[styles.toolbar, {borderBottomColor: toolbarBorderColor}]}>
-          {save ? (
-            <Pressable testID={save.testID} accessibilityLabel={save.accessibilityLabel} style={styles.toolbarBtn} onPress={save.onPress} disabled={save.disabled}>
-              <Text
-                style={[
-                  styles.toolbarText,
-                  {
-                    color: save.disabled ? tokens.textSecondary : tokens.primary,
-                  },
-                ]}
-              >
-                {save.label}
-              </Text>
-            </Pressable>
-          ) : null}
-          {title == null ? null : titlePress ? (
-            <Pressable testID={titlePress.testID} style={styles.toolbarTitle} onPress={titlePress.onPress} accessibilityRole="button" accessibilityLabel="收起键盘">
-              <Text style={[styles.toolbarTitleText, {color: titleColor, fontSize: titleFontSize}]} numberOfLines={1} ellipsizeMode="tail">
-                {title}
-              </Text>
-            </Pressable>
-          ) : (
-            <Text style={[styles.toolbarTitle, styles.toolbarTitleText, {color: titleColor, fontSize: titleFontSize}]} numberOfLines={1} ellipsizeMode="tail">
-              {title}
-            </Text>
-          )}
-          {toggle ? (
-            <Pressable testID={toggle.testID} accessibilityLabel={toggle.accessibilityLabel} style={styles.toolbarBtn} onPress={toggle.onPress}>
-              <Text
-                style={[
-                  styles.toolbarText,
-                  {
-                    color: toggle.previewMode ? tokens.primary : tokens.textSecondary,
-                  },
-                ]}
-              >
-                {toggle.previewMode ? '编辑' : '预览'}
-              </Text>
-            </Pressable>
-          ) : null}
-        </View>
-      ) : null}
-      {toolbarExtra}
-      {previewMode && segmented ? <SegmentedControl options={segmented.options} value={segmented.value} onChange={segmented.onChange} tokens={tokens} /> : null}
-      {previewMode ? (
-        /* WebView owns scroll — no outer ScrollView (avoids nested scroll + height bugs). */
-        <View style={[styles.preview, {backgroundColor: tokens.surface}]}>{preview}</View>
-      ) : (
-        editor
-      )}
-    </>
-  );
-
-  const rootStyle = [styles.root, {backgroundColor: tokens.background}];
-
-  // 预览无软键盘；编辑态 Android 抬升裁切，iOS 仍用 KAV padding。
-  if (previewMode) {
-    return <View style={rootStyle}>{body}</View>;
-  }
-
-  if (Platform.OS === 'android') {
-    return (
-      <View style={rootStyle}>
-        <AndroidKeyboardClipBody>{body}</AndroidKeyboardClipBody>
-      </View>
+    const body = (
+        <>
+            {hasToolbar ? (
+                <View testID="editor-screen-toolbar" style={[styles.toolbar, {borderBottomColor: toolbarBorderColor}]}>
+                    {save ? (
+                        <Pressable testID={save.testID} accessibilityLabel={save.accessibilityLabel} style={styles.toolbarBtn} onPress={save.onPress} disabled={save.disabled}>
+                            <Text
+                                style={[
+                                    styles.toolbarText,
+                                    {
+                                        color: save.disabled ? tokens.textSecondary : tokens.primary,
+                                    },
+                                ]}
+                            >
+                                {save.label}
+                            </Text>
+                        </Pressable>
+                    ) : null}
+                    {title == null ? null : titlePress ? (
+                        <Pressable testID={titlePress.testID} style={styles.toolbarTitle} onPress={titlePress.onPress} accessibilityRole="button" accessibilityLabel={coreT({key: "ui.common.dismiss_keyboard"})}>
+                            <Text style={[styles.toolbarTitleText, {color: titleColor, fontSize: titleFontSize}]} numberOfLines={1} ellipsizeMode="tail">
+                                {title}
+                            </Text>
+                        </Pressable>
+                    ) : (
+                        <Text style={[styles.toolbarTitle, styles.toolbarTitleText, {color: titleColor, fontSize: titleFontSize}]} numberOfLines={1} ellipsizeMode="tail">
+                            {title}
+                        </Text>
+                    )}
+                    {toggle ? (
+                        <Pressable testID={toggle.testID} accessibilityLabel={toggle.accessibilityLabel} style={styles.toolbarBtn} onPress={toggle.onPress}>
+                            <Text
+                                style={[
+                                    styles.toolbarText,
+                                    {
+                                        color: toggle.previewMode ? tokens.primary : tokens.textSecondary,
+                                    },
+                                ]}
+                            >
+                                {toggle.previewMode ? coreT({key: "ui.common.edit"}) : coreT({key: "ui.common.preview"})}
+                            </Text>
+                        </Pressable>
+                    ) : null}
+                </View>
+            ) : null}
+            {toolbarExtra}
+            {previewMode && segmented ? <SegmentedControl options={segmented.options} value={segmented.value} onChange={segmented.onChange} tokens={tokens} /> : null}
+            {previewMode ? (
+                /* WebView owns scroll — no outer ScrollView (avoids nested scroll + height bugs). */
+                <View style={[styles.preview, {backgroundColor: tokens.surface}]}>{preview}</View>
+            ) : (
+                editor
+            )}
+        </>
     );
-  }
 
-  return (
-    <KeyboardAvoidingView style={rootStyle} behavior="padding" automaticOffset>
-      {body}
-    </KeyboardAvoidingView>
-  );
+    const rootStyle = [styles.root, {backgroundColor: tokens.background}];
+
+    // 预览无软键盘；编辑态 Android 抬升裁切，iOS 仍用 KAV padding。
+    if (previewMode) {
+        return <View style={rootStyle}>{body}</View>;
+    }
+
+    if (Platform.OS === 'android') {
+        return (
+            <View style={rootStyle}>
+                <AndroidKeyboardClipBody>{body}</AndroidKeyboardClipBody>
+            </View>
+        );
+    }
+
+    return (
+        <KeyboardAvoidingView style={rootStyle} behavior="padding" automaticOffset>
+            {body}
+        </KeyboardAvoidingView>
+    );
 }
 
 const styles = StyleSheet.create({
-  root: {flex: 1},
-  toolbar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  toolbarBtn: {flexShrink: 0},
-  toolbarTitle: {
-    flex: 1,
-    flexShrink: 1,
-    minWidth: 0,
-  },
-  toolbarTitleText: {fontSize: 13, textAlign: 'center'},
-  toolbarText: {fontSize: 14, fontWeight: '600'},
-  preview: {flex: 1, minHeight: 0, padding: 12},
+    root: {flex: 1},
+    toolbar: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+    },
+    toolbarBtn: {flexShrink: 0},
+    toolbarTitle: {
+        flex: 1,
+        flexShrink: 1,
+        minWidth: 0,
+    },
+    toolbarTitleText: {fontSize: 13, textAlign: 'center'},
+    toolbarText: {fontSize: 14, fontWeight: '600'},
+    preview: {flex: 1, minHeight: 0, padding: 12},
 });

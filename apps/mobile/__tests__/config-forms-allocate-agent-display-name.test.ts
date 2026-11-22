@@ -4,31 +4,31 @@ import { describe, it } from "@jest/globals";
 import { allocateAgentDisplayName } from "@/config-forms/agent/allocate-agent-display-name";
 
 describe("allocateAgentDisplayName", () => {
-  it("空列表时返回 agent1", () => {
-    assert.equal(AllocateAgentDisplayName.allocate([]), "agent1");
-  });
+    it("空列表时返回 agent1", () => {
+        assert.equal(AllocateAgentDisplayName.allocate([]), "agent1");
+    });
 
-  it("跳过已占用的序号", () => {
-    assert.equal(
-      AllocateAgentDisplayName.allocate([
-        { id: "a", name: "agent1" },
-        { id: "b", name: "agent3" },
-      ]),
-      "agent2",
-    );
-  });
+    it("跳过已占用的序号", () => {
+        assert.equal(
+            AllocateAgentDisplayName.allocate([
+                { id: "a", name: "agent1" },
+                { id: "b", name: "agent3" },
+            ]),
+            "agent2",
+        );
+    });
 
-  it("比较显示名时 trim 空白", () => {
-    assert.equal(
-      AllocateAgentDisplayName.allocate([{ id: "a", name: "  agent1  " }]),
-      "agent2",
-    );
-  });
+    it("比较显示名时 trim 空白", () => {
+        assert.equal(
+            AllocateAgentDisplayName.allocate([{ id: "a", name: "  agent1  " }]),
+            "agent2",
+        );
+    });
 
-  it("忽略空白显示名", () => {
-    assert.equal(
-      AllocateAgentDisplayName.allocate([{ id: "a", name: "   " }]),
-      "agent1",
-    );
-  });
+    it("忽略空白显示名", () => {
+        assert.equal(
+            AllocateAgentDisplayName.allocate([{ id: "a", name: "   " }]),
+            "agent1",
+        );
+    });
 });

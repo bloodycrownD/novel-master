@@ -13,7 +13,7 @@
  * ## 单池：内容正文池（decodedContentCache）
  *
  * 键 = 明文 sha256 hex。`vfs_content_blob` 与 `session_file_cache_blob`
- * 的 content_hash 都是 `ContentHash.hash(明文)`（同一个纯函数），所以同一位文件
+ * 的 content_hash 都是 `Hash.sha256Hex(明文)`（同一个纯函数），所以同一位文件
  * 正文在两套存储里天然同键——一份内存同时服务 vfs.read（文件预览 / 工具
  * 读盘 / workplace 冷回填）与 file_cache 读链。**这池不需要任何失效
  * 机制**：键是内容的密码学哈希，同键必同值（value 是 key 的函数），不存在
@@ -61,19 +61,19 @@
 
 /** 单池上界与命名（name 只进诊断输出，用于定位是哪层在抖）。 */
 interface DecodedContentPoolLimits {
-  readonly name: string;
-  readonly maxEntries: number;
-  readonly maxChars: number;
+    readonly name: string;
+    readonly maxEntries: number;
+    readonly maxChars: number;
 }
 
 /** 池快照（测试与诊断观测面）。 */
 interface DecodedContentPoolStats {
-  readonly name: string;
-  readonly entries: number;
-  readonly chars: number;
-  readonly hits: number;
-  readonly misses: number;
-  readonly evictions: number;
+    readonly name: string;
+    readonly entries: number;
+    readonly chars: number;
+    readonly hits: number;
+    readonly misses: number;
+    readonly evictions: number;
 }
 
 /**
@@ -83,80 +83,80 @@ interface DecodedContentPoolStats {
  * 单例 {@link decodedContentCache}，不需要自己 new。
  */
 export class DecodedContentPool {
-  /** 迭代序 = 插入序：命中先删再插即 LRU 刷新，逐出取最前键。 */
-  private readonly lru = new Map<string, string>();
-  private chars = 0;
-  private hits = 0;
-  private misses = 0;
-  private evictions = 0;
+    /** 迭代序 = 插入序：命中先删再插即 LRU 刷新，逐出取最前键。 */
+    private readonly lru = new Map<string, string>();
+    private chars = 0;
+    private hits = 0;
+    private misses = 0;
+    private evictions = 0;
 
-  constructor(private readonly limits: DecodedContentPoolLimits) {}
+    constructor(private readonly limits: DecodedContentPoolLimits) {}
 
-  /** 命中返回缓存值（含空串）；miss 返回 null。 */
-  get(key: string): string | null {
-    const hit = this.lru.get(key);
-    if (hit == null) {
-      this.misses++;
-      return null;
+    /** 命中返回缓存值（含空串）；miss 返回 null。 */
+    get(key: string): string | null {
+        const hit = this.lru.get(key);
+        if (hit == null) {
+            this.misses++;
+            return null;
+        }
+        this.lru.delete(key);
+        this.lru.set(key, hit);
+        this.hits++;
+        return hit;
     }
-    this.lru.delete(key);
-    this.lru.set(key, hit);
-    this.hits++;
-    return hit;
-  }
 
-  set(key: string, value: string): void {
-    if (value.length > this.limits.maxChars) {
-      // 单条吃不下整个预算：不收录（见模块头「不收录」段），并清掉可能
-      // 存在的旧值，避免旧值占着预算不放。
-      this.delete(key);
-      return;
+    set(key: string, value: string): void {
+        if (value.length > this.limits.maxChars) {
+            // 单条吃不下整个预算：不收录（见模块头「不收录」段），并清掉可能
+            // 存在的旧值，避免旧值占着预算不放。
+            this.delete(key);
+            return;
+        }
+        const previous = this.lru.get(key);
+        if (previous != null) {
+            this.lru.delete(key);
+            this.chars -= previous.length;
+        }
+        this.lru.set(key, value);
+        this.chars += value.length;
+        while (this.lru.size > this.limits.maxEntries || this.chars > this.limits.maxChars) {
+            const oldest = this.lru.keys().next().value;
+            if (oldest == null) {
+                return;
+            }
+            this.delete(oldest);
+            this.evictions++;
+        }
     }
-    const previous = this.lru.get(key);
-    if (previous != null) {
-      this.lru.delete(key);
-      this.chars -= previous.length;
-    }
-    this.lru.set(key, value);
-    this.chars += value.length;
-    while (this.lru.size > this.limits.maxEntries || this.chars > this.limits.maxChars) {
-      const oldest = this.lru.keys().next().value;
-      if (oldest == null) {
-        return;
-      }
-      this.delete(oldest);
-      this.evictions++;
-    }
-  }
 
-  delete(key: string): void {
-    const previous = this.lru.get(key);
-    if (previous == null) {
-      return;
+    delete(key: string): void {
+        const previous = this.lru.get(key);
+        if (previous == null) {
+            return;
+        }
+        this.lru.delete(key);
+        this.chars -= previous.length;
     }
-    this.lru.delete(key);
-    this.chars -= previous.length;
-  }
 
-  /** 清空条目与计数器（整体归零，测试隔离用）。 */
-  clear(): void {
-    this.lru.clear();
-    this.chars = 0;
-    this.hits = 0;
-    this.misses = 0;
-    this.evictions = 0;
-  }
+    /** 清空条目与计数器（整体归零，测试隔离用）。 */
+    clear(): void {
+        this.lru.clear();
+        this.chars = 0;
+        this.hits = 0;
+        this.misses = 0;
+        this.evictions = 0;
+    }
 
-  stats(): DecodedContentPoolStats {
-    return {
-      name: this.limits.name,
-      entries: this.lru.size,
-      chars: this.chars,
-      hits: this.hits,
-      misses: this.misses,
-      evictions: this.evictions,
-    };
-  }
+    stats(): DecodedContentPoolStats {
+        return {
+            name: this.limits.name,
+            entries: this.lru.size,
+            chars: this.chars,
+            hits: this.hits,
+            misses: this.misses,
+            evictions: this.evictions,
+        };
+    }
 }
 
 /**
@@ -176,7 +176,7 @@ const CONTENT_BODY_POOL_MAX_ENTRIES = 1024;
  * 键 = 明文 sha256 hex（`vfs_content_blob` 与 `session_file_cache_blob` 的
  * content_hash 同源），同键必同值，因此**不需要任何失效机制**；`clear()`
  * 只在 bootstrap 换库与测试隔离时调用。调用方保证
- * `contentHash === ContentHash.hash(body)`；喂错键等于投毒，本层不做校验（校验
+ * `contentHash === Hash.sha256Hex(body)`；喂错键等于投毒，本层不做校验（校验
  * 就得再哈希一遍，正是本层要消灭的线性成本）。
  *
  * @remarks 传 `vfs_content_blob` / `session_file_cache_blob` 的 content_hash；
@@ -185,7 +185,7 @@ const CONTENT_BODY_POOL_MAX_ENTRIES = 1024;
  * 换库清池）；类只为其 LRU/预算行为可直测而导出，生产接线只认这一个实例。
  */
 export const decodedContentCache = new DecodedContentPool({
-  name: "content-body",
-  maxEntries: CONTENT_BODY_POOL_MAX_ENTRIES,
-  maxChars: CONTENT_BODY_POOL_MAX_CHARS,
+    name: "content-body",
+    maxEntries: CONTENT_BODY_POOL_MAX_ENTRIES,
+    maxChars: CONTENT_BODY_POOL_MAX_CHARS,
 });

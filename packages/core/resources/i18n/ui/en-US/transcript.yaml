@@ -1,0 +1,306 @@
+  transcript:
+    menu:
+      edit: Edit
+      copy: Copy
+      set_floor: Pin
+      fork: Fork
+      rollback: Roll back
+    tool_result_title: Tool result
+    tool_status:
+      success: Success
+      error: Failed
+      pending: Running
+      interrupted: Interrupted
+    tool_group_title: "Tool calls ({count})"
+    open_hint: "View · {kind}"
+    open_kind:
+      subagent: subagent session
+      skill: skill
+      result: result
+      workspace: chat workspace
+    role:
+      user: User
+      assistant: Assistant
+    message_actions: Message actions
+    attach_group_title: "Attachments ({count})"
+    attach_src:
+      workspace: workspace
+      dir: directory
+      file: file
+  chat:
+    placeholder: Type a message…
+    placeholder_no_model: Select a model to start chatting
+    placeholder_desktop: Type a message… (Ctrl+Enter to send)
+    composer_disabled_hint: Configure a model first (Settings → Provider)
+    no_model_selected: No model selected
+    configure_model_first: Configure a model first
+    no_workspace_model_hint: Select a workspace model first
+    message_input_aria: Message input
+    more_options: More options
+    reference_files: Reference files
+    reference_skills: Reference skills
+    stop_gen: Stop
+    stop_generating: Stop generating
+    stop_subagent: Stop subagent
+    attachment_draft_aria: Pending attachments
+    attachment_status_aria: Status attachments
+    remove_attachment_aria: "Remove {label}"
+    select_model_title: Select workspace model
+    no_saved_models: No saved models yet. Add models on the Providers page first.
+    select_project_first: Select a project first
+    select_session_first: Select a session first
+    select_session: Select a session
+    rename_prompt: Enter a name
+    copy_session_done: "Session duplicated: {name}"
+    delete_sessions_confirm: "Delete the selected {count} sessions?"
+    delete_session_done: Session deleted
+    delete_session_confirm: "Delete session \"{name}\"? Its messages and files are deleted too and cannot be recovered."
+    edit_message_title: Edit message
+    edit_message_placeholder: Edit message content
+    fork_done: "Forked: {name}"
+    rollback_success: Rollback completed
+    rollback_truncated: Conversation truncated; workspace not restored
+    rollback_blocked_title: Rollback unavailable right now
+    rollback_blocked_msg: An agent is running. Stop generation or wait for this turn to finish before rolling back.
+    set_floor_done: Set as floor
+    set_floor_confirm_title: Set floor at this message?
+    set_floor_confirm_msg: Messages before this one are excluded from the prompt; this message and later ones become visible again.
+    rollback_confirm_title: Roll back to this message
+    rollback_degraded_title: Delete later messages only
+    rollback_continue: Continue rollback
+    snapshot_missing: Snapshot missing
+    workspace_restore_fail_title: Cannot restore workspace
+    context_up_to_date: Context is already up to date
+    compacting_toast: Compacting context…
+    compact_done: Compacted
+    compact_cancelled: Compaction cancelled
+    active_suffix: " · active"
+    hidden_tag: Hidden
+    role_system: System
+    tab_chat: Chat
+    tab_prompt: Prompt
+    tab_conversation: Conversation content
+    subagent_running_empty: Subagent running…
+    subagent_pick_parent_hint: Go back to the parent session and tap the subagent card again
+    subagent_empty: No messages in this subagent session
+    thinking_sanitized: Thinking (sanitized)
+    workspace_unavailable: Chat workspace unavailable
+    parent_dir: Up one level
+    pick_target_dir_title: Choose target directory
+    pick_dir_hint: Browse to the target folder and confirm; the source itself and its subtree cannot be selected
+    file_ref_hint: Select multiple files and directories
+    select_current_folder: Select current folder
+    deselect_current_folder: Deselect current folder
+    pick_dir_empty: No subdirectories
+    pick_file_empty: No files
+    pick_dir_blocked: (not usable as target)
+    dir_blocked_hint: The current directory is the source itself or inside its subtree and cannot be a target
+    pick_dir_aria: "Select directory {label}"
+    enter_dir_aria: "Enter directory {label}"
+    pick_file_aria: "Select file {label}"
+    file_path_suggest_aria: File path suggestions
+    skill_suggest_aria: Skill suggestions
+    open_file_aria: "Open file {path}"
+    open_subagent_aria: "Open subagent session {id}"
+    open_skill_aria: "Open skill {name}"
+    view_subagent_aria: "View subagent session {id}"
+    view_skill_aria: "View skill {name}"
+    view_result_aria: "View tool result {name}"
+    io_input_label: Input
+    io_output_label: Output
+    reset_workplace_cache_done: Persistent workspace cache reset
+    reset_workplace_cache_failed: Failed to reset workplace cache
+    stream_disconnected: Connection lost; generation interrupted
+    runtime_rebuilding: Runtime is rebuilding; please try again shortly
+    session_generating_busy: This session already has an ongoing generation; wait for it or stop it first
+    # p27 R6 wave 3-2a: agent-running guards and message action failures (incl. U-line conservative item 7)
+    agent_running_compact_blocked: Cannot compact while an agent is running
+    agent_running_fork_blocked: Cannot fork while an agent is running
+    agent_running_set_floor_blocked: Cannot set floor while an agent is running
+    agent_running_rollback_blocked: Cannot roll back while an agent is running
+    message_missing: Message not found
+    message_no_editable_text: This message has no editable text
+    message_no_copyable_text: This message has no copyable text
+    message_content_required: Message content cannot be empty
+    compact_partial_failed: Compaction partially failed
+    select_or_create_project: Create or select a project first
+  common:
+    cancel: Cancel
+    confirm: OK
+    confirm_alt: Confirm
+    delete: Delete
+    save: Save
+    saving: Saving…
+    saved: Saved
+    edit: Edit
+    copy: Copy
+    copy_code: Copy code
+    close: Close
+    create: Create
+    creating: Creating…
+    created: Created
+    add: Add
+    adding: Adding…
+    added: Added
+    new: New
+    retry: Retry
+    select_placeholder: "Select…"
+    no_options: No options
+    back: Back
+    more: More
+    move_up: Move up
+    move_down: Move down
+    move_top: Move to top
+    move_bottom: Move to bottom
+    select_all: Select all
+    select_none: Deselect all
+    select: Select
+    deselect: Deselect
+    selected_count: "{count} selected"
+    loading: Loading…
+    processing: Processing…
+    cancelled: Cancelled
+    renamed: Renamed
+    deleted: Deleted
+    remove: Remove
+    clear: Clear
+    done: Done
+    understood: Got it
+    current: Current
+    preview: Preview
+    text: Text
+    stay: Stay
+    leave: Leave
+    unsaved_title: Unsaved
+    unsaved_confirm_msg: You have unsaved changes. Leave anyway?
+    unsaved_discard_msg: Unsaved changes will be discarded. Continue?
+    confirm_delete: Confirm deletion
+    confirm_op: Confirm action
+    confirm_count_msg: "Delete the selected {count} items?"
+    delete_named_confirm: "Delete {name}?"
+    overwrite: Overwrite
+    overwrite_confirm_title: Overwrite confirmation
+    expand: Expand
+    collapse: Collapse
+    manage: Manage
+    stop: Stop
+    send: Send
+    paste: Paste
+    import: Import
+    export: Export
+    rename: Rename
+    move: Move
+    view: View
+    enable: Enable
+    turn_off: Turn off
+    on: "On"
+    off: "Off"
+    builtin: Built-in
+    all: All
+    not_enabled: Not enabled
+    open_fullscreen: Full-screen editor
+    fullscreen_edit_aria: "Full-screen editor: {label}"
+    dismiss_keyboard: Dismiss keyboard
+    restoring: Restoring…
+    reset_default: Restore defaults
+    restore: Restore
+    name: Name
+    description: Description
+    content: Content
+    role: Role
+    model: Model
+    model_name: Model name
+    file: File
+    result: Result
+    test: Test
+    copied: Copied
+    empty_file: (empty file)
+    empty_note: (no note)
+    picker_empty: No options yet. Create them in Settings first.
+    zip_saved: ZIP saved to the chosen location
+    updated_at: "Updated {time}"
+    time_just_now: Just now
+    time_minutes_ago: "{count} min ago"
+    time_hours_ago: "{count} h ago"
+    time_days_ago: "{count} d ago"
+    # p27 R6 wave 3-2a: failure toast titles / guard hints (direct UI strings, merged "<action> failed" patterns)
+    load_failed: Load failed
+    delete_failed: Delete failed
+    save_failed: Save failed
+    import_failed: Import failed
+    export_failed: Export failed
+    create_failed: Create failed
+    rename_failed: Rename failed
+    set_failed: Update failed
+    op_failed: Operation failed
+    rollback_failed: Rollback failed
+    copy_failed: Copy failed
+    connect_failed: Connection failed
+    read_failed: Read failed
+    set_floor_failed: Set floor failed
+    move_failed: Move failed
+    cleanup_failed: Cleanup failed
+    check_failed: Check failed
+    restore_failed: Restore failed
+    failed: Failed
+    error: Error
+    please_wait: Please wait
+    cannot_edit: Cannot edit
+    cannot_copy: Cannot copy
+    cannot_save: Cannot save
+    open_link_failed: Cannot open link
+    unknown_action: Unknown action
+    push_failed: Push failed
+    sync_failed: Sync failed
+    pull_failed: Pull failed
+    # p27 wave 3c-a: wave 3-2 MISS backfill (M1 compact/fork failure toasts, M2/D3 batch "disable", unsaved-changes marker)
+    compact_failed: Compact failed
+    fork_failed: Fork failed
+    disable: Disable
+    unsaved_changes: Unsaved changes
+  session:
+    name_label: Session name
+    name_placeholder: Enter session name
+    name_input_aria: Session name input
+    rename_title: Edit session name
+    untitled: (unnamed)
+    current_agent: Current agent
+    current_model: Current model
+    switch_agent: Switch agent
+    switch_model: Switch model
+    switch_agent_aria: "Switch agent, current {name}"
+    switch_model_aria: "Switch model, current {name}"
+    switch_agent_error: Switch agent (failed to load)
+    switch_agent_loading: Switch agent (loading)
+    switch_agent_pending: Switch agent (pending reselection)
+    view_prompt_value: Preview prompt
+    compact_context: Compact context
+    compact_confirm_msg: Compact the context? Continue?
+    compact_confirm_msg_desktop: The context will be compacted per event settings. Continue?
+    compacting: Compacting…
+    cancel_compact: Cancel compaction
+    compact_value: Reduce context usage
+    skills_value: "View & manage"
+    context_usage: Context usage
+    agent_locked: Agent locked
+    agent_deleted_hint: Agent deleted · tap to reselect
+    agent_loading_guide: Agent info is loading; try again shortly.
+    agent_loading_toast: Agent info is loading; try again shortly
+    agent_lock_model_toast: The agent locks its model; it cannot be overridden in this session
+    agent_model_locked_hint: The agent locks its model; it cannot be overridden in this session.
+    agent_picker_title: Select agent
+    agent_picker_title_aria: "Select agent (current: {name})"
+    model_picker_title_aria: "Select model (current: {name})"
+    clear_model_override_aria: "Clear session override (use the agent's locked model)"
+    no_agents: No agents yet. Configure them in Settings first.
+    no_models: No models yet. Configure a Provider in Settings first.
+    agent_picker_empty: No agents yet. Create one in Agent settings first.
+    # p27 R6 wave 3-2a: load failure titles (session details / subagent session / agent info)
+    agent_info_load_failed: Failed to load agent info
+    detail_load_failed: Failed to load session details
+    subsession_load_failed: Failed to load subagent session
+    # p27 wave 3c-a: wave 3-2 MISS backfill (M1 meta fallback name / compact Alert button + D1 drawer aria)
+    agent_unconfigured: Agent not configured
+    compact_button: Compact
+    view_skills_aria: View session skills
+    switch_model_locked_aria: "Switch model (locked)"

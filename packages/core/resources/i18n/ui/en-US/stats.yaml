@@ -1,0 +1,88 @@
+  stats:
+    filter_label: Filters
+    time_range: Time range
+    range_today: Today
+    range_7d: Last 7 days
+    range_30d: Last 30 days
+    range_custom: Custom
+    start_date: Start date
+    end_date: End date
+    model_filter_aria: Model filter
+    model_all: All models
+    model_other: Other models
+    provider_unlogged: Unlogged provider
+    provider_other_label: "{provider}/other models"
+    view_tabs_aria: View tabs
+    tab_summary: Summary
+    tab_charts: Charts
+    tab_requests: Requests
+    empty_db: No usage data yet. Token usage accumulates from when recording shipped; stats appear here after you start chatting. Cache-hit-rate data is recorded from this version; rate and first-token latency data accumulate from this version.
+    empty_filtered: No usage data in this filter range. Adjust the time range or model filter and retry.
+    empty_range: No data in this range
+    overview_title: "Overview · {range}"
+    overview_desc: Follows the current time range and model filter
+    total_tokens: Total tokens
+    input_label: Input
+    output_label: Output
+    calls_label: Calls
+    hit_rate: Hit rate
+    avg_rate: Average rate
+    avg_first_token: Avg first-token latency
+    nonstream_hint: Non-streaming requests are measured at completion time
+    pie_section: Provider × model
+    pie_desc: "Click a slice or legend for usage, calls and share"
+    slice_aria: "{label} · usage {value} · {calls} calls · {share} share"
+    chart_input_aria: "Input {count}"
+    chart_output_aria: "Output {count}"
+    chart_calls_aria: "{count} calls"
+    requests_title: "Request log · {count} total"
+    requests_desc: "Lists requests in the current filter range, newest first"
+    col_time: Time
+    col_cache_read: Cache read
+    col_first_token: First token
+    col_total_time: Total time
+    page_prev: Previous page
+    page_next: Next page
+    day_hourly_title: Today · hourly distribution
+    day_hourly_desc: "Input/output and calls for the day, 0–24h"
+    by_day_title: Usage by day
+    hour_label: "{hour}:00"
+    detail_title: Usage details
+    recent_requests: Recent requests
+    recent_empty: No request records
+    requests_empty: (no request records)
+    cache_read: Cache read
+    cache_write: Cache write
+    cache_hit_rate: Cache hit rate
+    visible_messages: Messages (visible)
+    tool_calls: Tool calls
+    footnote_visible: Message count is visible-only; tool calls include hidden messages
+    footnote_recent: "Recent requests are per-step ground truth, sourced differently from the bar's whole-turn reading"
+    metrics_bar_aria: "Streaming metrics, {line}"
+    metrics_bar_aria_desktop: "Streaming metrics: {line}"
+    bucket_line: "{key} · input {input} · output {output} · {calls} calls"
+    range_picker_title: Select date range
+    range_pick_start: "Pick the start date, then the end date"
+    range_pick_end: Start picked; now pick the end date
+    date_md: "{month}/{day}"
+    weekday_mon: Mo
+    weekday_tue: Tu
+    weekday_wed: We
+    weekday_thu: Th
+    weekday_fri: Fr
+    weekday_sat: Sa
+    weekday_sun: Su
+    switch_more: Switch ›
+    # p27 R6 wave 3-2a: stats load failures and range validation (TokenUsageStatsScreen)
+    load_failed: Failed to load statistics
+    requests_load_failed: Failed to load requests
+    hourly_load_failed: Failed to load hourly distribution
+    range_start_after_end: Custom range start date cannot be after the end date
+    # p27 wave 3c-a: wave 3-2 MISS backfill (session-total both ends, M3 chart labels, D3 range validation + format error)
+    session_total: Session total
+    range_required: Select start and end dates
+    usage_label: Usage
+    ratio_label: Share
+    day_hourly_template: "{day} · Hourly distribution"
+    format_invalid: Unexpected statistics response format
+    month_label: "{month}/{year}"

@@ -1,391 +1,391 @@
 import {
-  USER_VFS_TURN_ACK_TEXT,
-  userVfsTurnStorage,
-  type ChatMessageData,
+    USER_VFS_TURN_ACK_TEXT,
+    userVfsTurnStorage,
+    type ChatMessageData,
 } from '@novel-master/core/chat';
 import {type BuildChatListItemsOptions, MessageBlocks} from '@/components/chat/message-blocks'
 
 function msg(
-  id: string,
-  role: string,
-  blocks: ChatMessageData['content']['blocks'],
-  seq: number,
-  hidden = false,
-  raw: ChatMessageData['raw'] = null,
+    id: string,
+    role: string,
+    blocks: ChatMessageData['content']['blocks'],
+    seq: number,
+    hidden = false,
+    raw: ChatMessageData['raw'] = null,
 ): ChatMessageData {
-  return {
-    id,
-    sessionId: 's1',
-    seq,
-    role,
-    content: {blocks},
-    provider: null,
-    raw,
-    createdAtMs: seq,
-    hidden,
-  };
+    return {
+        id,
+        sessionId: 's1',
+        seq,
+        role,
+        content: {blocks},
+        provider: null,
+        raw,
+        createdAtMs: seq,
+        hidden,
+    };
 }
 
 describe('buildTranscriptRows', () => {
-  it('matches buildChatListItems message order (seq ascending)', () => {
-    const messages = [
-      msg('u1', 'user', [{type: 'text', text: 'hi'}], 1),
-      msg('a1', 'assistant', [{type: 'text', text: 'hello'}], 2),
-    ];
-    const listKinds = MessageBlocks.buildChatListItems(messages).map(i => i.kind);
-    const rowKinds = MessageBlocks.buildTranscriptRows(messages).map(r => r.kind);
-    expect(rowKinds).toEqual(listKinds);
-  });
-
-  it('user 带 attachments → row.attachments 摘要', () => {
-    const withAttach: ChatMessageData = {
-      ...msg('u1', 'user', [{type: 'text', text: '看这个'}], 1),
-      attachments: [
-        {
-          name: '/a.md',
-          source: 'attach',
-          type: 'text',
-          content: null,
-          path: '/a.md',
-        },
-        {
-          name: '/b',
-          source: 'attach',
-          type: 'dir',
-          content: null,
-          path: '/b',
-        },
-      ],
-    };
-    const row = MessageBlocks.buildTranscriptRows([withAttach])[0];
-    expect(row).toMatchObject({
-      kind: 'message',
-      role: 'user',
-      attachments: [
-        {
-          source: 'attach',
-          type: 'text',
-          name: '/a.md',
-          path: '/a.md',
-        },
-        {
-          source: 'attach',
-          type: 'dir',
-          name: '/b',
-          path: '/b',
-        },
-      ],
+    it('matches buildChatListItems message order (seq ascending)', () => {
+        const messages = [
+            msg('u1', 'user', [{type: 'text', text: 'hi'}], 1),
+            msg('a1', 'assistant', [{type: 'text', text: 'hello'}], 2),
+        ];
+        const listKinds = MessageBlocks.buildChatListItems(messages).map(i => i.kind);
+        const rowKinds = MessageBlocks.buildTranscriptRows(messages).map(r => r.kind);
+        expect(rowKinds).toEqual(listKinds);
     });
-    const plain = MessageBlocks.buildTranscriptRows([
-      msg('u2', 'user', [{type: 'text', text: '无附件'}], 1),
-    ])[0];
-    expect(plain).toMatchObject({kind: 'message', role: 'user'});
-    expect(
-      plain && plain.kind === 'message' ? plain.attachments : undefined,
-    ).toBeUndefined();
-  });
 
-  it('T-SR3: 仅遗留 user_ops 操作日志（非 annotate）的空正文消息不进 transcript（直接丢弃）', () => {
-    const opsOnly: ChatMessageData = {
-      ...msg('u-ops', 'user', [{type: 'text', text: ''}], 3),
-      attachments: [
-        {
-          name: 'mkdir:/notes',
-          source: 'user_ops',
-          type: 'text',
-          content: '<action name="mkdir">\n{"path":"/notes"}\n</action>',
-        },
-      ],
-    };
-    // user ops 已拆除：遗留操作日志不再兼容展示，空正文且无其它附件 → 不生成行。
-    expect(MessageBlocks.buildTranscriptRows([opsOnly])).toHaveLength(0);
-  });
-
-  it('T-SR3b: 空正文 + 仅 annotate 附件仍进 transcript（批注保留）', () => {
-    const annotateOnly: ChatMessageData = {
-      ...msg('u-ann', 'user', [{type: 'text', text: ''}], 3),
-      attachments: [
-        {
-          name: '/c.md',
-          source: 'user_ops',
-          type: 'text',
-          path: '/c.md',
-          action: 'annotate',
-          content:
-            '<action name="annotate">\n{"path":"/c.md","userAnnotation":"批一下"}\n</action>',
-        },
-      ],
-    };
-    const rows = MessageBlocks.buildTranscriptRows([annotateOnly]);
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({
-      kind: 'message',
-      role: 'user',
-      text: '',
-      attachments: [
-        {
-          source: 'user_ops',
-          action: 'annotate',
-        },
-      ],
+    it('user 带 attachments → row.attachments 摘要', () => {
+        const withAttach: ChatMessageData = {
+            ...msg('u1', 'user', [{type: 'text', text: '看这个'}], 1),
+            attachments: [
+                {
+                    name: '/a.md',
+                    source: 'attach',
+                    type: 'text',
+                    content: null,
+                    path: '/a.md',
+                },
+                {
+                    name: '/b',
+                    source: 'attach',
+                    type: 'dir',
+                    content: null,
+                    path: '/b',
+                },
+            ],
+        };
+        const row = MessageBlocks.buildTranscriptRows([withAttach])[0];
+        expect(row).toMatchObject({
+            kind: 'message',
+            role: 'user',
+            attachments: [
+                {
+                    source: 'attach',
+                    type: 'text',
+                    name: '/a.md',
+                    path: '/a.md',
+                },
+                {
+                    source: 'attach',
+                    type: 'dir',
+                    name: '/b',
+                    path: '/b',
+                },
+            ],
+        });
+        const plain = MessageBlocks.buildTranscriptRows([
+            msg('u2', 'user', [{type: 'text', text: '无附件'}], 1),
+        ])[0];
+        expect(plain).toMatchObject({kind: 'message', role: 'user'});
+        expect(
+            plain && plain.kind === 'message' ? plain.attachments : undefined,
+        ).toBeUndefined();
     });
-  });
 
-  it('T-CHIP: transcript 透传 annotate/workplace 的 action/content；遗留 user_ops 操作日志被丢弃', () => {
-    const withAction: ChatMessageData = {
-      ...msg('u-act', 'user', [{type: 'text', text: 'hi'}], 4),
-      attachments: [
-        {
-          name: '/a.md',
-          source: 'user_ops',
-          type: 'text',
-          path: '/a.md',
-          action: 'write',
-          content: '<action name="write">\n{"path":"/a.md"}\n</action>',
-        },
-        {
-          name: '/r.md',
-          source: 'workplace',
-          type: 'text',
-          path: '/r.md',
-          action: 'workplaceChange',
-          content: null,
-        },
-      ],
-    };
-    const row = MessageBlocks.buildTranscriptRows([withAction])[0];
-    // user_ops write 是遗留操作日志，丢弃；workplace 照常透传。
-    expect(row).toMatchObject({
-      kind: 'message',
-      attachments: [
-        {
-          source: 'workplace',
-          path: '/r.md',
-          action: 'workplaceChange',
-        },
-      ],
+    it('T-SR3: 仅遗留 user_ops 操作日志（非 annotate）的空正文消息不进 transcript（直接丢弃）', () => {
+        const opsOnly: ChatMessageData = {
+            ...msg('u-ops', 'user', [{type: 'text', text: ''}], 3),
+            attachments: [
+                {
+                    name: 'mkdir:/notes',
+                    source: 'user_ops',
+                    type: 'text',
+                    content: '<action name="mkdir">\n{"path":"/notes"}\n</action>',
+                },
+            ],
+        };
+        // user ops 已拆除：遗留操作日志不再兼容展示，空正文且无其它附件 → 不生成行。
+        expect(MessageBlocks.buildTranscriptRows([opsOnly])).toHaveLength(0);
     });
-  });
 
-  it('T-UO2x: 历史 UA fixture → 仅 message，无 user_vfs_turn', () => {
-    const actionXml = '<action name="delete">\n{"path":"/a.md"}\n</action>';
-    const messages = [
-      msg(
-        'u1',
-        'user',
-        [{type: 'text', text: userVfsTurnStorage.wrapActions(actionXml)}],
-        1,
-        false,
-        {
-          metadata: {
-            kind: 'user_vfs_action',
-            source: 'user',
-            synthetic: true,
-          },
-        },
-      ),
-      msg(
-        'a1',
-        'assistant',
-        [{type: 'text', text: USER_VFS_TURN_ACK_TEXT}],
-        2,
-        false,
-        {metadata: {kind: 'user_vfs_ack', synthetic: true}},
-      ),
-    ];
-    const items = MessageBlocks.buildChatListItems(messages);
-    const rows = MessageBlocks.buildTranscriptRows(messages);
-    expect(items.every(i => i.kind === 'message')).toBe(true);
-    expect(rows.every(r => r.kind === 'message')).toBe(true);
-    expect(items).toHaveLength(2);
-    expect(rows).toHaveLength(2);
-  });
-
-  it('T-SR3: 空正文 + workplace/attach 摘要进 ChatTranscriptBridge 行', () => {
-    const emptyWithMixed: ChatMessageData = {
-      ...msg('u-mix', 'user', [{type: 'text', text: '   '}], 1),
-      attachments: [
-        {
-          name: '/w.md',
-          source: 'workplace',
-          type: 'text',
-          content: null,
-          path: '/w.md',
-        },
-        {
-          name: '/a.md',
-          source: 'attach',
-          type: 'text',
-          content: null,
-          path: '/a.md',
-        },
-      ],
-    };
-    const rows = MessageBlocks.buildTranscriptRows([emptyWithMixed]);
-    expect(rows.length).toBeGreaterThanOrEqual(1);
-    expect(rows[0]).toMatchObject({
-      kind: 'message',
-      role: 'user',
-      text: '',
-      attachments: [
-        {source: 'workplace', name: '/w.md', path: '/w.md'},
-        {source: 'attach', name: '/a.md', path: '/a.md'},
-      ],
+    it('T-SR3b: 空正文 + 仅 annotate 附件仍进 transcript（批注保留）', () => {
+        const annotateOnly: ChatMessageData = {
+            ...msg('u-ann', 'user', [{type: 'text', text: ''}], 3),
+            attachments: [
+                {
+                    name: '/c.md',
+                    source: 'user_ops',
+                    type: 'text',
+                    path: '/c.md',
+                    action: 'annotate',
+                    content:
+                        '<action name="annotate">\n{"path":"/c.md","userAnnotation":"批一下"}\n</action>',
+                },
+            ],
+        };
+        const rows = MessageBlocks.buildTranscriptRows([annotateOnly]);
+        expect(rows).toHaveLength(1);
+        expect(rows[0]).toMatchObject({
+            kind: 'message',
+            role: 'user',
+            text: '',
+            attachments: [
+                {
+                    source: 'user_ops',
+                    action: 'annotate',
+                },
+            ],
+        });
     });
-  });
 
-  it('流式正文不再是本函数的第二数据面（spec C10：流式行由宿主投影生成）', () => {
-    const messages = [msg('u1', 'user', [{type: 'text', text: 'q'}], 1)];
-    const rows = MessageBlocks.buildTranscriptRows(messages);
-    expect(rows).toHaveLength(1);
-    expect(rows.every(row => row.kind === 'message')).toBe(true);
-  });
-
-  it('maps pending tools on message rows when incomplete', () => {
-    const messages = [
-      msg(
-        'a1',
-        'assistant',
-        [{type: 'tool_use', id: 'tu1', name: 'read', input: {}}],
-        1,
-      ),
-    ];
-    const row = MessageBlocks.buildTranscriptRows(messages, {
-      agentRunning: true,
-    })[0];
-    expect(row).toMatchObject({
-      kind: 'message',
-      id: 'a1',
-      tools: [expect.objectContaining({toolUseId: 'tu1', status: 'pending'})],
+    it('T-CHIP: transcript 透传 annotate/workplace 的 action/content；遗留 user_ops 操作日志被丢弃', () => {
+        const withAction: ChatMessageData = {
+            ...msg('u-act', 'user', [{type: 'text', text: 'hi'}], 4),
+            attachments: [
+                {
+                    name: '/a.md',
+                    source: 'user_ops',
+                    type: 'text',
+                    path: '/a.md',
+                    action: 'write',
+                    content: '<action name="write">\n{"path":"/a.md"}\n</action>',
+                },
+                {
+                    name: '/r.md',
+                    source: 'workplace',
+                    type: 'text',
+                    path: '/r.md',
+                    action: 'workplaceChange',
+                    content: null,
+                },
+            ],
+        };
+        const row = MessageBlocks.buildTranscriptRows([withAction])[0];
+        // user_ops write 是遗留操作日志，丢弃；workplace 照常透传。
+        expect(row).toMatchObject({
+            kind: 'message',
+            attachments: [
+                {
+                    source: 'workplace',
+                    path: '/r.md',
+                    action: 'workplaceChange',
+                },
+            ],
+        });
     });
-  });
 
-  it('maps message fields for Web rows', () => {
-    const messages = [
-      msg(
-        'a1',
-        'assistant',
-        [
-          {type: 'text', text: 'reply'},
-          {type: 'thinking', text: 'hmm'},
-        ],
-        1,
-      ),
-    ];
-    const row = MessageBlocks.buildTranscriptRows(messages)[0];
-    expect(row).toMatchObject({
-      kind: 'message',
-      id: 'a1',
-      role: 'assistant',
-      text: 'reply',
-      thinking: 'hmm',
+    it('T-UO2x: 历史 UA fixture → 仅 message，无 user_vfs_turn', () => {
+        const actionXml = '<action name="delete">\n{"path":"/a.md"}\n</action>';
+        const messages = [
+            msg(
+                'u1',
+                'user',
+                [{type: 'text', text: userVfsTurnStorage.wrapActions(actionXml)}],
+                1,
+                false,
+                {
+                    metadata: {
+                        kind: 'user_vfs_action',
+                        source: 'user',
+                        synthetic: true,
+                    },
+                },
+            ),
+            msg(
+                'a1',
+                'assistant',
+                [{type: 'text', text: USER_VFS_TURN_ACK_TEXT}],
+                2,
+                false,
+                {metadata: {kind: 'user_vfs_ack', synthetic: true}},
+            ),
+        ];
+        const items = MessageBlocks.buildChatListItems(messages);
+        const rows = MessageBlocks.buildTranscriptRows(messages);
+        expect(items.every(i => i.kind === 'message')).toBe(true);
+        expect(rows.every(r => r.kind === 'message')).toBe(true);
+        expect(items).toHaveLength(2);
+        expect(rows).toHaveLength(2);
     });
-  });
 
-  it('embeds tools on message rows (no kind:tool)', () => {
-    const messages = [
-      msg('u1', 'user', [{type: 'text', text: 'hi'}], 1),
-      msg(
-        'a1',
-        'assistant',
-        [
-          {type: 'text', text: 'hello'},
-          {type: 'tool_use', id: 'tu1', name: 'read', input: {path: '/x'}},
-        ],
-        2,
-      ),
-      msg(
-        'u2',
-        'user',
-        [{type: 'tool_result', toolUseId: 'tu1', content: 'ok'}],
-        3,
-      ),
-    ];
-    const rows = MessageBlocks.buildTranscriptRows(messages);
-    expect(rows.every(r => r.kind !== 'tool')).toBe(true);
-    const assistant = rows.find(r => r.kind === 'message' && r.id === 'a1');
-    expect(assistant).toMatchObject({
-      kind: 'message',
-      id: 'a1',
-      tools: [
-        expect.objectContaining({
-          toolUseId: 'tu1',
-          name: 'read',
-          status: 'success',
-          input: {path: '/x'},
-          resultContent: 'ok',
-        }),
-      ],
+    it('T-SR3: 空正文 + workplace/attach 摘要进 ChatTranscriptBridge 行', () => {
+        const emptyWithMixed: ChatMessageData = {
+            ...msg('u-mix', 'user', [{type: 'text', text: '   '}], 1),
+            attachments: [
+                {
+                    name: '/w.md',
+                    source: 'workplace',
+                    type: 'text',
+                    content: null,
+                    path: '/w.md',
+                },
+                {
+                    name: '/a.md',
+                    source: 'attach',
+                    type: 'text',
+                    content: null,
+                    path: '/a.md',
+                },
+            ],
+        };
+        const rows = MessageBlocks.buildTranscriptRows([emptyWithMixed]);
+        expect(rows.length).toBeGreaterThanOrEqual(1);
+        expect(rows[0]).toMatchObject({
+            kind: 'message',
+            role: 'user',
+            text: '',
+            attachments: [
+                {source: 'workplace', name: '/w.md', path: '/w.md'},
+                {source: 'attach', name: '/a.md', path: '/a.md'},
+            ],
+        });
     });
-  });
 
-  it('includes embedded tools on hidden assistant rows when complete', () => {
-    const messages = [
-      msg(
-        'a1',
-        'assistant',
-        [{type: 'tool_use', id: 'tu1', name: 'list', input: {}}],
-        1,
-        true,
-      ),
-      msg(
-        'u1',
-        'user',
-        [{type: 'tool_result', toolUseId: 'tu1', content: 'ok'}],
-        2,
-      ),
-    ];
-    const rows = MessageBlocks.buildTranscriptRows(messages);
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({
-      kind: 'message',
-      hidden: true,
-      tools: [expect.objectContaining({toolUseId: 'tu1'})],
+    it('流式正文不再是本函数的第二数据面（spec C10：流式行由宿主投影生成）', () => {
+        const messages = [msg('u1', 'user', [{type: 'text', text: 'q'}], 1)];
+        const rows = MessageBlocks.buildTranscriptRows(messages);
+        expect(rows).toHaveLength(1);
+        expect(rows.every(row => row.kind === 'message')).toBe(true);
     });
-  });
 
-  it('maps hidden flag on message rows', () => {
-    const messages = [
-      msg('u1', 'user', [{type: 'text', text: 'hidden'}], 1, true),
-    ];
-    const row = MessageBlocks.buildTranscriptRows(messages)[0];
-    expect(row).toMatchObject({kind: 'message', hidden: true});
-  });
-
-  it('selectTailTranscriptRows 需全量上下文：hidden tool_result 已配对时显示 success 工具卡', () => {
-    const messages = [
-      msg(
-        'a1',
-        'assistant',
-        [{type: 'tool_use', id: 'tu1', name: 'read', input: {}}],
-        1,
-      ),
-      msg(
-        'u1',
-        'user',
-        [{type: 'tool_result', toolUseId: 'tu1', content: 'ok'}],
-        2,
-        true,
-      ),
-    ];
-    const tailOnly = MessageBlocks.buildTranscriptRows([messages[0]!], {
-      agentRunning: true,
-    })[0];
-    const fromFull = MessageBlocks.selectTailTranscriptRows(messages, [messages[0]!], {
-      agentRunning: true,
-    })[0];
-    expect(tailOnly).toMatchObject({
-      tools: [expect.objectContaining({toolUseId: 'tu1', status: 'pending'})],
+    it('maps pending tools on message rows when incomplete', () => {
+        const messages = [
+            msg(
+                'a1',
+                'assistant',
+                [{type: 'tool_use', id: 'tu1', name: 'read', input: {}}],
+                1,
+            ),
+        ];
+        const row = MessageBlocks.buildTranscriptRows(messages, {
+            agentRunning: true,
+        })[0];
+        expect(row).toMatchObject({
+            kind: 'message',
+            id: 'a1',
+            tools: [expect.objectContaining({toolUseId: 'tu1', status: 'pending'})],
+        });
     });
-    expect(fromFull).toMatchObject({
-      tools: [expect.objectContaining({toolUseId: 'tu1', status: 'success'})],
-    });
-  });
 
-  it('T-R1: 空 tail 返回空数组', () => {
-    const messages = [msg('u1', 'user', [{type: 'text', text: 'hi'}], 1)];
-    expect(MessageBlocks.selectTailTranscriptRows(messages, [])).toEqual([]);
-  });
+    it('maps message fields for Web rows', () => {
+        const messages = [
+            msg(
+                'a1',
+                'assistant',
+                [
+                    {type: 'text', text: 'reply'},
+                    {type: 'thinking', text: 'hmm'},
+                ],
+                1,
+            ),
+        ];
+        const row = MessageBlocks.buildTranscriptRows(messages)[0];
+        expect(row).toMatchObject({
+            kind: 'message',
+            id: 'a1',
+            role: 'assistant',
+            text: 'reply',
+            thinking: 'hmm',
+        });
+    });
+
+    it('embeds tools on message rows (no kind:tool)', () => {
+        const messages = [
+            msg('u1', 'user', [{type: 'text', text: 'hi'}], 1),
+            msg(
+                'a1',
+                'assistant',
+                [
+                    {type: 'text', text: 'hello'},
+                    {type: 'tool_use', id: 'tu1', name: 'read', input: {path: '/x'}},
+                ],
+                2,
+            ),
+            msg(
+                'u2',
+                'user',
+                [{type: 'tool_result', toolUseId: 'tu1', content: 'ok'}],
+                3,
+            ),
+        ];
+        const rows = MessageBlocks.buildTranscriptRows(messages);
+        expect(rows.every(r => r.kind !== 'tool')).toBe(true);
+        const assistant = rows.find(r => r.kind === 'message' && r.id === 'a1');
+        expect(assistant).toMatchObject({
+            kind: 'message',
+            id: 'a1',
+            tools: [
+                expect.objectContaining({
+                    toolUseId: 'tu1',
+                    name: 'read',
+                    status: 'success',
+                    input: {path: '/x'},
+                    resultContent: 'ok',
+                }),
+            ],
+        });
+    });
+
+    it('includes embedded tools on hidden assistant rows when complete', () => {
+        const messages = [
+            msg(
+                'a1',
+                'assistant',
+                [{type: 'tool_use', id: 'tu1', name: 'list', input: {}}],
+                1,
+                true,
+            ),
+            msg(
+                'u1',
+                'user',
+                [{type: 'tool_result', toolUseId: 'tu1', content: 'ok'}],
+                2,
+            ),
+        ];
+        const rows = MessageBlocks.buildTranscriptRows(messages);
+        expect(rows).toHaveLength(1);
+        expect(rows[0]).toMatchObject({
+            kind: 'message',
+            hidden: true,
+            tools: [expect.objectContaining({toolUseId: 'tu1'})],
+        });
+    });
+
+    it('maps hidden flag on message rows', () => {
+        const messages = [
+            msg('u1', 'user', [{type: 'text', text: 'hidden'}], 1, true),
+        ];
+        const row = MessageBlocks.buildTranscriptRows(messages)[0];
+        expect(row).toMatchObject({kind: 'message', hidden: true});
+    });
+
+    it('selectTailTranscriptRows 需全量上下文：hidden tool_result 已配对时显示 success 工具卡', () => {
+        const messages = [
+            msg(
+                'a1',
+                'assistant',
+                [{type: 'tool_use', id: 'tu1', name: 'read', input: {}}],
+                1,
+            ),
+            msg(
+                'u1',
+                'user',
+                [{type: 'tool_result', toolUseId: 'tu1', content: 'ok'}],
+                2,
+                true,
+            ),
+        ];
+        const tailOnly = MessageBlocks.buildTranscriptRows([messages[0]!], {
+            agentRunning: true,
+        })[0];
+        const fromFull = MessageBlocks.selectTailTranscriptRows(messages, [messages[0]!], {
+            agentRunning: true,
+        })[0];
+        expect(tailOnly).toMatchObject({
+            tools: [expect.objectContaining({toolUseId: 'tu1', status: 'pending'})],
+        });
+        expect(fromFull).toMatchObject({
+            tools: [expect.objectContaining({toolUseId: 'tu1', status: 'success'})],
+        });
+    });
+
+    it('T-R1: 空 tail 返回空数组', () => {
+        const messages = [msg('u1', 'user', [{type: 'text', text: 'hi'}], 1)];
+        expect(MessageBlocks.selectTailTranscriptRows(messages, [])).toEqual([]);
+    });
 });
 
 // ---------------------------------------------------------------------------
@@ -397,99 +397,99 @@ describe('buildTranscriptRows', () => {
 type Block = ChatMessageData['content']['blocks'][number];
 
 function buildDenseToolMessages(rounds: number): ChatMessageData[] {
-  const messages: ChatMessageData[] = [];
-  let seq = 1;
-  let toolSeq = 0;
-  for (let round = 0; round < rounds; round += 1) {
-    messages.push(
-      msg(
-        `q-${round}`,
-        'user',
-        [{type: 'text', text: `第 ${round} 轮提问`}],
-        seq++,
-      ),
-    );
-    const readId = `read-${toolSeq++}`;
-    const listId = `list-${toolSeq++}`;
-    messages.push(
-      msg(
-        `a-${round}`,
-        'assistant',
-        [
-          {type: 'thinking', text: `想一下第 ${round} 轮`},
-          {type: 'text', text: `第 ${round} 轮回答`},
-          {
-            type: 'tool_use',
-            id: readId,
-            name: 'read',
-            input: {path: `/f${round}.md`},
-          },
-          {type: 'tool_use', id: listId, name: 'list', input: {dir: '/'}},
-        ],
-        seq++,
-      ),
-    );
-    const isLast = round === rounds - 1;
-    if (isLast) {
-      // 最后一轮不回结果：tail 切片里带上未配对 assistant，
-      // 验证预扫上下文对 pending 判定的全局依赖。
-      continue;
-    }
-    const resultBlocks: Block[] = [
-      {
-        type: 'tool_result',
-        toolUseId: readId,
-        content: `ok ${round}`,
-        ok: true,
-      },
-    ];
-    if (round % 9 !== 4) {
-      resultBlocks.push(
-        round % 2 === 0
-          ? {
-              type: 'tool_result',
-              toolUseId: listId,
-              content: `目录 ${round}`,
-              ok: true,
-            }
-          : {
-              type: 'tool_result',
-              toolUseId: listId,
-              content: `Error: 失败 ${round}`,
-              ok: false,
+    const messages: ChatMessageData[] = [];
+    let seq = 1;
+    let toolSeq = 0;
+    for (let round = 0; round < rounds; round += 1) {
+        messages.push(
+            msg(
+                `q-${round}`,
+                'user',
+                [{type: 'text', text: `第 ${round} 轮提问`}],
+                seq++,
+            ),
+        );
+        const readId = `read-${toolSeq++}`;
+        const listId = `list-${toolSeq++}`;
+        messages.push(
+            msg(
+                `a-${round}`,
+                'assistant',
+                [
+                    {type: 'thinking', text: `想一下第 ${round} 轮`},
+                    {type: 'text', text: `第 ${round} 轮回答`},
+                    {
+                        type: 'tool_use',
+                        id: readId,
+                        name: 'read',
+                        input: {path: `/f${round}.md`},
+                    },
+                    {type: 'tool_use', id: listId, name: 'list', input: {dir: '/'}},
+                ],
+                seq++,
+            ),
+        );
+        const isLast = round === rounds - 1;
+        if (isLast) {
+            // 最后一轮不回结果：tail 切片里带上未配对 assistant，
+            // 验证预扫上下文对 pending 判定的全局依赖。
+            continue;
+        }
+        const resultBlocks: Block[] = [
+            {
+                type: 'tool_result',
+                toolUseId: readId,
+                content: `ok ${round}`,
+                ok: true,
             },
-      );
+        ];
+        if (round % 9 !== 4) {
+            resultBlocks.push(
+                round % 2 === 0
+                    ? {
+                            type: 'tool_result',
+                            toolUseId: listId,
+                            content: `目录 ${round}`,
+                            ok: true,
+                        }
+                    : {
+                            type: 'tool_result',
+                            toolUseId: listId,
+                            content: `Error: 失败 ${round}`,
+                            ok: false,
+                        },
+            );
+        }
+        messages.push(msg(`r-${round}`, 'user', resultBlocks, seq++, true));
     }
-    messages.push(msg(`r-${round}`, 'user', resultBlocks, seq++, true));
-  }
-  return messages;
+    return messages;
 }
 
 describe('T-R1 selectTailTranscriptRows 预扫构建等价（init-busy-yield Step 5）', () => {
-  const optionVariants: readonly BuildChatListItemsOptions[] = [
-    {},
-    {agentRunning: false},
-    {agentRunning: true},
-    {agentRunning: true, runUiStopped: true},
-  ];
+    const optionVariants: readonly BuildChatListItemsOptions[] = [
+        {},
+        {agentRunning: false},
+        {agentRunning: true},
+        {agentRunning: true, runUiStopped: true},
+    ];
 
-  it.each(optionVariants)(
-    '长列表：与「全量构建再 filter」输出全等（options=%j）',
-    options => {
-      const allMessages = buildDenseToolMessages(180);
-      // 尾轮不回结果行：180×3 − 1 = 539 条（>500）。
-      expect(allMessages).toHaveLength(539);
-      for (const tailSize of [3, 30, 539]) {
-        const tailMessages = allMessages.slice(-tailSize);
-        const tailIds = new Set(tailMessages.map(message => message.id));
-        const expected = MessageBlocks.buildTranscriptRows(allMessages, options).filter(
-          row => row.kind === 'message' && tailIds.has(row.id),
-        );
-        expect(
-          MessageBlocks.selectTailTranscriptRows(allMessages, tailMessages, options),
-        ).toEqual(expected);
-      }
-    },
-    20000,
-  );
+    it.each(optionVariants)(
+        '长列表：与「全量构建再 filter」输出全等（options=%j）',
+        options => {
+            const allMessages = buildDenseToolMessages(180);
+            // 尾轮不回结果行：180×3 − 1 = 539 条（>500）。
+            expect(allMessages).toHaveLength(539);
+            for (const tailSize of [3, 30, 539]) {
+                const tailMessages = allMessages.slice(-tailSize);
+                const tailIds = new Set(tailMessages.map(message => message.id));
+                const expected = MessageBlocks.buildTranscriptRows(allMessages, options).filter(
+                    row => row.kind === 'message' && tailIds.has(row.id),
+                );
+                expect(
+                    MessageBlocks.selectTailTranscriptRows(allMessages, tailMessages, options),
+                ).toEqual(expected);
+            }
+        },
+        20000,
+    );
 });

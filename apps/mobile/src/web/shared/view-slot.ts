@@ -22,27 +22,27 @@
 
 /** 视图槽的注册/调用面；未注册时 `invoke` 返回 false 且不产生任何副作用。 */
 export interface ViewSlot<P> {
-  /** 是否已注册实现（需要「缺失即走另一条路径」时用）。 */
-  has(): boolean;
-  /** 由装配点注册视图刷新/卸载实现（覆盖上一次注册）。 */
-  register(render: (props: P) => void): void;
-  /** 调用已注册实现；未注册返回 false。 */
-  invoke(props: P): boolean;
+    /** 是否已注册实现（需要「缺失即走另一条路径」时用）。 */
+    has(): boolean;
+    /** 由装配点注册视图刷新/卸载实现（覆盖上一次注册）。 */
+    register(render: (props: P) => void): void;
+    /** 调用已注册实现；未注册返回 false。 */
+    invoke(props: P): boolean;
 }
 
 export const ViewSlot = {
-  create: <P>(): ViewSlot<P> => {
-    let render: ((props: P) => void) | null = null;
-    return {
-      has: () => render != null,
-      register(next) {
-        render = next;
-      },
-      invoke(props) {
-        if (render == null) return false;
-        render(props);
-        return true;
-      },
-    };
-  },
+    create: <P>(): ViewSlot<P> => {
+        let render: ((props: P) => void) | null = null;
+        return {
+            has: () => render != null,
+            register(next) {
+                render = next;
+            },
+            invoke(props) {
+                if (render == null) return false;
+                render(props);
+                return true;
+            },
+        };
+    },
 } as const;

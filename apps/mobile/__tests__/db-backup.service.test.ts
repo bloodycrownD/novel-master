@@ -30,348 +30,345 @@ const liveConn = {tag: 'live'};
 const restoreConn = {close: mockRestoreConnClose};
 
 jest.mock('@novel-master/core', () => ({
-  // 头校验是下沉 core 的纯函数：走真实实现，测试覆盖「拒绝非 SQLite 字节」的真实分支。
-  SqliteBackupHeader: jest.requireActual(
-    '../../../packages/core/dist/infra/db-backup/sqlite-backup-header.js',
-  ).SqliteBackupHeader,
-  DatabaseReplacedError: jest.requireActual(
-    '../../../packages/core/dist/infra/cloud-sync/model/database-replaced-error.js',
-  ).DatabaseReplacedError,
-  // 导出链路已下沉 core：走真实实现（平台注入点仍由本测试的 mock 接管）。
-  DatabaseBackupExport: jest.requireActual(
-    '../../../packages/core/dist/infra/db-backup/export-database-backup.js',
-  ).DatabaseBackupExport,
-  ProviderTableSnapshotIo: {
-    dump: (...args: unknown[]) => mockDumpSnapshot(...args),
-    scrubInDatabase: (...args: unknown[]) => mockScrubInDatabase(...args),
-    restore: (...args: unknown[]) => mockRestoreSnapshot(...args),
-  },
-  TdbcOpen: {open: (...args: unknown[]) => mockOpen(...args)},
+    // 头校验是下沉 core 的纯函数：走真实实现，测试覆盖「拒绝非 SQLite 字节」的真实分支。
+    SqliteBackupHeader: jest.requireActual(
+        '../../../packages/core/dist/infra/db-backup/sqlite-backup-header.js',
+    ).SqliteBackupHeader,
+    // 导出链路已下沉 core：走真实实现（平台注入点仍由本测试的 mock 接管）。
+    DatabaseBackupExport: jest.requireActual(
+        '../../../packages/core/dist/infra/db-backup/export-database-backup.js',
+    ).DatabaseBackupExport,
+    ProviderTableSnapshotIo: {
+        dump: (...args: unknown[]) => mockDumpSnapshot(...args),
+        scrubInDatabase: (...args: unknown[]) => mockScrubInDatabase(...args),
+        restore: (...args: unknown[]) => mockRestoreSnapshot(...args),
+    },
+    TdbcOpen: {open: (...args: unknown[]) => mockOpen(...args)},
 }));
 
 // core 导出实现按相对路径 import 本模块；mock 掉同一 dist 文件，让 scrub
 // 断言仍走本测试的 mock（与上面 barrel mock 指向同一个 jest.fn）。
 jest.mock(
-  '../../../packages/core/dist/infra/db-backup/provider-table-snapshot.js',
-  () => ({
-    ProviderTableSnapshotIo: {
-      scrubInDatabase: (...args: unknown[]) => mockScrubInDatabase(...args),
-    },
-  }),
+    '../../../packages/core/dist/infra/db-backup/provider-table-snapshot.js',
+    () => ({
+        ProviderTableSnapshotIo: {
+            scrubInDatabase: (...args: unknown[]) => mockScrubInDatabase(...args),
+        },
+    }),
 );
 
 jest.mock('@/db/connection', () => {
-  const legacy = {
-  checkpointMobileDatabase: (...args: unknown[]) => mockCheckpoint(...args),
-  closeMobileConnection: (...args: unknown[]) => mockClose(...args),
-  getMobileConnection: (...args: unknown[]) => mockGetConnection(...args),
-  registerMobileOpSqliteDriver: (...args: unknown[]) =>
-    mockRegisterDriver(...args),
+    const legacy = {
+    checkpointMobileDatabase: (...args: unknown[]) => mockCheckpoint(...args),
+    closeMobileConnection: (...args: unknown[]) => mockClose(...args),
+    getMobileConnection: (...args: unknown[]) => mockGetConnection(...args),
+    registerMobileOpSqliteDriver: (...args: unknown[]) =>
+        mockRegisterDriver(...args),
 };
-  return {...legacy, MobileDb: {checkpointMobileDatabase: legacy.checkpointMobileDatabase, closeMobileConnection: legacy.closeMobileConnection, getMobileConnection: legacy.getMobileConnection, registerMobileOpSqliteDriver: legacy.registerMobileOpSqliteDriver}};
+    return {...legacy, MobileDb: {checkpointMobileDatabase: legacy.checkpointMobileDatabase, closeMobileConnection: legacy.closeMobileConnection, getMobileConnection: legacy.getMobileConnection, registerMobileOpSqliteDriver: legacy.registerMobileOpSqliteDriver}};
 });
 
 jest.mock('@/db/db-file-path', () => ({
-  MobileDatabaseFilePath: {resolve: (...args: unknown[]) => mockGetPath(...args)},
+    MobileDatabaseFilePath: {resolve: (...args: unknown[]) => mockGetPath(...args)},
 }));
 
 jest.mock('@/runtime/agent-activity', () => ({
-  agentActivity: {isActive: () => mockAgentActive()},
+    agentActivity: {isActive: () => mockAgentActive()},
 }));
 
 jest.mock('react-native', () => ({
-  Platform: {OS: 'android'},
+    Platform: {OS: 'android'},
 }));
 
 jest.mock('react-native-blob-util', () => ({
-  __esModule: true,
-  default: {
-    fs: {
-      dirs: {CacheDir: '/cache', DatabasesDir: '/db'},
-      cp: (...args: unknown[]) => mockCp(...args),
-      exists: (...args: unknown[]) => mockExists(...args),
-      stat: (...args: unknown[]) => mockStat(...args),
-      unlink: (...args: unknown[]) => mockUnlink(...args),
-      writeFile: (...args: unknown[]) => mockWriteFile(...args),
-      readFile: (...args: unknown[]) => mockReadFile(...args),
-      writeStream: (...args: unknown[]) => mockWriteStream(...args),
+    __esModule: true,
+    default: {
+        fs: {
+            dirs: {CacheDir: '/cache', DatabasesDir: '/db'},
+            cp: (...args: unknown[]) => mockCp(...args),
+            exists: (...args: unknown[]) => mockExists(...args),
+            stat: (...args: unknown[]) => mockStat(...args),
+            unlink: (...args: unknown[]) => mockUnlink(...args),
+            writeFile: (...args: unknown[]) => mockWriteFile(...args),
+            readFile: (...args: unknown[]) => mockReadFile(...args),
+            writeStream: (...args: unknown[]) => mockWriteStream(...args),
+        },
     },
-  },
 }));
 
 jest.mock('@react-native-documents/picker', () => ({
-  saveDocuments: (...args: unknown[]) => mockSaveDocuments(...args),
-  pick: (...args: unknown[]) => mockPick(...args),
-  keepLocalCopy: (...args: unknown[]) => mockKeepLocalCopy(...args),
-  types: {allFiles: '*/*'},
-  errorCodes: {OPERATION_CANCELED: 'OPERATION_CANCELED'},
-  isErrorWithCode: () => false,
+    saveDocuments: (...args: unknown[]) => mockSaveDocuments(...args),
+    pick: (...args: unknown[]) => mockPick(...args),
+    keepLocalCopy: (...args: unknown[]) => mockKeepLocalCopy(...args),
+    types: {allFiles: '*/*'},
+    errorCodes: {OPERATION_CANCELED: 'OPERATION_CANCELED'},
+    isErrorWithCode: () => false,
 }));
 
 const emptySnapshot = {
-  sksp_secrets: [],
-  llm_provider: [],
-  llm_saved_model: [],
+    sksp_secrets: [],
+    llm_provider: [],
+    llm_saved_model: [],
 };
 
 describe('db-backup.service', () => {
-  // signal-abort-scope Step 11：export/import 会建 scope 并登记 backup("local")，
-  // 测试桩必须提供泛化 registry。
-  const runtime = {conn: liveConn, abortRegistry: AbortRegistryFactory.create()} as never;
-  const onRebootstrap = jest.fn();
+    // signal-abort-scope Step 11：export/import 会建 scope 并登记 backup("local")，
+    // 测试桩必须提供泛化 registry。
+    const runtime = {conn: liveConn, abortRegistry: AbortRegistryFactory.create()} as never;
+    const onRebootstrap = jest.fn();
 
-  beforeEach(() => {
-    mockCheckpoint.mockReset().mockResolvedValue(undefined);
-    mockClose.mockReset().mockResolvedValue(undefined);
-    mockGetConnection.mockReset().mockResolvedValue(liveConn);
-    mockGetPath.mockReset().mockResolvedValue('/db/novel_master_vfs');
-    mockCp.mockReset().mockResolvedValue(undefined);
-    mockExists.mockReset().mockResolvedValue(true);
-    mockStat.mockReset().mockResolvedValue({size: 1024});
-    mockUnlink.mockReset().mockResolvedValue(undefined);
-    mockWriteFile.mockReset().mockResolvedValue(undefined);
-    mockReadFile.mockReset();
-    mockWriteStreamWrite.mockReset().mockResolvedValue(undefined);
-    mockWriteStreamClose.mockReset().mockResolvedValue(undefined);
-    mockWriteStream.mockReset().mockResolvedValue({
-      write: mockWriteStreamWrite,
-      close: mockWriteStreamClose,
-    });
-    mockSaveDocuments.mockReset().mockResolvedValue([{}]);
-    mockPick.mockReset();
-    mockKeepLocalCopy.mockReset();
-    mockAgentActive.mockReset().mockReturnValue(false);
-    mockDumpSnapshot.mockReset().mockResolvedValue(emptySnapshot);
-    mockScrubInDatabase.mockReset().mockResolvedValue(undefined);
-    mockRestoreSnapshot.mockReset().mockResolvedValue(undefined);
-    mockOpen.mockReset().mockResolvedValue(restoreConn);
-    mockRestoreConnClose.mockReset().mockResolvedValue(undefined);
-    mockRegisterDriver.mockReset();
-    onRebootstrap.mockReset();
-  });
-
-  it('export calls checkpoint, copies db, and scrubs provider tables on copy', async () => {
-    await DbBackupService.exportViaPicker(runtime);
-
-    expect(mockCheckpoint).toHaveBeenCalledWith(liveConn);
-    expect(mockGetPath).toHaveBeenCalled();
-    const tmpPath = '/cache/nmbackup.db';
-    expect(mockCp).toHaveBeenCalledWith('/db/novel_master_vfs', tmpPath);
-    expect(mockScrubInDatabase).toHaveBeenCalledWith(
-      liveConn,
-      '/cache/nmbackup.db',
-      'export_db',
-    );
-    expect(mockSaveDocuments).toHaveBeenCalledWith(
-      expect.objectContaining({fileName: 'nmbackup.db'}),
-    );
-  });
-
-  it('rejects export when agent is running', async () => {
-    mockAgentActive.mockReturnValue(true);
-    // 四期签名：已知失败沿 Result.err 回传（中文文案在 detail），不再 reject。
-    const exportResult = await DbBackupService.exportViaPicker(runtime);
-    expect(exportResult.ok).toBe(false);
-    if (!exportResult.ok) {
-      expect(exportResult.error.message).toMatch(/Agent/);
-    }
-    expect(mockCheckpoint).not.toHaveBeenCalled();
-  });
-
-  it('rejects import when agent is running (guard fires before picker)', async () => {
-    mockAgentActive.mockReturnValue(true);
-    // 四期签名：已知失败沿 Result.err 回传，不再 reject。
-    const importGuard = await DbBackupService.importViaPicker(runtime, onRebootstrap);
-    expect(importGuard.ok).toBe(false);
-    if (!importGuard.ok) {
-      expect(importGuard.error.message).toMatch(/Agent/);
-    }
-    // 守卫在触发前拦截：文件选择器与后续导入链路均未启动
-    expect(mockPick).not.toHaveBeenCalled();
-    expect(mockDumpSnapshot).not.toHaveBeenCalled();
-    expect(onRebootstrap).not.toHaveBeenCalled();
-  });
-
-  it('import uses path-level cp (no whole-file read / writeFile)', async () => {
-    mockPick.mockResolvedValue([{uri: 'content://backup'}]);
-    mockKeepLocalCopy.mockResolvedValue([
-      {status: 'success', localUri: 'file:///cache/import.nmbackup'},
-    ]);
-
-    await DbBackupService.importViaPicker(runtime, onRebootstrap);
-
-    expect(mockDumpSnapshot).toHaveBeenCalledWith(liveConn);
-    expect(mockClose).toHaveBeenCalled();
-    expect(mockCp).toHaveBeenCalledWith(
-      '/cache/import.nmbackup',
-      '/db/novel_master_vfs',
-    );
-    expect(mockReadFile).not.toHaveBeenCalled();
-    expect(mockWriteFile).not.toHaveBeenCalled();
-    expect(mockOpen).toHaveBeenCalled();
-    expect(mockRestoreSnapshot).toHaveBeenCalledWith(
-      restoreConn,
-      emptySnapshot,
-    );
-    expect(mockRestoreConnClose).toHaveBeenCalled();
-    expect(onRebootstrap).toHaveBeenCalled();
-  });
-
-  it('provider-restore reopen registers the driver via the single-point helper', async () => {
-    // 驱动注册表是 last-wins：恢复用的短连接必须走 db/connection 导出的
-    // 单点注册（带 AppState 后台探测），不能自己直接调无参的
-    // registerOpSqliteDriver() 把带参版本覆盖掉。
-    await DbBackupService.importFromPath('/cache/single-point.nmbackup');
-
-    expect(mockRegisterDriver).toHaveBeenCalledTimes(1);
-  });
-
-  it('rejects tiny backup via stat without reading body', async () => {
-    mockPick.mockResolvedValue([{uri: 'content://bad'}]);
-    mockKeepLocalCopy.mockResolvedValue([
-      {status: 'success', localUri: 'file:///cache/bad.nmbackup'},
-    ]);
-    mockStat.mockResolvedValue({size: 8});
-
-    // 四期签名：已知失败沿 Result.err 回传，不再 reject。
-    const tinyResult = await DbBackupService.importViaPicker(runtime, onRebootstrap);
-    expect(tinyResult.ok).toBe(false);
-    if (!tinyResult.ok) {
-      expect(tinyResult.error.message).toMatch(/文件过小/);
-    }
-    expect(mockReadFile).not.toHaveBeenCalled();
-    expect(onRebootstrap).not.toHaveBeenCalled();
-  });
-
-  it('exportDatabaseBackupToPath checkpoints, copies, and scrubs without dialog', async () => {
-    const destPath = '/cache/cloud-sync-snapshot.nmbackup';
-    await DbBackupService.exportToPath(runtime, destPath);
-
-    expect(mockCheckpoint).toHaveBeenCalledWith(liveConn);
-    expect(mockGetPath).toHaveBeenCalled();
-    expect(mockCp).toHaveBeenCalledWith('/db/novel_master_vfs', destPath);
-    expect(mockScrubInDatabase).toHaveBeenCalledWith(
-      liveConn,
-      destPath,
-      'export_db',
-    );
-    expect(mockSaveDocuments).not.toHaveBeenCalled();
-  });
-
-  it('importDatabaseBackupFromBytes chunks to temp then path-imports', async () => {
-    const bytes = new Uint8Array(Buffer.from('SQLite format 3\0padding'));
-
-    await DbBackupService.importFromBytes(bytes);
-
-    expect(mockWriteStream).toHaveBeenCalled();
-    expect(mockWriteStreamWrite).toHaveBeenCalled();
-    expect(mockWriteStreamClose).toHaveBeenCalled();
-    expect(mockCp).toHaveBeenCalledWith(
-      expect.stringMatching(/\/cache\/import-bytes-\d+\.nmbackup/),
-      '/db/novel_master_vfs',
-    );
-    expect(mockWriteFile).not.toHaveBeenCalled();
-    expect(mockDumpSnapshot).toHaveBeenCalledWith(liveConn);
-    expect(mockClose).toHaveBeenCalled();
-    expect(mockRestoreSnapshot).toHaveBeenCalledWith(
-      restoreConn,
-      emptySnapshot,
-    );
-    expect(mockRestoreConnClose).toHaveBeenCalled();
-    expect(onRebootstrap).not.toHaveBeenCalled();
-    expect(mockUnlink).toHaveBeenCalled();
-  });
-
-  it('importDatabaseBackupFromPath uses cp instead of base64 writeFile', async () => {
-    const srcPath = '/cache/import-snapshot.nmbackup';
-    mockExists.mockResolvedValue(true);
-    mockStat.mockResolvedValue({size: 64});
-
-    await DbBackupService.importFromPath(srcPath);
-
-    expect(mockStat).toHaveBeenCalledWith(srcPath);
-    expect(mockReadFile).not.toHaveBeenCalled();
-    expect(mockDumpSnapshot).toHaveBeenCalledWith(liveConn);
-    expect(mockClose).toHaveBeenCalled();
-    expect(mockCp).toHaveBeenCalledWith(srcPath, '/db/novel_master_vfs');
-    expect(mockWriteFile).not.toHaveBeenCalled();
-    expect(mockRestoreSnapshot).toHaveBeenCalled();
-  });
-
-  it('importDatabaseBackupFromBytes rejects invalid sqlite bytes', async () => {
-    const bytes = new Uint8Array(Buffer.from('not sqlite'));
-
-    // 四期签名：已知失败沿 Result.err 回传，不再 reject。
-    const invalidResult = await DbBackupService.importFromBytes(bytes);
-    expect(invalidResult.ok).toBe(false);
-    if (!invalidResult.ok) {
-      expect(invalidResult.error.message).toMatch(/不是有效的/);
-    }
-    expect(mockDumpSnapshot).not.toHaveBeenCalled();
-    expect(mockWriteStream).not.toHaveBeenCalled();
-  });
-
-  it('ic-20: exportDatabaseBackupToPath 期间 busy 为 true，结束后 false（底层覆盖云同步直调）', async () => {
-    expect(maintenanceBusy.isBusy()).toBe(false);
-    const busySamples: boolean[] = [];
-    // 采样点挂在链路中段（scrub）：底层 acquire 之后、release 之前
-    mockScrubInDatabase.mockImplementation(async () => {
-      busySamples.push(maintenanceBusy.isBusy());
+    beforeEach(() => {
+        mockCheckpoint.mockReset().mockResolvedValue(undefined);
+        mockClose.mockReset().mockResolvedValue(undefined);
+        mockGetConnection.mockReset().mockResolvedValue(liveConn);
+        mockGetPath.mockReset().mockResolvedValue('/db/novel_master_vfs');
+        mockCp.mockReset().mockResolvedValue(undefined);
+        mockExists.mockReset().mockResolvedValue(true);
+        mockStat.mockReset().mockResolvedValue({size: 1024});
+        mockUnlink.mockReset().mockResolvedValue(undefined);
+        mockWriteFile.mockReset().mockResolvedValue(undefined);
+        mockReadFile.mockReset();
+        mockWriteStreamWrite.mockReset().mockResolvedValue(undefined);
+        mockWriteStreamClose.mockReset().mockResolvedValue(undefined);
+        mockWriteStream.mockReset().mockResolvedValue({
+            write: mockWriteStreamWrite,
+            close: mockWriteStreamClose,
+        });
+        mockSaveDocuments.mockReset().mockResolvedValue([{}]);
+        mockPick.mockReset();
+        mockKeepLocalCopy.mockReset();
+        mockAgentActive.mockReset().mockReturnValue(false);
+        mockDumpSnapshot.mockReset().mockResolvedValue(emptySnapshot);
+        mockScrubInDatabase.mockReset().mockResolvedValue(undefined);
+        mockRestoreSnapshot.mockReset().mockResolvedValue(undefined);
+        mockOpen.mockReset().mockResolvedValue(restoreConn);
+        mockRestoreConnClose.mockReset().mockResolvedValue(undefined);
+        mockRegisterDriver.mockReset();
+        onRebootstrap.mockReset();
     });
 
-    await DbBackupService.exportToPath(runtime, '/cache/busy-probe.nmbackup');
+    it('export calls checkpoint, copies db, and scrubs provider tables on copy', async () => {
+        await DbBackupService.exportViaPicker(runtime);
 
-    expect(busySamples).toEqual([true]);
-    expect(maintenanceBusy.isBusy()).toBe(false);
-  });
-
-  it('ic-20: importDatabaseBackupFromPath 期间 busy 恒 true（含「关连接+覆盖库文件」窗口），结束后 false', async () => {
-    expect(maintenanceBusy.isBusy()).toBe(false);
-    const busySamples: boolean[] = [];
-    mockDumpSnapshot.mockImplementation(async () => {
-      busySamples.push(maintenanceBusy.isBusy());
-      return emptySnapshot;
-    });
-    mockRestoreSnapshot.mockImplementation(async () => {
-      busySamples.push(maintenanceBusy.isBusy());
-    });
-
-    await DbBackupService.importFromPath('/cache/busy-probe.nmbackup');
-
-    expect(busySamples).toEqual([true, true]);
-    expect(maintenanceBusy.isBusy()).toBe(false);
-  });
-
-  it('ic-20: 上层 importDatabaseBackup 外层计数兜底——链路期间 true、onRebootstrap 之后 false', async () => {
-    expect(maintenanceBusy.isBusy()).toBe(false);
-    mockPick.mockResolvedValue([{uri: 'content://backup'}]);
-    mockKeepLocalCopy.mockResolvedValue([
-      {status: 'success', localUri: 'file:///cache/import.nmbackup'},
-    ]);
-    const busyAtRestore: boolean[] = [];
-    mockRestoreSnapshot.mockImplementation(async () => {
-      busyAtRestore.push(maintenanceBusy.isBusy());
+        expect(mockCheckpoint).toHaveBeenCalledWith(liveConn);
+        expect(mockGetPath).toHaveBeenCalled();
+        const tmpPath = '/cache/nmbackup.db';
+        expect(mockCp).toHaveBeenCalledWith('/db/novel_master_vfs', tmpPath);
+        expect(mockScrubInDatabase).toHaveBeenCalledWith(
+            liveConn,
+            '/cache/nmbackup.db',
+            'export_db',
+        );
+        expect(mockSaveDocuments).toHaveBeenCalledWith(
+            expect.objectContaining({fileName: 'nmbackup.db'}),
+        );
     });
 
-    await DbBackupService.importViaPicker(runtime, onRebootstrap);
+    it('rejects export when agent is running', async () => {
+        mockAgentActive.mockReturnValue(true);
+        // 四期签名：已知失败沿 Result.err 回传（中文文案在 detail），不再 reject。
+        const exportResult = await DbBackupService.exportViaPicker(runtime);
+        expect(exportResult.ok).toBe(false);
+        if (!exportResult.ok) {
+            expect(exportResult.error.message).toMatch(/Agent/);
+        }
+        expect(mockCheckpoint).not.toHaveBeenCalled();
+    });
 
-    // 底层 + 外层嵌套计数期间为 true；结束后（onRebootstrap 已先于 release
-    // 执行）归零
-    expect(busyAtRestore).toEqual([true]);
-    expect(onRebootstrap).toHaveBeenCalled();
-    expect(maintenanceBusy.isBusy()).toBe(false);
-  });
+    it('rejects import when agent is running (guard fires before picker)', async () => {
+        mockAgentActive.mockReturnValue(true);
+        // 四期签名：已知失败沿 Result.err 回传，不再 reject。
+        const importGuard = await DbBackupService.importViaPicker(runtime, onRebootstrap);
+        expect(importGuard.ok).toBe(false);
+        if (!importGuard.ok) {
+            expect(importGuard.error.message).toMatch(/Agent/);
+        }
+        // 守卫在触发前拦截：文件选择器与后续导入链路均未启动
+        expect(mockPick).not.toHaveBeenCalled();
+        expect(mockDumpSnapshot).not.toHaveBeenCalled();
+        expect(onRebootstrap).not.toHaveBeenCalled();
+    });
 
-  it('ic-20: 底层导入失败路径同样释放计数（finally 配对，不泄漏）', async () => {
-    expect(maintenanceBusy.isBusy()).toBe(false);
-    mockStat.mockResolvedValue({size: 8});
+    it('import uses path-level cp (no whole-file read / writeFile)', async () => {
+        mockPick.mockResolvedValue([{uri: 'content://backup'}]);
+        mockKeepLocalCopy.mockResolvedValue([
+            {status: 'success', localUri: 'file:///cache/import.nmbackup'},
+        ]);
 
-    // 四期签名：已知失败沿 Result.err 回传，不再 reject；busy 计数仍由 finally 配对释放。
-    const tooSmall = await DbBackupService.importFromPath('/cache/too-small.nmbackup');
-    expect(tooSmall.ok).toBe(false);
-    if (!tooSmall.ok) {
-      expect(tooSmall.error.message).toMatch(/文件过小/);
-    }
-    expect(maintenanceBusy.isBusy()).toBe(false);
-  });
+        await DbBackupService.importViaPicker(runtime, onRebootstrap);
+
+        expect(mockDumpSnapshot).toHaveBeenCalledWith(liveConn);
+        expect(mockClose).toHaveBeenCalled();
+        expect(mockCp).toHaveBeenCalledWith(
+            '/cache/import.nmbackup',
+            '/db/novel_master_vfs',
+        );
+        expect(mockReadFile).not.toHaveBeenCalled();
+        expect(mockWriteFile).not.toHaveBeenCalled();
+        expect(mockOpen).toHaveBeenCalled();
+        expect(mockRestoreSnapshot).toHaveBeenCalledWith(
+            restoreConn,
+            emptySnapshot,
+        );
+        expect(mockRestoreConnClose).toHaveBeenCalled();
+        expect(onRebootstrap).toHaveBeenCalled();
+    });
+
+    it('provider-restore reopen registers the driver via the single-point helper', async () => {
+        // 驱动注册表是 last-wins：恢复用的短连接必须走 db/connection 导出的
+        // 单点注册（带 AppState 后台探测），不能自己直接调无参的
+        // registerOpSqliteDriver() 把带参版本覆盖掉。
+        await DbBackupService.importFromPath('/cache/single-point.nmbackup');
+
+        expect(mockRegisterDriver).toHaveBeenCalledTimes(1);
+    });
+
+    it('rejects tiny backup via stat without reading body', async () => {
+        mockPick.mockResolvedValue([{uri: 'content://bad'}]);
+        mockKeepLocalCopy.mockResolvedValue([
+            {status: 'success', localUri: 'file:///cache/bad.nmbackup'},
+        ]);
+        mockStat.mockResolvedValue({size: 8});
+
+        // 四期签名：已知失败沿 Result.err 回传，不再 reject。
+        const tinyResult = await DbBackupService.importViaPicker(runtime, onRebootstrap);
+        expect(tinyResult.ok).toBe(false);
+        if (!tinyResult.ok) {
+            expect(tinyResult.error.message).toMatch(/文件过小/);
+        }
+        expect(mockReadFile).not.toHaveBeenCalled();
+        expect(onRebootstrap).not.toHaveBeenCalled();
+    });
+
+    it('exportDatabaseBackupToPath checkpoints, copies, and scrubs without dialog', async () => {
+        const destPath = '/cache/cloud-sync-snapshot.nmbackup';
+        await DbBackupService.exportToPath(runtime, destPath);
+
+        expect(mockCheckpoint).toHaveBeenCalledWith(liveConn);
+        expect(mockGetPath).toHaveBeenCalled();
+        expect(mockCp).toHaveBeenCalledWith('/db/novel_master_vfs', destPath);
+        expect(mockScrubInDatabase).toHaveBeenCalledWith(
+            liveConn,
+            destPath,
+            'export_db',
+        );
+        expect(mockSaveDocuments).not.toHaveBeenCalled();
+    });
+
+    it('importDatabaseBackupFromBytes chunks to temp then path-imports', async () => {
+        const bytes = new Uint8Array(Buffer.from('SQLite format 3\0padding'));
+
+        await DbBackupService.importFromBytes(bytes);
+
+        expect(mockWriteStream).toHaveBeenCalled();
+        expect(mockWriteStreamWrite).toHaveBeenCalled();
+        expect(mockWriteStreamClose).toHaveBeenCalled();
+        expect(mockCp).toHaveBeenCalledWith(
+            expect.stringMatching(/\/cache\/import-bytes-\d+\.nmbackup/),
+            '/db/novel_master_vfs',
+        );
+        expect(mockWriteFile).not.toHaveBeenCalled();
+        expect(mockDumpSnapshot).toHaveBeenCalledWith(liveConn);
+        expect(mockClose).toHaveBeenCalled();
+        expect(mockRestoreSnapshot).toHaveBeenCalledWith(
+            restoreConn,
+            emptySnapshot,
+        );
+        expect(mockRestoreConnClose).toHaveBeenCalled();
+        expect(onRebootstrap).not.toHaveBeenCalled();
+        expect(mockUnlink).toHaveBeenCalled();
+    });
+
+    it('importDatabaseBackupFromPath uses cp instead of base64 writeFile', async () => {
+        const srcPath = '/cache/import-snapshot.nmbackup';
+        mockExists.mockResolvedValue(true);
+        mockStat.mockResolvedValue({size: 64});
+
+        await DbBackupService.importFromPath(srcPath);
+
+        expect(mockStat).toHaveBeenCalledWith(srcPath);
+        expect(mockReadFile).not.toHaveBeenCalled();
+        expect(mockDumpSnapshot).toHaveBeenCalledWith(liveConn);
+        expect(mockClose).toHaveBeenCalled();
+        expect(mockCp).toHaveBeenCalledWith(srcPath, '/db/novel_master_vfs');
+        expect(mockWriteFile).not.toHaveBeenCalled();
+        expect(mockRestoreSnapshot).toHaveBeenCalled();
+    });
+
+    it('importDatabaseBackupFromBytes rejects invalid sqlite bytes', async () => {
+        const bytes = new Uint8Array(Buffer.from('not sqlite'));
+
+        // 四期签名：已知失败沿 Result.err 回传，不再 reject。
+        const invalidResult = await DbBackupService.importFromBytes(bytes);
+        expect(invalidResult.ok).toBe(false);
+        if (!invalidResult.ok) {
+            expect(invalidResult.error.message).toMatch(/不是有效的/);
+        }
+        expect(mockDumpSnapshot).not.toHaveBeenCalled();
+        expect(mockWriteStream).not.toHaveBeenCalled();
+    });
+
+    it('ic-20: exportDatabaseBackupToPath 期间 busy 为 true，结束后 false（底层覆盖云同步直调）', async () => {
+        expect(maintenanceBusy.isBusy()).toBe(false);
+        const busySamples: boolean[] = [];
+        // 采样点挂在链路中段（scrub）：底层 acquire 之后、release 之前
+        mockScrubInDatabase.mockImplementation(async () => {
+            busySamples.push(maintenanceBusy.isBusy());
+        });
+
+        await DbBackupService.exportToPath(runtime, '/cache/busy-probe.nmbackup');
+
+        expect(busySamples).toEqual([true]);
+        expect(maintenanceBusy.isBusy()).toBe(false);
+    });
+
+    it('ic-20: importDatabaseBackupFromPath 期间 busy 恒 true（含「关连接+覆盖库文件」窗口），结束后 false', async () => {
+        expect(maintenanceBusy.isBusy()).toBe(false);
+        const busySamples: boolean[] = [];
+        mockDumpSnapshot.mockImplementation(async () => {
+            busySamples.push(maintenanceBusy.isBusy());
+            return emptySnapshot;
+        });
+        mockRestoreSnapshot.mockImplementation(async () => {
+            busySamples.push(maintenanceBusy.isBusy());
+        });
+
+        await DbBackupService.importFromPath('/cache/busy-probe.nmbackup');
+
+        expect(busySamples).toEqual([true, true]);
+        expect(maintenanceBusy.isBusy()).toBe(false);
+    });
+
+    it('ic-20: 上层 importDatabaseBackup 外层计数兜底——链路期间 true、onRebootstrap 之后 false', async () => {
+        expect(maintenanceBusy.isBusy()).toBe(false);
+        mockPick.mockResolvedValue([{uri: 'content://backup'}]);
+        mockKeepLocalCopy.mockResolvedValue([
+            {status: 'success', localUri: 'file:///cache/import.nmbackup'},
+        ]);
+        const busyAtRestore: boolean[] = [];
+        mockRestoreSnapshot.mockImplementation(async () => {
+            busyAtRestore.push(maintenanceBusy.isBusy());
+        });
+
+        await DbBackupService.importViaPicker(runtime, onRebootstrap);
+
+        // 底层 + 外层嵌套计数期间为 true；结束后（onRebootstrap 已先于 release
+        // 执行）归零
+        expect(busyAtRestore).toEqual([true]);
+        expect(onRebootstrap).toHaveBeenCalled();
+        expect(maintenanceBusy.isBusy()).toBe(false);
+    });
+
+    it('ic-20: 底层导入失败路径同样释放计数（finally 配对，不泄漏）', async () => {
+        expect(maintenanceBusy.isBusy()).toBe(false);
+        mockStat.mockResolvedValue({size: 8});
+
+        // 四期签名：已知失败沿 Result.err 回传，不再 reject；busy 计数仍由 finally 配对释放。
+        const tooSmall = await DbBackupService.importFromPath('/cache/too-small.nmbackup');
+        expect(tooSmall.ok).toBe(false);
+        if (!tooSmall.ok) {
+            expect(tooSmall.error.message).toMatch(/文件过小/);
+        }
+        expect(maintenanceBusy.isBusy()).toBe(false);
+    });
 });

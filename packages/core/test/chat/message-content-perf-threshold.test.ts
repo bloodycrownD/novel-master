@@ -30,7 +30,7 @@ novelMasterTestFixture();
 
 /** 20KB 量级中文正文（对齐重度长会话单条消息体量）。 */
 function largeTextBody(): string {
-  return `二十KB量级的中文正文样本。${"云舟渡口灯火渐起，少年负剑西行。".repeat(
+    return `二十KB量级的中文正文样本。${"云舟渡口灯火渐起，少年负剑西行。".repeat(
     512
   )}`;
 }
@@ -55,65 +55,65 @@ const ABSOLUTE_BUDGET_MS = 5000;
  * 护栏失真，劣化静默通过。故此处抽成单一函数，不允许各写一份表达式。
  */
 function roleAt(index: number): ChatMessageData["role"] {
-  return index % 2 === 0 ? "assistant" : "user";
+    return index % 2 === 0 ? "assistant" : "user";
 }
 
 /** 计时一次 tail 加载（返回消息条数与耗时，供调用方断言内容与耗时）。 */
 async function timeTail(
-  sessionId: string
+    sessionId: string
 ): Promise<{ count: number; ms: number }> {
-  const repo = new SqliteMessageRepository(getNovelMasterTestContext().conn);
-  // 预热一次（JIT / SQLite 页缓存），再计时取稳定值。
-  outcomeValue(await repo.listBySessionTail(sessionId, ROWS));
-  const t0 = Date.now();
-  const tail = outcomeValue(await repo.listBySessionTail(sessionId, ROWS));
-  return { count: tail.length, ms: Date.now() - t0 };
+    const repo = new SqliteMessageRepository(getNovelMasterTestContext().conn);
+    // 预热一次（JIT / SQLite 页缓存），再计时取稳定值。
+    outcomeValue(await repo.listBySessionTail(sessionId, ROWS));
+    const t0 = Date.now();
+    const tail = outcomeValue(await repo.listBySessionTail(sessionId, ROWS));
+    return { count: tail.length, ms: Date.now() - t0 };
 }
 
 describe("稳态读性能护栏（T-MP-P0：明文 tail 加载绝对预算）", () => {
-  it(`${ROWS} 条 × 20KB tail 加载：明文形态耗时不超绝对预算`, async () => {
-    const ctx = getNovelMasterTestContext();
-    const body = largeTextBody();
+    it(`${ROWS} 条 × 20KB tail 加载：明文形态耗时不超绝对预算`, async () => {
+        const ctx = getNovelMasterTestContext();
+        const body = largeTextBody();
 
-    // 明文形态库：走生产写路径（batchInsert 直写明文）。
-    const plainProject = unwrap(await ctx.projects.create(
-      `P-${testIsolationSuffix()}`
-    ));
-    const plainSession = unwrap(await ctx.sessions.create(
-      plainProject.id,
-      `S-${testIsolationSuffix()}`
-    ));
-    const messages: ChatMessageData[] = [];
-    for (let i = 1; i <= ROWS; i++) {
-      messages.push({
-        id: randomUUID(),
-        sessionId: plainSession.id,
-        seq: i,
-        role: roleAt(i),
-        content: TextBlocks.of(body),
-        provider: null,
-        raw: null,
-        createdAtMs: Date.now() + i,
-        hidden: false,
-      });
-    }
-    const repo = new SqliteMessageRepository(ctx.conn);
-    await repo.batchInsert(messages);
-    const plain = await timeTail(plainSession.id);
-    assert.equal(plain.count, ROWS, "明文库应读到 40 条");
+        // 明文形态库：走生产写路径（batchInsert 直写明文）。
+        const plainProject = unwrap(await ctx.projects.create(
+            `P-${testIsolationSuffix()}`
+        ));
+        const plainSession = unwrap(await ctx.sessions.create(
+            plainProject.id,
+            `S-${testIsolationSuffix()}`
+        ));
+        const messages: ChatMessageData[] = [];
+        for (let i = 1; i <= ROWS; i++) {
+            messages.push({
+                id: randomUUID(),
+                sessionId: plainSession.id,
+                seq: i,
+                role: roleAt(i),
+                content: TextBlocks.of(body),
+                provider: null,
+                raw: null,
+                createdAtMs: Date.now() + i,
+                hidden: false,
+            });
+        }
+        const repo = new SqliteMessageRepository(ctx.conn);
+        await repo.batchInsert(messages);
+        const plain = await timeTail(plainSession.id);
+        assert.equal(plain.count, ROWS, "明文库应读到 40 条");
 
-    // 内容深比对：读回同一份正文，防「护栏量的是一个空/错结果的库」
-    // （空 blocks / 内容错位必须红——原护栏同款口径）。
-    const tail = outcomeValue(await repo.listBySessionTail(plainSession.id, ROWS));
-    assert.deepEqual(
-      tail.map((message) => message.content),
-      messages.map((message) => message.content)
-    );
+        // 内容深比对：读回同一份正文，防「护栏量的是一个空/错结果的库」
+        // （空 blocks / 内容错位必须红——原护栏同款口径）。
+        const tail = outcomeValue(await repo.listBySessionTail(plainSession.id, ROWS));
+        assert.deepEqual(
+            tail.map((message) => message.content),
+            messages.map((message) => message.content)
+        );
 
-    // 绝对预算：明文 tail 耗时不得劣化到预算之外（数量级回归护栏）。
-    assert.ok(
-      plain.ms <= ABSOLUTE_BUDGET_MS,
-      `明文 tail 耗时 ${plain.ms}ms 超绝对预算 ${ABSOLUTE_BUDGET_MS}ms（读路径数量级回归）`
-    );
-  });
+        // 绝对预算：明文 tail 耗时不得劣化到预算之外（数量级回归护栏）。
+        assert.ok(
+            plain.ms <= ABSOLUTE_BUDGET_MS,
+            `明文 tail 耗时 ${plain.ms}ms 超绝对预算 ${ABSOLUTE_BUDGET_MS}ms（读路径数量级回归）`
+        );
+    });
 });

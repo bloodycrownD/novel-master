@@ -11,548 +11,548 @@ import {  AppErrorOps  } from "@/errors/app-error.js";
 import {  AgentTurnRunner, type AgentTurnRuntimePort  } from "@/service/agent/logic/run-agent-turn.js";
 import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
 import {  userVfsUnifiedToolTurnFlag  } from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
-import {  userMessageFormatter  } from "@/domain/chat/logic/prompt/user-message-formatter.js";
-import {  attachmentXmlCodec  } from "@/domain/chat/logic/attachment/attachment-xml-codec.js";
-import {  attachmentScanner  } from "@/domain/chat/logic/attachment/attachment-scanner.js";
+import {  UserMessageFormatter  } from "@/domain/chat/logic/prompt/user-message-formatter.js";
+import {  AttachmentXmlCodec  } from "@/domain/chat/logic/attachment/attachment-xml-codec.js";
+import {  AttachmentScanner  } from "@/domain/chat/logic/attachment/attachment-scanner.js";
 import {  messageAttachmentSchema, type MessageAttachment  } from "@/domain/chat/model/message-attachment.schema.js";
 import type { AnnotateDraft } from "@/domain/chat/model/annotate-draft.schema.js";
 import {  tCore  } from "../../helpers/core-i18n.js";
 
 const sampleDefinition: AgentDefinition = {
-  name: "Test",
-  prompts: { persist: [], dynamic: [] },
-  model: "provider:model",
+    name: "Test",
+    prompts: { persist: [], dynamic: [] },
+    model: "provider:model",
 };
 
 function emptyRuleView() {
-  return { rows: [] as const, displayByPath: new Map() };
+    return { rows: [] as const, displayByPath: new Map() };
 }
 
 function mockUserVfsTurn(): UserVfsTurnService {
-  return {
-    executeOp: async () => ({ ok: true }),
-  };
+    return {
+        executeOp: async () => ({ ok: true }),
+    };
 }
 
 function makeRuntime(overrides: {
-  readonly listBySession?: () => Promise<
-    ReadonlyArray<{ id?: string; role: string; content: unknown; raw?: unknown }>
-  >;
-  readonly append?: (
-    sessionId: string,
-    role: string,
-    content: unknown,
-    opts?: { attachments?: readonly MessageAttachment[] },
-  ) => Promise<{ id: string }>;
-  readonly delete?: (id: string) => Promise<void>;
-  readonly userVfsTurn?: UserVfsTurnService;
-  readonly sessionVfs?: () => {
-    read: (path: string) => Promise<unknown>;
-  };
+    readonly listBySession?: () => Promise<
+        ReadonlyArray<{ id?: string; role: string; content: unknown; raw?: unknown }>
+    >;
+    readonly append?: (
+        sessionId: string,
+        role: string,
+        content: unknown,
+        opts?: { attachments?: readonly MessageAttachment[] },
+    ) => Promise<{ id: string }>;
+    readonly delete?: (id: string) => Promise<void>;
+    readonly userVfsTurn?: UserVfsTurnService;
+    readonly sessionVfs?: () => {
+        read: (path: string) => Promise<unknown>;
+    };
 }): AgentTurnRuntimePort {
-  return {
-    state: {
-      getCurrentAgentId: async () => Result.ok("a1"),
-      getCurrentModelId: async () => Result.ok("openai/gpt"),
-    },
-    agentRegistry: {
-      listAgentIds: async () => ["a1"],
-      list: async () => [sampleDefinition],
-      // 错误通道迁移四期：agentRegistry.get 走 Result 通道。
-      get: async () => Result.ok(sampleDefinition) as never,
-    },
-    projects: {
-      getAgentConfig: async () => Result.ok({ mode: "follow" }),
-    } as AgentTurnRuntimePort["projects"],
-    messages: {
-      listBySession: overrides.listBySession ?? (async () => []),
-      // 错误通道迁移二期：append/delete 走 Result 通道——override 仍写裸值，这里统一包 Ok。
-      append:
-        overrides.append != null
-          ? (async (...args: Parameters<NonNullable<typeof overrides.append>>) => Result.ok(await overrides.append!(...args))) as AgentTurnRuntimePort["messages"]["append"]
-          : (async () => Result.ok({ id: "m1", role: "user", content: { blocks: [] } })) as AgentTurnRuntimePort["messages"]["append"],
-      delete: (async (...args: Parameters<NonNullable<typeof overrides.delete>>) => {
-        await overrides.delete!(...args);
-        return Result.ok(undefined);
-      }) as AgentTurnRuntimePort["messages"]["delete"],
-    } as AgentTurnRuntimePort["messages"],
-    messageCheckpoint: {
-      capture: async () => undefined,
-      backfillMissingBaselines: async () => undefined,
-    } as AgentTurnRuntimePort["messageCheckpoint"],
-    modelRequests: {} as AgentTurnRuntimePort["modelRequests"],
-    eventBus: {} as AgentTurnRuntimePort["eventBus"],
-    compactionConditionEvaluator:
-      undefined as unknown as AgentTurnRuntimePort["compactionConditionEvaluator"],
-    eventOrchestrator:
-      {} as AgentTurnRuntimePort["eventOrchestrator"],
-    sessionVfs:
-      overrides.sessionVfs ??
-      // annotate 行号补算会先 read 草稿 path：默认给「读不到」的 Err 通道
-      // （静默跳过行号补算，不阻断 append 编排）。
-      (() => ({ read: async () => Result.err(new Error("no vfs in stub")) })),
-    workplace: () =>
-      ({
-        renderDisplay: async () => Result.ok(""),
-        buildListRows: async () => Result.ok([]),
-        materializePersistBlock: async () => Result.ok({ workplaceDisplay: "" }),
-        evaluateRuleView: async () => Result.ok(emptyRuleView()),
-      }) as ReturnType<AgentTurnRuntimePort["workplace"]>,
-    sessionKkv: {
-      get: async () => null,
-      set: async () => undefined,
-      listKeys: async () => [],
-    } as AgentTurnRuntimePort["sessionKkv"],
-    savedModelRepo: {
-      getById: async () => null,
-    } as AgentTurnRuntimePort["savedModelRepo"],
-    userVfsTurn: overrides.userVfsTurn,
-    sessions: {
-      getSessionAgentConfig: async () => Result.ok({ mode: "follow" }),
-    },
-  } as AgentTurnRuntimePort;
+    return {
+        state: {
+            getCurrentAgentId: async () => Result.ok("a1"),
+            getCurrentModelId: async () => Result.ok("openai/gpt"),
+        },
+        agentRegistry: {
+            listAgentIds: async () => ["a1"],
+            list: async () => [sampleDefinition],
+            // 错误通道迁移四期：agentRegistry.get 走 Result 通道。
+            get: async () => Result.ok(sampleDefinition) as never,
+        },
+        projects: {
+            getAgentConfig: async () => Result.ok({ mode: "follow" }),
+        } as AgentTurnRuntimePort["projects"],
+        messages: {
+            listBySession: overrides.listBySession ?? (async () => []),
+            // 错误通道迁移二期：append/delete 走 Result 通道——override 仍写裸值，这里统一包 Ok。
+            append:
+                overrides.append != null
+                    ? (async (...args: Parameters<NonNullable<typeof overrides.append>>) => Result.ok(await overrides.append!(...args))) as AgentTurnRuntimePort["messages"]["append"]
+                    : (async () => Result.ok({ id: "m1", role: "user", content: { blocks: [] } })) as AgentTurnRuntimePort["messages"]["append"],
+            delete: (async (...args: Parameters<NonNullable<typeof overrides.delete>>) => {
+                await overrides.delete!(...args);
+                return Result.ok(undefined);
+            }) as AgentTurnRuntimePort["messages"]["delete"],
+        } as AgentTurnRuntimePort["messages"],
+        messageCheckpoint: {
+            capture: async () => undefined,
+            backfillMissingBaselines: async () => undefined,
+        } as AgentTurnRuntimePort["messageCheckpoint"],
+        modelRequests: {} as AgentTurnRuntimePort["modelRequests"],
+        eventBus: {} as AgentTurnRuntimePort["eventBus"],
+        compactionConditionEvaluator:
+            undefined as unknown as AgentTurnRuntimePort["compactionConditionEvaluator"],
+        eventOrchestrator:
+            {} as AgentTurnRuntimePort["eventOrchestrator"],
+        sessionVfs:
+            overrides.sessionVfs ??
+            // annotate 行号补算会先 read 草稿 path：默认给「读不到」的 Err 通道
+            // （静默跳过行号补算，不阻断 append 编排）。
+            (() => ({ read: async () => Result.err(new Error("no vfs in stub")) })),
+        workplace: () =>
+            ({
+                renderDisplay: async () => Result.ok(""),
+                buildListRows: async () => Result.ok([]),
+                materializePersistBlock: async () => Result.ok({ workplaceDisplay: "" }),
+                evaluateRuleView: async () => Result.ok(emptyRuleView()),
+            }) as ReturnType<AgentTurnRuntimePort["workplace"]>,
+        sessionKkv: {
+            get: async () => null,
+            set: async () => undefined,
+            listKeys: async () => [],
+        } as AgentTurnRuntimePort["sessionKkv"],
+        savedModelRepo: {
+            getById: async () => null,
+        } as AgentTurnRuntimePort["savedModelRepo"],
+        userVfsTurn: overrides.userVfsTurn,
+        sessions: {
+            getSessionAgentConfig: async () => Result.ok({ mode: "follow" }),
+        },
+    } as AgentTurnRuntimePort;
 }
 
 describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
-  it("T-AN4: 仅 annotateDrafts → hasInput/shouldAppend；禁空续跑删末条", async () => {
-    userVfsUnifiedToolTurnFlag.refresh(true);
-    const deleted: string[] = [];
-    const appended: Array<{
-      attachments?: readonly MessageAttachment[];
-    }> = [];
-    const trailingId = "u-trailing";
-    const runtime = makeRuntime({
-      listBySession: async () => [
-        { id: trailingId, role: "user", content: { blocks: [] } },
-      ],
-      delete: async (id) => {
-        deleted.push(id);
-      },
-      append: async (_s, _r, _c, opts) => {
-        appended.push({ attachments: opts?.attachments });
-        return { id: "u-new" };
-      },
-      userVfsTurn: mockUserVfsTurn(),
-    });
-
-    // stub runner：避免真实 LLM；runAgentTurn 在 append 后会进 runner
-    // 此处只验证 append 前编排（makeRuntime 默认注入 sampleDefinition）
-    // 使用 onUserMessageAppended + 在 runner 前抛错的方式不可行。
-    // 改为：mock 到 append 后抛错——实际上 runAgentTurn 会继续 runner。
-    // 最小：断言空 content + annotate 不抛「消息不能为空」，且 delete 未调用。
-    try {
-      unwrap(await AgentTurnRunner.run(
-        runtime,
-        { projectId: "p1", sessionId: "s1" },
-        "",
-        {
-          allowResumeWithoutInput: true,
-          annotateDrafts: [
-            {
-              id: "a1",
-              path: "/note.md",
-              originalText: "选区",
-              userAnnotation: "说明",
+    it("T-AN4: 仅 annotateDrafts → hasInput/shouldAppend；禁空续跑删末条", async () => {
+        userVfsUnifiedToolTurnFlag.refresh(true);
+        const deleted: string[] = [];
+        const appended: Array<{
+            attachments?: readonly MessageAttachment[];
+        }> = [];
+        const trailingId = "u-trailing";
+        const runtime = makeRuntime({
+            listBySession: async () => [
+                { id: trailingId, role: "user", content: { blocks: [] } },
+            ],
+            delete: async (id) => {
+                deleted.push(id);
             },
-          ],
-          stream: false,
-        },
-      ));
-    } catch {
-      // runner 缺依赖可能失败；门闩与 append 语义仍可检
-    }
-
-    assert.equal(deleted.length, 0, "有 annotateDrafts 时不得 delete 末条");
-    assert.ok(appended.length >= 1, "须新 append");
-    const atts = appended[0]!.attachments ?? [];
-    assert.ok(atts.some((a) => a.action === "annotate"));
-    // user ops 拆除（E-core）：手改 write 附件不再随发送产生
-    assert.equal(atts.some((a) => a.action === "write"), false);
-
-    userVfsUnifiedToolTurnFlag.resetForTests();
-  });
-
-  it("T-AN3: append 成功后附件含 annotate action XML；回调可触发", async () => {
-    userVfsUnifiedToolTurnFlag.refresh(true);
-    let appendedAtts: readonly MessageAttachment[] | undefined;
-    let callbackCount = 0;
-    const runtime = makeRuntime({
-      append: async (_s, _r, _c, opts) => {
-        appendedAtts = opts?.attachments;
-        return { id: "u1" };
-      },
-      userVfsTurn: mockUserVfsTurn(),
-    });
-
-    try {
-      unwrap(await AgentTurnRunner.run(
-        runtime,
-        { projectId: "p1", sessionId: "s1" },
-        "hello",
-        {
-          annotateDrafts: [
-            {
-              id: "d1",
-              path: "/c.md",
-              originalText: "原文",
-              userAnnotation: "批",
+            append: async (_s, _r, _c, opts) => {
+                appended.push({ attachments: opts?.attachments });
+                return { id: "u-new" };
             },
-          ],
-          stream: false,
-          onUserMessageAppended: () => {
-            callbackCount += 1;
-          },
-        },
-      ));
-    } catch {
-      // runner 可能失败
-    }
+            userVfsTurn: mockUserVfsTurn(),
+        });
 
-    assert.ok(appendedAtts != null);
-    const ann = appendedAtts!.filter((a) => a.action === "annotate");
-    assert.equal(ann.length, 1);
-    assert.equal(ann[0]!.name, "/c.md");
-    assert.equal(ann[0]!.source, "user_ops");
-    assert.match(ann[0]!.content ?? "", /name="annotate"/);
-    assert.match(ann[0]!.content ?? "", /"originalText"/);
-    assert.match(ann[0]!.content ?? "", /"userAnnotation"/);
-    assert.equal(callbackCount, 1);
+        // stub runner：避免真实 LLM；runAgentTurn 在 append 后会进 runner
+        // 此处只验证 append 前编排（makeRuntime 默认注入 sampleDefinition）
+        // 使用 onUserMessageAppended + 在 runner 前抛错的方式不可行。
+        // 改为：mock 到 append 后抛错——实际上 runAgentTurn 会继续 runner。
+        // 最小：断言空 content + annotate 不抛「消息不能为空」，且 delete 未调用。
+        try {
+            unwrap(await AgentTurnRunner.run(
+                runtime,
+                { projectId: "p1", sessionId: "s1" },
+                "",
+                {
+                    allowResumeWithoutInput: true,
+                    annotateDrafts: [
+                        {
+                            id: "a1",
+                            path: "/note.md",
+                            originalText: "选区",
+                            userAnnotation: "说明",
+                        },
+                    ],
+                    stream: false,
+                },
+            ));
+        } catch {
+            // runner 缺依赖可能失败；门闩与 append 语义仍可检
+        }
 
-    userVfsUnifiedToolTurnFlag.resetForTests();
-  });
+        assert.equal(deleted.length, 0, "有 annotateDrafts 时不得 delete 末条");
+        assert.ok(appended.length >= 1, "须新 append");
+        const atts = appended[0]!.attachments ?? [];
+        assert.ok(atts.some((a) => a.action === "annotate"));
+        // user ops 拆除（E-core）：手改 write 附件不再随发送产生
+        assert.equal(atts.some((a) => a.action === "write"), false);
 
-  it("T-AN6: 同 path 两条 annotate concat 进落库；禁 path 去重丢条", async () => {
-    userVfsUnifiedToolTurnFlag.refresh(true);
-    const drafts = [
-      {
-        id: "1",
-        path: "/same.md",
-        originalText: "a",
-        userAnnotation: "一",
-      },
-      {
-        id: "2",
-        path: "/same.md",
-        originalText: "b",
-        userAnnotation: "二",
-      },
-    ];
-    const annotateAtts = drafts.map((draft) => attachmentXmlCodec.encodeAnnotateAttachment(draft));
-    // 若误走 mergeAttachmentsByPath 会丢一条
-    const wronglyMerged = attachmentScanner.mergeByPath([], annotateAtts);
-    assert.equal(
-      wronglyMerged.length,
-      1,
-      "对照：path 去重会静默丢条",
-    );
-
-    const concat = [...annotateAtts];
-    assert.equal(concat.length, 2);
-    const wrapped = userMessageFormatter.wrapForLlm("x", concat);
-    const matches = wrapped.match(/name="annotate"/g) ?? [];
-    assert.equal(matches.length, 2);
-    assert.match(wrapped, /"userAnnotation": "一"/);
-    assert.match(wrapped, /"userAnnotation": "二"/);
-
-    // 打穿 runAgentTurn append：同 path 两条不得被 path 去重丢掉
-    let appendedAtts: readonly MessageAttachment[] | undefined;
-    const runtime = makeRuntime({
-      append: async (_s, _r, _c, opts) => {
-        appendedAtts = opts?.attachments;
-        return { id: "u-an6" };
-      },
-      userVfsTurn: mockUserVfsTurn(),
+        userVfsUnifiedToolTurnFlag.resetForTests();
     });
-    try {
-      unwrap(await AgentTurnRunner.run(
-        runtime,
-        { projectId: "p1", sessionId: "s1" },
-        "hello",
-        {
-          annotateDrafts: drafts,
-          stream: false,
-        },
-      ));
-    } catch {
-      // runner 可能失败；append 语义仍可检
-    }
-    assert.ok(appendedAtts != null, "须走 append");
-    const ann = (appendedAtts ?? []).filter((a) => a.action === "annotate");
-    assert.equal(ann.length, 2, "同 path 两条 annotate 均须进 append attachments");
-    assert.equal(ann[0]!.path, "/same.md");
-    assert.equal(ann[1]!.path, "/same.md");
-    assert.match(ann[0]!.content ?? "", /"userAnnotation": "一"/);
-    assert.match(ann[1]!.content ?? "", /"userAnnotation": "二"/);
 
-    userVfsUnifiedToolTurnFlag.resetForTests();
-  });
+    it("T-AN3: append 成功后附件含 annotate action XML；回调可触发", async () => {
+        userVfsUnifiedToolTurnFlag.refresh(true);
+        let appendedAtts: readonly MessageAttachment[] | undefined;
+        let callbackCount = 0;
+        const runtime = makeRuntime({
+            append: async (_s, _r, _c, opts) => {
+                appendedAtts = opts?.attachments;
+                return { id: "u1" };
+            },
+            userVfsTurn: mockUserVfsTurn(),
+        });
 
-  it("T-MA6: 文件形 attachmentXmlCodec.encodeAnnotateAttachment(AnnotateDraft) 签名仍可用", () => {
-    const fileOnly: AnnotateDraft = {
-      id: "desktop-ok",
-      path: "/desktop.md",
-      originalText: "x",
-      userAnnotation: "y",
-    };
-    const att = attachmentXmlCodec.encodeAnnotateAttachment(fileOnly);
-    assert.equal(att.path, "/desktop.md");
-    assert.equal(att.action, "annotate");
-    assert.equal(att.name, "/desktop.md");
-    assert.equal(messageAttachmentSchema.safeParse(att).success, true);
-  });
+        try {
+            unwrap(await AgentTurnRunner.run(
+                runtime,
+                { projectId: "p1", sessionId: "s1" },
+                "hello",
+                {
+                    annotateDrafts: [
+                        {
+                            id: "d1",
+                            path: "/c.md",
+                            originalText: "原文",
+                            userAnnotation: "批",
+                        },
+                    ],
+                    stream: false,
+                    onUserMessageAppended: () => {
+                        callbackCount += 1;
+                    },
+                },
+            ));
+        } catch {
+            // runner 可能失败
+        }
 
-  it("无输入且无 annotate → 仍返回消息不能为空", async () => {
-    userVfsUnifiedToolTurnFlag.refresh(true);
-    const runtime = makeRuntime({ userVfsTurn: mockUserVfsTurn() });
-    // 发送门是业务失败：沿 Result.err 交回（AGENT_MESSAGE_EMPTY 自带 code + messageKey）。
-    await rejectsErr(
-      () =>
-        AgentTurnRunner.run(
-          runtime,
-          { projectId: "p1", sessionId: "s1" },
-          "  ",
-          { stream: false },
-        ),
-      (err: unknown) =>
-        assert.ok(AppErrorOps.is(err, "AGENT_MESSAGE_EMPTY") && err.messageKey === "error.agent.message_empty"),
-    );
-    userVfsUnifiedToolTurnFlag.resetForTests();
-  });
+        assert.ok(appendedAtts != null);
+        const ann = appendedAtts!.filter((a) => a.action === "annotate");
+        assert.equal(ann.length, 1);
+        assert.equal(ann[0]!.name, "/c.md");
+        assert.equal(ann[0]!.source, "user_ops");
+        assert.match(ann[0]!.content ?? "", /name="annotate"/);
+        assert.match(ann[0]!.content ?? "", /"originalText"/);
+        assert.match(ann[0]!.content ?? "", /"userAnnotation"/);
+        assert.equal(callbackCount, 1);
+
+        userVfsUnifiedToolTurnFlag.resetForTests();
+    });
+
+    it("T-AN6: 同 path 两条 annotate concat 进落库；禁 path 去重丢条", async () => {
+        userVfsUnifiedToolTurnFlag.refresh(true);
+        const drafts = [
+            {
+                id: "1",
+                path: "/same.md",
+                originalText: "a",
+                userAnnotation: "一",
+            },
+            {
+                id: "2",
+                path: "/same.md",
+                originalText: "b",
+                userAnnotation: "二",
+            },
+        ];
+        const annotateAtts = drafts.map((draft) => AttachmentXmlCodec.encodeAnnotateAttachment(draft));
+        // 若误走 mergeAttachmentsByPath 会丢一条
+        const wronglyMerged = AttachmentScanner.mergeByPath([], annotateAtts);
+        assert.equal(
+            wronglyMerged.length,
+            1,
+            "对照：path 去重会静默丢条",
+        );
+
+        const concat = [...annotateAtts];
+        assert.equal(concat.length, 2);
+        const wrapped = UserMessageFormatter.wrapForLlm("x", concat);
+        const matches = wrapped.match(/name="annotate"/g) ?? [];
+        assert.equal(matches.length, 2);
+        assert.match(wrapped, /"userAnnotation": "一"/);
+        assert.match(wrapped, /"userAnnotation": "二"/);
+
+        // 打穿 runAgentTurn append：同 path 两条不得被 path 去重丢掉
+        let appendedAtts: readonly MessageAttachment[] | undefined;
+        const runtime = makeRuntime({
+            append: async (_s, _r, _c, opts) => {
+                appendedAtts = opts?.attachments;
+                return { id: "u-an6" };
+            },
+            userVfsTurn: mockUserVfsTurn(),
+        });
+        try {
+            unwrap(await AgentTurnRunner.run(
+                runtime,
+                { projectId: "p1", sessionId: "s1" },
+                "hello",
+                {
+                    annotateDrafts: drafts,
+                    stream: false,
+                },
+            ));
+        } catch {
+            // runner 可能失败；append 语义仍可检
+        }
+        assert.ok(appendedAtts != null, "须走 append");
+        const ann = (appendedAtts ?? []).filter((a) => a.action === "annotate");
+        assert.equal(ann.length, 2, "同 path 两条 annotate 均须进 append attachments");
+        assert.equal(ann[0]!.path, "/same.md");
+        assert.equal(ann[1]!.path, "/same.md");
+        assert.match(ann[0]!.content ?? "", /"userAnnotation": "一"/);
+        assert.match(ann[1]!.content ?? "", /"userAnnotation": "二"/);
+
+        userVfsUnifiedToolTurnFlag.resetForTests();
+    });
+
+    it("T-MA6: 文件形 AttachmentXmlCodec.encodeAnnotateAttachment(AnnotateDraft) 签名仍可用", () => {
+        const fileOnly: AnnotateDraft = {
+            id: "desktop-ok",
+            path: "/desktop.md",
+            originalText: "x",
+            userAnnotation: "y",
+        };
+        const att = AttachmentXmlCodec.encodeAnnotateAttachment(fileOnly);
+        assert.equal(att.path, "/desktop.md");
+        assert.equal(att.action, "annotate");
+        assert.equal(att.name, "/desktop.md");
+        assert.equal(messageAttachmentSchema.safeParse(att).success, true);
+    });
+
+    it("无输入且无 annotate → 仍返回消息不能为空", async () => {
+        userVfsUnifiedToolTurnFlag.refresh(true);
+        const runtime = makeRuntime({ userVfsTurn: mockUserVfsTurn() });
+        // 发送门是业务失败：沿 Result.err 交回（AGENT_MESSAGE_EMPTY 自带 code + messageKey）。
+        await rejectsErr(
+            () =>
+                AgentTurnRunner.run(
+                    runtime,
+                    { projectId: "p1", sessionId: "s1" },
+                    "  ",
+                    { stream: false },
+                ),
+            (err: unknown) =>
+                assert.ok(AppErrorOps.is(err, "AGENT_MESSAGE_EMPTY") && err.messageKey === "error.agent.message_empty"),
+        );
+        userVfsUnifiedToolTurnFlag.resetForTests();
+    });
 });
 
-describe("attachmentXmlCodec.encodeAnnotateAttachment：locationLabel 注入", () => {
-  it("有 startLine/endLine → params 含 locationLabel 自然语言", () => {
-    const att = attachmentXmlCodec.encodeAnnotateAttachment({
-      id: "x",
-      path: "/a.md",
-      originalText: "原文",
-      userAnnotation: "批",
-      startLine: 5,
-      endLine: 7,
+describe("AttachmentXmlCodec.encodeAnnotateAttachment：locationLabel 注入", () => {
+    it("有 startLine/endLine → params 含 locationLabel 自然语言", () => {
+        const att = AttachmentXmlCodec.encodeAnnotateAttachment({
+            id: "x",
+            path: "/a.md",
+            originalText: "原文",
+            userAnnotation: "批",
+            startLine: 5,
+            endLine: 7,
+        });
+        assert.match(att.content, /"locationLabel": "第 5-7 行"/);
+        assert.match(att.content, /"startLine": 5/);
+        assert.match(att.content, /"endLine": 7/);
     });
-    assert.match(att.content, /"locationLabel": "第 5-7 行"/);
-    assert.match(att.content, /"startLine": 5/);
-    assert.match(att.content, /"endLine": 7/);
-  });
 
-  it("单行 locationLabel", () => {
-    const att = attachmentXmlCodec.encodeAnnotateAttachment({
-      id: "x",
-      path: "/a.md",
-      originalText: "原文",
-      userAnnotation: "批",
-      startLine: 3,
-      endLine: 3,
+    it("单行 locationLabel", () => {
+        const att = AttachmentXmlCodec.encodeAnnotateAttachment({
+            id: "x",
+            path: "/a.md",
+            originalText: "原文",
+            userAnnotation: "批",
+            startLine: 3,
+            endLine: 3,
+        });
+        assert.match(att.content, /"locationLabel": "第 3 行"/);
     });
-    assert.match(att.content, /"locationLabel": "第 3 行"/);
-  });
 
-  it("无行号 → 不写 locationLabel（老附件兼容）", () => {
-    const att = attachmentXmlCodec.encodeAnnotateAttachment({
-      id: "x",
-      path: "/a.md",
-      originalText: "原文",
-      userAnnotation: "批",
+    it("无行号 → 不写 locationLabel（老附件兼容）", () => {
+        const att = AttachmentXmlCodec.encodeAnnotateAttachment({
+            id: "x",
+            path: "/a.md",
+            originalText: "原文",
+            userAnnotation: "批",
+        });
+        assert.doesNotMatch(att.content, /locationLabel/);
     });
-    assert.doesNotMatch(att.content, /locationLabel/);
-  });
 });
 
 describe("runAgentTurn 批注行号补算（VFS read + originalText 反查）", () => {
-  it("草稿缺 startLine、VFS 能读到源文本且 originalText 命中 → 落库附件含行号 + locationLabel", async () => {
-    userVfsUnifiedToolTurnFlag.refresh(true);
-    // 源文件第 3 行包含 "find-me"
-    const source = "L1\nL2\nfind-me\nL4\nL5\n";
-    let appendedAtts: readonly MessageAttachment[] | undefined;
-    const runtime = makeRuntime({
-      append: async (_s, _r, _c, opts) => {
-        appendedAtts = opts?.attachments;
-        return { id: "u-lin1" };
-      },
-      userVfsTurn: mockUserVfsTurn(),
-      sessionVfs: () => ({
-        read: async () => Result.ok({ content: source }),
-      }),
+    it("草稿缺 startLine、VFS 能读到源文本且 originalText 命中 → 落库附件含行号 + locationLabel", async () => {
+        userVfsUnifiedToolTurnFlag.refresh(true);
+        // 源文件第 3 行包含 "find-me"
+        const source = "L1\nL2\nfind-me\nL4\nL5\n";
+        let appendedAtts: readonly MessageAttachment[] | undefined;
+        const runtime = makeRuntime({
+            append: async (_s, _r, _c, opts) => {
+                appendedAtts = opts?.attachments;
+                return { id: "u-lin1" };
+            },
+            userVfsTurn: mockUserVfsTurn(),
+            sessionVfs: () => ({
+                read: async () => Result.ok({ content: source }),
+            }),
+        });
+
+        try {
+            unwrap(await AgentTurnRunner.run(
+                runtime,
+                { projectId: "p1", sessionId: "s1" },
+                "hi",
+                {
+                    annotateDrafts: [
+                        {
+                            id: "d1",
+                            path: "/note.md",
+                            originalText: "find-me",
+                            userAnnotation: "就是这",
+                        },
+                    ],
+                    stream: false,
+                },
+            ));
+        } catch {
+            // runner 可能失败；append 已发生即可
+        }
+
+        assert.ok(appendedAtts != null);
+        const ann = (appendedAtts ?? []).filter((a) => a.action === "annotate");
+        assert.equal(ann.length, 1);
+        // padding=0 精确行号：命中原第 3 行
+        assert.match(ann[0]!.content ?? "", /"startLine": 3/);
+        assert.match(ann[0]!.content ?? "", /"locationLabel": "第 3 行"/);
+
+        userVfsUnifiedToolTurnFlag.resetForTests();
     });
 
-    try {
-      unwrap(await AgentTurnRunner.run(
-        runtime,
-        { projectId: "p1", sessionId: "s1" },
-        "hi",
-        {
-          annotateDrafts: [
-            {
-              id: "d1",
-              path: "/note.md",
-              originalText: "find-me",
-              userAnnotation: "就是这",
+    it("草稿缺 startLine、VFS 拿不到源文本（read 招错） → 静默跳过，不写行号也不报错", async () => {
+        userVfsUnifiedToolTurnFlag.refresh(true);
+        let appendedAtts: readonly MessageAttachment[] | undefined;
+        const runtime = makeRuntime({
+            append: async (_s, _r, _c, opts) => {
+                appendedAtts = opts?.attachments;
+                return { id: "u-lin2" };
             },
-          ],
-          stream: false,
-        },
-      ));
-    } catch {
-      // runner 可能失败；append 已发生即可
-    }
+            userVfsTurn: mockUserVfsTurn(),
+            sessionVfs: () => ({
+                // 错误通道迁移四期：read 失败走 Result.err（不再 throw）
+                read: async () => Result.err(new Error("no such file")),
+            }),
+        });
 
-    assert.ok(appendedAtts != null);
-    const ann = (appendedAtts ?? []).filter((a) => a.action === "annotate");
-    assert.equal(ann.length, 1);
-    // padding=0 精确行号：命中原第 3 行
-    assert.match(ann[0]!.content ?? "", /"startLine": 3/);
-    assert.match(ann[0]!.content ?? "", /"locationLabel": "第 3 行"/);
+        try {
+            unwrap(await AgentTurnRunner.run(
+                runtime,
+                { projectId: "p1", sessionId: "s1" },
+                "hi",
+                {
+                    annotateDrafts: [
+                        {
+                            id: "d1",
+                            path: "/missing.md",
+                            originalText: "x",
+                            userAnnotation: "y",
+                        },
+                    ],
+                    stream: false,
+                },
+            ));
+        } catch {
+            // runner 可能失败
+        }
 
-    userVfsUnifiedToolTurnFlag.resetForTests();
-  });
+        assert.ok(appendedAtts != null);
+        const ann = (appendedAtts ?? []).filter((a) => a.action === "annotate");
+        assert.equal(ann.length, 1);
+        // 招错 → 不行行号补算，locationLabel / startLine 均不出现
+        assert.doesNotMatch(ann[0]!.content ?? "", /locationLabel/);
+        assert.doesNotMatch(ann[0]!.content ?? "", /startLine/);
 
-  it("草稿缺 startLine、VFS 拿不到源文本（read 招错） → 静默跳过，不写行号也不报错", async () => {
-    userVfsUnifiedToolTurnFlag.refresh(true);
-    let appendedAtts: readonly MessageAttachment[] | undefined;
-    const runtime = makeRuntime({
-      append: async (_s, _r, _c, opts) => {
-        appendedAtts = opts?.attachments;
-        return { id: "u-lin2" };
-      },
-      userVfsTurn: mockUserVfsTurn(),
-      sessionVfs: () => ({
-        // 错误通道迁移四期：read 失败走 Result.err（不再 throw）
-        read: async () => Result.err(new Error("no such file")),
-      }),
+        userVfsUnifiedToolTurnFlag.resetForTests();
     });
 
-    try {
-      unwrap(await AgentTurnRunner.run(
-        runtime,
-        { projectId: "p1", sessionId: "s1" },
-        "hi",
-        {
-          annotateDrafts: [
-            {
-              id: "d1",
-              path: "/missing.md",
-              originalText: "x",
-              userAnnotation: "y",
+    it("originalText 在源文本里查不到 → 静默跳过行号补算", async () => {
+        userVfsUnifiedToolTurnFlag.refresh(true);
+        const source = "aaa\nbbb\nccc\n";
+        let appendedAtts: readonly MessageAttachment[] | undefined;
+        const runtime = makeRuntime({
+            append: async (_s, _r, _c, opts) => {
+                appendedAtts = opts?.attachments;
+                return { id: "u-lin3" };
             },
-          ],
-          stream: false,
-        },
-      ));
-    } catch {
-      // runner 可能失败
-    }
+            userVfsTurn: mockUserVfsTurn(),
+            sessionVfs: () => ({
+                read: async () => Result.ok({ content: source }),
+            }),
+        });
 
-    assert.ok(appendedAtts != null);
-    const ann = (appendedAtts ?? []).filter((a) => a.action === "annotate");
-    assert.equal(ann.length, 1);
-    // 招错 → 不行行号补算，locationLabel / startLine 均不出现
-    assert.doesNotMatch(ann[0]!.content ?? "", /locationLabel/);
-    assert.doesNotMatch(ann[0]!.content ?? "", /startLine/);
+        try {
+            unwrap(await AgentTurnRunner.run(
+                runtime,
+                { projectId: "p1", sessionId: "s1" },
+                "hi",
+                {
+                    annotateDrafts: [
+                        {
+                            id: "d1",
+                            path: "/note.md",
+                            originalText: "不存在的选区文本 xyz",
+                            userAnnotation: "y",
+                        },
+                    ],
+                    stream: false,
+                },
+            ));
+        } catch {
+            // runner 可能失败
+        }
 
-    userVfsUnifiedToolTurnFlag.resetForTests();
-  });
+        const ann = (appendedAtts ?? []).filter((a) => a.action === "annotate");
+        assert.equal(ann.length, 1);
+        assert.doesNotMatch(ann[0]!.content ?? "", /locationLabel/);
 
-  it("originalText 在源文本里查不到 → 静默跳过行号补算", async () => {
-    userVfsUnifiedToolTurnFlag.refresh(true);
-    const source = "aaa\nbbb\nccc\n";
-    let appendedAtts: readonly MessageAttachment[] | undefined;
-    const runtime = makeRuntime({
-      append: async (_s, _r, _c, opts) => {
-        appendedAtts = opts?.attachments;
-        return { id: "u-lin3" };
-      },
-      userVfsTurn: mockUserVfsTurn(),
-      sessionVfs: () => ({
-        read: async () => Result.ok({ content: source }),
-      }),
+        userVfsUnifiedToolTurnFlag.resetForTests();
     });
 
-    try {
-      unwrap(await AgentTurnRunner.run(
-        runtime,
-        { projectId: "p1", sessionId: "s1" },
-        "hi",
-        {
-          annotateDrafts: [
-            {
-              id: "d1",
-              path: "/note.md",
-              originalText: "不存在的选区文本 xyz",
-              userAnnotation: "y",
+    it("草稿已带 startLine/endLine → 不覆盖，原样物化", async () => {
+        userVfsUnifiedToolTurnFlag.refresh(true);
+        let appendedAtts: readonly MessageAttachment[] | undefined;
+        const runtime = makeRuntime({
+            append: async (_s, _r, _c, opts) => {
+                appendedAtts = opts?.attachments;
+                return { id: "u-lin4" };
             },
-          ],
-          stream: false,
-        },
-      ));
-    } catch {
-      // runner 可能失败
-    }
+            userVfsTurn: mockUserVfsTurn(),
+            sessionVfs: () => ({
+                // 故意返回和草稿行号不同的内容，验证不被覆盖
+                read: async () => ({ content: "L1\nL2\ntarget\nL4\n" }),
+            }),
+        });
 
-    const ann = (appendedAtts ?? []).filter((a) => a.action === "annotate");
-    assert.equal(ann.length, 1);
-    assert.doesNotMatch(ann[0]!.content ?? "", /locationLabel/);
+        try {
+            unwrap(await AgentTurnRunner.run(
+                runtime,
+                { projectId: "p1", sessionId: "s1" },
+                "hi",
+                {
+                    annotateDrafts: [
+                        {
+                            id: "d1",
+                            path: "/note.md",
+                            originalText: "target",
+                            userAnnotation: "y",
+                            startLine: 99,
+                            endLine: 99,
+                        },
+                    ],
+                    stream: false,
+                },
+            ));
+        } catch {
+            // runner 可能失败
+        }
 
-    userVfsUnifiedToolTurnFlag.resetForTests();
-  });
+        const ann = (appendedAtts ?? []).filter((a) => a.action === "annotate");
+        assert.equal(ann.length, 1);
+        // 草稿自带 99/99 不应被 VFS 反查出的 3 覆盖
+        assert.match(ann[0]!.content ?? "", /"startLine": 99/);
+        assert.match(ann[0]!.content ?? "", /"locationLabel": "第 99 行"/);
 
-  it("草稿已带 startLine/endLine → 不覆盖，原样物化", async () => {
-    userVfsUnifiedToolTurnFlag.refresh(true);
-    let appendedAtts: readonly MessageAttachment[] | undefined;
-    const runtime = makeRuntime({
-      append: async (_s, _r, _c, opts) => {
-        appendedAtts = opts?.attachments;
-        return { id: "u-lin4" };
-      },
-      userVfsTurn: mockUserVfsTurn(),
-      sessionVfs: () => ({
-        // 故意返回和草稿行号不同的内容，验证不被覆盖
-        read: async () => ({ content: "L1\nL2\ntarget\nL4\n" }),
-      }),
+        userVfsUnifiedToolTurnFlag.resetForTests();
     });
-
-    try {
-      unwrap(await AgentTurnRunner.run(
-        runtime,
-        { projectId: "p1", sessionId: "s1" },
-        "hi",
-        {
-          annotateDrafts: [
-            {
-              id: "d1",
-              path: "/note.md",
-              originalText: "target",
-              userAnnotation: "y",
-              startLine: 99,
-              endLine: 99,
-            },
-          ],
-          stream: false,
-        },
-      ));
-    } catch {
-      // runner 可能失败
-    }
-
-    const ann = (appendedAtts ?? []).filter((a) => a.action === "annotate");
-    assert.equal(ann.length, 1);
-    // 草稿自带 99/99 不应被 VFS 反查出的 3 覆盖
-    assert.match(ann[0]!.content ?? "", /"startLine": 99/);
-    assert.match(ann[0]!.content ?? "", /"locationLabel": "第 99 行"/);
-
-    userVfsUnifiedToolTurnFlag.resetForTests();
-  });
 });
 
 /** 错误用户可见文案：带 messageKey 时经 tCore 渲染（G1-G3 descriptor 契约），否则回退 message。 */
 function renderError(error: unknown): string {
-  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
-  return textOf(error);
+    const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
+    return textOf(error);
 }
 
 /** 含 cause 链（ToolError 包装 AppError 时 messageKey 在 cause 上）。 */
 function textOf(error: unknown): string {
-  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
-  if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
-  if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
-  return e.message;
+    const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
+    if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
+    if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
+    return e.message;
 }

@@ -16,33 +16,41 @@
  * @module renderer/features/chat/chat-link-route
  */
 
-import { chatLinkResolver } from "@shared/logic/chat";
+import { ChatLinkResolver } from "@shared/logic/chat";
 import type {
-  IpcResult,
-  VfsReadRequest,
-  VfsReadResultDto,
+    IpcResult,
+    VfsReadRequest,
+    VfsReadResultDto,
 } from "@shared/ipc-types";
 
 /** 探测所需的 ipcVfsRead 面（invokeClient 同形，测试直传 stub）。 */
 export type ChatLinkProbeRead = (
-  req: VfsReadRequest,
+    req: VfsReadRequest,
 ) => Promise<IpcResult<VfsReadResultDto>>;
 
 /** 链接点击的执行意图：应用内 Preview 打开 / 外部浏览器打开 / 路径未命中 / 无动作。 */
 type ChatLinkAction =
-  | { kind: "preview"; workspaceScope: "chat" | "session"; path: string }
-  | { kind: "external"; url: string }
-  | { kind: "not-found"; path: string }
-  | { kind: "none" };
+    | { kind: "preview"; workspaceScope: "chat" | "session"; path: string }
+    | { kind: "external"; url: string }
+    | { kind: "not-found"; path: string }
+    | { kind: "none" };
 
 /** 会话上下文：chat 域（core session 域）探测必需 projectId+sessionId。 */
 type ChatLinkSessionContext = {
-  readonly projectId: string;
-  readonly sessionId: string;
+    readonly projectId: string;
+    readonly sessionId: string;
 } | null;
 
 /** 非侵入日志（renderer 侧 console 语义，测试可注入捕获）。 */
 type ChatLinkLogger = (message: string, detail?: unknown) => void;
+
+/** resolveChatLinkAction 的注入依赖：会话/项目上下文 + VFS 探针 + 可选日志。 */
+type ChatLinkDeps = {
+    sessionContext: ChatLinkSessionContext;
+    projectContext: { projectId: string } | null;
+    vfsRead: ChatLinkProbeRead;
+    log?: ChatLinkLogger;
+};
 
 /**
  * 解析链接点击意图。
@@ -51,54 +59,46 @@ type ChatLinkLogger = (message: string, detail?: unknown) => void;
  * chat 域探测（需会话上下文齐全）→ session 域探测 → 命中即 preview；
  * 双未命中 not-found（调用方弹「路径不存在」提示——用户拍板）。
  */
-export async function resolveChatLinkAction(
-  href: string,
-  deps: {
-    sessionContext: ChatLinkSessionContext;
-    projectContext: { projectId: string } | null;
-    vfsRead: ChatLinkProbeRead;
-    log?: ChatLinkLogger;
-  },
-): Promise<ChatLinkAction> {
-  const log = deps.log ?? (() => undefined);
-  const trimmed = href.trim();
-  if (chatLinkResolver.isHttp(trimmed)) {
-    return { kind: "external", url: trimmed };
-  }
-  const target = chatLinkResolver.resolve(trimmed);
-  if (target == null) {
-    return { kind: "none" };
-  }
-  // ① chat 域（core session 域：会话工作区）
-  if (deps.sessionContext != null) {
-    const result = await deps.vfsRead({
-      workspaceScope: "chat",
-      projectId: deps.sessionContext.projectId,
-      sessionId: deps.sessionContext.sessionId,
-      path: target,
-    });
-    if (result.ok) {
-      return { kind: "preview", workspaceScope: "chat", path: target };
+export async function resolveChatLinkAction(href: string, deps: ChatLinkDeps): Promise<ChatLinkAction> {
+    const log = deps.log ?? (() => undefined);
+    const trimmed = href.trim();
+    if (ChatLinkResolver.isHttp(trimmed)) {
+        return { kind: "external", url: trimmed };
     }
-    log("chat link probe miss (chat scope)", {
-      path: target,
-      code: result.error.code,
-    });
-  }
-  // ② session 域（core project 域：项目工作区）
-  if (deps.projectContext != null) {
-    const result = await deps.vfsRead({
-      workspaceScope: "session",
-      projectId: deps.projectContext.projectId,
-      path: target,
-    });
-    if (result.ok) {
-      return { kind: "preview", workspaceScope: "session", path: target };
+    const target = ChatLinkResolver.resolve(trimmed);
+    if (target == null) {
+        return { kind: "none" };
     }
-    log("chat link probe miss (session scope)", {
-      path: target,
-      code: result.error.code,
-    });
-  }
-  return { kind: "not-found", path: target };
+    // ① chat 域（core session 域：会话工作区）
+    if (deps.sessionContext != null) {
+        const result = await deps.vfsRead({
+            workspaceScope: "chat",
+            projectId: deps.sessionContext.projectId,
+            sessionId: deps.sessionContext.sessionId,
+            path: target,
+        });
+        if (result.ok) {
+            return { kind: "preview", workspaceScope: "chat", path: target };
+        }
+        log("chat link probe miss (chat scope)", {
+            path: target,
+            code: result.error.code,
+        });
+    }
+    // ② session 域（core project 域：项目工作区）
+    if (deps.projectContext != null) {
+        const result = await deps.vfsRead({
+            workspaceScope: "session",
+            projectId: deps.projectContext.projectId,
+            path: target,
+        });
+        if (result.ok) {
+            return { kind: "preview", workspaceScope: "session", path: target };
+        }
+        log("chat link probe miss (session scope)", {
+            path: target,
+            code: result.error.code,
+        });
+    }
+    return { kind: "not-found", path: target };
 }

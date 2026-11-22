@@ -1,0 +1,89 @@
+  stats:
+    filter_label: 筛选
+    time_range: 时间范围
+    range_today: 今天
+    range_7d: 近 7 天
+    range_30d: 近 30 天
+    range_custom: 自定义
+    start_date: 开始日期
+    end_date: 结束日期
+    model_filter_aria: 模型筛选
+    model_all: 全部模型
+    model_other: 其他模型
+    provider_unlogged: 未记录服务商
+    provider_other_label: "{provider}/其他模型"
+    view_tabs_aria: 视图页签
+    tab_summary: 汇总
+    tab_charts: 图表
+    tab_requests: 流水
+    empty_db: 库里还没有任何用量数据。Token 用量自记录功能上线起开始积累，发起对话后这里会展示统计；缓存命中率数据自本版本起开始记录；速率与首字延迟数据自本版本起开始积累。
+    empty_filtered: 当前筛选范围内暂无用量数据，可调整时间范围或模型筛选后再试。
+    empty_range: 该区间无数据
+    overview_title: "总览 · {range}"
+    overview_desc: 跟随当前时间范围与模型筛选
+    total_tokens: 总 token
+    input_label: 输入
+    output_label: 输出
+    calls_label: 调用次数
+    hit_rate: 命中率
+    avg_rate: 平均速率
+    avg_first_token: 平均首字延迟
+    nonstream_hint: 非流式请求按完成时刻计
+    pie_section: 服务商 × 模型
+    pie_desc: 点选扇区或图例查看用量、调用次数与占比
+    slice_aria: "{label} · 用量 {value} · {calls} 次 · 占比 {share}"
+    chart_input_aria: "输入 {count}"
+    chart_output_aria: "输出 {count}"
+    chart_calls_aria: "调用 {count} 次"
+    requests_title: "请求流水 · 共 {count} 条"
+    requests_desc: 按时间倒序列出当前筛选范围内的请求
+    col_time: 时间
+    col_cache_read: 缓存读
+    col_first_token: 首字延迟
+    col_total_time: 总时间
+    page_prev: 上一页
+    page_next: 下一页
+    day_hourly_title: 今天 · 按小时分布
+    day_hourly_desc: 当天 0-24 点的输入输出与调用量
+    by_day_title: 按天用量
+    hour_label: "{hour}时"
+    detail_title: 用量详情
+    recent_requests: 最近请求
+    recent_empty: 暂无请求记录
+    requests_empty: （无请求记录）
+    cache_read: 缓存读取
+    cache_write: 缓存写入
+    cache_hit_rate: 缓存命中率
+    visible_messages: 消息数（可见）
+    tool_calls: 工具调用
+    footnote_visible: 消息数为可见口径 · 工具调用含已隐藏消息
+    footnote_recent: 最近请求为单步真值，与指标条整轮读数不同源
+    metrics_bar_aria: "流式指标，{line}"
+    metrics_bar_aria_desktop: "流式指标：{line}"
+    bucket_line: "{key} · 输入 {input} · 输出 {output} · 调用 {calls} 次"
+    range_picker_title: 选择日期区间
+    range_pick_start: 先选起始日，再选结束日
+    range_pick_end: 已选起始日，请选择结束日
+    date_md: "{month} 月 {day} 日"
+    weekday_mon: 一
+    weekday_tue: 二
+    weekday_wed: 三
+    weekday_thu: 四
+    weekday_fri: 五
+    weekday_sat: 六
+    weekday_sun: 日
+    switch_more: 切换 ›
+    # —— 波 3-2a 补键：统计加载失败与区间校验（TokenUsageStatsScreen） ——
+    load_failed: 加载统计失败
+    requests_load_failed: 加载流水失败
+    hourly_load_failed: 加载小时分布失败
+    range_start_after_end: 自定义区间起始日不能晚于结束日
+    # —— 波 3c-a 补键：波 3-2 MISS 收尾（两端会话累计、M3 图表标签、D3 区间校验与格式异常） ——
+    session_total: 会话累计
+    range_required: 请选择起止日期
+    usage_label: 用量
+    ratio_label: 占比
+    day_hourly_template: "{day} · 按小时分布"
+    format_invalid: 统计数据返回格式异常
+    month_label: "{year} 年 {month} 月"
+  # —— cloud_sync：云同步/云存储/同步进度（mobile CloudSync* + desktop SettingsViews cloud + cloud-sync-progress-ui·CloudSyncProgressPanel） ——

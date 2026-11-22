@@ -18,28 +18,28 @@ import type { Result } from "@/errors/either.js";
  * 缓存的指针也返回 `ok(undefined)`，调用方不必按指针种类分叉。
  */
 export interface PersistentState {
-  getCurrentProjectId(): Promise<Result<string | undefined, AppError>>;
-  setCurrentProjectId(id: string): Promise<Result<void, AppError>>;
-  resetCurrentProjectId(): Promise<void>;
+    getCurrentProjectId(): Promise<Result<string | undefined, AppError>>;
+    setCurrentProjectId(id: string): Promise<Result<void, AppError>>;
+    resetCurrentProjectId(): Promise<void>;
 
-  getCurrentSessionId(): Promise<Result<string | undefined, AppError>>;
-  setCurrentSessionId(id: string): Promise<Result<void, AppError>>;
-  resetCurrentSessionId(): Promise<void>;
+    getCurrentSessionId(): Promise<Result<string | undefined, AppError>>;
+    setCurrentSessionId(id: string): Promise<Result<void, AppError>>;
+    resetCurrentSessionId(): Promise<void>;
 
-  /** CLI-scoped workspace pointer (`nm provider use`); apps may read/reset but do not set. */
-  getCurrentProviderId(): Promise<Result<string | undefined, AppError>>;
-  /** CLI-scoped: `nm provider use` only; mobile/desktop must not call. */
-  setCurrentProviderId(id: string): Promise<Result<void, AppError>>;
-  resetCurrentProviderId(): Promise<void>;
+    /** CLI-scoped workspace pointer (`nm provider use`); apps may read/reset but do not set. */
+    getCurrentProviderId(): Promise<Result<string | undefined, AppError>>;
+    /** CLI-scoped: `nm provider use` only; mobile/desktop must not call. */
+    setCurrentProviderId(id: string): Promise<Result<void, AppError>>;
+    resetCurrentProviderId(): Promise<void>;
 
-  getCurrentModelId(): Promise<Result<string | undefined, AppError>>;
-  setCurrentModelId(id: string): Promise<Result<void, AppError>>;
-  resetCurrentModelId(): Promise<void>;
+    getCurrentModelId(): Promise<Result<string | undefined, AppError>>;
+    setCurrentModelId(id: string): Promise<Result<void, AppError>>;
+    resetCurrentModelId(): Promise<void>;
 
-  /**
+    /**
    * 当前 Agent 指针；实体删除由 {@link import("../../service/agent/agent-registry.port.js").AgentRegistryService} 维护。
    */
-  getCurrentAgentId(): Promise<Result<string | undefined, AppError>>;
-  setCurrentAgentId(id: string): Promise<Result<void, AppError>>;
-  resetCurrentAgentId(): Promise<void>;
+    getCurrentAgentId(): Promise<Result<string | undefined, AppError>>;
+    setCurrentAgentId(id: string): Promise<Result<void, AppError>>;
+    resetCurrentAgentId(): Promise<void>;
 }

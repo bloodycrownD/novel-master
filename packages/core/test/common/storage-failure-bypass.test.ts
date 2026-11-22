@@ -28,55 +28,55 @@ import {  ErrorMessage  } from "../../src/i18n/error-message.js";
 import {  tCore  } from "../helpers/core-i18n.js";
 
 describe("YAML 导入通道的错误标签反转判据（normalizeSmartSortImportError）", () => {
-  it("T-SRTX-D1 DB 故障不被贴「YAML 无效」标签", () => {
-    const dbFailure = new TdbcError("SQLITE_ERROR", "SQLITE_CONSTRAINT: 撞号");
+    it("T-SRTX-D1 DB 故障不被贴「YAML 无效」标签", () => {
+        const dbFailure = new TdbcError("SQLITE_ERROR", "SQLITE_CONSTRAINT: 撞号");
 
-    // 通道语义：命中即原样上抛，不经 normalizeYamlError。
-    const surfaced = Errors.normalizeSmartSortImport(dbFailure);
-    assert.equal(surfaced.message.includes("YAML 无效"), false,
-      "DB 故障不得带上「YAML 无效」标签");
-    // 且必须是**原对象**：端上 `throw` 出去后调用方要能按 TdbcError 拿到 code，
-    // 包一层新 Error 会把 code 丢掉（端上错误分类依赖它）。
-    assert.equal(surfaced, dbFailure,
-      "存储类故障必须原样返回（不得包装），否则端上拿不到 TdbcError.code");
-    assert.equal((surfaced as TdbcError).code, "SQLITE_ERROR",
-      "原样返回 ⇒ code 仍在（这条守住「不包装」）");
-  });
+        // 通道语义：命中即原样上抛，不经 normalizeYamlError。
+        const surfaced = Errors.normalizeSmartSortImport(dbFailure);
+        assert.equal(surfaced.message.includes("YAML 无效"), false,
+            "DB 故障不得带上「YAML 无效」标签");
+        // 且必须是**原对象**：端上 `throw` 出去后调用方要能按 TdbcError 拿到 code，
+        // 包一层新 Error 会把 code 丢掉（端上错误分类依赖它）。
+        assert.equal(surfaced, dbFailure,
+            "存储类故障必须原样返回（不得包装），否则端上拿不到 TdbcError.code");
+        assert.equal((surfaced as TdbcError).code, "SQLITE_ERROR",
+            "原样返回 ⇒ code 仍在（这条守住「不包装」）");
+    });
 
-  it("T-SRTX-D2 YAML 语法错 / schema 违规仍贴「YAML 无效」标签", () => {
-    // YAML 语法错（四期签名：parseText 失败沿 Result.err 回传，不再 throw）。
-    const syntaxParsed = SerializationParseText.parse("rules: [", "yaml");
-    const syntaxErr: unknown = syntaxParsed.ok ? null : syntaxParsed.error;
-    assert.ok(syntaxErr != null, "夹具必须真的失败（否则本条无牙齿）");
-    // 迁移后标签走 descriptor：message 是 key 原文，中文经 userMessageOf +
-    // tCore 渲染（顺带钉住「带 messageKey 的错误能被边界翻译通道识别」）。
-    const syntaxDescriptor = ErrorMessage.userOf(Errors.normalizeSmartSortImport(syntaxErr));
-    assert.ok(syntaxDescriptor != null, "产品错误必须带 messageKey（否则边界翻译拿不到）");
-    assert.match(tCore(syntaxDescriptor), /YAML 无效/);
+    it("T-SRTX-D2 YAML 语法错 / schema 违规仍贴「YAML 无效」标签", () => {
+        // YAML 语法错（四期签名：parseText 失败沿 Result.err 回传，不再 throw）。
+        const syntaxParsed = SerializationParseText.parse("rules: [", "yaml");
+        const syntaxErr: unknown = syntaxParsed.ok ? null : syntaxParsed.error;
+        assert.ok(syntaxErr != null, "夹具必须真的失败（否则本条无牙齿）");
+        // 迁移后标签走 descriptor：message 是 key 原文，中文经 userMessageOf +
+        // tCore 渲染（顺带钉住「带 messageKey 的错误能被边界翻译通道识别」）。
+        const syntaxDescriptor = ErrorMessage.userOf(Errors.normalizeSmartSortImport(syntaxErr));
+        assert.ok(syntaxDescriptor != null, "产品错误必须带 messageKey（否则边界翻译拿不到）");
+        assert.match(tCore(syntaxDescriptor), /YAML 无效/);
 
-    // schema 违规（缺 rules 字段）。四期签名：decode 失败沿 Result.err 回传，不再 throw。
-    const schemaParsed = SmartSortRuleIo.decodeBundle({ nope: 1 });
-    const schemaErr: unknown = schemaParsed.ok ? null : schemaParsed.error;
-    assert.ok(schemaErr != null, "夹具必须真的失败（否则本条无牙齿）");
-    const schemaDescriptor = ErrorMessage.userOf(Errors.normalizeSmartSortImport(schemaErr));
-    assert.ok(schemaDescriptor != null, "产品错误必须带 messageKey");
-    assert.match(tCore(schemaDescriptor), /YAML 无效/);
-  });
+        // schema 违规（缺 rules 字段）。四期签名：decode 失败沿 Result.err 回传，不再 throw。
+        const schemaParsed = SmartSortRuleIo.decodeBundle({ nope: 1 });
+        const schemaErr: unknown = schemaParsed.ok ? null : schemaParsed.error;
+        assert.ok(schemaErr != null, "夹具必须真的失败（否则本条无牙齿）");
+        const schemaDescriptor = ErrorMessage.userOf(Errors.normalizeSmartSortImport(schemaErr));
+        assert.ok(schemaDescriptor != null, "产品错误必须带 messageKey");
+        assert.match(tCore(schemaDescriptor), /YAML 无效/);
+    });
 
-  /**
+    /**
    * 接线牙齿的补充：判据一旦被写成**正向白名单**（只让列举到的错误绕过），
    * 未列举的普通 Error 会被误判成 DB 类 ⇒「YAML 无效」标签从主路径消失。
    * 本条钉住「非 Error 的抛出值也照套前缀」（反转判据的兜底边界）。
    */
-  it("T-SRTX-D3 非 Error 抛出值照套前缀（不因判据放宽而漏标签）", () => {
-    const thrown: unknown = "裸字符串";
-    const surfaced = Errors.normalizeSmartSortImport(thrown);
-    const descriptor = ErrorMessage.userOf(surfaced);
-    assert.ok(descriptor != null, "非 Error 抛出值的产品也必须带 messageKey");
-    // reason = String(裸字符串)，渲染成「标签：裸字符串」（不拼 ": undefined"）
-    assert.equal(
-      tCore(descriptor),
-      "智能排序规则 YAML 无效：裸字符串",
-    );
-  });
+    it("T-SRTX-D3 非 Error 抛出值照套前缀（不因判据放宽而漏标签）", () => {
+        const thrown: unknown = "裸字符串";
+        const surfaced = Errors.normalizeSmartSortImport(thrown);
+        const descriptor = ErrorMessage.userOf(surfaced);
+        assert.ok(descriptor != null, "非 Error 抛出值的产品也必须带 messageKey");
+        // reason = String(裸字符串)，渲染成「标签：裸字符串」（不拼 ": undefined"）
+        assert.equal(
+            tCore(descriptor),
+            "智能排序规则 YAML 无效：裸字符串",
+        );
+    });
 });

@@ -9,8 +9,7 @@
  * @module infra/db-backup/export-database-backup
  */
 
-import type {Interrupt} from "@/errors/outcome.js";
-import {AbortError} from "@/domain/abort/logic/create-abort-error.js";
+import type {Interrupt, Outcome} from "@/errors/outcome.js";
 import type {TdbcConnection} from "../tdbc/ports/connection.port.js";
 import {ProviderTableSnapshotIo} from "./provider-table-snapshot.js";
 
@@ -35,16 +34,19 @@ export const DatabaseBackupExport = {
      * 将数据库导出到指定路径（checkpoint → 拷贝 → 清除服务商三表），无文件对话框。
      * 调用方负责 Agent 守卫、目标路径管理与 busy 互斥。
      *
-     * 取消策略：copy 前调用 `checkpoint`，命中走 AbortError（平台协议例外：Promise
-     * 无 Result 通道），由各端边界转 Outcome.cancelled / IPC_ABORTED。
+     * 取消策略：copy 前调用 `checkpoint`，命中沿返回值上行（Outcome 通道，
+     * Interrupt 是 Outcome 的 cancelled/replaced 分支子集，原样透传），
+     * 由各端边界转 IPC_ABORTED。
      */
-    async toPath(conn: TdbcConnection, destPath: string, deps: ExportDatabaseBackupDeps, checkpoint?: () => Interrupt | null): Promise<void> {
+    async toPath(conn: TdbcConnection, destPath: string, deps: ExportDatabaseBackupDeps, checkpoint?: () => Interrupt | null): Promise<Outcome<void>> {
         await deps.checkpointDatabase(conn);
         const dbPath = await deps.resolveDbPath();
-        if (checkpoint?.() != null) {
-            throw AbortError.create();
+        const hit = checkpoint?.();
+        if (hit != null) {
+            return hit;
         }
         await deps.copyFile(dbPath, destPath);
         await ProviderTableSnapshotIo.scrubInDatabase(conn, destPath, EXPORT_ATTACH_ALIAS);
+        return { kind: "completed", value: undefined };
     },
 } as const;

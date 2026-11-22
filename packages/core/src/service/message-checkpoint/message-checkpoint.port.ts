@@ -10,18 +10,18 @@ import type { AbortScope } from "@/domain/abort/model/abort-scope.js";
  * Captures the session work tree after Agent mutating tools complete.
  */
 export interface MessageCheckpointService {
-  /**
+    /**
    * Records `{ logicalPath → head_version }` for all session files.
    *
    * @remarks No-op when the work tree has zero files (optional per PRD).
    */
-  capture(
-    sessionId: string,
-    projectId: string,
-    messageId: string
-  ): Promise<void>;
+    capture(
+        sessionId: string,
+        projectId: string,
+        messageId: string
+    ): Promise<void>;
 
-  /**
+    /**
    * 给「最后一个有 checkpoint 的消息之后」的空窗消息补 baseline 快照。
    *
    * 用途：Step 9 之前产生的历史消息可能没有 baseline，这里在事务内统一修补。
@@ -40,13 +40,13 @@ export interface MessageCheckpointService {
    *
    *   无取消诉求的调用方传 `AbortScopeFactory.create()` 显式表达「不可取消」。
    */
-  backfillMissingBaselines(
-    sessionId: string,
-    projectId: string,
-    scope: AbortScope
-  ): Promise<void>;
+    backfillMissingBaselines(
+        sessionId: string,
+        projectId: string,
+        scope: AbortScope
+    ): Promise<void>;
 
-  /**
+    /**
    * 删除指定消息的 checkpoint 行（capture 的补偿动作）。
    *
    * 主要给 {@link CoordinatedWrite} 的回滚路径用：当 append + capture 这条链里 capture
@@ -55,5 +55,5 @@ export interface MessageCheckpointService {
    *
    * @remarks 实现可选；不提供时回滚按 no-op 处理（best-effort 约定）。
    */
-  release?(sessionId: string, messageId: string): Promise<void>;
+    release?(sessionId: string, messageId: string): Promise<void>;
 }

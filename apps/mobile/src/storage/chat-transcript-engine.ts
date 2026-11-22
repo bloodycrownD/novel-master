@@ -36,19 +36,19 @@ const DEFAULT_ENGINE: ChatTranscriptEngine = 'webview';
 const ALLOWED_ENGINES: readonly ChatTranscriptEngine[] = ['legacy-rn', 'webview'];
 
 export const ChatTranscriptEngine = {
-  /** 恒为 `webview`（引擎开关已退役，见文件头）。 */
-  default: (): ChatTranscriptEngine => {
-    return DEFAULT_ENGINE;
-  },
+    /** 恒为 `webview`（引擎开关已退役，见文件头）。 */
+    default: (): ChatTranscriptEngine => {
+        return DEFAULT_ENGINE;
+    },
 
-  /**
+    /**
    * 读一次引擎键、**丢弃读到的值**，恒返回 `webview`。
    *
    * 保留读动作是为了让这个键有个显式消费点（理由见文件头），返回值不带任何
    * 分支语义——调用方拿到的永远是 `DEFAULT_ENGINE`。
    */
-  read: async (appUi: AppUiPreferences | null | undefined): Promise<ChatTranscriptEngine> => {
-    await AppUiPrefIo.readEnumPref(appUi, APP_UI_KEY_CHAT_TRANSCRIPT_ENGINE, ALLOWED_ENGINES, DEFAULT_ENGINE);
-    return DEFAULT_ENGINE;
-  },
+    read: async (appUi: AppUiPreferences | null | undefined): Promise<ChatTranscriptEngine> => {
+        await AppUiPrefIo.readEnumPref(appUi, APP_UI_KEY_CHAT_TRANSCRIPT_ENGINE, ALLOWED_ENGINES, DEFAULT_ENGINE);
+        return DEFAULT_ENGINE;
+    },
 } as const;

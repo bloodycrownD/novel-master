@@ -11,107 +11,107 @@ import {join} from 'node:path';
 const mockWebViewProps: Array<Record<string, unknown>> = [];
 
 jest.mock('react-native-webview', () => {
-  const React = require('react');
-  const {View} = require('react-native');
-  return {
-    __esModule: true,
-    default: (props: Record<string, unknown>) => {
-      mockWebViewProps.push(props);
-      return React.createElement(View, {testID: 'webview'});
-    },
-  };
+    const React = require('react');
+    const {View} = require('react-native');
+    return {
+        __esModule: true,
+        default: (props: Record<string, unknown>) => {
+            mockWebViewProps.push(props);
+            return React.createElement(View, {testID: 'webview'});
+        },
+    };
 });
 
 jest.mock('@react-native-clipboard/clipboard', () => ({
-  __esModule: true,
-  default: {setString: jest.fn()},
+    __esModule: true,
+    default: {setString: jest.fn()},
 }));
 
 jest.mock('@/webview-host/webview-asset-uri', () => {
-  const legacy = {
-  getWebViewPackageIndexUri: () => 'file:///rich-document/index.html',
-  getWebViewPackageDirUri: () => 'file:///rich-document/',
+    const legacy = {
+    getWebViewPackageIndexUri: () => 'file:///rich-document/index.html',
+    getWebViewPackageDirUri: () => 'file:///rich-document/',
 };
-  return {...legacy, WebviewAssetUri: {getWebViewPackageDirUri: legacy.getWebViewPackageDirUri, getWebViewPackageIndexUri: legacy.getWebViewPackageIndexUri}};
+    return {...legacy, WebviewAssetUri: {getWebViewPackageDirUri: legacy.getWebViewPackageDirUri, getWebViewPackageIndexUri: legacy.getWebViewPackageIndexUri}};
 });
 
 // mermaid 全屏返回键自注册用（组件不在 NavigationContainer 内渲染；聚焦恒真即可）
 jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({isFocused: () => true}),
-  useFocusEffect: () => {},
+    useNavigation: () => ({isFocused: () => true}),
+    useFocusEffect: () => {},
 }));
 
 jest.mock('@/theme/ThemeProvider', () => ({
-  useTheme: () => ({
-    tokens: {
-      background: '#fff',
-      text: '#111',
-      textSecondary: '#666',
-      primary: '#007aff',
-      surface: '#f2f2f7',
-      borderLight: '#eee',
-    },
-  }),
+    useTheme: () => ({
+        tokens: {
+            background: '#fff',
+            text: '#111',
+            textSecondary: '#666',
+            primary: '#007aff',
+            surface: '#f2f2f7',
+            borderLight: '#eee',
+        },
+    }),
 }));
 
 import {
-  RICH_DOCUMENT_ANNOTATE_MENU_ITEMS,
-  RichDocumentWebView,
+    RICH_DOCUMENT_ANNOTATE_MENU_ITEMS,
+    RichDocumentWebView,
 } from '@/components/vfs/RichDocumentWebView';
 
 describe('RichDocumentWebView annotate（原生菜单 + Recogito 投影）', () => {
-  beforeEach(() => {
-    mockWebViewProps.length = 0;
-  });
-
-  it('annotateEnabled=true 挂 复制/批注 menuItems', () => {
-    act(() => {
-      TestRenderer.create(
-        <RichDocumentWebView
-          html="<p>hello world</p>"
-          annotateEnabled
-          annotations={[
-            {
-              id: 'a1',
-              originalText: 'hello',
-              renderStart: 0,
-              renderEnd: 5,
-            },
-          ]}
-          onRecogitoCreate={jest.fn()}
-        />,
-      );
+    beforeEach(() => {
+        mockWebViewProps.length = 0;
     });
-    const last = mockWebViewProps[mockWebViewProps.length - 1];
-    expect(last?.menuItems).toEqual([...RICH_DOCUMENT_ANNOTATE_MENU_ITEMS]);
-    expect(typeof last?.onCustomMenuSelection).toBe('function');
-  });
 
-  it('annotateEnabled=false 不挂 menuItems', () => {
-    act(() => {
-      TestRenderer.create(
-        <RichDocumentWebView plain="hello" annotateEnabled={false} />,
-      );
+    it('annotateEnabled=true 挂 复制/批注 menuItems', () => {
+        act(() => {
+            TestRenderer.create(
+                <RichDocumentWebView
+                    html="<p>hello world</p>"
+                    annotateEnabled
+                    annotations={[
+                        {
+                            id: 'a1',
+                            originalText: 'hello',
+                            renderStart: 0,
+                            renderEnd: 5,
+                        },
+                    ]}
+                    onRecogitoCreate={jest.fn()}
+                />,
+            );
+        });
+        const last = mockWebViewProps[mockWebViewProps.length - 1];
+        expect(last?.menuItems).toEqual([...RICH_DOCUMENT_ANNOTATE_MENU_ITEMS]);
+        expect(typeof last?.onCustomMenuSelection).toBe('function');
     });
-    const last = mockWebViewProps[mockWebViewProps.length - 1];
-    expect(last?.menuItems).toBeUndefined();
-  });
 
-  it('源码：菜单批注 + inject Recogito 采集；无划词即 createAnnotation', () => {
-    const web = readFileSync(
-      join(__dirname, '../src/components/vfs/RichDocumentWebView.tsx'),
-      'utf8',
-    );
-    const annotate = readFileSync(
-      join(__dirname, '../src/web/rich-document/webview/runtime/annotate.ts'),
-      'utf8',
-    );
-    expect(web).toMatch(/menuItems/);
-    expect(web).toMatch(/RICH_DOCUMENT_ANNOTATE_MENU_ITEMS/);
-    expect(web).toMatch(/__nmCollectRecogitoSelection/);
-    expect(web).toContain('recogitoCreate');
-    expect(annotate).toMatch(/annotatingEnabled:\s*false/);
-    expect(annotate).not.toMatch(/\.on\(\s*['\"]createAnnotation['\"]/);
+    it('annotateEnabled=false 不挂 menuItems', () => {
+        act(() => {
+            TestRenderer.create(
+                <RichDocumentWebView plain="hello" annotateEnabled={false} />,
+            );
+        });
+        const last = mockWebViewProps[mockWebViewProps.length - 1];
+        expect(last?.menuItems).toBeUndefined();
+    });
+
+    it('源码：菜单批注 + inject Recogito 采集；无划词即 createAnnotation', () => {
+        const web = readFileSync(
+            join(__dirname, '../src/components/vfs/RichDocumentWebView.tsx'),
+            'utf8',
+        );
+        const annotate = readFileSync(
+            join(__dirname, '../src/web/rich-document/webview/runtime/annotate.ts'),
+            'utf8',
+        );
+        expect(web).toMatch(/menuItems/);
+        expect(web).toMatch(/RICH_DOCUMENT_ANNOTATE_MENU_ITEMS/);
+        expect(web).toMatch(/__nmCollectRecogitoSelection/);
+        expect(web).toContain('recogitoCreate');
+        expect(annotate).toMatch(/annotatingEnabled:\s*false/);
+        expect(annotate).not.toMatch(/\.on\(\s*['\"]createAnnotation['\"]/);
   });
 });
 

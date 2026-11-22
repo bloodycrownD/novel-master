@@ -134,10 +134,12 @@ const WEBVIEW_CORE_ALLOWLIST = {
     //    **刻意不在**本白名单里——它一旦被 barrel 拖进来就是老 WebView 白屏，门 B 会直接打红。
     'domain/character-card/logic/character-card-limits.js',
     'domain/chat/logic/attachment/render-dir-attach-tree.js',
-    'presentation/chat/attachment-chip.js',
+    // p27 presentation/chat 降级 domain/chat/presentation（descriptor 化；chip-keys 为 action 词表）。
+    'domain/chat/presentation/attachment-chip.js',
+    'domain/chat/presentation/chip-keys.js',
     // attachment-chip 的 rename/move 分类依赖；删了 chip 文案退化为裸 path。
     'domain/chat/logic/message/attachment-path.js',
-    'presentation/chat/tool-summary.js',
+    'domain/chat/presentation/tool-summary.js',
     'domain/chat/logic/vfs-turn/user-vfs-turn-view.js',
     // action XML 唯一 codec：user-vfs-turn-view 解析 VFS 操作卡片正文；删了卡片无内容。
     'domain/vfs/logic/user-vfs-action-xml.js',

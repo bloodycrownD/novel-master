@@ -1,0 +1,273 @@
+  agent:
+    basic_info: 基本信息
+    import_yaml: 导入 YAML
+    export_yaml: 导出 YAML
+    scope: 作用域
+    scope_picker_title: 选择作用域
+    description_hint: 向 task 工具说明这个智能体擅长什么，可留空。
+    description_placeholder: 例如：擅长检索代码库、写测试。
+    description_task_hint: 用于在 task 工具中向主智能体介绍本智能体的能力。
+    tool_mode_default: 默认（全部工具）
+    tool_mode_default_all: 默认（全部）
+    tool_mode_allow: 白名单
+    tool_mode_deny: 黑名单
+    scope_primary: 仅主智能体
+    scope_subagent: 仅子智能体
+    workplace_label: 常驻工作区
+    workplace_hint: 可编辑助手确认语。
+    workplace_disabled_hint: 关闭时不注入项目文件树。
+    assistant_text_label: 助手确认语
+    assistant_text_readonly_hint: 助手确认语（只读）。
+    prompt_template_title: 提示词模版
+    system_label: 系统
+    system_blocks_label: 系统区
+    system_content_label: 系统内容
+    system_prompt_label: 系统提示词
+    enable_system: 启用系统
+    enable_persist: 启用持久区
+    enable_dynamic: 启用动态区
+    persist_blocks_label: 持久区
+    dynamic_blocks_label: 动态区
+    persist_macro_hint: 持久区禁止使用宏。
+    layout_order: 系统 → 技能索引 → 常驻工作区 → 持久区 → 会话历史 → 动态区
+    layout_order_prefix: 纵向顺序与模型组装一致：
+    layout_order_prefix_short: 纵向顺序：
+    system_disabled_hint: 关闭时不写入系统提示词。
+    persist_disabled_hint: 关闭后持久区内容不会发送给 AI，已填写的内容仍保留。
+    dynamic_disabled_hint: 关闭后动态区内容不会发送给 AI，已填写的内容仍保留。
+    system_placeholder: 单段系统级指令…
+    max_steps_label: 最大步数
+    max_steps_hint: 限制单轮任务中模型与工具的往返次数；未填写时默认为 20。
+    max_steps_value: "最大步数 {n}"
+    blocks_empty_hint: 暂无块，点击添加
+    chat_blocks_label: 会话历史
+    chat_tag: 会话消息
+    chat_blocks_short: 会话区
+    chat_readonly_hint: 运行时自动注入当前会话的可见消息，固定位于持久区与动态区之间。不可编辑、不可关闭，始终会发送给 AI。
+    skills_label: 技能索引
+    skills_blocks_label: 技能索引区
+    skills_readonly_hint: 运行时注入生效技能索引。
+    skills_disabled_hint: 关闭后不注入索引且不注册 skill 工具；手动引用 skill 不受影响。
+    block_role_picker_title: 选择角色
+    block_content_aria_persist: "常驻块 {name} 内容"
+    block_content_aria_dynamic: "动态块 {name} 内容"
+    macro_chip: 宏
+    macro_prefix: 宏：
+    attach_toggle_label: 开启自定义附加信息
+    attach_toggle_hint: 用户聊天历史，开启后可给每次输入附加额外内容
+    attach_text_label: 附加信息文本
+    attach_text_label_mobile: 附加信息内容
+    attach_text_hint: 每条用户消息都会附带这段文本给模型
+    attach_macro_hint: 支持 $time、$week_cn、$filetree…
+    blocks_list_label: 块列表
+    tools_section: 工具策略
+    tools_mode_label: 模式
+    tools_mode_picker_title: 工具名单模式
+    select_tools: 选择工具
+    allowlist_label: 白名单工具
+    denylist_label: 黑名单工具
+    builtin_tools_hint: "未配置时使用全部内置工具（{count} 个）：task、read、write、edit、fs、glob、grep、skill、agent、curl、search。"
+    selected_tools_aria: "已选工具（{selected}/{total}）"
+    no_tools_selected: "未选择工具（0/{total}）"
+    all_tools_selected: "全部工具（{total}/{total}）"
+    search_tools_placeholder: 搜索工具…
+    skill_injection_toggle: 开启技能注入与 skill 工具
+    skills_prefix_label: 索引前缀语
+    model_dedicated: 专属模型
+    model_follow_hint: 默认(跟随) 表示使用会话操作抽屉 / 我的里设置的当前模型。
+    model_picker_title: 选择专属模型
+    model_follow_option: 默认(跟随)
+    no_models_hint: 请先在「服务商」页添加模型
+    unresolved_model_warn: "⚠ 原绑定模型当前不可用（{id}）"
+    unresolved_model_hint: 原绑定模型当前不可用（服务商可能已删除或模型列表加载失败），保存将保留原绑定；选择「默认(跟随)」可解除。
+    runtime_section: 运行时
+    unnamed: 未命名 Agent
+    deleted_done: 已删除 Agent
+    template_overwritten: 已用默认模板覆盖并保存
+    back_to_list: 返回列表
+    delete_agent_title: 删除 Agent
+    delete_agent_confirm_msg_named: "删除 Agent「{name}」？"
+    delete_agents_confirm_msg: "确定删除选中的 {count} 个 Agent？"
+    template_overwrite_title: 覆盖为默认模板
+    template_overwrite_msg: 将用默认 prompts 与运行时覆盖当前配置，并保留 Agent ID 与显示名称。是否继续？
+    template_overwrite_confirm: 覆盖并保存
+    saved_done: 已保存智能体配置
+    yaml_exported: 已导出 Agent YAML
+    yaml_import_confirm: 将覆盖当前智能体配置，是否继续？
+    yaml_imported: 已导入 Agent YAML
+    builtin_note_mobile: 内置智能体，不可编辑
+    builtin_note_desktop: 内置智能体，不可编辑——general 为出厂内置的通用子代理，运行时虚拟注入（不落库），主智能体可随时委派调用。
+    edit_title: "编辑 {name}{dirty}"
+    unsaved_suffix: " · 未保存"
+    list_primary_hint: 主智能体可直接选用作为对话主体；标注「全部」的智能体在两个 tab 均可用。
+    list_subagent_hint: 子智能体由主智能体通过任务委派调用；标注「全部」的智能体在两个 tab 均可用。
+    list_primary_empty: 暂无主智能体，点击「新建」创建。
+    list_subagent_empty: 暂无子智能体，点击「新建」创建。
+    list_workspace_suffix: "{label} · 工作区"
+    general_note: 通用助手 · 不可编辑
+    delete_select_title: 选择要删除的 Agent
+    primary_tab: 主智能体
+    subagent_tab: 子智能体
+    rename_title: 重命名 Agent
+    display_name_label: 显示名称
+    agent_name_label: Agent 名称
+    tool_desc_task: 委派子智能体执行子任务（仅主智能体可用）
+    tool_desc_read: 读取工作区文件（支持分页）
+    tool_desc_write: 写入或整文件覆盖
+    tool_desc_edit: 精确查找替换（含尾追）
+    tool_desc_fs: 文件系统命令（ls/rm/mv/cp/mkdir/rmdir）
+    tool_desc_glob: 按 glob 模式查找路径
+    tool_desc_grep: 在工作区文件内容中搜索（支持正则/反选/上下文）
+    tool_desc_skill: 使用与管理技能（load/read/write/edit/list）
+    tool_desc_agent: 管理 agent 定义（list/get/create/update，仅主智能体可用）
+    tool_desc_curl: 发起 http/https 请求获取或提交网页/API 内容，支持自定义方法、请求头与请求体；响应超过 50KB 时自动保存到会话工作区 /tmp/（可用 read 读取）
+    tool_desc_search: 联网搜索：按当前启用的搜索引擎串行检索网页，返回引擎原始结果数据（JSON 文本）；引擎的启用与配置在「设置 → 搜索配置」管理（缺省仅启用内置的 DuckDuckGo 免费搜索，无需配置）
+    # —— 波 3-2a 补键：编辑器校验与失败标题（agent-editor-state 两端共用校验 4 条 + mobile 编辑器 toast） ——
+    name_required: 请填写 Agent 名称
+    assistant_text_required: 请填写常驻工作区助手确认语
+    prompt_block_min: 至少保留一个 Prompt 块
+    dedicated_model_uuid_invalid: 专属模型须为已保存模型的 UUID
+    min_one_agent: 至少保留一个 Agent
+    select_dedicated_model: 请选择专属模型
+    list_load_failed: 加载智能体列表失败
+    overwrite_default_failed: 覆盖默认失败
+    export_yaml_failed: 导出 YAML 失败
+    import_yaml_failed: 导入 YAML 失败
+    # —— 波 3c-a 补键：波 3-2 MISS 收尾（D2 编辑器守卫/加载失败、M1 未找到、D3 新建与批量删除模板） ——
+    agent_id_missing: 缺少 agentId
+    load_failed: 无法加载智能体配置
+    not_found: "未找到 Agent：{agent_id}"
+    new_title: 新建 Agent
+    deleted_count_done: "已删除 {count} 个 Agent"
+    # —— 波 3c-c 补键：3c-b D 线契约对齐新 MISS（SettingsViews 主/子智能体 tab hint） ——
+    primary_scope_hint: 主智能体直接响应用户消息；作用域为「全部」的智能体双 tab 均显示。
+    subagent_scope_hint: 子智能体由主智能体委派调用；内置 general 为通用兜底，不可编辑。
+  # —— provider：服务商/模型管理（mobile Providers*·ProviderForm·FetchModelsSheet·ModelPickerModal + desktop SettingsViews·AddModelModal·FetchModelsModal·settings-ui） ——
+  skills:
+    new_title: 新建技能
+    name_label_plain: 技能名
+    name_label_manage_hint: 技能名（可在管理页重命名）
+    name_label_dir_hint: 技能名（即目录名，可在管理页重命名）
+    name_label_builtin_hint: 技能名（内置技能不可改名）
+    name_example_desktop: 如 lore-style-guide
+    name_example_mobile: 如 worldbuilding-checker
+    desc_required_label: 描述（进入技能索引，必填）
+    desc_label_desktop: 描述（进入技能索引）
+    desc_hint: 进入技能索引，模型据此决定是否使用
+    desc_hint_desktop: 模型会据此决定是否使用该技能
+    domain_label: 存储域
+    domain_global: 全局（所有项目）
+    domain_project: 项目
+    project_label: 所属项目
+    project_picker_title: 选择所属项目
+    no_projects_option: （暂无项目）
+    importing_zip: 从 ZIP 导入…
+    reading_zip: 读取中…
+    zip_imported_info: "已导入 ZIP · {count} 个文件（创建后全部带入）"
+    create_and_edit: 创建并编辑
+    domain_tag_global: 全局
+    domain_tag_overridden: 项目 · 覆盖全局
+    global_tab: 全局技能
+    project_tab: 项目技能
+    domain_section: 技能域
+    global_hint: 全局技能对所有项目生效；同名项目副本会覆盖全局版（仅对无副本的项目生效）。
+    project_hint: 项目技能仅所属项目生效；按所有项目分组展示。
+    global_tab_hint_mobile: 全局技能对所有项目生效。若任意项目存在同名副本，该项目优先使用副本——该全局版仅对无副本的项目生效。
+    project_tab_hint_mobile: 项目技能仅所属项目生效，同名时覆盖全局版。按所有项目分组展示全部项目技能。
+    edit_info: 编辑信息
+    export_zip: 导出 ZIP
+    exported_zip: "已导出「{name}.zip」"
+    delete_title: 删除技能
+    deleted_done: 已删除技能
+    global_delete_warn: 该技能影响所有项目，删除后全部会话不再注入。
+    project_delete_warn: 该技能仅所属项目生效，删除后其他项目不受影响。
+    batch_delete_warn_global: 其中的全局技能影响所有项目，删除后全部会话不再注入。
+    batch_delete_warn_project: 项目技能仅所属项目生效，删除后其他项目不受影响。
+    global_shadow_note: 该全局版仅对没有同名副本的项目生效；有副本的项目使用项目版。
+    overridden_tag: 被项目副本覆盖
+    invalid_tag: "无效 · {reason}"
+    invalid_default_reason: front matter 不合法
+    selected_skills_label: "选中的 {count} 个技能"
+    delete_confirm_named: "删除「{name}」？{scope}"
+    scope_hint_global: 全局技能删除后影响所有项目
+    scope_hint_project_single: "该技能仅在该项目（{project}）生效"
+    scope_hint_project: 项目技能仅所属项目生效
+    select_delete_title: 选择要删除的技能
+    empty_global: 暂无全局技能，点击上方「新建」创建。
+    empty_global_mobile: 暂无全局技能。新建全局技能后所有项目可用。
+    empty_projects_desktop: 暂无项目，先在主导航创建项目。
+    empty_project_desktop: 该项目暂无技能。
+    empty_project_mobile: 暂无项目技能。项目技能仅所属项目生效，同名时覆盖全局版。
+    menu_aria: "技能 {name} 更多操作"
+    skill_aria: "技能 {name}"
+    info_saved: 已保存技能信息
+    file_saved: 已保存技能文件
+    file_entry_protected: SKILL.md 是保留入口文件，不可新建同名文件。
+    file_entry_delete_protected: SKILL.md 是保留入口文件，不可删除。
+    entry_protected_mobile: SKILL.md 是技能入口文件，不能删除或重命名
+    unspecified: 未指定技能。
+    missing_panel: 技能不存在或已删除。
+    missing_toast: 技能不存在或已被删除
+    back_to_manage: 返回技能管理
+    domain_project_line: "项目域 · {project}"
+    domain_global_line: 全局域 · 所有项目生效
+    new_aux_file: 新建辅助文件
+    entry_file_tag: 入口文件
+    delete_file_aria: "删除 {path}"
+    file_mode_label: 技能文件模式
+    editor_title: 技能文件编辑
+    unsaved_hint: 未保存（Ctrl+S 保存）
+    delete_aux_title: 删除辅助文件
+    pick_hint_mobile: 单选插入 $技能名；已关闭技能显式引用后仍生效
+    pick_hint_desktop: 平铺当前项目合并视图，可多选；已关闭的技能仍会注入全文
+    pick_empty: 暂无可用技能
+    pick_empty_project: 当前项目暂无可用技能
+    pick_aria: "选用技能 {name}"
+    pick_ref_aria: "引用技能 {name}"
+    disabled_tag: 已关闭
+    session_panel_back: 返回会话详情
+    domain_tag_project: 项目
+    session_organize: 整理
+    session_enabled_stat: "{enabled}/{valid} 启用"
+    session_empty: 暂无技能。点击「新建」创建项目技能，或在设置·技能管理页维护全局技能。
+    session_toggle_aria: "{action}技能 {name}（仅当前项目）"
+    panel_empty_mobile: 当前项目还没有可用技能。技能是可复用的说明文档，创建后进入提示词索引，模型会按描述决定是否使用。
+    # —— 波 3-2a 补键：面板开关失败与 desktop 辅助文件表单校验（SkillPanelScreen + SkillDetailView） ——
+    enable_failed: 启用失败
+    disable_failed: 关闭失败
+    path_relative_required: 请输入相对路径。
+    path_no_dotdot: 路径不能包含「..」。
+    file_exists: 该文件已存在。
+    # —— 波 3c-a 补键：波 3-2 MISS 收尾（M2 加载失败/NewSkillModal 校验/删除确认 frame + D1/D2 辅助文件） ——
+    load_failed: 加载技能失败
+    aux_deleted: 已删除辅助文件
+    path_relative_label: 相对路径（支持子目录，如 references/x.md）
+    desc_empty: 描述不能为空（进入索引，供模型判断是否使用）
+    project_required: 请选择所属项目
+    zip_root_missing: ZIP 根目录缺少 SKILL.md（导出格式：zip 根即技能目录）
+    domain_name_conflict: "目标域已存在同名技能「{name}」"
+    delete_confirm_frame: "。确定删除{names}？删除会清理整目录与对应禁用记录。"
+  # —— smart_sort：智能排序规则（mobile SmartSort* + desktop SettingsViews 规则库/编辑器） ——
+  prompt:
+    turn_aria: "{action}{role}轮，{summary}"
+    tool_group_aria: "{action}工具调用 {name}"
+    file_preview_aria: "{action}文件预览 {path}"
+    parallel_tag: 并行
+    tool_input_aria: "查看工具入参，{name}"
+    tool_result_aria: "查看工具结果，{name}"
+    leaf_view_aria: "查看{leaf}，{name}"
+    lost_result: 未返回结果
+    status_lost: 丢失
+    mode_full: 全内容
+    mode_filename: 文件名
+    mode_header: 文件头
+    file_full_aria: "查看文件全文 {path}"
+    viewer_hint_mobile: 在聊天工作区调整纳入规则可改变预览内容。点轮卡头部就地展开，点子卡进入全屏阅读。
+    viewer_hint_desktop: 在会话工作区调整纳入规则可改变预览内容。点轮卡头部就地展开，点子卡进入全屏阅读。
+    fullscreen_aria: "{title}详情"
+    input_label: 入参
+    empty_prompt: （空提示词）
+    empty_value: （空）
+    # —— 波 3c-a 补键：波 3-2 MISS 收尾（M2 RealPrompt 项目/会话守卫） ——
+    select_project_session: 请先选择项目与会话
+  # —— stats：数据统计/用量详情/图表/区间选择（mobile TokenUsageStats*·charts + desktop TokenUsageStatsView + 两端 metrics 条与详情表） ——

@@ -26,10 +26,10 @@ type ForkCopySeedError = AppError;
 
 /** {@link ForkCopySeeder.seed} 入参。 */
 interface SeedForkCopyParityInput {
-  readonly projectId: string;
-  readonly sourceSessionId: string;
-  readonly targetSessionId: string;
-  readonly newMessages: ReadonlyArray<{ readonly id: string }>;
+    readonly projectId: string;
+    readonly sourceSessionId: string;
+    readonly targetSessionId: string;
+    readonly newMessages: ReadonlyArray<{ readonly id: string }>;
 }
 
 /**
@@ -40,84 +40,84 @@ interface SeedForkCopyParityInput {
  *
  * @remarks 禁止嵌套调用 MessageCheckpointService.capture；禁止指望 backfill 播种。
  */
-class ForkCopySeeder {
-  /** 缺 blob 是可恢复失败（事务由调用方回滚），返回 `Err`；copyScope 的失败（含 mapper 路径非法）同样经 `Err` 透传，由事务回调解包抛出触发回滚（总纲 §五例外 2）。 */
-  async seed(tx: TdbcConnection, input: SeedForkCopyParityInput): Promise<Result<void, ForkCopySeedError>> {
-    const entries = new SqliteVfsEntryRepository(tx);
-    const contentStore = new SqliteVfsContentStore(tx);
-    const revisions = new SqliteVfsRevisionRepository(tx);
-    const workplace = new SqliteWorkplaceRepository(tx);
-    const checkpoints = new SqliteMessageCheckpointRepository(tx);
+export const ForkCopySeeder = {
 
-    const { projectId, sourceSessionId, targetSessionId, newMessages } = input;
-    const targetScopeKey = LogicalPath.scopeKey({ kind: "session", projectId, sessionId: targetSessionId });
+    /** 缺 blob 是可恢复失败（事务由调用方回滚），返回 `Err`；copyScope 的失败（含 mapper 路径非法）同样经 `Err` 透传，由事务回调解包抛出触发回滚（总纲 §五例外 2）。 */
+    async seed(tx: TdbcConnection, input: SeedForkCopyParityInput): Promise<Result<void, ForkCopySeedError>> {
+        const entries = new SqliteVfsEntryRepository(tx);
+        const contentStore = new SqliteVfsContentStore(tx);
+        const revisions = new SqliteVfsRevisionRepository(tx);
+        const workplace = new SqliteWorkplaceRepository(tx);
+        const checkpoints = new SqliteMessageCheckpointRepository(tx);
 
-    const heads = await SessionFiles.listHeads(entries, projectId, targetSessionId);
+        const { projectId, sourceSessionId, targetSessionId, newMessages } = input;
+        const targetScopeKey = LogicalPath.scopeKey({ kind: "session", projectId, sessionId: targetSessionId });
 
-    // 批量取会话 scope 下所有文件 entry 的 meta（entryId → contentHash/mtime），
-    // 消掉对每个 head 逐条 findByPath / findContentHash 的冗余全表探测。
-    const scanned = await entries.scanFileEntriesWithMeta(targetScopeKey, "/");
-    if (!scanned.ok) return Result.err(scanned.error);
-    const metaByEntryId = new Map(scanned.value.map((m) => [m.entryId, m]));
+        const heads = await SessionFiles.listHeads(entries, projectId, targetSessionId);
 
-    if (heads.length > 0) {
-      // 批量验 blob 存在性：同库 fork/copy 时 copyVfsTree 已确保 blob 落位，
-      // 一次 IN 查询替代逐 head ensureBlob；缺失时保持与 ensureBlob 相同的报错语义。
-      const hashes = [...new Set(heads.map((h) => metaByEntryId.get(h.entryId)?.contentHash).filter((h): h is string => h != null))];
-      if (hashes.length > 0) {
-        const existingBlobs = await contentStore.findExistingBlobHashes(hashes);
-        const missing = hashes.find((h) => !existingBlobs.has(h));
-        if (missing != null) {
-          return Result.err(new AppError("VFS_CONTENT_BLOB_MISSING", { detail: `vfs_content_blob 缺失且无可回退明文: ${missing}` }));
+        // 批量取会话 scope 下所有文件 entry 的 meta（entryId → contentHash/mtime），
+        // 消掉对每个 head 逐条 findByPath / findContentHash 的冗余全表探测。
+        const scanned = await entries.scanFileEntriesWithMeta(targetScopeKey, "/");
+        if (!scanned.ok) return Result.err(scanned.error);
+        const metaByEntryId = new Map(scanned.value.map((m) => [m.entryId, m]));
+
+        if (heads.length > 0) {
+            // 批量验 blob 存在性：同库 fork/copy 时 copyVfsTree 已确保 blob 落位，
+            // 一次 IN 查询替代逐 head ensureBlob；缺失时保持与 ensureBlob 相同的报错语义。
+            const hashes = [...new Set(heads.map((h) => metaByEntryId.get(h.entryId)?.contentHash).filter((h): h is string => h != null))];
+            if (hashes.length > 0) {
+                const existingBlobs = await contentStore.findExistingBlobHashes(hashes);
+                const missing = hashes.find((h) => !existingBlobs.has(h));
+                if (missing != null) {
+                    return Result.err(new AppError("VFS_CONTENT_BLOB_MISSING", { detail: `vfs_content_blob 缺失且无可回退明文: ${missing}` }));
+                }
+            }
+
+            // 一次批量 INSERT 落全部 revision（ref_count 直接置 1，等价于逐条
+            // append + RevisionRefCount.adjust(+1)，且省去 RevisionRefCount.adjust 的存在性回查）。
+            const now = Date.now();
+            const items = heads.map((head) => {
+                const meta = metaByEntryId.get(head.entryId);
+                if (meta == null) {
+                    // entry 缺失 / 非文件行，钉 deleted revision 兜底，防止脏 head 污染
+                    return {
+                        entryId: head.entryId,
+                        version: head.headVersion,
+                        contentHash: null,
+                        status: "deleted",
+                        mtimeMs: now,
+                        refCount: 1,
+                    };
+                }
+                return {
+                    entryId: head.entryId,
+                    version: head.headVersion,
+                    contentHash: meta.contentHash,
+                    status: "active",
+                    mtimeMs: meta.mtimeMs,
+                    refCount: 1,
+                };
+            });
+            await revisions.batchAppendWithRefCount(items);
         }
-      }
 
-      // 一次批量 INSERT 落全部 revision（ref_count 直接置 1，等价于逐条
-      // append + RevisionRefCount.adjust(+1)，且省去 RevisionRefCount.adjust 的存在性回查）。
-      const now = Date.now();
-      const items = heads.map((head) => {
-        const meta = metaByEntryId.get(head.entryId);
-        if (meta == null) {
-          // entry 缺失 / 非文件行，钉 deleted revision 兜底，防止脏 head 污染
-          return {
-            entryId: head.entryId,
-            version: head.headVersion,
-            contentHash: null,
-            status: "deleted",
-            mtimeMs: now,
-            refCount: 1,
-          };
+        const sourceScope = WorkplaceScope.key({ kind: "session", projectId, sessionId: sourceSessionId });
+        const targetScope = WorkplaceScope.key({ kind: "session", projectId, sessionId: targetSessionId });
+        const copied = await workplace.copyScope(sourceScope, targetScope, (p) => PathNormalizer.normalize(p));
+        if (!copied.ok) {
+            return Result.err(copied.error);
         }
-        return {
-          entryId: head.entryId,
-          version: head.headVersion,
-          contentHash: meta.contentHash,
-          status: "active",
-          mtimeMs: meta.mtimeMs,
-          refCount: 1,
-        };
-      });
-      await revisions.batchAppendWithRefCount(items);
-    }
 
-    const sourceScope = WorkplaceScope.key({ kind: "session", projectId, sessionId: sourceSessionId });
-    const targetScope = WorkplaceScope.key({ kind: "session", projectId, sessionId: targetSessionId });
-    const copied = await workplace.copyScope(sourceScope, targetScope, (p) => PathNormalizer.normalize(p));
-    if (!copied.ok) {
-      return Result.err(copied.error);
-    }
+        if (heads.length === 0 || newMessages.length === 0) {
+            return Result.ok(undefined);
+        }
 
-    if (heads.length === 0 || newMessages.length === 0) {
-      return Result.ok(undefined);
-    }
+        const files = heads.map((h) => ({ entryId: h.entryId, revisionVersion: h.headVersion, path: h.logicalPath }));
+        const createdAtMs = Date.now();
+        // 批量播种：一次性写入所有消息的 checkpoint 锚点 + 文件指针 + ref_count，
+        // 替代逐条 insertCheckpoint 循环。200 文件 × 500 消息从 ~1.8s 降到百毫秒级。
+        await checkpoints.seedCheckpoints(targetSessionId, newMessages, files, createdAtMs);
+        return Result.ok(undefined);
+    },
+} as const;
 
-    const files = heads.map((h) => ({ entryId: h.entryId, revisionVersion: h.headVersion, path: h.logicalPath }));
-    const createdAtMs = Date.now();
-    // 批量播种：一次性写入所有消息的 checkpoint 锚点 + 文件指针 + ref_count，
-    // 替代逐条 insertCheckpoint 循环。200 文件 × 500 消息从 ~1.8s 降到百毫秒级。
-    await checkpoints.seedCheckpoints(targetSessionId, newMessages, files, createdAtMs);
-    return Result.ok(undefined);
-  }
-}
-
-export const forkCopySeeder = new ForkCopySeeder();

@@ -7,16 +7,16 @@ import { MockOpSqliteAdapter } from "./mock-adapter.js";
 const driver = new OpSqliteDriver(new MockOpSqliteAdapter());
 
 ConformanceSuite.run({
-  createConnection: async () =>
-    driver.open({ filename: ":memory:", driver: OPSQLITE_DRIVER_NAME }),
-  beforeUnknownDriverTest: () => {
-    TdbcRegistry.clear();
-  },
-  afterUnknownDriverTest: () => {
-    /* C11 only; other tests use injected driver directly */
-  },
+    createConnection: async () =>
+        driver.open({ filename: ":memory:", driver: OPSQLITE_DRIVER_NAME }),
+    beforeUnknownDriverTest: () => {
+        TdbcRegistry.clear();
+    },
+    afterUnknownDriverTest: () => {
+        /* C11 only; other tests use injected driver directly */
+    },
 });
 
 describe("op-sqlite driver conformance harness", () => {
-  /* nested describes registered by ConformanceSuite.run */
+    /* nested describes registered by ConformanceSuite.run */
 });

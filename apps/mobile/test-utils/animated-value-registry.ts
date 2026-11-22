@@ -19,17 +19,17 @@ const listeners = new Set<Listener>();
 
 /** 通知所有订阅者：某个测试注入的动画值发生了变化。 */
 export function notifyAnimatedValuesChanged(): void {
-  // 复制一份再遍历：react 回调里可能 subscribe/unsubscribe（重挂场景），
-  // 直接遍历 Set 会撞上「遍历中修改」。
-  for (const listener of Array.from(listeners)) {
-    listener();
-  }
+    // 复制一份再遍历：react 回调里可能 subscribe/unsubscribe（重挂场景），
+    // 直接遍历 Set 会撞上「遍历中修改」。
+    for (const listener of Array.from(listeners)) {
+        listener();
+    }
 }
 
 /** 订阅动画值变更；返回取消订阅函数。 */
 export function subscribeAnimatedValues(listener: Listener): () => void {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
+    listeners.add(listener);
+    return () => {
+        listeners.delete(listener);
+    };
 }

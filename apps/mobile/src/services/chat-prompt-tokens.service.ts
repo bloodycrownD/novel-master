@@ -7,7 +7,7 @@
  * {@link TokenCounterMode.resolveForModel} → `CurrentPromptTokens.resolve`（API 优先，否则本地）。
  * {@link ChatPromptTokenLabel.loadResilient} falls back to visible-message heuristic
  * (`counterKind: "heuristic"`) when {@link buildSessionPromptInputAdapter} reports
- * `Result.err`（错误通道迁移四期；bail 哨兵仍走 throw，见同文件 isChipBailError）。
+ * `Result.err`（错误通道迁移四期）；bail 弃权沿 build 的 null 哨兵到达（error-matrix-final R3）。
  *
  * stream-metrics-native ④：两处「拿不到模型 / 构建失败」的早退路径原本走
  * `runtime.tokenCounters.heuristic.countText`（`ceil(字符数 / 3.35)`）。该折算
@@ -34,7 +34,6 @@ import type {MobileNovelMasterRuntime} from '@/runtime/types';
 // 对拍 core 真实现而非 mock 行为）。
 import {TokenFormat} from '@novel-master/core/common';
 import {LogFactory} from '@novel-master/core/log';
-import {ChatPromptBuildBailedError} from '@novel-master/core';
 import {SessionPromptInputService} from './session-prompt-input.service';
 import type {SessionPromptScope} from './session-prompt-input.service';
 
@@ -45,37 +44,39 @@ type SessionId = string | null | undefined;
 type BailCheck = () => boolean;
 
 /**
+ * resolve 读口的弃权判据（错误通道迁移二期）：core 读口不再抛哨兵、改收
+ * Interrupt——run 在途即本轮刷新被在途 run 取代，收成 replaced。无判据时
+ * 恒 null（与不传同义，core 恒不弃权）。
+ */
+function resolveBailInterrupt(shouldBail?: BailCheck): Interrupt | null {
+    return shouldBail != null && shouldBail() === true ? {kind: 'replaced'} : null;
+}
+
+/**
  * 占用标签（源记号 + =/≈ 连接符 + pct + 占比）由 core 的
  * `TokenFormat.sourceBadge` + `TokenFormat.contextUsageLabel` 统一给出，
  * 本文件不再自备一份映射（与 desktop main 的 buildTokenStats 同源同形）。
  */
 type TokenLabelResult = {
-  tokenCount: number;
-  estimated: boolean;
-  counterKind: string;
-  source?: 'api' | 'local';
-  contextWindow?: number;
+    tokenCount: number;
+    estimated: boolean;
+    counterKind: string;
+    source?: 'api' | 'local';
+    contextWindow?: number;
 };
 
 /** 一帧标签读数：`label === ''` 是「中途弃权」哨兵（hook 对空串不写 meta）。 */
 type TokenLabelFrame = {
-  label: string;
-  upgradeWorthy: boolean;
-  savedModelId?: string;
+    label: string;
+    upgradeWorthy: boolean;
+    savedModelId?: string;
 };
 
-/**
- * chip 中途弃权的哨兵错误判定：build 段（ChatPromptBuildBailedError）。resolve
- * 段自错误通道迁移二期起不再抛哨兵——core 读口沿 Outcome.cancelled/replaced
- * 返回，调用点按 kind 收成空串哨兵，不走本判定。build 调用点必须用本判定
- * 收口——漏了弃权错误会逃逸成外层 rejection 并回落 fallback（重算一遍，
- * 恰是要避免的）。
- */
 /**
  * 会话首帧/两阶段的 token 占用标签读口（load 家族：单发 / resilient / fallback）。
  */
 export const ChatPromptTokenLabel = {
-  /**
+    /**
    * 兜底口径的 token 数：真 cl100k 计数优先，编码表建不起来才退回字符折算。
    *
    * 为什么不直接用 `runtime.tokenCounters.heuristic.countText`：那个 port 是
@@ -83,318 +84,311 @@ export const ChatPromptTokenLabel = {
    * 有可用的真分词器（且会话切换时已被 `primeStreamTokenModelHint` 空闲预热过
    * cl100k 兜底表），用它没有额外成本。
    */
-  countFallback: (rt: MobileNovelMasterRuntime, text: string): number => {
-    const real = EncodingCache.countText(text);
-    if (real != null) {
-      return real;
-    }
-    return rt.tokenCounters.heuristic.countText(text);
-  },
+    countFallback: (rt: MobileNovelMasterRuntime, text: string): number => {
+        const real = EncodingCache.countText(text);
+        if (real != null) {
+            return real;
+        }
+        return rt.tokenCounters.heuristic.countText(text);
+    },
 
-  /**
+    /**
    * 占用标签（源记号 + =/≈ 连接符 + pct + 占比）由 core 的
    * `TokenFormat.sourceBadge` + `TokenFormat.contextUsageLabel` 统一给出。
    */
-  format: (r: TokenLabelResult): string => {
-    const badge = TokenFormat.sourceBadge(r.source, r.counterKind, r.estimated);
-    return TokenFormat.contextUsageLabel(r.tokenCount, r.contextWindow, badge);
-  },
+    format: (r: TokenLabelResult): string => {
+        const badge = TokenFormat.sourceBadge(r.source, r.counterKind, r.estimated);
+        return TokenFormat.contextUsageLabel(r.tokenCount, r.contextWindow, badge);
+    },
 
-  /**
+    /**
    * 单发标签（完整口径：api 优先、miss 走家族计数器）。两阶段 UI 刷新用
    * {@link loadResilient}；本函数留给单测与一次性取数场景。
    */
-  // nm-style: keep-local — 导出签名（runtime 长类型 + scope 类型）单行化超 80 列
-  load: async (runtime: MobileNovelMasterRuntime, scope: SessionPromptScope): Promise<Result<string, AppError>> => {
-    return (await ChatPromptTokenLabel.loadWithFlag(runtime, scope, false)).map(frame => frame.label);
-  },
+    // nm-style: keep-local — 导出签名（runtime 长类型 + scope 类型）单行化超 80 列
+    load: async (runtime: MobileNovelMasterRuntime, scope: SessionPromptScope): Promise<Result<string, AppError>> => {
+        return (await ChatPromptTokenLabel.loadWithFlag(runtime, scope, false)).map(frame => frame.label);
+    },
 
-  /**
+    /**
    * chip 中途弃权的哨兵错误判定实现载体（见上方 module 注释）。
    */
-  // nm-style: keep-local — 四参签名（runtime 长类型 + scope 类型 + bail）单行化超 80 列
-  loadWithFlag: async (runtime: MobileNovelMasterRuntime, scope: SessionPromptScope, preferEstimate: boolean, shouldBail?: BailCheck): Promise<Result<TokenLabelFrame, AppError>> => {
-    // chip 链分段计时（__DEV__ 诊断，logcat 过滤 [nm-chip]）：2026-09-30 停止
-    // 失灵/压缩跳变两轮定位的关键读数（build=整串装配 / resolve=读口含 KKV）。
-    const t0 = Date.now();
-    const opt = shouldBail != null ? {shouldBail} : undefined;
-    // resolve 读口的弃权判据（错误通道迁移二期）：core 读口不再抛哨兵、改收
-    // Interrupt——run 在途即本轮刷新被在途 run 取代，收成 replaced。无判据时
-    // 恒 null（与不传同义，core 恒不弃权）。
-    const resolveBail = (): Interrupt | null => (shouldBail != null && shouldBail() === true ? {kind: 'replaced'} : null);
-    let bundle;
-    try {
-      bundle = await SessionPromptInputService.build(runtime, scope, undefined, opt);
-    } catch (error) {
-      if (error instanceof ChatPromptBuildBailedError) {
-        // run 起步后中途弃权：label 空串是「保留旧标签」哨兵（hook 侧对空串
-        // 不写 meta），不走 fallback——fallback 会再算一遍，恰是要避免的。
-        if (__DEV__) {
-          console.log('[nm-chip] bailed (run in flight)');
+    // nm-style: keep-local — 四参签名（runtime 长类型 + scope 类型 + bail）单行化超 80 列
+    loadWithFlag: async (runtime: MobileNovelMasterRuntime, scope: SessionPromptScope, preferEstimate: boolean, shouldBail?: BailCheck): Promise<Result<TokenLabelFrame, AppError>> => {
+        // chip 链分段计时（__DEV__ 诊断，logcat 过滤 [nm-chip]）：2026-09-30 停止
+        // 失灵/压缩跳变两轮定位的关键读数（build=整串装配 / resolve=读口含 KKV）。
+        const t0 = Date.now();
+        const opt = shouldBail != null ? {shouldBail} : undefined;
+        const bundle = await SessionPromptInputService.build(runtime, scope, undefined, opt);
+        if (!bundle.ok) {
+            // build 链已知失败（错误通道迁移四期）：沿 Result 通道上抛，调用方
+            // resilient 按 !ok 回落 fallback（与旧异常通道同终端）。
+            return Result.err(bundle.error);
         }
-        return Result.ok({label: '', upgradeWorthy: false});
-      }
-      throw error;
-    }
-    if (!bundle.ok) {
-      // build 链已知失败（错误通道迁移四期）：沿 Result 通道上抛，调用方
-      // resilient 按 !ok 回落 fallback（与旧异常通道同终端）。
-      return Result.err(bundle.error);
-    }
-    const {definition, layout, ctx, rawMessages} = bundle.value;
-    if (__DEV__) {
-      const msg = `[nm-chip] build ${Date.now() - t0}ms est=${preferEstimate}`;
-      console.log(msg);
-    }
-    // 弃权检查点（build/resolve 关键边界，r3-chip-1）：build 的分段 bail 只管得到
-    // build 段内部，最后一段 bail 到 resolve 派发之间还夹着 getSessionAgentConfig、
-    // 模型解析、resolveTokenCounterModeForModel 三次 IO——run 起步的
-    // 窗口正落在这里。命中即按空串哨兵收场，绝不放行到 resolve。
-    if (shouldBail?.() === true) {
-      if (__DEV__) {
-        console.log('[nm-chip] bailed at build/resolve boundary');
-      }
-      return Result.ok({label: '', upgradeWorthy: false});
-    }
-    const conf = await runtime.sessions.getSessionAgentConfig(scope.sessionId);
-    if (!conf.ok) return Result.err(conf.error);
-    const savedModelId = definition.model ?? conf.value.modelId;
-    if (!savedModelId) {
-      // 已知残留（r3-chip-1 留痕，刻意不补 bail）：无模型早退分支的 serialize +
-      // countFallback 整串级重活没有弃权点。理由——① 这一分支只统计可见
-      // 消息正文、不做整串装配，量级比 resolve 段小一个数量级；② 无模型即无
-      // 会话升级价值，丢掉这轮读数没有损失（下一轮刷新自然补上）。真要补也不难，
-      // 但会让「无 bail 分支」这个例外从注释升格成需要长期维护的分支。
-      const serialized = await serializePromptLlmInput(layout, ctx);
-      if (!serialized.ok) return Result.err(serialized.error);
-      const count = ChatPromptTokenLabel.countFallback(runtime, serialized.value);
-      return Result.ok({
-        label: ChatPromptTokenLabel.format({
-          tokenCount: count,
-          estimated: true,
-          counterKind: 'heuristic',
-          source: 'local',
-        }),
-        upgradeWorthy: false,
-      });
-    }
-    const models = runtime.providerModels;
-    const counterMode = await TokenCounterMode.resolveForModel(models, savedModelId);
-    // 已知失败沿 Result 接力（错误通道迁移四期）：首帧轮由 resilient 的 !ok
-    // 分支回落 fallback（与旧异常通道同终端），升级轮由 run 的
-    // !ok 分支留痕返回。
-    if (!counterMode.ok) return Result.err(counterMode.error);
-    const mode = counterMode.value;
-    // resolve 段（含 ~5.8s 级原生整串计数）同样要能中途弃权（r3-chip-1，错误
-    // 通道迁移二期改返回值）：core 在两处整串级重活之前检查 shouldBail，命中沿
-    // Outcome.cancelled/replaced 返回，这里收成空串哨兵——不重试、不回落
-    // fallback（重算一遍恰是要避免的竞争）；其余异常仍走外层 catch。
-    let result;
-    try {
-      const resolveRequest: CountPromptLlmInputParams = {
-        layout,
-        ctx,
-        savedModelId,
-        registry: runtime.tokenCounters,
-        tokenizerOverride: mode,
-        savedModels: {
-          findById: async id => {
-            const saved = await runtime.providerModels.getSavedById(id);
-            return saved;
-          },
-        },
-      };
-      const resolveOptions: Parameters<typeof PromptTokens.resolve>[3] = {
-        sessionKkv: runtime.sessionKkv,
-        ...(preferEstimate ? {preferEstimate: true} : {}),
-        // r3-chip-1：resolve 段的弃权判据透传给 core 读口。core 在两处整串级
-        // 重活之前（preferEstimate 序列化之前 / countPromptLlmInput 之前）检查
-        // 它，命中沿 Outcome.cancelled/replaced 返回——按 kind 收成空串哨兵。
-        shouldBail: resolveBail,
-      };
-      const resultPromise = PromptTokens.resolve(scope.sessionId, rawMessages, resolveRequest, resolveOptions);
-      const outcome = await resultPromise;
-      if (outcome.kind === 'failed') {
-        // core 读口的已知失败（现无产出路径）：沿 Result 通道上抛，不吞成弃权。
-        return Result.err(outcome.error);
-      }
-      if (outcome.kind !== 'completed') {
-        // 中途弃权（run 起步）：core 不再抛哨兵，收成空串哨兵。
-        if (__DEV__) {
-          console.log('[nm-chip] bailed during resolve (run in flight)');
+        if (bundle.value == null) {
+            // run 起步后中途弃权（error-matrix-final R3：弃权沿 null 哨兵到达）：
+            // label 空串是「保留旧标签」哨兵（hook 侧对空串不写 meta），不走
+            // fallback——fallback 会再算一遍，恰是要避免的。
+            if (__DEV__) {
+                console.log('[nm-chip] bailed (run in flight)');
+            }
+            return Result.ok({label: '', upgradeWorthy: false});
         }
-        return Result.ok({label: '', upgradeWorthy: false});
-      }
-      result = outcome.value;
-    } catch (error) {
-      if (error instanceof PromptCountCancelledError) {
-        // 取消收口（tokenizer-native-cancel）：在途原生计数被 cancelPreciseUpgrade
-        // 撤掉。与 bail 同款收成空串哨兵——不重试、不回落 fallback（重算一遍等于
-        // 取消白做），也不打 warn（取消不是失败）。
+        const {definition, layout, ctx, rawMessages} = bundle.value;
         if (__DEV__) {
-          console.log('[nm-chip] cancelled during resolve');
+            const msg = `[nm-chip] build ${Date.now() - t0}ms est=${preferEstimate}`;
+            console.log(msg);
         }
-        return Result.ok({label: '', upgradeWorthy: false});
-      }
-      throw error;
-    }
-    const window = await runtime.providerModels.getContextWindow(savedModelId);
-    // 已知失败沿 Result 接力（错误通道迁移四期）：同 counterMode 口径。
-    if (!window.ok) return Result.err(window.error);
-    const cw = window.value;
-    if (__DEV__) {
-      const msg = `[nm-chip] resolve ${Date.now() - t0}ms est=${preferEstimate}`;
-      console.log(msg);
-    }
-    return Result.ok({
-      label: ChatPromptTokenLabel.format({...result, contextWindow: cw ?? undefined}),
-      upgradeWorthy: result.source === 'local' && result.estimated,
-      // 模型身份随首帧带出：升级轮用它区分「切模型」（旧轮读数必被丢弃，可取消）
-      // 与「同模型的内容变化」（旧轮仍值得跑完，靠补跑槽收敛）。
-      savedModelId,
-    });
-  },
-
-  // nm-style: keep-public — chat-prompt-tokens.test.ts 直接 import 断言（含 Parameters<typeof> 类型引用与 5 个 scope 测试 mock 注入）
-  loadResilient: async (runtime: MobileNovelMasterRuntime, scope: SessionPromptScope, options?: TokenLabelOptions): Promise<Result<string, AppError>> => {
-    let first: Result<TokenLabelFrame, AppError>;
-    const bail = options?.shouldBail;
-    try {
-      first = await ChatPromptTokenLabel.loadWithFlag(runtime, scope, true, bail);
-      if (!first.ok) {
-        // 首帧已知失败（错误通道迁移四期）：与未知异常同款回落 fallback。
-        upgradeLog.warn('prompt count failed, message fallback', {
-          sessionId: scope.sessionId,
-          error: first.error,
+        // 弃权检查点（build/resolve 关键边界，r3-chip-1）：build 的分段 bail 只管得到
+        // build 段内部，最后一段 bail 到 resolve 派发之间还夹着 getSessionAgentConfig、
+        // 模型解析、resolveTokenCounterModeForModel 三次 IO——run 起步的
+        // 窗口正落在这里。命中即按空串哨兵收场，绝不放行到 resolve。
+        if (shouldBail?.() === true) {
+            if (__DEV__) {
+                console.log('[nm-chip] bailed at build/resolve boundary');
+            }
+            return Result.ok({label: '', upgradeWorthy: false});
+        }
+        const conf = await runtime.sessions.getSessionAgentConfig(scope.sessionId);
+        if (!conf.ok) return Result.err(conf.error);
+        const savedModelId = definition.model ?? conf.value.modelId;
+        if (!savedModelId) {
+            // 已知残留（r3-chip-1 留痕，刻意不补 bail）：无模型早退分支的 serialize +
+            // countFallback 整串级重活没有弃权点。理由——① 这一分支只统计可见
+            // 消息正文、不做整串装配，量级比 resolve 段小一个数量级；② 无模型即无
+            // 会话升级价值，丢掉这轮读数没有损失（下一轮刷新自然补上）。真要补也不难，
+            // 但会让「无 bail 分支」这个例外从注释升格成需要长期维护的分支。
+            const serialized = await serializePromptLlmInput(layout, ctx);
+            if (!serialized.ok) return Result.err(serialized.error);
+            const count = ChatPromptTokenLabel.countFallback(runtime, serialized.value);
+            return Result.ok({
+                label: ChatPromptTokenLabel.format({
+                    tokenCount: count,
+                    estimated: true,
+                    counterKind: 'heuristic',
+                    source: 'local',
+                }),
+                upgradeWorthy: false,
+            });
+        }
+        const models = runtime.providerModels;
+        const counterMode = await TokenCounterMode.resolveForModel(models, savedModelId);
+        // 已知失败沿 Result 接力（错误通道迁移四期）：首帧轮由 resilient 的 !ok
+        // 分支回落 fallback（与旧异常通道同终端），升级轮由 run 的
+        // !ok 分支留痕返回。
+        if (!counterMode.ok) return Result.err(counterMode.error);
+        const mode = counterMode.value;
+        // resolve 段（含 ~5.8s 级原生整串计数）同样要能中途弃权（r3-chip-1，错误
+        // 通道迁移二期改返回值）：core 在两处整串级重活之前检查 shouldBail，命中沿
+        // Outcome.cancelled/replaced 返回，这里收成空串哨兵——不重试、不回落
+        // fallback（重算一遍恰是要避免的竞争）；其余异常仍走外层 catch。
+        let result;
+        try {
+            const resolveRequest: CountPromptLlmInputParams = {
+                layout,
+                ctx,
+                savedModelId,
+                registry: runtime.tokenCounters,
+                tokenizerOverride: mode,
+                savedModels: {
+                    findById: async id => {
+                        const saved = await runtime.providerModels.getSavedById(id);
+                        return saved;
+                    },
+                },
+            };
+            const resolveOptions: Parameters<typeof PromptTokens.resolve>[3] = {
+                sessionKkv: runtime.sessionKkv,
+                ...(preferEstimate ? {preferEstimate: true} : {}),
+                // r3-chip-1：resolve 段的弃权判据透传给 core 读口。core 在两处整串级
+                // 重活之前（preferEstimate 序列化之前 / countPromptLlmInput 之前）检查
+                // 它，命中沿 Outcome.cancelled/replaced 返回——按 kind 收成空串哨兵。
+                shouldBail: () => resolveBailInterrupt(shouldBail),
+            };
+            const resultPromise = PromptTokens.resolve(scope.sessionId, rawMessages, resolveRequest, resolveOptions);
+            const outcome = await resultPromise;
+            if (outcome.kind === 'failed') {
+                // core 读口的已知失败（现无产出路径）：沿 Result 通道上抛，不吞成弃权。
+                return Result.err(outcome.error);
+            }
+            if (outcome.kind !== 'completed') {
+                // 中途弃权（run 起步）：core 不再抛哨兵，收成空串哨兵。
+                if (__DEV__) {
+                    console.log('[nm-chip] bailed during resolve (run in flight)');
+                }
+                return Result.ok({label: '', upgradeWorthy: false});
+            }
+            result = outcome.value;
+        } catch (error) {
+            if (error instanceof PromptCountCancelledError) {
+                // 取消收口（tokenizer-native-cancel）：在途原生计数被 cancelPreciseUpgrade
+                // 撤掉。与 bail 同款收成空串哨兵——不重试、不回落 fallback（重算一遍等于
+                // 取消白做），也不打 warn（取消不是失败）。
+                if (__DEV__) {
+                    console.log('[nm-chip] cancelled during resolve');
+                }
+                return Result.ok({label: '', upgradeWorthy: false});
+            }
+            throw error;
+        }
+        const window = await runtime.providerModels.getContextWindow(savedModelId);
+        // 已知失败沿 Result 接力（错误通道迁移四期）：同 counterMode 口径。
+        if (!window.ok) return Result.err(window.error);
+        const cw = window.value;
+        if (__DEV__) {
+            const msg = `[nm-chip] resolve ${Date.now() - t0}ms est=${preferEstimate}`;
+            console.log(msg);
+        }
+        return Result.ok({
+            label: ChatPromptTokenLabel.format({...result, contextWindow: cw ?? undefined}),
+            upgradeWorthy: result.source === 'local' && result.estimated,
+            // 模型身份随首帧带出：升级轮用它区分「切模型」（旧轮读数必被丢弃，可取消）
+            // 与「同模型的内容变化」（旧轮仍值得跑完，靠补跑槽收敛）。
+            savedModelId,
         });
-        return ChatPromptTokenLabel.loadFallback(runtime, scope);
-      }
-    } catch (error) {
-      if (__DEV__) {
-        console.warn('[nm/chat] prompt count failed, message fallback', error);
-      }
-      return ChatPromptTokenLabel.loadFallback(runtime, scope);
-    }
-    const frame = first.value;
-    // 中途弃权（run 已起步）：返回空串哨兵——hook 侧对空串不写 meta（保留
-    // 旧标签）、不推进代数（本轮没有产生新首帧，旧升级轮的新鲜度闸不受影响）。
-    if (frame.label === '') {
-      return Result.ok('');
-    }
-    const sessionId = scope.sessionId;
-    const gen = (sessionRefreshGen.get(sessionId) ?? 0) + 1;
-    sessionRefreshGen.set(sessionId, gen);
-    // run 在途抑制（2026-09-30 真机实锤）：精确升级的整串装配 + 原生计数与发送链
-    // 共享 JS 线程与单条 SQLite 连接——压缩/切模型后 API 基线失效的会话里，发送
-    // 触发的升级轮曾把 40 条消息会话的前奏从亚秒拖到 11s（期间停止信号无观察点
-    // 可兑现，用户连点 15 次无效）。run 在途时跳过升级（chip 保持估算档），run
-    // 结束后的刷新（onSettled → transcript 变化）会补上——彼时无竞争。
-    const runInFlight = runtime.abortRegistry.has(ABORT_KEY.agent(sessionId));
-    const onPreciseUpgrade = options?.onPreciseUpgrade;
-    if (frame.upgradeWorthy && onPreciseUpgrade != null && !runInFlight) {
-      const request: UpgradeRequest = {
-        runtime,
-        scope,
-        baselineLabel: frame.label,
-        onPreciseUpgrade,
-        // 升级轮中途弃权判 run 在途（不判 hasLabel——那是 hook 的展示层判据，
-        // 升级无论有没有旧标签都不该与发送链竞争），叠加调用方的追加判据
-        // （视图切走：升级不该与退出竞争，见 options.shouldBailPrecise 注释）。
-        shouldBail: () => runtime.abortRegistry.has(ABORT_KEY.agent(scope.sessionId)) || options?.shouldBailPrecise?.() === true,
-        round: ++preciseUpgradeRoundSeq,
-        savedModelId: frame.savedModelId ?? '',
-      };
-      const inFlight = preciseUpgradeInflight.get(sessionId);
-      if (inFlight != null && inFlight.savedModelId !== request.savedModelId) {
-        // 切模型（tokenizer-switch-stall）：旧轮的读数必被新鲜度闸丢弃，而它正
-        // 占着单线程原生 executor——切模型前 gemini/gemma 走 SP 整串 encode 实测
-        // 8.4s（本 PR 起转 HF，但 13.7MB 词表的首次加载与整串 encode 仍是秒级），
-        // 期间任何计数只能排队，这正是「切模型频繁时卡住线程」的本体。
-        // 先撤在途轮再起新轮。取消的生效边界要说清：原生侧只有「任务出队时」和
-        // 「词表加载后、encode 之前」两个检查点（分段计数已于 2026-11-06 移除，
-        // 那条路径走不到）——已经进 encode 的那一轮仍会把新轮挡在单线程
-        // executor 后面，属本轮已知残留，别误以为 cancel 能抢占 encode。
-        PreciseUpgrade.cancel(sessionId);
-        preciseUpgradeQueued.delete(sessionId);
-        preciseUpgradeInflight.delete(sessionId);
-        PreciseUpgrade.start(sessionId, request);
-      } else if (inFlight != null) {
-        // 同模型的内容变化：在途轮虽然产物过期，词表与前缀仍复用得上，不取消；
-        // 请求排进补跑槽，在途轮落定后立刻补跑。
-        preciseUpgradeQueued.set(sessionId, request);
-      } else {
-        PreciseUpgrade.start(sessionId, request);
-      }
-    }
-    return Result.ok(frame.label);
-  },
+    },
 
-  /** Message-only heuristic when full prompt build fails (still useful in meta bar).
+    // nm-style: keep-public — chat-prompt-tokens.test.ts 直接 import 断言（含 Parameters<typeof> 类型引用与 5 个 scope 测试 mock 注入）
+    loadResilient: async (runtime: MobileNovelMasterRuntime, scope: SessionPromptScope, options?: TokenLabelOptions): Promise<Result<string, AppError>> => {
+        let first: Result<TokenLabelFrame, AppError>;
+        const bail = options?.shouldBail;
+        try {
+            first = await ChatPromptTokenLabel.loadWithFlag(runtime, scope, true, bail);
+            if (!first.ok) {
+                // 首帧已知失败（错误通道迁移四期）：与未知异常同款回落 fallback。
+                upgradeLog.warn('prompt count failed, message fallback', {
+                    sessionId: scope.sessionId,
+                    error: first.error,
+                });
+                return ChatPromptTokenLabel.loadFallback(runtime, scope);
+            }
+        } catch (error) {
+            if (__DEV__) {
+                console.warn('[nm/chat] prompt count failed, message fallback', error);
+            }
+            return ChatPromptTokenLabel.loadFallback(runtime, scope);
+        }
+        const frame = first.value;
+        // 中途弃权（run 已起步）：返回空串哨兵——hook 侧对空串不写 meta（保留
+        // 旧标签）、不推进代数（本轮没有产生新首帧，旧升级轮的新鲜度闸不受影响）。
+        if (frame.label === '') {
+            return Result.ok('');
+        }
+        const sessionId = scope.sessionId;
+        const gen = (sessionRefreshGen.get(sessionId) ?? 0) + 1;
+        sessionRefreshGen.set(sessionId, gen);
+        // run 在途抑制（2026-09-30 真机实锤）：精确升级的整串装配 + 原生计数与发送链
+        // 共享 JS 线程与单条 SQLite 连接——压缩/切模型后 API 基线失效的会话里，发送
+        // 触发的升级轮曾把 40 条消息会话的前奏从亚秒拖到 11s（期间停止信号无观察点
+        // 可兑现，用户连点 15 次无效）。run 在途时跳过升级（chip 保持估算档），run
+        // 结束后的刷新（onSettled → transcript 变化）会补上——彼时无竞争。
+        const runInFlight = runtime.abortRegistry.has(ABORT_KEY.agent(sessionId));
+        const onPreciseUpgrade = options?.onPreciseUpgrade;
+        if (frame.upgradeWorthy && onPreciseUpgrade != null && !runInFlight) {
+            const request: UpgradeRequest = {
+                runtime,
+                scope,
+                baselineLabel: frame.label,
+                onPreciseUpgrade,
+                // 升级轮中途弃权判 run 在途（不判 hasLabel——那是 hook 的展示层判据，
+                // 升级无论有没有旧标签都不该与发送链竞争），叠加调用方的追加判据
+                // （视图切走：升级不该与退出竞争，见 options.shouldBailPrecise 注释）。
+                shouldBail: () => runtime.abortRegistry.has(ABORT_KEY.agent(scope.sessionId)) || options?.shouldBailPrecise?.() === true,
+                round: ++preciseUpgradeRoundCounter.seq,
+                savedModelId: frame.savedModelId ?? '',
+            };
+            const inFlight = preciseUpgradeInflight.get(sessionId);
+            if (inFlight != null && inFlight.savedModelId !== request.savedModelId) {
+                // 切模型（tokenizer-switch-stall）：旧轮的读数必被新鲜度闸丢弃，而它正
+                // 占着单线程原生 executor——切模型前 gemini/gemma 走 SP 整串 encode 实测
+                // 8.4s（本 PR 起转 HF，但 13.7MB 词表的首次加载与整串 encode 仍是秒级），
+                // 期间任何计数只能排队，这正是「切模型频繁时卡住线程」的本体。
+                // 先撤在途轮再起新轮。取消的生效边界要说清：原生侧只有「任务出队时」和
+                // 「词表加载后、encode 之前」两个检查点（分段计数已于 2026-11-06 移除，
+                // 那条路径走不到）——已经进 encode 的那一轮仍会把新轮挡在单线程
+                // executor 后面，属本轮已知残留，别误以为 cancel 能抢占 encode。
+                PreciseUpgrade.cancel(sessionId);
+                preciseUpgradeQueued.delete(sessionId);
+                preciseUpgradeInflight.delete(sessionId);
+                PreciseUpgrade.start(sessionId, request);
+            } else if (inFlight != null) {
+                // 同模型的内容变化：在途轮虽然产物过期，词表与前缀仍复用得上，不取消；
+                // 请求排进补跑槽，在途轮落定后立刻补跑。
+                preciseUpgradeQueued.set(sessionId, request);
+            } else {
+                PreciseUpgrade.start(sessionId, request);
+            }
+        }
+        return Result.ok(frame.label);
+    },
+
+    /** Message-only heuristic when full prompt build fails (still useful in meta bar).
    *
    * 失败通道（错误通道迁移四期）：读模型 / 读会话配置的已知失败沿 `Result.err`
    * 接力给调用方（resilient 原样透传，hook 收成清标签）；build 段的 bail 哨兵
    * 与未知异常仍走 reject，由调用方 catch 收口。
    */
-  // nm-style: keep-local — 44 行兜底装配（消息序列化 + 模型/上下文探测）内联进唯一
-  // catch 调用点会淹没主流程；其两参签名（runtime 长类型）单行化超 80 列。
-  loadFallback: async (runtime: MobileNovelMasterRuntime, scope: SessionPromptScope): Promise<Result<string, AppError>> => {
-    const allOutcome = await runtime.messages.listBySession(scope.sessionId);
-    // 读口已换 Outcome（长循环 hooks）：未注入 hooks 时中断分支不可达；
-    // 业务失败沿 Result 接力，中断按本文件既有的「弃权空串」哨兵处理。
-    if (allOutcome.kind === 'failed') return Result.err(allOutcome.error);
-    if (allOutcome.kind !== 'completed') return Result.ok('');
-    const all = allOutcome.value;
-    const visible = all.filter(m => !m.hidden);
-    const bodyText = MessageBodyText.fromBlocks;
-    const lines = visible.map(m => `${m.role}: ${bodyText(m.content.blocks)}`);
-    const serialized = lines.join('\n\n');
-    const count = ChatPromptTokenLabel.countFallback(runtime, serialized);
+    // nm-style: keep-local — 44 行兜底装配（消息序列化 + 模型/上下文探测）内联进唯一
+    // catch 调用点会淹没主流程；其两参签名（runtime 长类型）单行化超 80 列。
+    loadFallback: async (runtime: MobileNovelMasterRuntime, scope: SessionPromptScope): Promise<Result<string, AppError>> => {
+        const allOutcome = await runtime.messages.listBySession(scope.sessionId);
+        // 读口已换 Outcome（长循环 hooks）：未注入 hooks 时中断分支不可达；
+        // 业务失败沿 Result 接力，中断按本文件既有的「弃权空串」哨兵处理。
+        if (allOutcome.kind === 'failed') return Result.err(allOutcome.error);
+        if (allOutcome.kind !== 'completed') return Result.ok('');
+        const all = allOutcome.value;
+        const visible = all.filter(m => !m.hidden);
+        const bodyText = MessageBodyText.fromBlocks;
+        const lines = visible.map(m => `${m.role}: ${bodyText(m.content.blocks)}`);
+        const serialized = lines.join('\n\n');
+        const count = ChatPromptTokenLabel.countFallback(runtime, serialized);
 
-    const currentModel = await runtime.state.getCurrentModelId();
-    if (!currentModel.ok) return Result.err(currentModel.error);
-    const workspaceModelId = currentModel.value ?? '';
-    let savedModelId: string | undefined;
-    try {
-      const built = await SessionPromptInputService.build(runtime, scope);
-      if (!built.ok) {
-        savedModelId = workspaceModelId || undefined;
-      } else {
-        const conf = await runtime.sessions.getSessionAgentConfig(scope.sessionId);
-        savedModelId = conf.ok ? built.value.definition.model ?? conf.value.modelId : workspaceModelId || undefined;
-      }
-    } catch {
-      // 兜底显示用 workspace 当前模型（仅用于查 contextWindow，不参与 runtime 解析）。
-      savedModelId = workspaceModelId || undefined;
-    }
+        const currentModel = await runtime.state.getCurrentModelId();
+        if (!currentModel.ok) return Result.err(currentModel.error);
+        const workspaceModelId = currentModel.value ?? '';
+        let savedModelId: string | undefined;
+        try {
+            const built = await SessionPromptInputService.build(runtime, scope);
+            if (!built.ok || built.value == null) {
+                // 失败与弃权（error-matrix-final R3）同收：兜底显示用 workspace 当前模型。
+                savedModelId = workspaceModelId || undefined;
+            } else {
+                const conf = await runtime.sessions.getSessionAgentConfig(scope.sessionId);
+                savedModelId = conf.ok ? built.value.definition.model ?? conf.value.modelId : workspaceModelId || undefined;
+            }
+        } catch {
+            // 兜底显示用 workspace 当前模型（仅用于查 contextWindow，不参与 runtime 解析）。
+            savedModelId = workspaceModelId || undefined;
+        }
 
-    let contextWindow: number | undefined;
-    if (savedModelId) {
-      try {
-        const cw = await runtime.providerModels.getContextWindow(savedModelId);
-        // 已知失败与未知异常同收 undefined（错误通道迁移四期：不再解包上抛）。
-        if (cw.ok) contextWindow = cw.value ?? undefined;
-      } catch {
-        contextWindow = undefined;
-      }
-    }
+        let contextWindow: number | undefined;
+        if (savedModelId) {
+            try {
+                const cw = await runtime.providerModels.getContextWindow(savedModelId);
+                // 已知失败与未知异常同收 undefined（错误通道迁移四期：不再解包上抛）。
+                if (cw.ok) contextWindow = cw.value ?? undefined;
+            } catch {
+                contextWindow = undefined;
+            }
+        }
 
-    const label = ChatPromptTokenLabel.format({tokenCount: count, estimated: true, counterKind: 'heuristic', source: 'local', contextWindow});
-    return Result.ok(label);
-  },
+        const label = ChatPromptTokenLabel.format({tokenCount: count, estimated: true, counterKind: 'heuristic', source: 'local', contextWindow});
+        return Result.ok(label);
+    },
 } as const;
 
 // nm-style: keep-public — 类型位置经 namespace 访问：useChatTabScope.ts:175 promptTokens.TokenLabelOptions
 export type TokenLabelOptions = {
-  /** 首帧估算档的后台精确升级回填。 */
-  readonly onPreciseUpgrade?: (label: string) => void;
-  readonly shouldBail?: BailCheck;
-  /**
+    /** 首帧估算档的后台精确升级回填。 */
+    readonly onPreciseUpgrade?: (label: string) => void;
+    readonly shouldBail?: BailCheck;
+    /**
    * 精确升级轮的追加弃权判据（2026-10-01 侧滑退出被堵实锤）：升级是秒级
    * 后台重活，视图已切走（退出会话/切到别的会话）时继续跑纯属浪费，且它
    * 占着 JS 线程与原生模块队列，正是堵返回键的那只手。首帧轮不受此判据
    * 影响——首帧是 chip 显示的必要首拍且轻（估算档）。
    */
-  readonly shouldBailPrecise?: BailCheck;
+    readonly shouldBailPrecise?: BailCheck;
 };
 
 /**
@@ -410,8 +404,8 @@ const preciseUpgradeInflight = new Map<string, {round: number; savedModelId: str
 /** 读数链路开发期留痕（错误通道迁移四期新增两处 Result 失败留痕走 logger，不占裸 console 基线）。 */
 const upgradeLog = LogFactory.create('chat.prompt-tokens');
 
-/** 轮次号自增源：只在 `ChatPromptTokenLabel.loadResilient` 构造请求时消费。 */
-let preciseUpgradeRoundSeq = 0;
+/** 轮次号自增源（模块内 holder，对象管理）：只在 `ChatPromptTokenLabel.loadResilient` 构造请求时消费。 */
+const preciseUpgradeRoundCounter = { seq: 0 };
 
 /**
  * 精确升级的启动延迟（2026-10-01 设 2500：升级轮是秒级重活且不可中断，首帧后
@@ -427,24 +421,27 @@ let preciseUpgradeRoundSeq = 0;
  * 测试里的字面量会静默变成错值（cr2-B-2）。
  */
 export const PRECISE_UPGRADE_START_DELAY_MS = 800;
-let preciseUpgradeStartDelayMs = PRECISE_UPGRADE_START_DELAY_MS;
+/** 启动延迟的运行时槽（模块内 holder，对象管理；测试经 setDelayForTests 注入小值）。 */
+const preciseUpgradeDelaySlot = {
+    ms: PRECISE_UPGRADE_START_DELAY_MS,
+};
 
 /** 升级轮启动延迟计时器（按 sessionId）：由 {@link PreciseUpgrade.cancelDelay} 收口。 */
 const preciseUpgradeDelayTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 /** 一次后台精确升级请求：轮次起步时所需的全部上下文。 */
 type UpgradeRequest = {
-  readonly runtime: MobileNovelMasterRuntime;
-  readonly scope: SessionPromptScope;
-  /** 发起它的首帧标签：精确标签与之一致时不必回调（读数没变）。 */
-  readonly baselineLabel: string;
-  readonly onPreciseUpgrade: (label: string) => void;
-  /** 升级轮的中途弃权判定（run 起步即撤——升级永远不该与发送链竞争）。 */
-  readonly shouldBail?: () => boolean;
-  /** 本轮轮次号：在途登记与 finally 清理都按它比对，切模型取消后旧轮不会误删新轮标记。 */
-  readonly round: number;
-  /** 本轮计数针对的模型身份（解析失败时为空串）：切模型判据。 */
-  readonly savedModelId: string;
+    readonly runtime: MobileNovelMasterRuntime;
+    readonly scope: SessionPromptScope;
+    /** 发起它的首帧标签：精确标签与之一致时不必回调（读数没变）。 */
+    readonly baselineLabel: string;
+    readonly onPreciseUpgrade: (label: string) => void;
+    /** 升级轮的中途弃权判定（run 起步即撤——升级永远不该与发送链竞争）。 */
+    readonly shouldBail?: () => boolean;
+    /** 本轮轮次号：在途登记与 finally 清理都按它比对，切模型取消后旧轮不会误删新轮标记。 */
+    readonly round: number;
+    /** 本轮计数针对的模型身份（解析失败时为空串）：切模型判据。 */
+    readonly savedModelId: string;
 };
 
 /**
@@ -463,19 +460,29 @@ const preciseUpgradeQueued = new Map<string, UpgradeRequest>();
 const sessionRefreshGen = new Map<string, number>();
 
 /**
+ * 升级轮的弃权判据：发起方的 shouldBail 命中，或代数已变（期间已有更新的
+ * 首帧——切模型/新消息，本轮读数必被新鲜度闸丢弃）。gen 在轮次起步取定是
+ * 刻意的时序约束，签名化把该约束显性化（真机实证：白跑轮 `settle gen=4
+ * current=5` 烧掉 1004ms）。
+ */
+function upgradeBailCheck(request: UpgradeRequest, sessionId: string, gen: number): boolean {
+    return request.shouldBail?.() === true || (sessionRefreshGen.get(sessionId) ?? 0) !== gen;
+}
+
+/**
  * 后台精确升级的生命周期收口（延迟计时 / 在途原生计数 / 轮次跑动）。
  */
 export const PreciseUpgrade = {
-  /**
+    /**
    * 测试口：置 0 = 立即启动（不经 setTimeout，微任务节奏即可断言升级轮，
    * 与延迟引入前的旧实现时序一致）——存量两阶段用例靠它保持零改动；
    * 新增「延迟启动」用例还原默认值后用假计时器推进。
    */
-  setDelayForTests: (ms: number): void => {
-    preciseUpgradeStartDelayMs = ms;
-  },
+    setDelayForTests: (ms: number): void => {
+        preciseUpgradeDelaySlot.ms = ms;
+    },
 
-  /**
+    /**
    * 收口某会话**仍挂起**的精确升级延迟计时（换会话 / hook 卸载时调用）。
    *
    * ⚠ 语义硬约束（cr2-E-2）：只清 timer 是不够的，**必须连 inflight 与补跑槽一起
@@ -490,22 +497,22 @@ export const PreciseUpgrade = {
    * 守卫挡掉、根本不跑。
    * 会话 id 传 null/undefined 同理无事可做（该会话没有挂起计时）。
    */
-  cancelDelay: (sessionId: SessionId) => {
-    if (sessionId == null) {
-      return;
-    }
-    const timer = preciseUpgradeDelayTimers.get(sessionId);
-    if (timer == null) {
-      // 已起跑：在途/补跑槽的生命周期归 run 的 finally 管。
-      return;
-    }
-    clearTimeout(timer);
-    preciseUpgradeDelayTimers.delete(sessionId);
-    preciseUpgradeInflight.delete(sessionId);
-    preciseUpgradeQueued.delete(sessionId);
-  },
+    cancelDelay: (sessionId: SessionId) => {
+        if (sessionId == null) {
+            return;
+        }
+        const timer = preciseUpgradeDelayTimers.get(sessionId);
+        if (timer == null) {
+            // 已起跑：在途/补跑槽的生命周期归 run 的 finally 管。
+            return;
+        }
+        clearTimeout(timer);
+        preciseUpgradeDelayTimers.delete(sessionId);
+        preciseUpgradeInflight.delete(sessionId);
+        preciseUpgradeQueued.delete(sessionId);
+    },
 
-  /**
+    /**
    * 收口某会话**在途**的原生精确计数（换会话 / hook 卸载时与
    * {@link cancelDelay} 并调，tokenizer-native-cancel）。
    *
@@ -521,19 +528,19 @@ export const PreciseUpgrade = {
    *
    * 无在途轮 / 无会话 id / 原生未提供 cancelCount 时均为 no-op（桥内处理）。
    */
-  cancel: (sessionId: SessionId) => {
-    if (sessionId == null) {
-      return;
-    }
-    if (__DEV__) {
-      // R8 送达延迟观测的第一时间戳：cancel dispatch 与 native reject 落定之间
-      // 的间距，就是取消链路的送达延迟（logcat 过滤 [nm-chip]）。
-      console.log('[nm-chip] cancel dispatch ' + sessionId);
-    }
-    AndroidNativeBridge.cancelSessionCounts(sessionId);
-  },
+    cancel: (sessionId: SessionId) => {
+        if (sessionId == null) {
+            return;
+        }
+        if (__DEV__) {
+            // R8 送达延迟观测的第一时间戳：cancel dispatch 与 native reject 落定之间
+            // 的间距，就是取消链路的送达延迟（logcat 过滤 [nm-chip]）。
+            console.log('[nm-chip] cancel dispatch ' + sessionId);
+        }
+        AndroidNativeBridge.cancelSessionCounts(sessionId);
+    },
 
-  /**
+    /**
    * 跑一轮后台精确升级；落定后若补跑槽里有排队的请求，按最新一次接着跑。
    *
    * 补跑这一层是必需的（2026-09-30 手动压缩实锤）：在途轮的精确结果会被新鲜度
@@ -544,112 +551,109 @@ export const PreciseUpgrade = {
    * 计数），只是把它从「丢弃即终」改成「丢弃即重来」；一旦某一轮跑完，L1 里就
    * 有了该内容的精确条目，后续首帧直接命中精确档、不再排队，链条自然收敛。
    */
-  start: (sessionId: string, request: UpgradeRequest) => {
-    // 在途标记在延迟窗口起就算数：延迟期间再来的升级请求必须走补跑槽，
-    // 否则去重失效、同会话两轮整串计数并发。
-    //
-    // 入口先收口上一轮的挂起计时（cr2-E-2）：本轮把它顶替了，旧 timer 的回调
-    // 不会再跑，于是它的 finally 也不会来摘 inflight——不在这儿代摘，该会话的
-    // inflight 标记会一直挂着，后续请求全部被挡进补跑槽、无人排空（楔死在估算
-    // 档）。旧代码在这里读 `prev` 却写在 setTimeout 之后，清的是刚建好的本轮
-    // 计时器（死代码，且真把本轮升级自己掐了）。
-    const prevTimer = preciseUpgradeDelayTimers.get(sessionId);
-    if (prevTimer != null) {
-      clearTimeout(prevTimer);
-      preciseUpgradeDelayTimers.delete(sessionId);
-      preciseUpgradeInflight.delete(sessionId);
-    }
-    preciseUpgradeInflight.set(sessionId, {
-      round: request.round,
-      savedModelId: request.savedModelId,
-    });
-    if (preciseUpgradeStartDelayMs <= 0) {
-      void PreciseUpgrade.run(sessionId, request);
-      return;
-    }
-    // nm-style: keep-local — setTimeout 的「回调 + 延迟」两参无法单行（prettier@80 必折行）
-    const timer = setTimeout(() => {
-      // 已被新轮顶替（切模型/换会话）的旧计时器，即便回调已入队也不得起飞：
-      // clearTimeout 只能撤回**未到期**的，回调入队后照样执行。旧 request 起步时
-      // 才取代数（取到的是新代数），gen 闸会放行，于是与新轮并发跑整串计数；
-      // 且这里的 delete 会抹掉新轮刚登记的 timer 条目，cancelDelay
-      // 随后误判「无挂起计时」，不再收口新轮的 inflight/补跑槽。
-      if (preciseUpgradeDelayTimers.get(sessionId) !== timer) {
-        return;
-      }
-      preciseUpgradeDelayTimers.delete(sessionId);
-      void PreciseUpgrade.run(sessionId, request);
-    }, preciseUpgradeStartDelayMs);
-    preciseUpgradeDelayTimers.set(sessionId, timer);
-  },
+    start: (sessionId: string, request: UpgradeRequest) => {
+        // 在途标记在延迟窗口起就算数：延迟期间再来的升级请求必须走补跑槽，
+        // 否则去重失效、同会话两轮整串计数并发。
+        //
+        // 入口先收口上一轮的挂起计时（cr2-E-2）：本轮把它顶替了，旧 timer 的回调
+        // 不会再跑，于是它的 finally 也不会来摘 inflight——不在这儿代摘，该会话的
+        // inflight 标记会一直挂着，后续请求全部被挡进补跑槽、无人排空（楔死在估算
+        // 档）。旧代码在这里读 `prev` 却写在 setTimeout 之后，清的是刚建好的本轮
+        // 计时器（死代码，且真把本轮升级自己掐了）。
+        const prevTimer = preciseUpgradeDelayTimers.get(sessionId);
+        if (prevTimer != null) {
+            clearTimeout(prevTimer);
+            preciseUpgradeDelayTimers.delete(sessionId);
+            preciseUpgradeInflight.delete(sessionId);
+        }
+        preciseUpgradeInflight.set(sessionId, {
+            round: request.round,
+            savedModelId: request.savedModelId,
+        });
+        if (preciseUpgradeDelaySlot.ms <= 0) {
+            void PreciseUpgrade.run(sessionId, request);
+            return;
+        }
+        // nm-style: keep-local — setTimeout 的「回调 + 延迟」两参无法单行（prettier@80 必折行）
+        const timer = setTimeout(() => {
+            // 已被新轮顶替（切模型/换会话）的旧计时器，即便回调已入队也不得起飞：
+            // clearTimeout 只能撤回**未到期**的，回调入队后照样执行。旧 request 起步时
+            // 才取代数（取到的是新代数），gen 闸会放行，于是与新轮并发跑整串计数；
+            // 且这里的 delete 会抹掉新轮刚登记的 timer 条目，cancelDelay
+            // 随后误判「无挂起计时」，不再收口新轮的 inflight/补跑槽。
+            if (preciseUpgradeDelayTimers.get(sessionId) !== timer) {
+                return;
+            }
+            preciseUpgradeDelayTimers.delete(sessionId);
+            void PreciseUpgrade.run(sessionId, request);
+        }, preciseUpgradeDelaySlot.ms);
+        preciseUpgradeDelayTimers.set(sessionId, timer);
+    },
 
-  /**
+    /**
    * 升级轮本体（延迟到期后跑）：起步先查弃权（延迟窗口里视图已切走/run 已
    * 起步的话，这轮重活一行都不跑），其余语义与原实现一致（新鲜度闸 + 补跑槽）。
    */
-  run: async (sessionId: string, request: UpgradeRequest) => {
-    // 只有仍是自己的轮次才继续：被顶替/被取消的旧轮（含「计时器回调已入队才被
-    // clearTimeout」那条路径）在这里就退出，与 finally 的 stillOwner 同判据。
-    if (preciseUpgradeInflight.get(sessionId)?.round !== request.round) {
-      return;
-    }
-    // 代数在轮次起步时取（同步段）：首帧轮取到发起它的那一代，补跑轮取到最新一代。
-    const gen = sessionRefreshGen.get(sessionId) ?? 0;
-    // 代数已变 = 期间已有更新的首帧（切模型/新消息）：本轮读数必被下面的新鲜度闸
-    // 丢弃，于是在 build 分段与整串计数之前就弃权，切模型的旧轮不再白跑一整轮
-    // 装配（真机实证：白跑轮 `settle gen=4 current=5` 烧掉 1004ms）。这是纯增量
-    // 判据，run 在途与视图切走的既有弃权照旧。
-    const shouldBail = () => request.shouldBail?.() === true || (sessionRefreshGen.get(sessionId) ?? 0) !== gen;
-    try {
-      if (shouldBail()) {
-        if (__DEV__) {
-          console.log('[nm-chip] precise upgrade bailed before start');
+    run: async (sessionId: string, request: UpgradeRequest) => {
+        // 只有仍是自己的轮次才继续：被顶替/被取消的旧轮（含「计时器回调已入队才被
+        // clearTimeout」那条路径）在这里就退出，与 finally 的 stillOwner 同判据。
+        if (preciseUpgradeInflight.get(sessionId)?.round !== request.round) {
+            return;
         }
-        return;
-      }
-      // nm-style: keep-local — 四实参（request 深字段）无法单行；单实参调用 + 多行拆分
-      const precisePromise = ChatPromptTokenLabel.loadWithFlag(request.runtime, request.scope, false, shouldBail);
-      const precise = await precisePromise;
-      if (!precise.ok) {
-        // 升级失败保持首帧估算标签（错误通道迁移四期：与旧 catch 同款留痕，
-        // cr-fix-spec-r2 full/I-1——静默失败会让 chip 永停估算档且无从排查）。
-        upgradeLog.warn('prompt token precise upgrade failed', {
-          sessionId,
-          error: precise.error,
-        });
-        return;
-      }
-      if (
-        // 空串 = 中途弃权（run 已起步）：没有新读数可回调，也不能当失败留痕。
-        precise.value.label !== '' &&
-        sessionRefreshGen.get(sessionId) === gen &&
-        precise.value.label !== request.baselineLabel
-      ) {
-        request.onPreciseUpgrade(precise.value.label);
-      }
-    } catch (error) {
-      // 升级失败保持首帧估算标签；下次刷新/api 真值自愈。开发期留痕
-      // （cr-fix-spec-r2 full/I-1）：静默失败会让 chip 永停估算档且无从排查。
-      if (__DEV__) {
-        console.warn('[chat] prompt token precise upgrade failed', error);
-      }
-    } finally {
-      // 只摘自己这一轮：切模型取消后新轮已用新轮次号登记，无条件 delete 会把
-      // 新轮的标记一起抹掉，后续升级请求就再无在途去重可用。
-      const inflight = preciseUpgradeInflight.get(sessionId);
-      const stillOwner = inflight?.round === request.round;
-      if (stillOwner) {
-        preciseUpgradeInflight.delete(sessionId);
-      }
-      // 补跑槽同样只在 owner 时排空：被切模型取消的旧轮若抢着排空，会把新轮
-      // 刚排进槽的补跑请求提前放出来，同会话出现两轮并发整串计数（两轮 JS
-      // 装配 + 两轮原生排队），正是这轮要消灭的队列堆积。非 owner 直接退出，
-      // 排队请求交给当前 owner 的 finally 接手。
-      const queued = stillOwner ? preciseUpgradeQueued.get(sessionId) : undefined;
-      if (queued != null) {
-        preciseUpgradeQueued.delete(sessionId);
-        PreciseUpgrade.start(sessionId, queued);
-      }
-    }
-  },
+        // 代数在轮次起步时取（同步段）：首帧轮取到发起它的那一代，补跑轮取到最新一代。
+        const gen = sessionRefreshGen.get(sessionId) ?? 0;
+        // 代数已变 = 期间已有更新的首帧：在 build 分段与整串计数之前就弃权，
+        // 切模型的旧轮不再白跑一整轮装配（判据本体见 upgradeBailCheck）。
+        try {
+            if (upgradeBailCheck(request, sessionId, gen)) {
+                if (__DEV__) {
+                    console.log('[nm-chip] precise upgrade bailed before start');
+                }
+                return;
+            }
+            // nm-style: keep-local — 四实参（request 深字段）无法单行；单实参调用 + 多行拆分
+            const precisePromise = ChatPromptTokenLabel.loadWithFlag(request.runtime, request.scope, false, () => upgradeBailCheck(request, sessionId, gen));
+            const precise = await precisePromise;
+            if (!precise.ok) {
+                // 升级失败保持首帧估算标签（错误通道迁移四期：与旧 catch 同款留痕，
+                // cr-fix-spec-r2 full/I-1——静默失败会让 chip 永停估算档且无从排查）。
+                upgradeLog.warn('prompt token precise upgrade failed', {
+                    sessionId,
+                    error: precise.error,
+                });
+                return;
+            }
+            if (
+                // 空串 = 中途弃权（run 已起步）：没有新读数可回调，也不能当失败留痕。
+                precise.value.label !== '' &&
+                sessionRefreshGen.get(sessionId) === gen &&
+                precise.value.label !== request.baselineLabel
+            ) {
+                request.onPreciseUpgrade(precise.value.label);
+            }
+        } catch (error) {
+            // 升级失败保持首帧估算标签；下次刷新/api 真值自愈。开发期留痕
+            // （cr-fix-spec-r2 full/I-1）：静默失败会让 chip 永停估算档且无从排查。
+            if (__DEV__) {
+                console.warn('[chat] prompt token precise upgrade failed', error);
+            }
+        } finally {
+            // 只摘自己这一轮：切模型取消后新轮已用新轮次号登记，无条件 delete 会把
+            // 新轮的标记一起抹掉，后续升级请求就再无在途去重可用。
+            const inflight = preciseUpgradeInflight.get(sessionId);
+            const stillOwner = inflight?.round === request.round;
+            if (stillOwner) {
+                preciseUpgradeInflight.delete(sessionId);
+            }
+            // 补跑槽同样只在 owner 时排空：被切模型取消的旧轮若抢着排空，会把新轮
+            // 刚排进槽的补跑请求提前放出来，同会话出现两轮并发整串计数（两轮 JS
+            // 装配 + 两轮原生排队），正是这轮要消灭的队列堆积。非 owner 直接退出，
+            // 排队请求交给当前 owner 的 finally 接手。
+            const queued = stillOwner ? preciseUpgradeQueued.get(sessionId) : undefined;
+            if (queued != null) {
+                preciseUpgradeQueued.delete(sessionId);
+                PreciseUpgrade.start(sessionId, queued);
+            }
+        }
+    },
 } as const;

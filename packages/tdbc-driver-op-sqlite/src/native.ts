@@ -25,7 +25,7 @@ export { NativeOpSqliteAdapter } from "./impl/op-sqlite-native.adapter.js";
  *   {@link OpSqliteSharedRegister.registerWith}。
  */
 export namespace OpSqliteNativeRegister {
-  export function register(adapter?: OpSqliteAdapter, isBackground?: () => boolean,): void {
-    OpSqliteSharedRegister.registerWith(adapter ?? new NativeOpSqliteAdapter(), isBackground,);
-  }
+    export function register(adapter?: OpSqliteAdapter, isBackground?: () => boolean,): void {
+        OpSqliteSharedRegister.registerWith(adapter ?? new NativeOpSqliteAdapter(), isBackground,);
+    }
 }

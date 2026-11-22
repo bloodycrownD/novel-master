@@ -9,11 +9,11 @@ import type { ThinkingLevel } from "./saved-model-settings.js";
 
 /** 档位 value + 标签 descriptor（Desktop / Mobile 分段控件，宿主 translator 渲染）。 */
 export const THINKING_LEVEL_SELECT_OPTIONS: ReadonlyArray<{
-  readonly value: ThinkingLevel;
-  readonly label: CoreMessageDescriptor;
+    readonly value: ThinkingLevel;
+    readonly label: CoreMessageDescriptor;
 }> = [
-  { value: "off", label: { key: "label.provider.thinking_level.off" } },
-  { value: "low", label: { key: "label.provider.thinking_level.low" } },
-  { value: "medium", label: { key: "label.provider.thinking_level.medium" } },
-  { value: "high", label: { key: "label.provider.thinking_level.high" } },
+    { value: "off", label: { key: "label.provider.thinking_level.off" } },
+    { value: "low", label: { key: "label.provider.thinking_level.low" } },
+    { value: "medium", label: { key: "label.provider.thinking_level.medium" } },
+    { value: "high", label: { key: "label.provider.thinking_level.high" } },
 ];

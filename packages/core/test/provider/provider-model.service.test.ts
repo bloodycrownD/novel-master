@@ -3,7 +3,7 @@ import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
 
 /** decode 已改返回 Result（四期签名）：测试内统一解包——Ok 取 value，Err 抛 error。 */
 function decode<T>(raw: unknown, schema: ZodType<T>): T {
-  return unwrap(SerializationDecode.decode(raw, schema));
+    return unwrap(SerializationDecode.decode(raw, schema));
 }
 import {  describe, it, mock  } from "node:test";
 import assert from "node:assert/strict";
@@ -22,338 +22,338 @@ import {  getNovelMasterTestContext, novelMasterTestFixture  } from "../helpers/
 import {  PersistentStateFactory  } from "../../src/service/persistent-state/create-persistent-state.js";
 
 function memorySecretStore(): SecretStore {
-  const map = new Map<string, string>();
-  return {
-    async get(ref) {
-      return map.get(ref) ?? null;
-    },
-    async has(ref) {
-      return map.has(ref);
-    },
-    async set(ref, plain) {
-      map.set(ref, plain);
-    },
-    async delete(ref) {
-      return map.delete(ref);
-    },
-  };
+    const map = new Map<string, string>();
+    return {
+        async get(ref) {
+            return map.get(ref) ?? null;
+        },
+        async has(ref) {
+            return map.has(ref);
+        },
+        async set(ref, plain) {
+            map.set(ref, plain);
+        },
+        async delete(ref) {
+            return map.delete(ref);
+        },
+    };
 }
 
 novelMasterTestFixture();
 
 describe("ProviderModelService fetch", () => {
-  it("populates suggestions from listModels response", async () => {
-    Registry.clearProtocolAdapters();
-    const fetchFn = mock.fn(async () => {
-      return new Response(
-        JSON.stringify({
-          data: [{ id: "gpt-4o" }, { id: "gpt-4o-mini" }],
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      );
+    it("populates suggestions from listModels response", async () => {
+        Registry.clearProtocolAdapters();
+        const fetchFn = mock.fn(async () => {
+            return new Response(
+                JSON.stringify({
+                    data: [{ id: "gpt-4o" }, { id: "gpt-4o-mini" }],
+                }),
+                { status: 200, headers: { "Content-Type": "application/json" } },
+            );
+        });
+        Registry.getProtocolAdapter("openai", fetchFn as typeof fetch);
+
+        const ctx = getNovelMasterTestContext();
+        const secrets = memorySecretStore();
+        const bundle = ProviderServiceFactory.create(ctx.conn, secrets);
+        await secrets.set(`provider/${BUILTIN_PROVIDER_UUID_OPENAI}/apiKey`, "sk-test");
+
+        unwrap(await bundle.providerModels.fetch(BUILTIN_PROVIDER_UUID_OPENAI));
+        const suggestions = unwrap(await bundle.providerModels.suggestList(BUILTIN_PROVIDER_UUID_OPENAI));
+        assert.equal(suggestions.length, 2);
+        assert.ok(
+            suggestions.some((s) => s.vendorModelId === "gpt-4o" && s.stale === false),
+        );
+        const saved = unwrap(await bundle.providerModels.savedList(BUILTIN_PROVIDER_UUID_OPENAI));
+        assert.equal(saved.length, 0);
+        Registry.clearProtocolAdapters();
     });
-    Registry.getProtocolAdapter("openai", fetchFn as typeof fetch);
 
-    const ctx = getNovelMasterTestContext();
-    const secrets = memorySecretStore();
-    const bundle = ProviderServiceFactory.create(ctx.conn, secrets);
-    await secrets.set(`provider/${BUILTIN_PROVIDER_UUID_OPENAI}/apiKey`, "sk-test");
+    it("normalizes prefixed vendor ids when saving fetched models", async () => {
+        Registry.clearProtocolAdapters();
+        const fetchFn = mock.fn(async () => {
+            return new Response(
+                JSON.stringify({
+                    data: [{ id: "zhipu/glm-4-flash" }],
+                }),
+                { status: 200, headers: { "Content-Type": "application/json" } },
+            );
+        });
+        Registry.getProtocolAdapter("openai", fetchFn as typeof fetch);
 
-    unwrap(await bundle.providerModels.fetch(BUILTIN_PROVIDER_UUID_OPENAI));
-    const suggestions = unwrap(await bundle.providerModels.suggestList(BUILTIN_PROVIDER_UUID_OPENAI));
-    assert.equal(suggestions.length, 2);
-    assert.ok(
-      suggestions.some((s) => s.vendorModelId === "gpt-4o" && s.stale === false),
-    );
-    const saved = unwrap(await bundle.providerModels.savedList(BUILTIN_PROVIDER_UUID_OPENAI));
-    assert.equal(saved.length, 0);
-    Registry.clearProtocolAdapters();
-  });
+        const ctx = getNovelMasterTestContext();
+        const secrets = memorySecretStore();
+        const bundle = ProviderServiceFactory.create(ctx.conn, secrets);
+        const zhipu = unwrap(await bundle.providers.create({
+            protocol: "openai",
+            baseUrl: "https://example.com/v1",
+            displayName: "智谱",
+            apiKey: "sk-test",
+        }));
 
-  it("normalizes prefixed vendor ids when saving fetched models", async () => {
-    Registry.clearProtocolAdapters();
-    const fetchFn = mock.fn(async () => {
-      return new Response(
-        JSON.stringify({
-          data: [{ id: "zhipu/glm-4-flash" }],
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      );
+        unwrap(await bundle.providerModels.fetch(zhipu.id));
+        const saved = unwrap(await bundle.providerModels.save(
+            zhipu.id,
+            `${zhipu.id}/glm-4-flash`,
+        ));
+        const list = unwrap(await bundle.providerModels.savedList(zhipu.id));
+        assert.equal(list.length, 1);
+        assert.equal(saved.vendorModelId, "glm-4-flash");
+        assert.equal(saved.modelName, "glm-4-flash");
+        assert.equal(
+            SavedModel.displayName(saved, "智谱"),
+            SavedModelDisplayName.format("智谱", "glm-4-flash"),
+        );
+        Registry.clearProtocolAdapters();
     });
-    Registry.getProtocolAdapter("openai", fetchFn as typeof fetch);
-
-    const ctx = getNovelMasterTestContext();
-    const secrets = memorySecretStore();
-    const bundle = ProviderServiceFactory.create(ctx.conn, secrets);
-    const zhipu = unwrap(await bundle.providers.create({
-      protocol: "openai",
-      baseUrl: "https://example.com/v1",
-      displayName: "智谱",
-      apiKey: "sk-test",
-    }));
-
-    unwrap(await bundle.providerModels.fetch(zhipu.id));
-    const saved = unwrap(await bundle.providerModels.save(
-      zhipu.id,
-      `${zhipu.id}/glm-4-flash`,
-    ));
-    const list = unwrap(await bundle.providerModels.savedList(zhipu.id));
-    assert.equal(list.length, 1);
-    assert.equal(saved.vendorModelId, "glm-4-flash");
-    assert.equal(saved.modelName, "glm-4-flash");
-    assert.equal(
-      SavedModel.displayName(saved, "智谱"),
-      SavedModelDisplayName.format("智谱", "glm-4-flash"),
-    );
-    Registry.clearProtocolAdapters();
-  });
 });
 
 describe("ProviderModelService settings", () => {
-  it("save claude-3-5 gets contextWindowTokens 200_000", async () => {
-    const ctx = getNovelMasterTestContext();
-    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
-    const saved = unwrap(await bundle.providerModels.create(
-      BUILTIN_PROVIDER_UUID_OPENAI,
-      "claude-3-5-sonnet",
-    ));
-    assert.equal(SavedModelSettings.contextWindowTokens(saved.settings), 200_000);
-  });
+    it("save claude-3-5 gets contextWindowTokens 200_000", async () => {
+        const ctx = getNovelMasterTestContext();
+        const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
+        const saved = unwrap(await bundle.providerModels.create(
+            BUILTIN_PROVIDER_UUID_OPENAI,
+            "claude-3-5-sonnet",
+        ));
+        assert.equal(SavedModelSettings.contextWindowTokens(saved.settings), 200_000);
+    });
 
-  it("save unknown model gets contextWindowTokens 128_000", async () => {
-    const ctx = getNovelMasterTestContext();
-    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
-    const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "unknown-model"));
-    assert.equal(SavedModelSettings.contextWindowTokens(saved.settings), 128_000);
-  });
+    it("save unknown model gets contextWindowTokens 128_000", async () => {
+        const ctx = getNovelMasterTestContext();
+        const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
+        const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "unknown-model"));
+        assert.equal(SavedModelSettings.contextWindowTokens(saved.settings), 128_000);
+    });
 
-  it("updateSettings rejects non-positive contextWindowTokens", async () => {
-    const ctx = getNovelMasterTestContext();
-    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
-    const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "manual-model"));
-    await rejectsErr(
-      () =>
-        bundle.providerModels.updateSettings(saved.id, {
-          contextWindowTokens: 0,
-        }),
-      (e) => assert.ok(AppErrorOps.is(e, "PROVIDER_INVALID_ARGUMENT")),
-    );
-  });
+    it("updateSettings rejects non-positive contextWindowTokens", async () => {
+        const ctx = getNovelMasterTestContext();
+        const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
+        const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "manual-model"));
+        await rejectsErr(
+            () =>
+                bundle.providerModels.updateSettings(saved.id, {
+                    contextWindowTokens: 0,
+                }),
+            (e) => assert.ok(AppErrorOps.is(e, "PROVIDER_INVALID_ARGUMENT")),
+        );
+    });
 
-  it("new saved model defaults tokenCounterMode to auto", async () => {
-    const ctx = getNovelMasterTestContext();
-    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
-    const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o"));
-    assert.equal(SavedModelSettings.tokenCounterMode(saved.settings), "auto");
-  });
+    it("new saved model defaults tokenCounterMode to auto", async () => {
+        const ctx = getNovelMasterTestContext();
+        const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
+        const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o"));
+        assert.equal(SavedModelSettings.tokenCounterMode(saved.settings), "auto");
+    });
 
-  it("new saved model defaults thinkingLevel to high", async () => {
-    const ctx = getNovelMasterTestContext();
-    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
-    const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o"));
-    assert.equal(SavedModelSettings.thinkingLevel(saved.settings), "high");
-  });
+    it("new saved model defaults thinkingLevel to high", async () => {
+        const ctx = getNovelMasterTestContext();
+        const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
+        const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o"));
+        assert.equal(SavedModelSettings.thinkingLevel(saved.settings), "high");
+    });
 
-  it("updateSettings persists tokenCounterMode round-trip", async () => {
-    const ctx = getNovelMasterTestContext();
-    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
-    const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o"));
-    const updated = unwrap(await bundle.providerModels.updateSettings(saved.id, {
-      tokenCounterMode: "gemma",
-    }));
-    assert.equal(SavedModelSettings.tokenCounterMode(updated.settings), "gemma");
-    assert.equal(
-      unwrap(await bundle.providerModels.getTokenCounterMode(saved.id)),
-      "gemma",
-    );
-  });
+    it("updateSettings persists tokenCounterMode round-trip", async () => {
+        const ctx = getNovelMasterTestContext();
+        const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
+        const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o"));
+        const updated = unwrap(await bundle.providerModels.updateSettings(saved.id, {
+            tokenCounterMode: "gemma",
+        }));
+        assert.equal(SavedModelSettings.tokenCounterMode(updated.settings), "gemma");
+        assert.equal(
+            unwrap(await bundle.providerModels.getTokenCounterMode(saved.id)),
+            "gemma",
+        );
+    });
 
-  it("getTokenCounterMode returns auto for unknown saved model id", async () => {
-    const ctx = getNovelMasterTestContext();
-    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
-    assert.equal(
-      unwrap(await bundle.providerModels.getTokenCounterMode(
-        "00000000-0000-4000-8000-000000000000",
-      )),
-      "auto",
-    );
-  });
+    it("getTokenCounterMode returns auto for unknown saved model id", async () => {
+        const ctx = getNovelMasterTestContext();
+        const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
+        assert.equal(
+            unwrap(await bundle.providerModels.getTokenCounterMode(
+                "00000000-0000-4000-8000-000000000000",
+            )),
+            "auto",
+        );
+    });
 
-  it("updateSettings rejects invalid tokenCounterMode", async () => {
-    const ctx = getNovelMasterTestContext();
-    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
-    const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o"));
-    await rejectsErr(
-      () =>
-        bundle.providerModels.updateSettings(saved.id, {
-          tokenCounterMode: "not-a-mode" as "auto",
-        }),
-      (e) => assert.ok(AppErrorOps.is(e, "PROVIDER_INVALID_ARGUMENT")),
-    );
-  });
+    it("updateSettings rejects invalid tokenCounterMode", async () => {
+        const ctx = getNovelMasterTestContext();
+        const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
+        const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o"));
+        await rejectsErr(
+            () =>
+                bundle.providerModels.updateSettings(saved.id, {
+                    tokenCounterMode: "not-a-mode" as "auto",
+                }),
+            (e) => assert.ok(AppErrorOps.is(e, "PROVIDER_INVALID_ARGUMENT")),
+        );
+    });
 
-  it("updateSettings 持久化 thinkingLevel 为 v2 JSON", async () => {
-    const ctx = getNovelMasterTestContext();
-    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
-    const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o"));
-    const updated = unwrap(await bundle.providerModels.updateSettings(saved.id, {
-      thinkingLevel: "high",
-    }));
-    assert.equal(updated.settings.generation.thinkingLevel, "high");
-    assert.equal(updated.settings.schemaVersion, 2);
-    const refetched = unwrap(await bundle.providerModels.getSavedById(saved.id));
-    assert.ok(refetched != null);
-    assert.equal(refetched.settings.generation.thinkingLevel, "high");
-    assert.equal(refetched.settings.schemaVersion, 2);
-  });
+    it("updateSettings 持久化 thinkingLevel 为 v2 JSON", async () => {
+        const ctx = getNovelMasterTestContext();
+        const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
+        const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o"));
+        const updated = unwrap(await bundle.providerModels.updateSettings(saved.id, {
+            thinkingLevel: "high",
+        }));
+        assert.equal(updated.settings.generation.thinkingLevel, "high");
+        assert.equal(updated.settings.schemaVersion, 2);
+        const refetched = unwrap(await bundle.providerModels.getSavedById(saved.id));
+        assert.ok(refetched != null);
+        assert.equal(refetched.settings.generation.thinkingLevel, "high");
+        assert.equal(refetched.settings.schemaVersion, 2);
+    });
 });
 
 describe("ProviderModelService multi-preset（T-SM5/T-SM6）", () => {
-  it("同 provider+vendor 可 insert 两行且 settings 独立", async () => {
-    const ctx = getNovelMasterTestContext();
-    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
-    const a = unwrap(await bundle.providerModels.save(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o", "preset-a"));
-    const b = unwrap(await bundle.providerModels.save(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o", "preset-b"));
-    assert.notEqual(a.id, b.id);
-    assert.equal(a.vendorModelId, b.vendorModelId);
-    unwrap(await bundle.providerModels.updateSettings(a.id, { thinkingLevel: "low" }));
-    unwrap(await bundle.providerModels.updateSettings(b.id, { thinkingLevel: "high" }));
-    const refA = unwrap(await bundle.providerModels.getSavedById(a.id));
-    const refB = unwrap(await bundle.providerModels.getSavedById(b.id));
-    assert.equal(refA?.settings.generation.thinkingLevel, "low");
-    assert.equal(refB?.settings.generation.thinkingLevel, "high");
-  });
+    it("同 provider+vendor 可 insert 两行且 settings 独立", async () => {
+        const ctx = getNovelMasterTestContext();
+        const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
+        const a = unwrap(await bundle.providerModels.save(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o", "preset-a"));
+        const b = unwrap(await bundle.providerModels.save(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o", "preset-b"));
+        assert.notEqual(a.id, b.id);
+        assert.equal(a.vendorModelId, b.vendorModelId);
+        unwrap(await bundle.providerModels.updateSettings(a.id, { thinkingLevel: "low" }));
+        unwrap(await bundle.providerModels.updateSettings(b.id, { thinkingLevel: "high" }));
+        const refA = unwrap(await bundle.providerModels.getSavedById(a.id));
+        const refB = unwrap(await bundle.providerModels.getSavedById(b.id));
+        assert.equal(refA?.settings.generation.thinkingLevel, "low");
+        assert.equal(refB?.settings.generation.thinkingLevel, "high");
+    });
 
-  it("save 第二次同 vendor 新增行（非 upsert）", async () => {
-    const ctx = getNovelMasterTestContext();
-    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
-    const vendor = `gpt-4o-dup-${Date.now()}`;
-    const before = (unwrap(await bundle.providerModels.savedList(BUILTIN_PROVIDER_UUID_OPENAI))).length;
-    const first = unwrap(await bundle.providerModels.save(BUILTIN_PROVIDER_UUID_OPENAI, vendor));
-    const second = unwrap(await bundle.providerModels.save(BUILTIN_PROVIDER_UUID_OPENAI, vendor));
-    assert.notEqual(first.id, second.id);
-    const list = unwrap(await bundle.providerModels.savedList(BUILTIN_PROVIDER_UUID_OPENAI));
-    assert.equal(list.length, before + 2);
-    assert.equal(list.filter((m) => m.vendorModelId === vendor).length, 2);
-  });
+    it("save 第二次同 vendor 新增行（非 upsert）", async () => {
+        const ctx = getNovelMasterTestContext();
+        const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
+        const vendor = `gpt-4o-dup-${Date.now()}`;
+        const before = (unwrap(await bundle.providerModels.savedList(BUILTIN_PROVIDER_UUID_OPENAI))).length;
+        const first = unwrap(await bundle.providerModels.save(BUILTIN_PROVIDER_UUID_OPENAI, vendor));
+        const second = unwrap(await bundle.providerModels.save(BUILTIN_PROVIDER_UUID_OPENAI, vendor));
+        assert.notEqual(first.id, second.id);
+        const list = unwrap(await bundle.providerModels.savedList(BUILTIN_PROVIDER_UUID_OPENAI));
+        assert.equal(list.length, before + 2);
+        assert.equal(list.filter((m) => m.vendorModelId === vendor).length, 2);
+    });
 });
 
 describe("ProviderModelService editSaved（T-SM14/T-SM15）", () => {
-  it("默认 modelName=vendor 时 displayName 等于 legacy path", async () => {
-    const ctx = getNovelMasterTestContext();
-    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
-    const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o"));
-    assert.equal(saved.modelName, "gpt-4o");
-    assert.equal(
-      SavedModel.displayName(saved, "OpenAI"),
-      SavedModelDisplayName.format("OpenAI", "gpt-4o"),
-    );
-  });
+    it("默认 modelName=vendor 时 displayName 等于 legacy path", async () => {
+        const ctx = getNovelMasterTestContext();
+        const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
+        const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o"));
+        assert.equal(saved.modelName, "gpt-4o");
+        assert.equal(
+            SavedModel.displayName(saved, "OpenAI"),
+            SavedModelDisplayName.format("OpenAI", "gpt-4o"),
+        );
+    });
 
-  it("省略 modelName 时不改名；空字符串拒绝", async () => {
-    const ctx = getNovelMasterTestContext();
-    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
-    const created = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "manual-model"));
-    unwrap(await bundle.providerModels.editSaved(created.id, "Label A"));
-    const after = unwrap(await bundle.providerModels.editSaved(created.id));
-    assert.equal(after.modelName, "Label A");
-    await rejectsErr(
-      () => bundle.providerModels.editSaved(created.id, ""),
-      (e) => assert.ok(AppErrorOps.is(e, "PROVIDER_INVALID_MODEL_NAME")),
-    );
-  });
+    it("省略 modelName 时不改名；空字符串拒绝", async () => {
+        const ctx = getNovelMasterTestContext();
+        const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
+        const created = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "manual-model"));
+        unwrap(await bundle.providerModels.editSaved(created.id, "Label A"));
+        const after = unwrap(await bundle.providerModels.editSaved(created.id));
+        assert.equal(after.modelName, "Label A");
+        await rejectsErr(
+            () => bundle.providerModels.editSaved(created.id, ""),
+            (e) => assert.ok(AppErrorOps.is(e, "PROVIDER_INVALID_MODEL_NAME")),
+        );
+    });
 });
 
 describe("ProviderModelService deleteSaved（T-SM8）", () => {
-  it("currentModelId 引用时拒绝删除", async () => {
-    const ctx = getNovelMasterTestContext();
-    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
-    const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o"));
-    const state = PersistentStateFactory.create(ctx.conn);
-    await state.setCurrentModelId(saved.id);
-    await rejectsErr(
-      () => bundle.providerModels.deleteSaved(saved.id),
-      (e) => assert.ok(AppErrorOps.is(e, "PROVIDER_SAVED_MODEL_IN_USE")),
-    );
-  });
+    it("currentModelId 引用时拒绝删除", async () => {
+        const ctx = getNovelMasterTestContext();
+        const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
+        const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o"));
+        const state = PersistentStateFactory.create(ctx.conn);
+        await state.setCurrentModelId(saved.id);
+        await rejectsErr(
+            () => bundle.providerModels.deleteSaved(saved.id),
+            (e) => assert.ok(AppErrorOps.is(e, "PROVIDER_SAVED_MODEL_IN_USE")),
+        );
+    });
 
-  it("agent_definition.model pin 引用时拒绝删除", async () => {
-    const ctx = getNovelMasterTestContext();
-    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
-    const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o"));
-    const registry = AgentServiceFactory.createRegistry(ctx.conn);
-    await registry.upsert(
-      `agent-pin-${randomUUID()}`,
-      decode(
-        {
-          schemaVersion: 1,
-          name: `pin-agent-${Date.now()}`,
-          prompts: { persist: {}, dynamic: {} },
-          model: saved.id,
-        },
-        agentDefinitionSchema,
-      ),
-    );
-    await rejectsErr(
-      () => bundle.providerModels.deleteSaved(saved.id),
-      (e) => assert.ok(AppErrorOps.is(e, "PROVIDER_SAVED_MODEL_IN_USE")),
-    );
-  });
+    it("agent_definition.model pin 引用时拒绝删除", async () => {
+        const ctx = getNovelMasterTestContext();
+        const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
+        const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o"));
+        const registry = AgentServiceFactory.createRegistry(ctx.conn);
+        await registry.upsert(
+            `agent-pin-${randomUUID()}`,
+            decode(
+                {
+                    schemaVersion: 1,
+                    name: `pin-agent-${Date.now()}`,
+                    prompts: { persist: {}, dynamic: {} },
+                    model: saved.id,
+                },
+                agentDefinitionSchema,
+            ),
+        );
+        await rejectsErr(
+            () => bundle.providerModels.deleteSaved(saved.id),
+            (e) => assert.ok(AppErrorOps.is(e, "PROVIDER_SAVED_MODEL_IN_USE")),
+        );
+    });
 
-  it("chat_project.agent_config_json.model pin 引用时拒绝删除", async () => {
-    const ctx = getNovelMasterTestContext();
-    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
-    const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o"));
-    const project = unwrap(await ctx.projects.create(`proj-pin-${Date.now()}`));
-    unwrap(await ctx.projects.updateAgentConfig(project.id, {
-      mode: "custom",
-      definition: decode(
-        {
-          schemaVersion: 1,
-          name: "project-pin",
-          prompts: { persist: {}, dynamic: {} },
-          model: saved.id,
-        },
-        agentDefinitionSchema,
-      ),
-    }));
-    await rejectsErr(
-      () => bundle.providerModels.deleteSaved(saved.id),
-      (e) => assert.ok(AppErrorOps.is(e, "PROVIDER_SAVED_MODEL_IN_USE")),
-    );
-  });
+    it("chat_project.agent_config_json.model pin 引用时拒绝删除", async () => {
+        const ctx = getNovelMasterTestContext();
+        const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
+        const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o"));
+        const project = unwrap(await ctx.projects.create(`proj-pin-${Date.now()}`));
+        unwrap(await ctx.projects.updateAgentConfig(project.id, {
+            mode: "custom",
+            definition: decode(
+                {
+                    schemaVersion: 1,
+                    name: "project-pin",
+                    prompts: { persist: {}, dynamic: {} },
+                    model: saved.id,
+                },
+                agentDefinitionSchema,
+            ),
+        }));
+        await rejectsErr(
+            () => bundle.providerModels.deleteSaved(saved.id),
+            (e) => assert.ok(AppErrorOps.is(e, "PROVIDER_SAVED_MODEL_IN_USE")),
+        );
+    });
 
-  it("chat_session.agent_config_json.modelId 引用时拒绝删除", async () => {
-    // 照抄上面 chat_project 那条的形状。会话级覆盖**只**存在 chat_session
-    // （该表没有 model_id 列），形态是顶层 `{agentId, modelId}`。
-    const ctx = getNovelMasterTestContext();
-    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
-    const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o"));
-    const project = unwrap(await ctx.projects.create(`proj-sess-${Date.now()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    unwrap(await ctx.sessions.updateSessionAgentConfig(session.id, {
-      agentId: `agent-sess-${randomUUID()}`,
-      modelId: saved.id,
-    }));
-    await rejectsErr(
-      () => bundle.providerModels.deleteSaved(saved.id),
-      (e) => assert.ok(AppErrorOps.is(e, "PROVIDER_SAVED_MODEL_IN_USE")),
-    );
-  });
+    it("chat_session.agent_config_json.modelId 引用时拒绝删除", async () => {
+        // 照抄上面 chat_project 那条的形状。会话级覆盖**只**存在 chat_session
+        // （该表没有 model_id 列），形态是顶层 `{agentId, modelId}`。
+        const ctx = getNovelMasterTestContext();
+        const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
+        const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o"));
+        const project = unwrap(await ctx.projects.create(`proj-sess-${Date.now()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        unwrap(await ctx.sessions.updateSessionAgentConfig(session.id, {
+            agentId: `agent-sess-${randomUUID()}`,
+            modelId: saved.id,
+        }));
+        await rejectsErr(
+            () => bundle.providerModels.deleteSaved(saved.id),
+            (e) => assert.ok(AppErrorOps.is(e, "PROVIDER_SAVED_MODEL_IN_USE")),
+        );
+    });
 
-  it("chat_session.agent_config_json 为脏 JSON 时守卫不整体失败（仍能删无引用模型）", async () => {
-    // 脏行必须被跳过而不是让整个守卫抛错——抛错等于守卫失效，比不扫更糟。
-    const ctx = getNovelMasterTestContext();
-    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
-    const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o"));
-    const project = unwrap(await ctx.projects.create(`proj-dirty-${Date.now()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    await ctx.conn.execute(`UPDATE chat_session SET agent_config_json = ? WHERE id = ?`, [
-      "{坏 JSON",
-      session.id,
-    ]);
+    it("chat_session.agent_config_json 为脏 JSON 时守卫不整体失败（仍能删无引用模型）", async () => {
+        // 脏行必须被跳过而不是让整个守卫抛错——抛错等于守卫失效，比不扫更糟。
+        const ctx = getNovelMasterTestContext();
+        const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
+        const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o"));
+        const project = unwrap(await ctx.projects.create(`proj-dirty-${Date.now()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        await ctx.conn.execute(`UPDATE chat_session SET agent_config_json = ? WHERE id = ?`, [
+            "{坏 JSON",
+            session.id,
+        ]);
 
-    unwrap(await bundle.providerModels.deleteSaved(saved.id));
-    assert.equal(unwrap(await bundle.providerModels.getSavedById(saved.id)), null);
-  });
+        unwrap(await bundle.providerModels.deleteSaved(saved.id));
+        assert.equal(unwrap(await bundle.providerModels.getSavedById(saved.id)), null);
+    });
 });

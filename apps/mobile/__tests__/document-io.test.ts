@@ -15,391 +15,391 @@ const mockUnlink = jest.fn();
 const mockStat = jest.fn();
 
 jest.mock('@react-native-documents/picker', () => ({
-  errorCodes: {OPERATION_CANCELED: 'OPERATION_CANCELED'},
-  isErrorWithCode: (error: unknown): boolean =>
-    typeof error === 'object' &&
-    error != null &&
-    'code' in error &&
-    (error as {code: unknown}).code === 'OPERATION_CANCELED',
-  isKnownType: (...args: unknown[]) => mockIsKnownType(...args),
-  pick: (...args: unknown[]) => mockPick(...args),
-  saveDocuments: (...args: unknown[]) => mockSaveDocuments(...args),
-  keepLocalCopy: (...args: unknown[]) => mockKeepLocalCopy(...args),
+    errorCodes: {OPERATION_CANCELED: 'OPERATION_CANCELED'},
+    isErrorWithCode: (error: unknown): boolean =>
+        typeof error === 'object' &&
+        error != null &&
+        'code' in error &&
+        (error as {code: unknown}).code === 'OPERATION_CANCELED',
+    isKnownType: (...args: unknown[]) => mockIsKnownType(...args),
+    pick: (...args: unknown[]) => mockPick(...args),
+    saveDocuments: (...args: unknown[]) => mockSaveDocuments(...args),
+    keepLocalCopy: (...args: unknown[]) => mockKeepLocalCopy(...args),
 }));
 
 jest.mock('react-native-blob-util', () => ({
-  fs: {
-    dirs: {CacheDir: '/cache'},
-    exists: (...args: unknown[]) => mockExists(...args),
-    readFile: (...args: unknown[]) => mockReadFile(...args),
-    writeFile: (...args: unknown[]) => mockWriteFile(...args),
-    unlink: (...args: unknown[]) => mockUnlink(...args),
-    stat: (...args: unknown[]) => mockStat(...args),
-  },
+    fs: {
+        dirs: {CacheDir: '/cache'},
+        exists: (...args: unknown[]) => mockExists(...args),
+        readFile: (...args: unknown[]) => mockReadFile(...args),
+        writeFile: (...args: unknown[]) => mockWriteFile(...args),
+        unlink: (...args: unknown[]) => mockUnlink(...args),
+        stat: (...args: unknown[]) => mockStat(...args),
+    },
 }));
 
 import {DocumentIo} from '@/services/document-io'
 
 describe('document-io', () => {
-  beforeEach(() => {
-    mockPick.mockReset();
-    mockSaveDocuments.mockReset();
-    mockKeepLocalCopy.mockReset();
-    mockIsKnownType.mockReset();
-    mockExists.mockReset();
-    mockReadFile.mockReset();
-    mockWriteFile.mockReset();
-    mockUnlink.mockReset().mockResolvedValue(undefined);
-    mockStat.mockReset().mockResolvedValue({path: '/cache/a.png', size: 1024});
-    mockWriteFile.mockResolvedValue(undefined);
-    mockSaveDocuments.mockResolvedValue([
-      {uri: 'content://saved', error: null},
-    ]);
-    mockExists.mockResolvedValue(true);
-  });
-
-  describe('exportBytesViaDocumentPicker', () => {
-    it('先写临时文件再弹保存 UI，成功后清理临时文件', async () => {
-      const result = await DocumentIo.exportBytes({
-        fileName: 'a.zip',
-        mimeType: 'application/zip',
-        write: async tmpPath => {
-          expect(tmpPath).toBe('/cache/a.zip');
-          await mockWriteFile(tmpPath, 'payload', 'base64');
-        },
-      });
-
-      expect(result).toBe('saved');
-      expect(mockSaveDocuments).toHaveBeenCalledWith({
-        sourceUris: ['file:///cache/a.zip'],
-        mimeType: 'application/zip',
-        fileName: 'a.zip',
-        copy: true,
-      });
-      expect(mockUnlink).toHaveBeenCalledWith('/cache/a.zip');
+    beforeEach(() => {
+        mockPick.mockReset();
+        mockSaveDocuments.mockReset();
+        mockKeepLocalCopy.mockReset();
+        mockIsKnownType.mockReset();
+        mockExists.mockReset();
+        mockReadFile.mockReset();
+        mockWriteFile.mockReset();
+        mockUnlink.mockReset().mockResolvedValue(undefined);
+        mockStat.mockReset().mockResolvedValue({path: '/cache/a.png', size: 1024});
+        mockWriteFile.mockResolvedValue(undefined);
+        mockSaveDocuments.mockResolvedValue([
+            {uri: 'content://saved', error: null},
+        ]);
+        mockExists.mockResolvedValue(true);
     });
 
-    it('用户取消返回 cancelled 且临时文件仍被 unlink（无残留）', async () => {
-      mockSaveDocuments.mockRejectedValue({code: 'OPERATION_CANCELED'});
+    describe('exportBytesViaDocumentPicker', () => {
+        it('先写临时文件再弹保存 UI，成功后清理临时文件', async () => {
+            const result = await DocumentIo.exportBytes({
+                fileName: 'a.zip',
+                mimeType: 'application/zip',
+                write: async tmpPath => {
+                    expect(tmpPath).toBe('/cache/a.zip');
+                    await mockWriteFile(tmpPath, 'payload', 'base64');
+                },
+            });
 
-      const result = await DocumentIo.exportBytes({
-        fileName: 'a.zip',
-        mimeType: 'application/zip',
-        write: async () => undefined,
-      });
+            expect(result).toBe('saved');
+            expect(mockSaveDocuments).toHaveBeenCalledWith({
+                sourceUris: ['file:///cache/a.zip'],
+                mimeType: 'application/zip',
+                fileName: 'a.zip',
+                copy: true,
+            });
+            expect(mockUnlink).toHaveBeenCalledWith('/cache/a.zip');
+        });
 
-      expect(result).toBe('cancelled');
-      expect(mockUnlink).toHaveBeenCalledWith('/cache/a.zip');
+        it('用户取消返回 cancelled 且临时文件仍被 unlink（无残留）', async () => {
+            mockSaveDocuments.mockRejectedValue({code: 'OPERATION_CANCELED'});
+
+            const result = await DocumentIo.exportBytes({
+                fileName: 'a.zip',
+                mimeType: 'application/zip',
+                write: async () => undefined,
+            });
+
+            expect(result).toBe('cancelled');
+            expect(mockUnlink).toHaveBeenCalledWith('/cache/a.zip');
+        });
+
+        it('saveDocuments 返回 error 条目时抛错并清理临时文件', async () => {
+            mockSaveDocuments.mockResolvedValue([{error: 'disk full'}]);
+
+            await expect(
+                DocumentIo.exportBytes({
+                    fileName: 'a.zip',
+                    mimeType: 'application/zip',
+                    write: async () => undefined,
+                }),
+            ).rejects.toThrow('disk full');
+            expect(mockUnlink).toHaveBeenCalledWith('/cache/a.zip');
+        });
+
+        it('copy 选项透传（备份在 Android 传 false）', async () => {
+            await DocumentIo.exportBytes({
+                fileName: 'b.nmbackup',
+                mimeType: 'application/octet-stream',
+                copy: false,
+                write: async () => undefined,
+            });
+            expect(mockSaveDocuments).toHaveBeenCalledWith(
+                expect.objectContaining({copy: false}),
+            );
+        });
     });
 
-    it('saveDocuments 返回 error 条目时抛错并清理临时文件', async () => {
-      mockSaveDocuments.mockResolvedValue([{error: 'disk full'}]);
+    describe('pickToLocalPath / pickAndReadBytes', () => {
+        it('pick → keepLocalCopy → 解码中文 localUri 为 fs 路径', async () => {
+            mockPick.mockResolvedValue([
+                {uri: 'content://x', name: '%E6%88%91.yaml'},
+            ]);
+            mockKeepLocalCopy.mockResolvedValue([
+                {status: 'success', localUri: 'file:///cache/%E4%B8%AD%E6%96%87.yaml'},
+            ]);
 
-      await expect(
-        DocumentIo.exportBytes({
-          fileName: 'a.zip',
-          mimeType: 'application/zip',
-          write: async () => undefined,
-        }),
-      ).rejects.toThrow('disk full');
-      expect(mockUnlink).toHaveBeenCalledWith('/cache/a.zip');
+            const picked = await DocumentIo.pickToLocalPath({
+                mimeTypes: ['text/yaml'],
+                fallbackLocalFileName: 'yaml-import.yaml',
+            });
+
+            expect(picked?.fsPath).toBe('/cache/中文.yaml');
+            expect(mockKeepLocalCopy).toHaveBeenCalledWith({
+                files: [{uri: 'content://x', fileName: '%E6%88%91.yaml'}],
+                destination: 'cachesDirectory',
+            });
+        });
+
+        it('localFileName 固定落盘名覆盖所选项自带名', async () => {
+            mockPick.mockResolvedValue([{uri: 'content://x', name: 'whatever.zip'}]);
+            mockKeepLocalCopy.mockResolvedValue([
+                {status: 'success', localUri: 'file:///cache/import.zip'},
+            ]);
+
+            await DocumentIo.pickToLocalPath({
+                mimeTypes: ['application/zip'],
+                localFileName: 'import.zip',
+            });
+
+            expect(mockKeepLocalCopy).toHaveBeenCalledWith({
+                files: [{uri: 'content://x', fileName: 'import.zip'}],
+                destination: 'cachesDirectory',
+            });
+        });
+
+        it('用户取消返回 null 且不触发 keepLocalCopy', async () => {
+            mockPick.mockResolvedValue([]);
+
+            await expect(
+                DocumentIo.pickAndReadBytes({mimeTypes: ['application/zip']}),
+            ).resolves.toBeNull();
+            expect(mockKeepLocalCopy).not.toHaveBeenCalled();
+        });
+
+        it('assertFileName 抛错时中止且不拷贝', async () => {
+            mockPick.mockResolvedValue([{uri: 'content://x', name: 'a.txt'}]);
+
+            await expect(
+                DocumentIo.pickToLocalPath({
+                    mimeTypes: ['text/plain'],
+                    assertFileName: () => {
+                        throw new Error('请选择 .yaml 文件');
+                    },
+                }),
+            ).rejects.toThrow('请选择 .yaml 文件');
+            expect(mockKeepLocalCopy).not.toHaveBeenCalled();
+        });
+
+        it('keepLocalCopy 失败走 buildCopyError 映射', async () => {
+            mockPick.mockResolvedValue([{uri: 'content://x', name: 'a.zip'}]);
+            mockKeepLocalCopy.mockResolvedValue([
+                {status: 'error', copyError: 'no space'},
+            ]);
+
+            await expect(
+                DocumentIo.pickAndReadBytes({
+                    mimeTypes: ['application/zip'],
+                    buildCopyError: msg => new Error(`zip copy failed: ${msg}`),
+                }),
+            ).rejects.toThrow('zip copy failed: no space');
+        });
+
+        it('读字节：exists 检查 + base64 解码', async () => {
+            mockPick.mockResolvedValue([{uri: 'content://x', name: 'a.zip'}]);
+            mockKeepLocalCopy.mockResolvedValue([
+                {status: 'success', localUri: 'file:///cache/a.zip'},
+            ]);
+            mockReadFile.mockResolvedValue(globalThis.btoa('hi'));
+
+            const bytes = await DocumentIo.pickAndReadBytes({mimeTypes: ['application/zip']});
+
+            expect(mockReadFile).toHaveBeenCalledWith('/cache/a.zip', 'base64');
+            expect(bytes).toEqual(new Uint8Array([0x68, 0x69]));
+        });
+
+        it('本地文件不存在时走 buildMissingError 映射', async () => {
+            mockPick.mockResolvedValue([{uri: 'content://x', name: 'a.zip'}]);
+            mockKeepLocalCopy.mockResolvedValue([
+                {status: 'success', localUri: 'file:///cache/a.zip'},
+            ]);
+            mockExists.mockResolvedValue(false);
+
+            await expect(
+                DocumentIo.pickAndReadBytes({
+                    mimeTypes: ['application/zip'],
+                    buildMissingError: fsPath => new Error(`missing: ${fsPath}`),
+                }),
+            ).rejects.toThrow('missing: /cache/a.zip');
+        });
+
+        it('maxBytes 预检：stat 超限抛 buildTooLargeError 且不读字节', async () => {
+            mockPick.mockResolvedValue([{uri: 'content://x', name: 'a.png'}]);
+            mockKeepLocalCopy.mockResolvedValue([
+                {status: 'success', localUri: 'file:///cache/a.png'},
+            ]);
+            mockStat.mockResolvedValue({path: '/cache/a.png', size: 50 * 1024 * 1024});
+
+            await expect(
+                DocumentIo.pickAndReadBytes({
+                    mimeTypes: ['image/png'],
+                    maxBytes: 48 * 1024 * 1024,
+                    buildTooLargeError: size =>
+                        new Error(`角色卡文件过大：${size} 字节，已拒绝导入`),
+                }),
+            ).rejects.toThrow('角色卡文件过大：52428800 字节，已拒绝导入');
+            expect(mockStat).toHaveBeenCalledWith('/cache/a.png');
+            expect(mockExists).not.toHaveBeenCalled();
+            expect(mockReadFile).not.toHaveBeenCalled();
+        });
+
+        it('maxBytes 预检：stat 失败容错放行，继续原读取流程', async () => {
+            mockPick.mockResolvedValue([{uri: 'content://x', name: 'a.png'}]);
+            mockKeepLocalCopy.mockResolvedValue([
+                {status: 'success', localUri: 'file:///cache/a.png'},
+            ]);
+            mockStat.mockRejectedValue(new Error('stat failed'));
+            mockReadFile.mockResolvedValue(globalThis.btoa('hi'));
+
+            const bytes = await DocumentIo.pickAndReadBytes({
+                mimeTypes: ['image/png'],
+                maxBytes: 48 * 1024 * 1024,
+                buildTooLargeError: size => new Error(`too large: ${size}`),
+            });
+
+            expect(bytes).toEqual(new Uint8Array([0x68, 0x69]));
+            expect(mockReadFile).toHaveBeenCalledWith('/cache/a.png', 'base64');
+        });
+
+        it('未传 maxBytes 时不做 stat 预检，行为不变', async () => {
+            mockPick.mockResolvedValue([{uri: 'content://x', name: 'a.zip'}]);
+            mockKeepLocalCopy.mockResolvedValue([
+                {status: 'success', localUri: 'file:///cache/a.zip'},
+            ]);
+            mockReadFile.mockResolvedValue(globalThis.btoa('hi'));
+
+            await DocumentIo.pickAndReadBytes({mimeTypes: ['application/zip']});
+
+            expect(mockStat).not.toHaveBeenCalled();
+            expect(mockReadFile).toHaveBeenCalledWith('/cache/a.zip', 'base64');
+        });
+
+        it('pickAndReadText 以 utf8 读出文本', async () => {
+            mockPick.mockResolvedValue([{uri: 'content://x', name: 'a.yaml'}]);
+            mockKeepLocalCopy.mockResolvedValue([
+                {status: 'success', localUri: 'file:///cache/a.yaml'},
+            ]);
+            mockReadFile.mockResolvedValue('name: a');
+
+            await expect(DocumentIo.pickAndReadText({mimeTypes: ['text/yaml']})).resolves.toBe(
+                'name: a',
+            );
+            expect(mockReadFile).toHaveBeenCalledWith('/cache/a.yaml', 'utf8');
+        });
     });
 
-    it('copy 选项透传（备份在 Android 传 false）', async () => {
-      await DocumentIo.exportBytes({
-        fileName: 'b.nmbackup',
-        mimeType: 'application/octet-stream',
-        copy: false,
-        write: async () => undefined,
-      });
-      expect(mockSaveDocuments).toHaveBeenCalledWith(
-        expect.objectContaining({copy: false}),
-      );
-    });
-  });
+    describe('pickAndReadFileWithMeta', () => {
+        /** 让 pick 成功并把 keepLocalCopy 落到指定缓存路径。 */
+        function arrangePick(
+            picked: {uri: string; name?: string},
+            localUri = 'file:///cache/import.bin',
+        ): void {
+            mockPick.mockResolvedValue([picked]);
+            mockKeepLocalCopy.mockResolvedValue([
+                {status: 'success', localUri, sourceUri: picked.uri},
+            ]);
+            mockReadFile.mockResolvedValue(globalThis.btoa('hi'));
+        }
 
-  describe('pickToLocalPath / pickAndReadBytes', () => {
-    it('pick → keepLocalCopy → 解码中文 localUri 为 fs 路径', async () => {
-      mockPick.mockResolvedValue([
-        {uri: 'content://x', name: '%E6%88%91.yaml'},
-      ]);
-      mockKeepLocalCopy.mockResolvedValue([
-        {status: 'success', localUri: 'file:///cache/%E4%B8%AD%E6%96%87.yaml'},
-      ]);
+        it('返回 {bytes, fileName}：落盘用临时名，fileName 取原件名', async () => {
+            arrangePick({uri: 'content://x', name: '资料.md'});
 
-      const picked = await DocumentIo.pickToLocalPath({
-        mimeTypes: ['text/yaml'],
-        fallbackLocalFileName: 'yaml-import.yaml',
-      });
+            const result = await DocumentIo.pickAndReadFileWithMeta({
+                mimeTypes: ['text/plain'],
+                localFileName: 'import.bin',
+            });
 
-      expect(picked?.fsPath).toBe('/cache/中文.yaml');
-      expect(mockKeepLocalCopy).toHaveBeenCalledWith({
-        files: [{uri: 'content://x', fileName: '%E6%88%91.yaml'}],
-        destination: 'cachesDirectory',
-      });
-    });
+            expect(mockKeepLocalCopy).toHaveBeenCalledWith({
+                files: [{uri: 'content://x', fileName: 'import.bin'}],
+                destination: 'cachesDirectory',
+            });
+            expect(mockReadFile).toHaveBeenCalledWith('/cache/import.bin', 'base64');
+            expect(result).toEqual({
+                bytes: new Uint8Array([0x68, 0x69]),
+                fileName: '资料.md',
+            });
+        });
 
-    it('localFileName 固定落盘名覆盖所选项自带名', async () => {
-      mockPick.mockResolvedValue([{uri: 'content://x', name: 'whatever.zip'}]);
-      mockKeepLocalCopy.mockResolvedValue([
-        {status: 'success', localUri: 'file:///cache/import.zip'},
-      ]);
+        it('原件名为空时退到 fallbackLocalFileName', async () => {
+            arrangePick({uri: 'content://x'});
 
-      await DocumentIo.pickToLocalPath({
-        mimeTypes: ['application/zip'],
-        localFileName: 'import.zip',
-      });
+            const result = await DocumentIo.pickAndReadFileWithMeta({
+                mimeTypes: ['text/plain'],
+                fallbackLocalFileName: '资料.md',
+            });
 
-      expect(mockKeepLocalCopy).toHaveBeenCalledWith({
-        files: [{uri: 'content://x', fileName: 'import.zip'}],
-        destination: 'cachesDirectory',
-      });
-    });
+            expect(result?.fileName).toBe('资料.md');
+        });
 
-    it('用户取消返回 null 且不触发 keepLocalCopy', async () => {
-      mockPick.mockResolvedValue([]);
+        it('原件名为空且无兜底时退到 import.bin（保证非空）', async () => {
+            arrangePick({uri: 'content://x', name: ''});
 
-      await expect(
-        DocumentIo.pickAndReadBytes({mimeTypes: ['application/zip']}),
-      ).resolves.toBeNull();
-      expect(mockKeepLocalCopy).not.toHaveBeenCalled();
-    });
+            const result = await DocumentIo.pickAndReadFileWithMeta({
+                mimeTypes: ['text/plain'],
+                localFileName: 'import.bin',
+            });
 
-    it('assertFileName 抛错时中止且不拷贝', async () => {
-      mockPick.mockResolvedValue([{uri: 'content://x', name: 'a.txt'}]);
+            expect(result?.fileName).toBe('import.bin');
+        });
 
-      await expect(
-        DocumentIo.pickToLocalPath({
-          mimeTypes: ['text/plain'],
-          assertFileName: () => {
-            throw new Error('请选择 .yaml 文件');
-          },
-        }),
-      ).rejects.toThrow('请选择 .yaml 文件');
-      expect(mockKeepLocalCopy).not.toHaveBeenCalled();
-    });
+        it('用户取消返回 null 且不触发 keepLocalCopy', async () => {
+            mockPick.mockResolvedValue([]);
 
-    it('keepLocalCopy 失败走 buildCopyError 映射', async () => {
-      mockPick.mockResolvedValue([{uri: 'content://x', name: 'a.zip'}]);
-      mockKeepLocalCopy.mockResolvedValue([
-        {status: 'error', copyError: 'no space'},
-      ]);
+            await expect(
+                DocumentIo.pickAndReadFileWithMeta({mimeTypes: ['text/plain']}),
+            ).resolves.toBeNull();
+            expect(mockKeepLocalCopy).not.toHaveBeenCalled();
+            expect(mockReadFile).not.toHaveBeenCalled();
+        });
 
-      await expect(
-        DocumentIo.pickAndReadBytes({
-          mimeTypes: ['application/zip'],
-          buildCopyError: msg => new Error(`zip copy failed: ${msg}`),
-        }),
-      ).rejects.toThrow('zip copy failed: no space');
-    });
+        it('maxBytes + buildTooLargeError 成对预检：超限抛错且不读字节', async () => {
+            arrangePick({uri: 'content://x', name: 'a.bin'});
+            mockStat.mockResolvedValue({
+                path: '/cache/import.bin',
+                size: 64 * 1024 * 1024,
+            });
 
-    it('读字节：exists 检查 + base64 解码', async () => {
-      mockPick.mockResolvedValue([{uri: 'content://x', name: 'a.zip'}]);
-      mockKeepLocalCopy.mockResolvedValue([
-        {status: 'success', localUri: 'file:///cache/a.zip'},
-      ]);
-      mockReadFile.mockResolvedValue(globalThis.btoa('hi'));
+            await expect(
+                DocumentIo.pickAndReadFileWithMeta({
+                    mimeTypes: ['application/octet-stream'],
+                    maxBytes: 32 * 1024 * 1024,
+                    buildTooLargeError: size => new Error(`too large: ${size}`),
+                }),
+            ).rejects.toThrow('too large: 67108864');
+            expect(mockStat).toHaveBeenCalledWith('/cache/import.bin');
+            expect(mockExists).not.toHaveBeenCalled();
+            expect(mockReadFile).not.toHaveBeenCalled();
+        });
 
-      const bytes = await DocumentIo.pickAndReadBytes({mimeTypes: ['application/zip']});
+        it('只传 maxBytes 不传 buildTooLargeError 时不做 stat 预检（成对约定）', async () => {
+            arrangePick({uri: 'content://x', name: 'a.bin'});
+            mockStat.mockResolvedValue({
+                path: '/cache/import.bin',
+                size: 64 * 1024 * 1024,
+            });
 
-      expect(mockReadFile).toHaveBeenCalledWith('/cache/a.zip', 'base64');
-      expect(bytes).toEqual(new Uint8Array([0x68, 0x69]));
-    });
+            const result = await DocumentIo.pickAndReadFileWithMeta({
+                mimeTypes: ['application/octet-stream'],
+                maxBytes: 32 * 1024 * 1024,
+            });
 
-    it('本地文件不存在时走 buildMissingError 映射', async () => {
-      mockPick.mockResolvedValue([{uri: 'content://x', name: 'a.zip'}]);
-      mockKeepLocalCopy.mockResolvedValue([
-        {status: 'success', localUri: 'file:///cache/a.zip'},
-      ]);
-      mockExists.mockResolvedValue(false);
-
-      await expect(
-        DocumentIo.pickAndReadBytes({
-          mimeTypes: ['application/zip'],
-          buildMissingError: fsPath => new Error(`missing: ${fsPath}`),
-        }),
-      ).rejects.toThrow('missing: /cache/a.zip');
+            expect(mockStat).not.toHaveBeenCalled();
+            expect(result?.fileName).toBe('a.bin');
+            expect(result?.bytes).toEqual(new Uint8Array([0x68, 0x69]));
+        });
     });
 
-    it('maxBytes 预检：stat 超限抛 buildTooLargeError 且不读字节', async () => {
-      mockPick.mockResolvedValue([{uri: 'content://x', name: 'a.png'}]);
-      mockKeepLocalCopy.mockResolvedValue([
-        {status: 'success', localUri: 'file:///cache/a.png'},
-      ]);
-      mockStat.mockResolvedValue({path: '/cache/a.png', size: 50 * 1024 * 1024});
+    describe('knownTypesForExtension', () => {
+        it('返回 isKnownType 的 MIME', () => {
+            mockIsKnownType.mockReturnValue({mimeType: 'image/png'});
+            expect(DocumentIo.knownTypesForExtension('png')).toEqual(['image/png']);
+        });
 
-      await expect(
-        DocumentIo.pickAndReadBytes({
-          mimeTypes: ['image/png'],
-          maxBytes: 48 * 1024 * 1024,
-          buildTooLargeError: size =>
-            new Error(`角色卡文件过大：${size} 字节，已拒绝导入`),
-        }),
-      ).rejects.toThrow('角色卡文件过大：52428800 字节，已拒绝导入');
-      expect(mockStat).toHaveBeenCalledWith('/cache/a.png');
-      expect(mockExists).not.toHaveBeenCalled();
-      expect(mockReadFile).not.toHaveBeenCalled();
+        it('mimeType 缺失或抛错时返回空数组', () => {
+            mockIsKnownType.mockReturnValueOnce({mimeType: null});
+            mockIsKnownType.mockImplementationOnce(() => {
+                throw new Error('unknown');
+            });
+            expect(DocumentIo.knownTypesForExtension('png')).toEqual([]);
+            expect(DocumentIo.knownTypesForExtension('png')).toEqual([]);
+        });
     });
-
-    it('maxBytes 预检：stat 失败容错放行，继续原读取流程', async () => {
-      mockPick.mockResolvedValue([{uri: 'content://x', name: 'a.png'}]);
-      mockKeepLocalCopy.mockResolvedValue([
-        {status: 'success', localUri: 'file:///cache/a.png'},
-      ]);
-      mockStat.mockRejectedValue(new Error('stat failed'));
-      mockReadFile.mockResolvedValue(globalThis.btoa('hi'));
-
-      const bytes = await DocumentIo.pickAndReadBytes({
-        mimeTypes: ['image/png'],
-        maxBytes: 48 * 1024 * 1024,
-        buildTooLargeError: size => new Error(`too large: ${size}`),
-      });
-
-      expect(bytes).toEqual(new Uint8Array([0x68, 0x69]));
-      expect(mockReadFile).toHaveBeenCalledWith('/cache/a.png', 'base64');
-    });
-
-    it('未传 maxBytes 时不做 stat 预检，行为不变', async () => {
-      mockPick.mockResolvedValue([{uri: 'content://x', name: 'a.zip'}]);
-      mockKeepLocalCopy.mockResolvedValue([
-        {status: 'success', localUri: 'file:///cache/a.zip'},
-      ]);
-      mockReadFile.mockResolvedValue(globalThis.btoa('hi'));
-
-      await DocumentIo.pickAndReadBytes({mimeTypes: ['application/zip']});
-
-      expect(mockStat).not.toHaveBeenCalled();
-      expect(mockReadFile).toHaveBeenCalledWith('/cache/a.zip', 'base64');
-    });
-
-    it('pickAndReadText 以 utf8 读出文本', async () => {
-      mockPick.mockResolvedValue([{uri: 'content://x', name: 'a.yaml'}]);
-      mockKeepLocalCopy.mockResolvedValue([
-        {status: 'success', localUri: 'file:///cache/a.yaml'},
-      ]);
-      mockReadFile.mockResolvedValue('name: a');
-
-      await expect(DocumentIo.pickAndReadText({mimeTypes: ['text/yaml']})).resolves.toBe(
-        'name: a',
-      );
-      expect(mockReadFile).toHaveBeenCalledWith('/cache/a.yaml', 'utf8');
-    });
-  });
-
-  describe('pickAndReadFileWithMeta', () => {
-    /** 让 pick 成功并把 keepLocalCopy 落到指定缓存路径。 */
-    function arrangePick(
-      picked: {uri: string; name?: string},
-      localUri = 'file:///cache/import.bin',
-    ): void {
-      mockPick.mockResolvedValue([picked]);
-      mockKeepLocalCopy.mockResolvedValue([
-        {status: 'success', localUri, sourceUri: picked.uri},
-      ]);
-      mockReadFile.mockResolvedValue(globalThis.btoa('hi'));
-    }
-
-    it('返回 {bytes, fileName}：落盘用临时名，fileName 取原件名', async () => {
-      arrangePick({uri: 'content://x', name: '资料.md'});
-
-      const result = await DocumentIo.pickAndReadFileWithMeta({
-        mimeTypes: ['text/plain'],
-        localFileName: 'import.bin',
-      });
-
-      expect(mockKeepLocalCopy).toHaveBeenCalledWith({
-        files: [{uri: 'content://x', fileName: 'import.bin'}],
-        destination: 'cachesDirectory',
-      });
-      expect(mockReadFile).toHaveBeenCalledWith('/cache/import.bin', 'base64');
-      expect(result).toEqual({
-        bytes: new Uint8Array([0x68, 0x69]),
-        fileName: '资料.md',
-      });
-    });
-
-    it('原件名为空时退到 fallbackLocalFileName', async () => {
-      arrangePick({uri: 'content://x'});
-
-      const result = await DocumentIo.pickAndReadFileWithMeta({
-        mimeTypes: ['text/plain'],
-        fallbackLocalFileName: '资料.md',
-      });
-
-      expect(result?.fileName).toBe('资料.md');
-    });
-
-    it('原件名为空且无兜底时退到 import.bin（保证非空）', async () => {
-      arrangePick({uri: 'content://x', name: ''});
-
-      const result = await DocumentIo.pickAndReadFileWithMeta({
-        mimeTypes: ['text/plain'],
-        localFileName: 'import.bin',
-      });
-
-      expect(result?.fileName).toBe('import.bin');
-    });
-
-    it('用户取消返回 null 且不触发 keepLocalCopy', async () => {
-      mockPick.mockResolvedValue([]);
-
-      await expect(
-        DocumentIo.pickAndReadFileWithMeta({mimeTypes: ['text/plain']}),
-      ).resolves.toBeNull();
-      expect(mockKeepLocalCopy).not.toHaveBeenCalled();
-      expect(mockReadFile).not.toHaveBeenCalled();
-    });
-
-    it('maxBytes + buildTooLargeError 成对预检：超限抛错且不读字节', async () => {
-      arrangePick({uri: 'content://x', name: 'a.bin'});
-      mockStat.mockResolvedValue({
-        path: '/cache/import.bin',
-        size: 64 * 1024 * 1024,
-      });
-
-      await expect(
-        DocumentIo.pickAndReadFileWithMeta({
-          mimeTypes: ['application/octet-stream'],
-          maxBytes: 32 * 1024 * 1024,
-          buildTooLargeError: size => new Error(`too large: ${size}`),
-        }),
-      ).rejects.toThrow('too large: 67108864');
-      expect(mockStat).toHaveBeenCalledWith('/cache/import.bin');
-      expect(mockExists).not.toHaveBeenCalled();
-      expect(mockReadFile).not.toHaveBeenCalled();
-    });
-
-    it('只传 maxBytes 不传 buildTooLargeError 时不做 stat 预检（成对约定）', async () => {
-      arrangePick({uri: 'content://x', name: 'a.bin'});
-      mockStat.mockResolvedValue({
-        path: '/cache/import.bin',
-        size: 64 * 1024 * 1024,
-      });
-
-      const result = await DocumentIo.pickAndReadFileWithMeta({
-        mimeTypes: ['application/octet-stream'],
-        maxBytes: 32 * 1024 * 1024,
-      });
-
-      expect(mockStat).not.toHaveBeenCalled();
-      expect(result?.fileName).toBe('a.bin');
-      expect(result?.bytes).toEqual(new Uint8Array([0x68, 0x69]));
-    });
-  });
-
-  describe('knownTypesForExtension', () => {
-    it('返回 isKnownType 的 MIME', () => {
-      mockIsKnownType.mockReturnValue({mimeType: 'image/png'});
-      expect(DocumentIo.knownTypesForExtension('png')).toEqual(['image/png']);
-    });
-
-    it('mimeType 缺失或抛错时返回空数组', () => {
-      mockIsKnownType.mockReturnValueOnce({mimeType: null});
-      mockIsKnownType.mockImplementationOnce(() => {
-        throw new Error('unknown');
-      });
-      expect(DocumentIo.knownTypesForExtension('png')).toEqual([]);
-      expect(DocumentIo.knownTypesForExtension('png')).toEqual([]);
-    });
-  });
 });

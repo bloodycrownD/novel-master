@@ -13,24 +13,24 @@ import { DEFAULT_SUBAGENT_DEFINITION } from "@novel-master/core/agent";
  * 过滤、双端 picker 字面口径一致）。改错任一分支必红。
  */
 test("agentModeMatchesTab 四态 × 两 tab 矩阵（T-C1）", () => {
-  // primary 定义：仅主 tab 显示。
-  assert.equal(agentModeMatchesTab("primary", "primary"), true);
-  assert.equal(agentModeMatchesTab("primary", "subagent"), false);
-  // subagent 定义：仅子 tab 显示。
-  assert.equal(agentModeMatchesTab("subagent", "primary"), false);
-  assert.equal(agentModeMatchesTab("subagent", "subagent"), true);
-  // all 定义：双侧 tab 都显示。
-  assert.equal(agentModeMatchesTab("all", "primary"), true);
-  assert.equal(agentModeMatchesTab("all", "subagent"), true);
-  // 未填写（undefined）：按 all 归一，双侧都显示。
-  assert.equal(agentModeMatchesTab(undefined, "primary"), true);
-  assert.equal(agentModeMatchesTab(undefined, "subagent"), true);
+    // primary 定义：仅主 tab 显示。
+    assert.equal(agentModeMatchesTab("primary", "primary"), true);
+    assert.equal(agentModeMatchesTab("primary", "subagent"), false);
+    // subagent 定义：仅子 tab 显示。
+    assert.equal(agentModeMatchesTab("subagent", "primary"), false);
+    assert.equal(agentModeMatchesTab("subagent", "subagent"), true);
+    // all 定义：双侧 tab 都显示。
+    assert.equal(agentModeMatchesTab("all", "primary"), true);
+    assert.equal(agentModeMatchesTab("all", "subagent"), true);
+    // 未填写（undefined）：按 all 归一，双侧都显示。
+    assert.equal(agentModeMatchesTab(undefined, "primary"), true);
+    assert.equal(agentModeMatchesTab(undefined, "subagent"), true);
 });
 
 /**
  * T-C2：DEFAULT_SUBAGENT_DEFINITION 经 /agent 公开子路径可导入且内容不漂移。
  */
 test("DEFAULT_SUBAGENT_DEFINITION 为虚拟 general 子代理（T-C2）", () => {
-  assert.equal(DEFAULT_SUBAGENT_DEFINITION.name, "general");
-  assert.equal(DEFAULT_SUBAGENT_DEFINITION.mode, "subagent");
+    assert.equal(DEFAULT_SUBAGENT_DEFINITION.name, "general");
+    assert.equal(DEFAULT_SUBAGENT_DEFINITION.mode, "subagent");
 });

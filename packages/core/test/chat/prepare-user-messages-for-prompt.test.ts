@@ -11,10 +11,10 @@ import {  TextBlocks  } from "@novel-master/core/chat";
 import {  PromptBuilder  } from "@novel-master/core/prompt";
 import {  MessageBodyText  } from "../../src/domain/chat/content/message-body-text.js";
 import {  ChatMessage  } from "../../src/domain/chat/logic/message/chat-message.js";
-import {  promptAssembler  } from "../../src/domain/chat/logic/prompt/prompt-assembler.js";
-import {  userMessageFormatter  } from "../../src/domain/chat/logic/prompt/user-message-formatter.js";
+import {  PromptAssembler  } from "../../src/domain/chat/logic/prompt/prompt-assembler.js";
+import {  UserMessageFormatter  } from "../../src/domain/chat/logic/prompt/user-message-formatter.js";
 const PROMPT_FILE_SEEN_SHORT_TIP = "该文件前文已引用，无需读取或加载";
-import {  dirAttachTreeRenderer  } from "../../src/domain/chat/logic/attachment/render-dir-attach-tree.js";
+import {  DirAttachTreeRenderer  } from "../../src/domain/chat/logic/attachment/render-dir-attach-tree.js";
 import type { ChatMessageData } from "../../src/domain/chat/model/message.js";
 import type { MessageAttachment } from "../../src/domain/chat/model/message-attachment.schema.js";
 import {  RULE_SNAPSHOT_CANON_KEY, SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT  } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
@@ -26,999 +26,999 @@ import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix
 novelMasterTestFixture();
 
 function userMsg(
-  text: string,
-  options?: {
-    readonly attachments?: readonly MessageAttachment[];
-    readonly hidden?: boolean;
-    readonly id?: string;
-    readonly sessionId?: string;
-  },
+    text: string,
+    options?: {
+        readonly attachments?: readonly MessageAttachment[];
+        readonly hidden?: boolean;
+        readonly id?: string;
+        readonly sessionId?: string;
+    },
 ): ChatMessageData {
-  return {
-    id: options?.id ?? "u1",
-    sessionId: options?.sessionId ?? "s1",
-    seq: 1,
-    role: "user",
-    content: TextBlocks.of(text),
-    provider: null,
-    raw: null,
-    createdAtMs: 0,
-    hidden: options?.hidden ?? false,
-    ...(options?.attachments != null
-      ? { attachments: options.attachments }
-      : {}),
-  };
+    return {
+        id: options?.id ?? "u1",
+        sessionId: options?.sessionId ?? "s1",
+        seq: 1,
+        role: "user",
+        content: TextBlocks.of(text),
+        provider: null,
+        raw: null,
+        createdAtMs: 0,
+        hidden: options?.hidden ?? false,
+        ...(options?.attachments != null
+            ? { attachments: options.attachments }
+            : {}),
+    };
 }
 
 describe("userMessageFormatter / promptAssembler (Step 6)", () => {
-  it("T-AT1: 仅 text 无附件 → wrap 恒等", () => {
-    assert.equal(userMessageFormatter.wrapForLlm("你好", undefined), "你好");
-    assert.equal(userMessageFormatter.wrapForLlm("你好", []), "你好");
-  });
-
-  it("T-EI1: 无附件但 extraInfo 非空 → wrap 注入 <extra-info> 块", () => {
-    const wrapped = userMessageFormatter.wrapForLlm("你好", undefined, "补充信息");
-    assert.match(wrapped, /<extra-info>/);
-    assert.match(wrapped, /补充信息/);
-    assert.match(wrapped, /<user-input>\n你好\n<\/user-input>/);
-    assert.match(wrapped, /<attachment>/);
-  });
-
-  it("T-EI2: 无附件无 extraInfo → wrap 仍恒等原文", () => {
-    assert.equal(userMessageFormatter.wrapForLlm("你好", undefined, undefined), "你好");
-    assert.equal(userMessageFormatter.wrapForLlm("你好", undefined, "   "), "你好");
-  });
-
-  it("T-EI3: prepare 对无附件纯文本消息注入 extraInfo（不再提前 return）", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const stored = unwrap(await ctx.messages.append(
-      session.id,
-      "user",
-      TextBlocks.of("继续"),
-    ));
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    const prepared = unwrap(await promptAssembler.prepare([stored], {
-      sessionId: session.id,
-      sessionKkv: sk,
-      vfs: ctx.sessionVfs(project.id, session.id),
-      extraInfo: "当前目录结构",
-    }));
-    const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
-    assert.match(body, /<extra-info>/);
-    assert.match(body, /当前目录结构/);
-    assert.match(body, /<user-input>\n继续\n<\/user-input>/);
-  });
-
-  it("T-EI4: annotate 附件 + extraInfo 非空 → </user-ops> 后 <extra-info> 嵌 attachment 内、顺序钉死", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const annotateXml = `<action name="annotate">\n{"path":"/x.md","note":"备注"}\n</action>`;
-    const attachments: MessageAttachment[] = [
-      {
-        name: "/x.md",
-        source: "user_ops",
-        type: "text",
-        content: annotateXml,
-        path: "/x.md",
-        action: "annotate",
-      },
-    ];
-    const stored = unwrap(await ctx.messages.append(
-      session.id,
-      "user",
-      TextBlocks.of("继续"),
-      { attachments },
-    ));
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    const prepared = unwrap(await promptAssembler.prepare([stored], {
-      sessionId: session.id,
-      sessionKkv: sk,
-      vfs: ctx.sessionVfs(project.id, session.id),
-      extraInfo: "备注信息",
-    }));
-    const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
-    // 顺序：user-ops 先闭合 → extra-info 嵌在 attachment 内 → attachment 闭合 → user-input
-    const expected = [
-      "<attachment>",
-      "  <user-ops>",
-      "    <action name=\"annotate\">",
-      '    {"path":"/x.md","note":"备注"}',
-      "    </action>",
-      "  </user-ops>",
-      "  <extra-info>",
-      "    备注信息",
-      "  </extra-info>",
-      "</attachment>",
-      "<user-input>",
-      "继续",
-      "</user-input>",
-    ].join("\n");
-    assert.equal(body, expected);
-  });
-
-  it("T-EA1: extra info 只对最新一条 user 消息拼接，历史消息不注入", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const first = unwrap(await ctx.messages.append(
-      session.id,
-      "user",
-      TextBlocks.of("第一条"),
-    ));
-    const second = unwrap(await ctx.messages.append(
-      session.id,
-      "user",
-      TextBlocks.of("第二条"),
-    ));
-    const third = unwrap(await ctx.messages.append(
-      session.id,
-      "user",
-      TextBlocks.of("第三条"),
-    ));
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    const prepared = unwrap(await promptAssembler.prepare(
-      [first, second, third],
-      {
-        sessionId: session.id,
-        sessionKkv: sk,
-        vfs: ctx.sessionVfs(project.id, session.id),
-        extraInfo: "背景说明",
-      },
-    ));
-    const body1 = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
-    const body2 = MessageBodyText.fromBlocks(prepared[1]!.content.blocks);
-    const body3 = MessageBodyText.fromBlocks(prepared[2]!.content.blocks);
-    // 只有最新（第三条）含 <extra-info>
-    assert.doesNotMatch(body1, /<extra-info>/);
-    assert.doesNotMatch(body2, /<extra-info>/);
-    assert.match(body3, /<extra-info>/);
-    assert.match(body3, /背景说明/);
-    // 历史消息保持原文恒等（无附件 + extraInfo 不注入 → wrap 恒等）
-    assert.equal(body1, "第一条");
-    assert.equal(body2, "第二条");
-  });
-
-  it("T-EA2: extraInfo 为空时所有 user 消息都不注入（与现状一致）", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const first = unwrap(await ctx.messages.append(
-      session.id,
-      "user",
-      TextBlocks.of("第一条"),
-    ));
-    const second = unwrap(await ctx.messages.append(
-      session.id,
-      "user",
-      TextBlocks.of("第二条"),
-    ));
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    const prepared = unwrap(await promptAssembler.prepare(
-      [first, second],
-      {
-        sessionId: session.id,
-        sessionKkv: sk,
-        vfs: ctx.sessionVfs(project.id, session.id),
-        // extraInfo 全空白
-        extraInfo: "   ",
-      },
-    ));
-    assert.doesNotMatch(MessageBodyText.fromBlocks(prepared[0]!.content.blocks), /<extra-info>/);
-    assert.doesNotMatch(MessageBodyText.fromBlocks(prepared[1]!.content.blocks), /<extra-info>/);
-  });
-
-  it("T-EA4: hidden user 不影响「最新一条」判定，hidden 原样进输出但不注入", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const visible1 = unwrap(await ctx.messages.append(
-      session.id,
-      "user",
-      TextBlocks.of("可见一"),
-    ));
-    const visible2 = unwrap(await ctx.messages.append(
-      session.id,
-      "user",
-      TextBlocks.of("可见二"),
-    ));
-    // hidden user 出现在最后，但不该被当作「最新一条」。
-    // messages.append 不支持 hidden 参数，用内存对象构造（对齐 T-HD1 做法）。
-    const hiddenMsg = userMsg("隐藏消息", {
-      sessionId: session.id,
-      hidden: true,
-    });
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    const prepared = unwrap(await promptAssembler.prepare(
-      [visible1, visible2, hiddenMsg],
-      {
-        sessionId: session.id,
-        sessionKkv: sk,
-        vfs: ctx.sessionVfs(project.id, session.id),
-        extraInfo: "背景说明",
-      },
-    ));
-    // hidden 透传但未 wrap（原文恒等）
-    const bodyHidden = MessageBodyText.fromBlocks(prepared[2]!.content.blocks);
-    assert.equal(bodyHidden, "隐藏消息");
-    assert.doesNotMatch(bodyHidden, /<extra-info>/);
-    // 最新一条非隐藏 user（visible2）才注入
-    assert.doesNotMatch(MessageBodyText.fromBlocks(prepared[0]!.content.blocks), /<extra-info>/);
-    assert.match(MessageBodyText.fromBlocks(prepared[1]!.content.blocks), /<extra-info>/);
-    assert.match(MessageBodyText.fromBlocks(prepared[1]!.content.blocks), /背景说明/);
-  });
-
-  it("T-AT2 / T-UO1: user_ops 手改(write)附件不进 prompt，annotate 附件仍进；库内仍为原文", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    // 历史 write 手改附件：无 action 字段（D2 下不进 prompt）
-    const writeXml = `<action name="write">\n{"path":"/x.md","content":""}\n</action>`;
-    const annotateXml = `<action name="annotate">\n{"path":"/n.md","note":"批注"}\n</action>`;
-    const attachments: MessageAttachment[] = [
-      {
-        name: "write",
-        source: "user_ops",
-        type: "text",
-        content: writeXml,
-      },
-      {
-        name: "/n.md",
-        source: "user_ops",
-        type: "text",
-        content: annotateXml,
-        path: "/n.md",
-        action: "annotate",
-      },
-    ];
-    const stored = unwrap(await ctx.messages.append(
-      session.id,
-      "user",
-      TextBlocks.of("继续"),
-      { attachments },
-    ));
-    assert.equal(MessageBodyText.fromBlocks(stored.content.blocks), "继续");
-    assert.equal(MessageBodyText.fromBlocks(stored.content.blocks).includes("<attachment>"), false);
-
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    const prepared = unwrap(await promptAssembler.prepare([stored], {
-      sessionId: session.id,
-      sessionKkv: sk,
-      vfs: ctx.sessionVfs(project.id, session.id),
-    }));
-    const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
-    // D2：user_ops 仅 annotate 进 <user-ops>；write 手改附件被过滤
-    assert.match(body, /<user-ops>/);
-    assert.doesNotMatch(body, /<action name="write">/);
-    assert.match(body, /<action name="annotate">/);
-    assert.match(body, /<user-input>\n继续\n<\/user-input>/);
-    assert.ok((prepared[0]!.attachments?.length ?? 0) > 0);
-
-    const reloaded = unwrap(await ctx.messages.get(stored.id));
-    assert.equal(MessageBodyText.fromBlocks(reloaded.content.blocks), "继续");
-  });
-
-  it("T-AT3: dir attach → <dir path>+$filetree ASCII depth=1，无深层/正文/file_cache", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    unwrap(await vfs.mkdir("/notes"));
-    unwrap(await vfs.mkdir("/notes/sub"));
-    await vfs.write("/notes/a.md", "AAA");
-    await vfs.write("/notes/sub/b.md", "BBB");
-
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    const tree = await dirAttachTreeRenderer.render("/notes", {
-      sessionId: session.id,
-      sessionKkv: sk,
-      vfs,
+    it("T-AT1: 仅 text 无附件 → wrap 恒等", () => {
+        assert.equal(UserMessageFormatter.wrapForLlm("你好", undefined), "你好");
+        assert.equal(UserMessageFormatter.wrapForLlm("你好", []), "你好");
     });
 
-    // 外层无 <dir>；内层 basename+/ ASCII；├──/└──；dirs 先 files 后
-    assert.equal(
-      tree,
-      [
-        "notes/",
-        "├── sub/",
-        "└── a.md",
-      ].join("\n"),
-    );
-    assert.ok(tree.includes("├──"));
-    assert.ok(tree.includes("└──"));
-    // 禁止嵌套展开、文件正文、内嵌 <file>、宏加载后缀
-    assert.ok(!tree.includes("b.md"));
-    assert.ok(!tree.includes("/notes/sub"));
-    assert.ok(!tree.includes("AAA"));
-    assert.ok(!tree.includes("BBB"));
-    assert.ok(!tree.includes("<file"));
-    assert.ok(!tree.includes("全部加载"));
-
-    const cacheKeysBefore = await sk.listKeys(
-      session.id,
-      SESSION_KKV_DOMAIN_FILE_CACHE,
-    );
-
-    const msg = userMsg("看目录", {
-      sessionId: session.id,
-      attachments: [
-        {
-          name: "/notes",
-          source: "attach",
-          type: "dir",
-          content: null,
-          path: "/notes",
-        },
-      ],
+    it("T-EI1: 无附件但 extraInfo 非空 → wrap 注入 <extra-info> 块", () => {
+        const wrapped = UserMessageFormatter.wrapForLlm("你好", undefined, "补充信息");
+        assert.match(wrapped, /<extra-info>/);
+        assert.match(wrapped, /补充信息/);
+        assert.match(wrapped, /<user-input>\n你好\n<\/user-input>/);
+        assert.match(wrapped, /<attachment>/);
     });
-    const prepared = unwrap(await promptAssembler.prepare([msg], {
-      sessionId: session.id,
-      sessionKkv: sk,
-      vfs,
-    }));
-    const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
-    assert.match(body, /<user-ops>/);
-    assert.match(body, /<action name="userAttach">/);
-    assert.match(body, /"kind": "dirTree"/);
-    assert.match(body, /notes\//);
-    assert.match(body, /├──/);
-    assert.match(body, /└──/);
-    assert.match(body, /a\.md/);
-    assert.match(body, /sub\//);
-    assert.ok(!body.includes("AAA"));
-    assert.ok(!body.includes("b.md"));
-    assert.ok(!body.includes("<dir "));
-    assert.ok(!body.includes("<file"));
-    assert.ok(!body.includes("<attach>"));
-    // T-WP6: 消息增量 prepare 路径 body 仍不含常驻前缀用的 <workplace>
-    assert.ok(!body.includes("<workplace>"));
 
-    const cacheKeysAfter = await sk.listKeys(
-      session.id,
-      SESSION_KKV_DOMAIN_FILE_CACHE,
-    );
-    assert.deepEqual(cacheKeysAfter, cacheKeysBefore);
-  });
-
-  it("T-AT4: @ 文本写 full；@ 二进制写 filename", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.write("/doc.md", "hello-doc");
-    await vfs.write("/pic.png", "fake-binary");
-
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    const msg = userMsg("refs", {
-      sessionId: session.id,
-      attachments: [
-        {
-          name: "/doc.md",
-          source: "attach",
-          type: "text",
-          content: null,
-          path: "/doc.md",
-        },
-        {
-          name: "/pic.png",
-          source: "attach",
-          type: "image",
-          content: null,
-          path: "/pic.png",
-        },
-      ],
+    it("T-EI2: 无附件无 extraInfo → wrap 仍恒等原文", () => {
+        assert.equal(UserMessageFormatter.wrapForLlm("你好", undefined, undefined), "你好");
+        assert.equal(UserMessageFormatter.wrapForLlm("你好", undefined, "   "), "你好");
     });
-    unwrap(await promptAssembler.prepare([msg], {
-      sessionId: session.id,
-      sessionKkv: sk,
-      vfs,
-    }));
 
-    assert.ok(
-      (unwrap(await sk.get(
-        session.id,
-        SESSION_KKV_DOMAIN_FILE_CACHE,
-        RuleSnapshotCodec.fileCacheKey("full", "/doc.md"),
-      ))) != null,
-    );
-    assert.ok(
-      (unwrap(await sk.get(
-        session.id,
-        SESSION_KKV_DOMAIN_FILE_CACHE,
-        RuleSnapshotCodec.fileCacheKey("filename", "/pic.png"),
-      ))) != null,
-    );
-  });
-
-  it("T-TX1/T-TX2: 落库气泡/可编辑原文无 wrap；attachments 可恢复", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.write("/w.md", "workplace-body");
-
-    const attachments: MessageAttachment[] = [
-      {
-        name: "/w.md",
-        source: "workplace",
-        type: "text",
-        content: null,
-        path: "/w.md",
-      },
-    ];
-    const stored = unwrap(await ctx.messages.append(
-      session.id,
-      "user",
-      TextBlocks.of("你好"),
-      { attachments },
-    ));
-    assert.equal(MessageBodyText.fromBlocks(stored.content.blocks), "你好");
-    assert.equal(ChatMessage.from(stored).editableText(), "你好");
-    assert.deepEqual(stored.attachments, attachments);
-    assert.equal(MessageBodyText.fromBlocks(stored.content.blocks).includes("<user-input>"), false);
-  });
-
-  it("T-TX3/T-CR8: prepare 后提示词段含 attachment wrap 与原文（历史 workplace 重放）", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.write("/w.md", "workplace-body");
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-
-    const stored = unwrap(await ctx.messages.append(
-      session.id,
-      "user",
-      TextBlocks.of("你好"),
-      {
-        attachments: [
-          {
-            name: "/w.md",
-            source: "workplace",
-            type: "text",
-            content: null,
-            path: "/w.md",
-          },
-        ],
-      },
-    ));
-    const prepared = unwrap(await promptAssembler.prepare([stored], {
-      sessionId: session.id,
-      sessionKkv: sk,
-      vfs,
-    }));
-    const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
-    assert.match(body, /<attachment>/);
-    assert.match(body, /<user-ops>/);
-    assert.match(body, /<action name="workplaceChange">/);
-    assert.match(body, /<user-input>\n你好\n<\/user-input>/);
-    assert.match(body, /workplace-body/);
-    assert.ok(!body.includes("<workplace>"));
-    assert.ok(!body.includes("<file "));
-    assert.ok(!body.includes("createdAt="));
-    assert.ok(!body.includes("mtime"));
-  });
-
-  it("hidden user 不 hydrate/wrap（T-HD1；agent-runner / session-prompt-input 已接线 prepare）", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.write("/h.md", "secret");
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-
-    const hidden = userMsg("隐藏", {
-      sessionId: session.id,
-      hidden: true,
-      attachments: [
-        {
-          name: "/h.md",
-          source: "attach",
-          type: "text",
-          content: null,
-          path: "/h.md",
-        },
-      ],
+    it("T-EI3: prepare 对无附件纯文本消息注入 extraInfo（不再提前 return）", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const stored = unwrap(await ctx.messages.append(
+            session.id,
+            "user",
+            TextBlocks.of("继续"),
+        ));
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        const prepared = unwrap(await PromptAssembler.prepare([stored], {
+            sessionId: session.id,
+            sessionKkv: sk,
+            vfs: ctx.sessionVfs(project.id, session.id),
+            extraInfo: "当前目录结构",
+        }));
+        const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
+        assert.match(body, /<extra-info>/);
+        assert.match(body, /当前目录结构/);
+        assert.match(body, /<user-input>\n继续\n<\/user-input>/);
     });
-    const prepared = unwrap(await promptAssembler.prepare([hidden], {
-      sessionId: session.id,
-      sessionKkv: sk,
-      vfs,
-    }));
-    assert.equal(MessageBodyText.fromBlocks(prepared[0]!.content.blocks), "隐藏");
-    assert.equal(MessageBodyText.fromBlocks(prepared[0]!.content.blocks).includes("<attachment>"), false);
-    assert.equal(
-      unwrap(await sk.get(
-        session.id,
-        SESSION_KKV_DOMAIN_FILE_CACHE,
-        RuleSnapshotCodec.fileCacheKey("full", "/h.md"),
-      )),
-      null,
-    );
-  });
 
-  it("T-SR6 / T-PD6: Agent prepare 与 RealPrompt 同源（assemble→prepare(S0)）用户段 wrap 一致", async () => {
-    // Desktop/Mobile buildSessionPromptInput = assemble → prepare(S0) → buildPromptLlmInputFromLayout；
-    // Agent runner 每 step 同样 assemble → prepare(S0)。此处钉用户段 wrap 文本一致。
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.write("/wp.md", "workplace-body");
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
+    it("T-EI4: annotate 附件 + extraInfo 非空 → </user-ops> 后 <extra-info> 嵌 attachment 内、顺序钉死", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const annotateXml = `<action name="annotate">\n{"path":"/x.md","note":"备注"}\n</action>`;
+        const attachments: MessageAttachment[] = [
+            {
+                name: "/x.md",
+                source: "user_ops",
+                type: "text",
+                content: annotateXml,
+                path: "/x.md",
+                action: "annotate",
+            },
+        ];
+        const stored = unwrap(await ctx.messages.append(
+            session.id,
+            "user",
+            TextBlocks.of("继续"),
+            { attachments },
+        ));
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        const prepared = unwrap(await PromptAssembler.prepare([stored], {
+            sessionId: session.id,
+            sessionKkv: sk,
+            vfs: ctx.sessionVfs(project.id, session.id),
+            extraInfo: "备注信息",
+        }));
+        const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
+        // 顺序：user-ops 先闭合 → extra-info 嵌在 attachment 内 → attachment 闭合 → user-input
+        const expected = [
+            "<attachment>",
+            "  <user-ops>",
+            "    <action name=\"annotate\">",
+            '    {"path":"/x.md","note":"备注"}',
+            "    </action>",
+            "  </user-ops>",
+            "  <extra-info>",
+            "    备注信息",
+            "  </extra-info>",
+            "</attachment>",
+            "<user-input>",
+            "继续",
+            "</user-input>",
+        ].join("\n");
+        assert.equal(body, expected);
+    });
 
-    const annotateXml =
-      '<action name="annotate">\n{"path":"/ops.md","note":"批注"}\n</action>';
-    const stored = unwrap(await ctx.messages.append(
-      session.id,
-      "user",
-      TextBlocks.of("继续"),
-      {
-        attachments: [
-          {
-            name: "/wp.md",
-            source: "workplace",
-            type: "text",
-            content: null,
-            path: "/wp.md",
-          },
-          {
-            name: "/ops.md",
-            source: "user_ops",
-            type: "text",
-            content: annotateXml,
-            path: "/ops.md",
-            action: "annotate",
-          },
-          {
-            name: "/wp.md",
-            source: "attach",
-            type: "text",
-            content: null,
-            path: "/wp.md",
-          },
-        ],
-      },
-    ));
+    it("T-EA1: extra info 只对最新一条 user 消息拼接，历史消息不注入", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const first = unwrap(await ctx.messages.append(
+            session.id,
+            "user",
+            TextBlocks.of("第一条"),
+        ));
+        const second = unwrap(await ctx.messages.append(
+            session.id,
+            "user",
+            TextBlocks.of("第二条"),
+        ));
+        const third = unwrap(await ctx.messages.append(
+            session.id,
+            "user",
+            TextBlocks.of("第三条"),
+        ));
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        const prepared = unwrap(await PromptAssembler.prepare(
+            [first, second, third],
+            {
+                sessionId: session.id,
+                sessionKkv: sk,
+                vfs: ctx.sessionVfs(project.id, session.id),
+                extraInfo: "背景说明",
+            },
+        ));
+        const body1 = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
+        const body2 = MessageBodyText.fromBlocks(prepared[1]!.content.blocks);
+        const body3 = MessageBodyText.fromBlocks(prepared[2]!.content.blocks);
+        // 只有最新（第三条）含 <extra-info>
+        assert.doesNotMatch(body1, /<extra-info>/);
+        assert.doesNotMatch(body2, /<extra-info>/);
+        assert.match(body3, /<extra-info>/);
+        assert.match(body3, /背景说明/);
+        // 历史消息保持原文恒等（无附件 + extraInfo 不注入 → wrap 恒等）
+        assert.equal(body1, "第一条");
+        assert.equal(body2, "第二条");
+    });
 
-    const prepareRuntime = {
-      sessionId: session.id,
-      sessionKkv: sk,
-      vfs,
-      seenPaths: [] as string[],
-    };
-    // Agent 路径：对 DB 原文 prepare
-    const agentPrepared = unwrap(await promptAssembler.prepare(
-      [stored],
-      prepareRuntime,
-    ));
-    const agentUserWrap = MessageBodyText.fromBlocks(agentPrepared[0]!.content.blocks);
+    it("T-EA2: extraInfo 为空时所有 user 消息都不注入（与现状一致）", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const first = unwrap(await ctx.messages.append(
+            session.id,
+            "user",
+            TextBlocks.of("第一条"),
+        ));
+        const second = unwrap(await ctx.messages.append(
+            session.id,
+            "user",
+            TextBlocks.of("第二条"),
+        ));
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        const prepared = unwrap(await PromptAssembler.prepare(
+            [first, second],
+            {
+                sessionId: session.id,
+                sessionKkv: sk,
+                vfs: ctx.sessionVfs(project.id, session.id),
+                // extraInfo 全空白
+                extraInfo: "   ",
+            },
+        ));
+        assert.doesNotMatch(MessageBodyText.fromBlocks(prepared[0]!.content.blocks), /<extra-info>/);
+        assert.doesNotMatch(MessageBodyText.fromBlocks(prepared[1]!.content.blocks), /<extra-info>/);
+    });
 
-    // RealPrompt / buildSessionPromptInput 同源：重新 list → prepare → layout
-    const listed = (outcomeValue(await ctx.messages.listBySession(session.id))).filter(
-      (m) => !m.hidden,
-    );
-    const realPromptPrepared = unwrap(await promptAssembler.prepare(
-      listed,
-      prepareRuntime,
-    ));
-    const layout = {
-      persistEnabled: false as const,
-      persist: [] as const,
-      dynamic: [] as const,
-    };
-    const input = unwrap(await PromptBuilder.llmInput(layout, {
-      workplaceDisplay: "",
-      messages: realPromptPrepared,
-    }));
-    const realPromptUser = input.messages.find((m) => m.id === stored.id);
-    assert.ok(realPromptUser, "layout 须含原 user 消息");
-    const realPromptUserWrap = MessageBodyText.fromBlocks(realPromptUser.content.blocks);
+    it("T-EA4: hidden user 不影响「最新一条」判定，hidden 原样进输出但不注入", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const visible1 = unwrap(await ctx.messages.append(
+            session.id,
+            "user",
+            TextBlocks.of("可见一"),
+        ));
+        const visible2 = unwrap(await ctx.messages.append(
+            session.id,
+            "user",
+            TextBlocks.of("可见二"),
+        ));
+        // hidden user 出现在最后，但不该被当作「最新一条」。
+        // messages.append 不支持 hidden 参数，用内存对象构造（对齐 T-HD1 做法）。
+        const hiddenMsg = userMsg("隐藏消息", {
+            sessionId: session.id,
+            hidden: true,
+        });
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        const prepared = unwrap(await PromptAssembler.prepare(
+            [visible1, visible2, hiddenMsg],
+            {
+                sessionId: session.id,
+                sessionKkv: sk,
+                vfs: ctx.sessionVfs(project.id, session.id),
+                extraInfo: "背景说明",
+            },
+        ));
+        // hidden 透传但未 wrap（原文恒等）
+        const bodyHidden = MessageBodyText.fromBlocks(prepared[2]!.content.blocks);
+        assert.equal(bodyHidden, "隐藏消息");
+        assert.doesNotMatch(bodyHidden, /<extra-info>/);
+        // 最新一条非隐藏 user（visible2）才注入
+        assert.doesNotMatch(MessageBodyText.fromBlocks(prepared[0]!.content.blocks), /<extra-info>/);
+        assert.match(MessageBodyText.fromBlocks(prepared[1]!.content.blocks), /<extra-info>/);
+        assert.match(MessageBodyText.fromBlocks(prepared[1]!.content.blocks), /背景说明/);
+    });
 
-    // 同 path：attach 优先，workplace 不进；二者同源；单一 <user-ops>
-    assert.match(agentUserWrap, /<user-ops>/);
-    assert.match(agentUserWrap, /<action name="userAttach">/);
-    assert.match(agentUserWrap, /<action name="annotate">/);
-    assert.match(agentUserWrap, /<user-input>\n继续\n<\/user-input>/);
-    assert.equal(
-      agentUserWrap.includes("<workplace>"),
-      false,
-      "同 path 时 workplace 应被 attach 抢先 seen 后省略",
-    );
-    assert.equal(agentUserWrap.includes("<attach>"), false);
-    // T-PR1：action 顺序 attach → workplace → user_ops annotate（本例无 workplace 内容）
-    const attachIdx = agentUserWrap.indexOf('name="userAttach"');
-    const annotateIdx = agentUserWrap.indexOf('name="annotate"');
-    assert.ok(attachIdx >= 0 && annotateIdx > attachIdx);
-    assert.equal(
-      realPromptUserWrap,
-      agentUserWrap,
-      "RealPrompt 用户段 wrap 须与 Agent prepare 一致",
-    );
-  });
+    it("T-AT2 / T-UO1: user_ops 手改(write)附件不进 prompt，annotate 附件仍进；库内仍为原文", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        // 历史 write 手改附件：无 action 字段（D2 下不进 prompt）
+        const writeXml = `<action name="write">\n{"path":"/x.md","content":""}\n</action>`;
+        const annotateXml = `<action name="annotate">\n{"path":"/n.md","note":"批注"}\n</action>`;
+        const attachments: MessageAttachment[] = [
+            {
+                name: "write",
+                source: "user_ops",
+                type: "text",
+                content: writeXml,
+            },
+            {
+                name: "/n.md",
+                source: "user_ops",
+                type: "text",
+                content: annotateXml,
+                path: "/n.md",
+                action: "annotate",
+            },
+        ];
+        const stored = unwrap(await ctx.messages.append(
+            session.id,
+            "user",
+            TextBlocks.of("继续"),
+            { attachments },
+        ));
+        assert.equal(MessageBodyText.fromBlocks(stored.content.blocks), "继续");
+        assert.equal(MessageBodyText.fromBlocks(stored.content.blocks).includes("<attachment>"), false);
+
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        const prepared = unwrap(await PromptAssembler.prepare([stored], {
+            sessionId: session.id,
+            sessionKkv: sk,
+            vfs: ctx.sessionVfs(project.id, session.id),
+        }));
+        const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
+        // D2：user_ops 仅 annotate 进 <user-ops>；write 手改附件被过滤
+        assert.match(body, /<user-ops>/);
+        assert.doesNotMatch(body, /<action name="write">/);
+        assert.match(body, /<action name="annotate">/);
+        assert.match(body, /<user-input>\n继续\n<\/user-input>/);
+        assert.ok((prepared[0]!.attachments?.length ?? 0) > 0);
+
+        const reloaded = unwrap(await ctx.messages.get(stored.id));
+        assert.equal(MessageBodyText.fromBlocks(reloaded.content.blocks), "继续");
+    });
+
+    it("T-AT3: dir attach → <dir path>+$filetree ASCII depth=1，无深层/正文/file_cache", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const vfs = ctx.sessionVfs(project.id, session.id);
+        unwrap(await vfs.mkdir("/notes"));
+        unwrap(await vfs.mkdir("/notes/sub"));
+        await vfs.write("/notes/a.md", "AAA");
+        await vfs.write("/notes/sub/b.md", "BBB");
+
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        const tree = await DirAttachTreeRenderer.render("/notes", {
+            sessionId: session.id,
+            sessionKkv: sk,
+            vfs,
+        });
+
+        // 外层无 <dir>；内层 basename+/ ASCII；├──/└──；dirs 先 files 后
+        assert.equal(
+            tree,
+            [
+                "notes/",
+                "├── sub/",
+                "└── a.md",
+            ].join("\n"),
+        );
+        assert.ok(tree.includes("├──"));
+        assert.ok(tree.includes("└──"));
+        // 禁止嵌套展开、文件正文、内嵌 <file>、宏加载后缀
+        assert.ok(!tree.includes("b.md"));
+        assert.ok(!tree.includes("/notes/sub"));
+        assert.ok(!tree.includes("AAA"));
+        assert.ok(!tree.includes("BBB"));
+        assert.ok(!tree.includes("<file"));
+        assert.ok(!tree.includes("全部加载"));
+
+        const cacheKeysBefore = await sk.listKeys(
+            session.id,
+            SESSION_KKV_DOMAIN_FILE_CACHE,
+        );
+
+        const msg = userMsg("看目录", {
+            sessionId: session.id,
+            attachments: [
+                {
+                    name: "/notes",
+                    source: "attach",
+                    type: "dir",
+                    content: null,
+                    path: "/notes",
+                },
+            ],
+        });
+        const prepared = unwrap(await PromptAssembler.prepare([msg], {
+            sessionId: session.id,
+            sessionKkv: sk,
+            vfs,
+        }));
+        const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
+        assert.match(body, /<user-ops>/);
+        assert.match(body, /<action name="userAttach">/);
+        assert.match(body, /"kind": "dirTree"/);
+        assert.match(body, /notes\//);
+        assert.match(body, /├──/);
+        assert.match(body, /└──/);
+        assert.match(body, /a\.md/);
+        assert.match(body, /sub\//);
+        assert.ok(!body.includes("AAA"));
+        assert.ok(!body.includes("b.md"));
+        assert.ok(!body.includes("<dir "));
+        assert.ok(!body.includes("<file"));
+        assert.ok(!body.includes("<attach>"));
+        // T-WP6: 消息增量 prepare 路径 body 仍不含常驻前缀用的 <workplace>
+        assert.ok(!body.includes("<workplace>"));
+
+        const cacheKeysAfter = await sk.listKeys(
+            session.id,
+            SESSION_KKV_DOMAIN_FILE_CACHE,
+        );
+        assert.deepEqual(cacheKeysAfter, cacheKeysBefore);
+    });
+
+    it("T-AT4: @ 文本写 full；@ 二进制写 filename", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const vfs = ctx.sessionVfs(project.id, session.id);
+        await vfs.write("/doc.md", "hello-doc");
+        await vfs.write("/pic.png", "fake-binary");
+
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        const msg = userMsg("refs", {
+            sessionId: session.id,
+            attachments: [
+                {
+                    name: "/doc.md",
+                    source: "attach",
+                    type: "text",
+                    content: null,
+                    path: "/doc.md",
+                },
+                {
+                    name: "/pic.png",
+                    source: "attach",
+                    type: "image",
+                    content: null,
+                    path: "/pic.png",
+                },
+            ],
+        });
+        unwrap(await PromptAssembler.prepare([msg], {
+            sessionId: session.id,
+            sessionKkv: sk,
+            vfs,
+        }));
+
+        assert.ok(
+            (unwrap(await sk.get(
+                session.id,
+                SESSION_KKV_DOMAIN_FILE_CACHE,
+                RuleSnapshotCodec.fileCacheKey("full", "/doc.md"),
+            ))) != null,
+        );
+        assert.ok(
+            (unwrap(await sk.get(
+                session.id,
+                SESSION_KKV_DOMAIN_FILE_CACHE,
+                RuleSnapshotCodec.fileCacheKey("filename", "/pic.png"),
+            ))) != null,
+        );
+    });
+
+    it("T-TX1/T-TX2: 落库气泡/可编辑原文无 wrap；attachments 可恢复", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const vfs = ctx.sessionVfs(project.id, session.id);
+        await vfs.write("/w.md", "workplace-body");
+
+        const attachments: MessageAttachment[] = [
+            {
+                name: "/w.md",
+                source: "workplace",
+                type: "text",
+                content: null,
+                path: "/w.md",
+            },
+        ];
+        const stored = unwrap(await ctx.messages.append(
+            session.id,
+            "user",
+            TextBlocks.of("你好"),
+            { attachments },
+        ));
+        assert.equal(MessageBodyText.fromBlocks(stored.content.blocks), "你好");
+        assert.equal(ChatMessage.from(stored).editableText(), "你好");
+        assert.deepEqual(stored.attachments, attachments);
+        assert.equal(MessageBodyText.fromBlocks(stored.content.blocks).includes("<user-input>"), false);
+    });
+
+    it("T-TX3/T-CR8: prepare 后提示词段含 attachment wrap 与原文（历史 workplace 重放）", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const vfs = ctx.sessionVfs(project.id, session.id);
+        await vfs.write("/w.md", "workplace-body");
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+
+        const stored = unwrap(await ctx.messages.append(
+            session.id,
+            "user",
+            TextBlocks.of("你好"),
+            {
+                attachments: [
+                    {
+                        name: "/w.md",
+                        source: "workplace",
+                        type: "text",
+                        content: null,
+                        path: "/w.md",
+                    },
+                ],
+            },
+        ));
+        const prepared = unwrap(await PromptAssembler.prepare([stored], {
+            sessionId: session.id,
+            sessionKkv: sk,
+            vfs,
+        }));
+        const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
+        assert.match(body, /<attachment>/);
+        assert.match(body, /<user-ops>/);
+        assert.match(body, /<action name="workplaceChange">/);
+        assert.match(body, /<user-input>\n你好\n<\/user-input>/);
+        assert.match(body, /workplace-body/);
+        assert.ok(!body.includes("<workplace>"));
+        assert.ok(!body.includes("<file "));
+        assert.ok(!body.includes("createdAt="));
+        assert.ok(!body.includes("mtime"));
+    });
+
+    it("hidden user 不 hydrate/wrap（T-HD1；agent-runner / session-prompt-input 已接线 prepare）", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const vfs = ctx.sessionVfs(project.id, session.id);
+        await vfs.write("/h.md", "secret");
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+
+        const hidden = userMsg("隐藏", {
+            sessionId: session.id,
+            hidden: true,
+            attachments: [
+                {
+                    name: "/h.md",
+                    source: "attach",
+                    type: "text",
+                    content: null,
+                    path: "/h.md",
+                },
+            ],
+        });
+        const prepared = unwrap(await PromptAssembler.prepare([hidden], {
+            sessionId: session.id,
+            sessionKkv: sk,
+            vfs,
+        }));
+        assert.equal(MessageBodyText.fromBlocks(prepared[0]!.content.blocks), "隐藏");
+        assert.equal(MessageBodyText.fromBlocks(prepared[0]!.content.blocks).includes("<attachment>"), false);
+        assert.equal(
+            unwrap(await sk.get(
+                session.id,
+                SESSION_KKV_DOMAIN_FILE_CACHE,
+                RuleSnapshotCodec.fileCacheKey("full", "/h.md"),
+            )),
+            null,
+        );
+    });
+
+    it("T-SR6 / T-PD6: Agent prepare 与 RealPrompt 同源（assemble→prepare(S0)）用户段 wrap 一致", async () => {
+        // Desktop/Mobile buildSessionPromptInput = assemble → prepare(S0) → buildPromptLlmInputFromLayout；
+        // Agent runner 每 step 同样 assemble → prepare(S0)。此处钉用户段 wrap 文本一致。
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const vfs = ctx.sessionVfs(project.id, session.id);
+        await vfs.write("/wp.md", "workplace-body");
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+
+        const annotateXml =
+            '<action name="annotate">\n{"path":"/ops.md","note":"批注"}\n</action>';
+        const stored = unwrap(await ctx.messages.append(
+            session.id,
+            "user",
+            TextBlocks.of("继续"),
+            {
+                attachments: [
+                    {
+                        name: "/wp.md",
+                        source: "workplace",
+                        type: "text",
+                        content: null,
+                        path: "/wp.md",
+                    },
+                    {
+                        name: "/ops.md",
+                        source: "user_ops",
+                        type: "text",
+                        content: annotateXml,
+                        path: "/ops.md",
+                        action: "annotate",
+                    },
+                    {
+                        name: "/wp.md",
+                        source: "attach",
+                        type: "text",
+                        content: null,
+                        path: "/wp.md",
+                    },
+                ],
+            },
+        ));
+
+        const prepareRuntime = {
+            sessionId: session.id,
+            sessionKkv: sk,
+            vfs,
+            seenPaths: [] as string[],
+        };
+        // Agent 路径：对 DB 原文 prepare
+        const agentPrepared = unwrap(await PromptAssembler.prepare(
+            [stored],
+            prepareRuntime,
+        ));
+        const agentUserWrap = MessageBodyText.fromBlocks(agentPrepared[0]!.content.blocks);
+
+        // RealPrompt / buildSessionPromptInput 同源：重新 list → prepare → layout
+        const listed = (outcomeValue(await ctx.messages.listBySession(session.id))).filter(
+            (m) => !m.hidden,
+        );
+        const realPromptPrepared = unwrap(await PromptAssembler.prepare(
+            listed,
+            prepareRuntime,
+        ));
+        const layout = {
+            persistEnabled: false as const,
+            persist: [] as const,
+            dynamic: [] as const,
+        };
+        const input = unwrap(await PromptBuilder.llmInput(layout, {
+            workplaceDisplay: "",
+            messages: realPromptPrepared,
+        }));
+        const realPromptUser = input.messages.find((m) => m.id === stored.id);
+        assert.ok(realPromptUser, "layout 须含原 user 消息");
+        const realPromptUserWrap = MessageBodyText.fromBlocks(realPromptUser.content.blocks);
+
+        // 同 path：attach 优先，workplace 不进；二者同源；单一 <user-ops>
+        assert.match(agentUserWrap, /<user-ops>/);
+        assert.match(agentUserWrap, /<action name="userAttach">/);
+        assert.match(agentUserWrap, /<action name="annotate">/);
+        assert.match(agentUserWrap, /<user-input>\n继续\n<\/user-input>/);
+        assert.equal(
+            agentUserWrap.includes("<workplace>"),
+            false,
+            "同 path 时 workplace 应被 attach 抢先 seen 后省略",
+        );
+        assert.equal(agentUserWrap.includes("<attach>"), false);
+        // T-PR1：action 顺序 attach → workplace → user_ops annotate（本例无 workplace 内容）
+        const attachIdx = agentUserWrap.indexOf('name="userAttach"');
+        const annotateIdx = agentUserWrap.indexOf('name="annotate"');
+        assert.ok(attachIdx >= 0 && annotateIdx > attachIdx);
+        assert.equal(
+            realPromptUserWrap,
+            agentUserWrap,
+            "RealPrompt 用户段 wrap 须与 Agent prepare 一致",
+        );
+    });
 });
 
 describe("promptAssembler path degrade (T-PD*)", () => {
-  it("T-PD1 / T-PR2: 可见消息首次文件 attach → userAttach JSON 行号正文，无 <file>/mtime", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.write("/a.md", "FULL-BODY-A");
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
+    it("T-PD1 / T-PR2: 可见消息首次文件 attach → userAttach JSON 行号正文，无 <file>/mtime", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const vfs = ctx.sessionVfs(project.id, session.id);
+        await vfs.write("/a.md", "FULL-BODY-A");
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
 
-    const prepared = unwrap(await promptAssembler.prepare(
-      [
-        userMsg("first", {
-          sessionId: session.id,
-          attachments: [
+        const prepared = unwrap(await PromptAssembler.prepare(
+            [
+                userMsg("first", {
+                    sessionId: session.id,
+                    attachments: [
+                        {
+                            name: "/a.md",
+                            source: "attach",
+                            type: "text",
+                            content: null,
+                            path: "/a.md",
+                        },
+                    ],
+                }),
+            ],
+            { sessionId: session.id, sessionKkv: sk, vfs },
+        ));
+        const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
+        assert.match(body, /<action name="userAttach">/);
+        assert.match(body, /"display": "full"/);
+        assert.match(body, /1\|FULL-BODY-A/);
+        assert.equal(body.includes("<file "), false);
+        assert.equal(body.includes("createdAt="), false);
+        assert.equal(body.includes("mtime"), false);
+        assert.equal(body.includes(PROMPT_FILE_SEEN_SHORT_TIP), false);
+    });
+
+    it("T-PD2 / T-PR2: 第二条可见消息同 path 文本 attach → alreadyReferenced，无 content", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const vfs = ctx.sessionVfs(project.id, session.id);
+        await vfs.write("/a.md", "FULL-BODY-A");
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+
+        const prepared = unwrap(await PromptAssembler.prepare(
+            [
+                userMsg("m1", {
+                    id: "u1",
+                    sessionId: session.id,
+                    attachments: [
+                        {
+                            name: "/a.md",
+                            source: "attach",
+                            type: "text",
+                            content: null,
+                            path: "/a.md",
+                        },
+                    ],
+                }),
+                userMsg("m2", {
+                    id: "u2",
+                    sessionId: session.id,
+                    attachments: [
+                        {
+                            name: "/a.md",
+                            source: "attach",
+                            type: "text",
+                            content: null,
+                            path: "/a.md",
+                        },
+                    ],
+                }),
+            ],
+            { sessionId: session.id, sessionKkv: sk, vfs },
+        ));
+        const body2 = MessageBodyText.fromBlocks(prepared[1]!.content.blocks);
+        assert.match(body2, /<action name="userAttach">/);
+        assert.match(body2, /"alreadyReferenced": true/);
+        assert.equal(body2.includes("FULL-BODY-A"), false);
+        assert.equal(body2.includes("createdAt="), false);
+        assert.equal(body2.includes("1|"), false);
+        assert.equal(body2.includes('"content"'), false);
+    });
+
+    it("T-PD3: 常驻前缀已含 path A 时再 @A（缺前导 /）→ alreadyReferenced；落库 path 带 /", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const vfs = ctx.sessionVfs(project.id, session.id);
+        await vfs.write("/pref.md", "PREFIX-BODY");
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+
+        const prepared = unwrap(await PromptAssembler.prepare(
+            [
+                userMsg("again", {
+                    sessionId: session.id,
+                    attachments: [
+                        {
+                            name: "pref.md",
+                            source: "attach",
+                            type: "text",
+                            content: null,
+                            // 故意缺前导 /：规范化后与 S0 同 key
+                            path: "pref.md",
+                        },
+                    ],
+                }),
+            ],
             {
-              name: "/a.md",
-              source: "attach",
-              type: "text",
-              content: null,
-              path: "/a.md",
+                sessionId: session.id,
+                sessionKkv: sk,
+                vfs,
+                seenPaths: ["/pref.md"],
             },
-          ],
-        }),
-      ],
-      { sessionId: session.id, sessionKkv: sk, vfs },
-    ));
-    const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
-    assert.match(body, /<action name="userAttach">/);
-    assert.match(body, /"display": "full"/);
-    assert.match(body, /1\|FULL-BODY-A/);
-    assert.equal(body.includes("<file "), false);
-    assert.equal(body.includes("createdAt="), false);
-    assert.equal(body.includes("mtime"), false);
-    assert.equal(body.includes(PROMPT_FILE_SEEN_SHORT_TIP), false);
-  });
+        ));
+        const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
+        assert.match(body, /<action name="userAttach">/);
+        assert.match(body, /"path": "\/pref\.md"/);
+        assert.match(body, /"alreadyReferenced": true/);
+        assert.equal(body.includes("PREFIX-BODY"), false);
+        assert.equal(prepared[0]!.attachments?.[0]?.path, "/pref.md");
+    });
 
-  it("T-PD2 / T-PR2: 第二条可见消息同 path 文本 attach → alreadyReferenced，无 content", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.write("/a.md", "FULL-BODY-A");
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
+    it("T-PD4 / T-PR1: 同条 workplace+attach 同 path → 仅 userAttach 有内容；顺序 attach 先", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const vfs = ctx.sessionVfs(project.id, session.id);
+        await vfs.write("/same.md", "SAME-BODY");
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
 
-    const prepared = unwrap(await promptAssembler.prepare(
-      [
-        userMsg("m1", {
-          id: "u1",
-          sessionId: session.id,
-          attachments: [
-            {
-              name: "/a.md",
-              source: "attach",
-              type: "text",
-              content: null,
-              path: "/a.md",
-            },
-          ],
-        }),
-        userMsg("m2", {
-          id: "u2",
-          sessionId: session.id,
-          attachments: [
-            {
-              name: "/a.md",
-              source: "attach",
-              type: "text",
-              content: null,
-              path: "/a.md",
-            },
-          ],
-        }),
-      ],
-      { sessionId: session.id, sessionKkv: sk, vfs },
-    ));
-    const body2 = MessageBodyText.fromBlocks(prepared[1]!.content.blocks);
-    assert.match(body2, /<action name="userAttach">/);
-    assert.match(body2, /"alreadyReferenced": true/);
-    assert.equal(body2.includes("FULL-BODY-A"), false);
-    assert.equal(body2.includes("createdAt="), false);
-    assert.equal(body2.includes("1|"), false);
-    assert.equal(body2.includes('"content"'), false);
-  });
+        const prepared = unwrap(await PromptAssembler.prepare(
+            [
+                userMsg("conflict", {
+                    sessionId: session.id,
+                    attachments: [
+                        {
+                            name: "/same.md",
+                            source: "workplace",
+                            type: "text",
+                            content: null,
+                            path: "/same.md",
+                        },
+                        {
+                            name: "/same.md",
+                            source: "attach",
+                            type: "text",
+                            content: null,
+                            path: "/same.md",
+                        },
+                    ],
+                }),
+            ],
+            { sessionId: session.id, sessionKkv: sk, vfs },
+        ));
+        const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
+        assert.match(body, /<user-ops>/);
+        assert.match(body, /<action name="userAttach">/);
+        assert.match(body, /SAME-BODY/);
+        assert.equal(body.includes("<workplace>"), false);
+        assert.equal(body.includes("<attach>"), false);
+        assert.equal(body.includes('name="workplaceChange"'), false);
+        const wp = prepared[0]!.attachments?.find((a) => a.source === "workplace");
+        assert.equal(wp?.content, "");
+    });
 
-  it("T-PD3: 常驻前缀已含 path A 时再 @A（缺前导 /）→ alreadyReferenced；落库 path 带 /", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.write("/pref.md", "PREFIX-BODY");
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
+    it("T-PD5: 目录 attach 两次均含 dirTree；目录计 seen 后同 path 文件为非首次", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const vfs = ctx.sessionVfs(project.id, session.id);
+        unwrap(await vfs.mkdir("/notes"));
+        await vfs.write("/notes/a.md", "note-a");
+        // 同 seen key：目录 /notes 与文件 /notes 冲突场景用独立文件 path
+        await vfs.write("/notes.md", "FILE-AT-NOTES");
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
 
-    const prepared = unwrap(await promptAssembler.prepare(
-      [
-        userMsg("again", {
-          sessionId: session.id,
-          attachments: [
-            {
-              name: "pref.md",
-              source: "attach",
-              type: "text",
-              content: null,
-              // 故意缺前导 /：规范化后与 S0 同 key
-              path: "pref.md",
-            },
-          ],
-        }),
-      ],
-      {
-        sessionId: session.id,
-        sessionKkv: sk,
-        vfs,
-        seenPaths: ["/pref.md"],
-      },
-    ));
-    const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
-    assert.match(body, /<action name="userAttach">/);
-    assert.match(body, /"path": "\/pref\.md"/);
-    assert.match(body, /"alreadyReferenced": true/);
-    assert.equal(body.includes("PREFIX-BODY"), false);
-    assert.equal(prepared[0]!.attachments?.[0]?.path, "/pref.md");
-  });
+        const prepared = unwrap(await PromptAssembler.prepare(
+            [
+                userMsg("d1", {
+                    id: "d1",
+                    sessionId: session.id,
+                    attachments: [
+                        {
+                            name: "/notes",
+                            source: "attach",
+                            type: "dir",
+                            content: null,
+                            path: "/notes/",
+                        },
+                    ],
+                }),
+                userMsg("d2", {
+                    id: "d2",
+                    sessionId: session.id,
+                    attachments: [
+                        {
+                            name: "/notes",
+                            source: "attach",
+                            type: "dir",
+                            content: null,
+                            path: "/notes",
+                        },
+                    ],
+                }),
+                userMsg("file-after-dir", {
+                    id: "f1",
+                    sessionId: session.id,
+                    attachments: [
+                        {
+                            name: "/notes",
+                            source: "attach",
+                            type: "text",
+                            content: null,
+                            // 与目录 seen key 相同（去尾 /）→ 短提示；此处用 /notes 作为「伪文件」
+                            // 实际 VFS 上 /notes 是目录，hydrate 会 missing；我们测 seen 降级即可
+                            path: "/notes",
+                        },
+                    ],
+                }),
+            ],
+            { sessionId: session.id, sessionKkv: sk, vfs },
+        ));
+        const b1 = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
+        const b2 = MessageBodyText.fromBlocks(prepared[1]!.content.blocks);
+        const b3 = MessageBodyText.fromBlocks(prepared[2]!.content.blocks);
+        assert.match(b1, /"kind": "dirTree"/);
+        assert.match(b2, /"kind": "dirTree"/);
+        assert.equal(b1.includes(PROMPT_FILE_SEEN_SHORT_TIP), false);
+        assert.equal(b2.includes(PROMPT_FILE_SEEN_SHORT_TIP), false);
+        assert.match(b3, /"alreadyReferenced": true/);
+        assert.match(b3, /"path": "\/notes"/);
+    });
 
-  it("T-PD4 / T-PR1: 同条 workplace+attach 同 path → 仅 userAttach 有内容；顺序 attach 先", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.write("/same.md", "SAME-BODY");
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
+    it("T-PD7: image/binary attach 非首次 → 仍 filename 档，无 alreadyReferenced", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const vfs = ctx.sessionVfs(project.id, session.id);
+        await vfs.write("/pic.png", "bin");
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
 
-    const prepared = unwrap(await promptAssembler.prepare(
-      [
-        userMsg("conflict", {
-          sessionId: session.id,
-          attachments: [
-            {
-              name: "/same.md",
-              source: "workplace",
-              type: "text",
-              content: null,
-              path: "/same.md",
-            },
-            {
-              name: "/same.md",
-              source: "attach",
-              type: "text",
-              content: null,
-              path: "/same.md",
-            },
-          ],
-        }),
-      ],
-      { sessionId: session.id, sessionKkv: sk, vfs },
-    ));
-    const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
-    assert.match(body, /<user-ops>/);
-    assert.match(body, /<action name="userAttach">/);
-    assert.match(body, /SAME-BODY/);
-    assert.equal(body.includes("<workplace>"), false);
-    assert.equal(body.includes("<attach>"), false);
-    assert.equal(body.includes('name="workplaceChange"'), false);
-    const wp = prepared[0]!.attachments?.find((a) => a.source === "workplace");
-    assert.equal(wp?.content, "");
-  });
+        const prepared = unwrap(await PromptAssembler.prepare(
+            [
+                userMsg("i1", {
+                    id: "i1",
+                    sessionId: session.id,
+                    attachments: [
+                        {
+                            name: "/pic.png",
+                            source: "attach",
+                            type: "image",
+                            content: null,
+                            path: "/pic.png",
+                        },
+                    ],
+                }),
+                userMsg("i2", {
+                    id: "i2",
+                    sessionId: session.id,
+                    attachments: [
+                        {
+                            name: "/pic.png",
+                            source: "attach",
+                            type: "image",
+                            content: null,
+                            path: "/pic.png",
+                        },
+                    ],
+                }),
+            ],
+            { sessionId: session.id, sessionKkv: sk, vfs },
+        ));
+        const body2 = MessageBodyText.fromBlocks(prepared[1]!.content.blocks);
+        assert.match(body2, /<action name="userAttach">/);
+        assert.match(body2, /"display": "filename"/);
+        // R2：attach 侧 filename 档正文改 BINARY_ATTACH_NOTE（原 1|basename）
+        assert.match(body2, /二进制文件，不提供正文/);
+        assert.equal(body2.includes("1|pic.png"), false);
+        assert.equal(body2.includes("alreadyReferenced"), false);
+        assert.equal(body2.includes("<file "), false);
+        assert.equal(body2.includes("createdAt="), false);
+    });
 
-  it("T-PD5: 目录 attach 两次均含 dirTree；目录计 seen 后同 path 文件为非首次", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    unwrap(await vfs.mkdir("/notes"));
-    await vfs.write("/notes/a.md", "note-a");
-    // 同 seen key：目录 /notes 与文件 /notes 冲突场景用独立文件 path
-    await vfs.write("/notes.md", "FILE-AT-NOTES");
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-
-    const prepared = unwrap(await promptAssembler.prepare(
-      [
-        userMsg("d1", {
-          id: "d1",
-          sessionId: session.id,
-          attachments: [
-            {
-              name: "/notes",
-              source: "attach",
-              type: "dir",
-              content: null,
-              path: "/notes/",
-            },
-          ],
-        }),
-        userMsg("d2", {
-          id: "d2",
-          sessionId: session.id,
-          attachments: [
-            {
-              name: "/notes",
-              source: "attach",
-              type: "dir",
-              content: null,
-              path: "/notes",
-            },
-          ],
-        }),
-        userMsg("file-after-dir", {
-          id: "f1",
-          sessionId: session.id,
-          attachments: [
-            {
-              name: "/notes",
-              source: "attach",
-              type: "text",
-              content: null,
-              // 与目录 seen key 相同（去尾 /）→ 短提示；此处用 /notes 作为「伪文件」
-              // 实际 VFS 上 /notes 是目录，hydrate 会 missing；我们测 seen 降级即可
-              path: "/notes",
-            },
-          ],
-        }),
-      ],
-      { sessionId: session.id, sessionKkv: sk, vfs },
-    ));
-    const b1 = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
-    const b2 = MessageBodyText.fromBlocks(prepared[1]!.content.blocks);
-    const b3 = MessageBodyText.fromBlocks(prepared[2]!.content.blocks);
-    assert.match(b1, /"kind": "dirTree"/);
-    assert.match(b2, /"kind": "dirTree"/);
-    assert.equal(b1.includes(PROMPT_FILE_SEEN_SHORT_TIP), false);
-    assert.equal(b2.includes(PROMPT_FILE_SEEN_SHORT_TIP), false);
-    assert.match(b3, /"alreadyReferenced": true/);
-    assert.match(b3, /"path": "\/notes"/);
-  });
-
-  it("T-PD7: image/binary attach 非首次 → 仍 filename 档，无 alreadyReferenced", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.write("/pic.png", "bin");
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-
-    const prepared = unwrap(await promptAssembler.prepare(
-      [
-        userMsg("i1", {
-          id: "i1",
-          sessionId: session.id,
-          attachments: [
-            {
-              name: "/pic.png",
-              source: "attach",
-              type: "image",
-              content: null,
-              path: "/pic.png",
-            },
-          ],
-        }),
-        userMsg("i2", {
-          id: "i2",
-          sessionId: session.id,
-          attachments: [
-            {
-              name: "/pic.png",
-              source: "attach",
-              type: "image",
-              content: null,
-              path: "/pic.png",
-            },
-          ],
-        }),
-      ],
-      { sessionId: session.id, sessionKkv: sk, vfs },
-    ));
-    const body2 = MessageBodyText.fromBlocks(prepared[1]!.content.blocks);
-    assert.match(body2, /<action name="userAttach">/);
-    assert.match(body2, /"display": "filename"/);
-    // R2：attach 侧 filename 档正文改 BINARY_ATTACH_NOTE（原 1|basename）
-    assert.match(body2, /二进制文件，不提供正文/);
-    assert.equal(body2.includes("1|pic.png"), false);
-    assert.equal(body2.includes("alreadyReferenced"), false);
-    assert.equal(body2.includes("<file "), false);
-    assert.equal(body2.includes("createdAt="), false);
-  });
-
-  it("旧 <file> 落库内容 hydrate → 剥壳转 action JSON，不原样进 <user-ops>", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    const legacyFile = `<file path="/legacy.md" createdAt="x" updatedAt="x" updatedBy="user">
+    it("旧 <file> 落库内容 hydrate → 剥壳转 action JSON，不原样进 <user-ops>", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const vfs = ctx.sessionVfs(project.id, session.id);
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        const legacyFile = `<file path="/legacy.md" createdAt="x" updatedAt="x" updatedBy="user">
 1|hello
 2|world
 </file>`;
-    const prepared = unwrap(await promptAssembler.prepare(
-      [
-        userMsg("看旧附件", {
-          sessionId: session.id,
-          attachments: [
+        const prepared = unwrap(await PromptAssembler.prepare(
+            [
+                userMsg("看旧附件", {
+                    sessionId: session.id,
+                    attachments: [
+                        {
+                            name: "/legacy.md",
+                            source: "attach",
+                            type: "text",
+                            content: legacyFile,
+                            path: "/legacy.md",
+                        },
+                    ],
+                }),
+            ],
             {
-              name: "/legacy.md",
-              source: "attach",
-              type: "text",
-              content: legacyFile,
-              path: "/legacy.md",
+                sessionId: session.id,
+                sessionKkv: sk,
+                vfs,
             },
-          ],
-        }),
-      ],
-      {
-        sessionId: session.id,
-        sessionKkv: sk,
-        vfs,
-      },
-    ));
-    const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
-    assert.match(body, /<user-ops>/);
-    assert.match(body, /<action name="userAttach">/);
-    assert.match(body, /"path": "\/legacy\.md"/);
-    assert.match(body, /1\|hello/);
-    assert.match(body, /2\|world/);
-    assert.equal(body.includes("<file "), false);
-    assert.equal(body.includes("createdAt="), false);
-    const att = prepared[0]!.attachments?.[0];
-    assert.equal(att?.action, "userAttach");
-    assert.equal(att?.content?.includes("<file "), false);
-  });
+        ));
+        const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
+        assert.match(body, /<user-ops>/);
+        assert.match(body, /<action name="userAttach">/);
+        assert.match(body, /"path": "\/legacy\.md"/);
+        assert.match(body, /1\|hello/);
+        assert.match(body, /2\|world/);
+        assert.equal(body.includes("<file "), false);
+        assert.equal(body.includes("createdAt="), false);
+        const att = prepared[0]!.attachments?.[0];
+        assert.equal(att?.action, "userAttach");
+        assert.equal(att?.content?.includes("<file "), false);
+    });
 
-  it("T-PD8: 仅 workplace/attach 但 hydrate 后全部 body 空 → wrap 等于 plainText", async () => {
-    const plain = "只有原文";
-    const wrapped = userMessageFormatter.wrapForLlm(plain, [
-      {
-        name: "/gone.md",
-        source: "workplace",
-        type: "text",
-        content: "",
-        path: "/gone.md",
-      },
-      {
-        name: "/gone.md",
-        source: "attach",
-        type: "text",
-        content: "   ",
-        path: "/gone.md",
-      },
-    ]);
-    assert.equal(wrapped, plain);
-    assert.equal(wrapped.includes("<attachment>"), false);
-
-    // prepare：S0 已含 path → workplace 空；无其它非空 section
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    const prepared = unwrap(await promptAssembler.prepare(
-      [
-        userMsg(plain, {
-          sessionId: session.id,
-          attachments: [
+    it("T-PD8: 仅 workplace/attach 但 hydrate 后全部 body 空 → wrap 等于 plainText", async () => {
+        const plain = "只有原文";
+        const wrapped = UserMessageFormatter.wrapForLlm(plain, [
             {
-              name: "/gone.md",
-              source: "workplace",
-              type: "text",
-              content: null,
-              path: "/gone.md",
+                name: "/gone.md",
+                source: "workplace",
+                type: "text",
+                content: "",
+                path: "/gone.md",
             },
-          ],
-        }),
-      ],
-      {
-        sessionId: session.id,
-        sessionKkv: sk,
-        vfs,
-        seenPaths: ["/gone.md"],
-      },
-    ));
-    assert.equal(MessageBodyText.fromBlocks(prepared[0]!.content.blocks), plain);
-  });
+            {
+                name: "/gone.md",
+                source: "attach",
+                type: "text",
+                content: "   ",
+                path: "/gone.md",
+            },
+        ]);
+        assert.equal(wrapped, plain);
+        assert.equal(wrapped.includes("<attachment>"), false);
+
+        // prepare：S0 已含 path → workplace 空；无其它非空 section
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const vfs = ctx.sessionVfs(project.id, session.id);
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        const prepared = unwrap(await PromptAssembler.prepare(
+            [
+                userMsg(plain, {
+                    sessionId: session.id,
+                    attachments: [
+                        {
+                            name: "/gone.md",
+                            source: "workplace",
+                            type: "text",
+                            content: null,
+                            path: "/gone.md",
+                        },
+                    ],
+                }),
+            ],
+            {
+                sessionId: session.id,
+                sessionKkv: sk,
+                vfs,
+                seenPaths: ["/gone.md"],
+            },
+        ));
+        assert.equal(MessageBodyText.fromBlocks(prepared[0]!.content.blocks), plain);
+    });
 });
 
 /**
@@ -1029,286 +1029,286 @@ describe("promptAssembler path degrade (T-PD*)", () => {
  * workplace 附件的省略判定，且**不写入共享 seen**。缺省回落 `seenPaths`。
  */
 describe("promptAssembler S0 双读（T-S0*）", () => {
-  it("T-S01: header 档目录的文件 attach 得全文——prefixPaths 不含它（不再被 S0 吞）", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.write("/hdr.md", "HEADER-BODY");
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
+    it("T-S01: header 档目录的文件 attach 得全文——prefixPaths 不含它（不再被 S0 吞）", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const vfs = ctx.sessionVfs(project.id, session.id);
+        await vfs.write("/hdr.md", "HEADER-BODY");
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
 
-    const prepared = unwrap(await promptAssembler.prepare(
-      [
-        userMsg("看设定", {
-          sessionId: session.id,
-          attachments: [
+        const prepared = unwrap(await PromptAssembler.prepare(
+            [
+                userMsg("看设定", {
+                    sessionId: session.id,
+                    attachments: [
+                        {
+                            name: "/hdr.md",
+                            source: "attach",
+                            type: "text",
+                            content: null,
+                            path: "/hdr.md",
+                        },
+                    ],
+                }),
+            ],
             {
-              name: "/hdr.md",
-              source: "attach",
-              type: "text",
-              content: null,
-              path: "/hdr.md",
+                sessionId: session.id,
+                sessionKkv: sk,
+                vfs,
+                // 显式 header 配置目录：assemble 侧只把它推进 visiblePaths，不进 prefixPaths。
+                seenPaths: [],
+                workplaceSeenPaths: ["/hdr.md"],
             },
-          ],
-        }),
-      ],
-      {
-        sessionId: session.id,
-        sessionKkv: sk,
-        vfs,
-        // 显式 header 配置目录：assemble 侧只把它推进 visiblePaths，不进 prefixPaths。
-        seenPaths: [],
-        workplaceSeenPaths: ["/hdr.md"],
-      },
-    ));
-    const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
-    assert.match(body, /<action name="userAttach">/);
-    assert.match(body, /"display": "full"/);
-    assert.match(body, /1\|HEADER-BODY/, "header 档路径的 attach 必须拿到全文");
-    assert.equal(body.includes("alreadyReferenced"), false);
-  });
+        ));
+        const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
+        assert.match(body, /<action name="userAttach">/);
+        assert.match(body, /"display": "full"/);
+        assert.match(body, /1\|HEADER-BODY/, "header 档路径的 attach 必须拿到全文");
+        assert.equal(body.includes("alreadyReferenced"), false);
+    });
 
-  it("T-S02: full 档路径（进 prefixPaths）attach 仍 alreadyReferenced——默认配置行为不变", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.write("/full.md", "FULL-BODY");
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
+    it("T-S02: full 档路径（进 prefixPaths）attach 仍 alreadyReferenced——默认配置行为不变", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const vfs = ctx.sessionVfs(project.id, session.id);
+        await vfs.write("/full.md", "FULL-BODY");
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
 
-    const prepared = unwrap(await promptAssembler.prepare(
-      [
-        userMsg("看设定", {
-          sessionId: session.id,
-          attachments: [
+        const prepared = unwrap(await PromptAssembler.prepare(
+            [
+                userMsg("看设定", {
+                    sessionId: session.id,
+                    attachments: [
+                        {
+                            name: "/full.md",
+                            source: "attach",
+                            type: "text",
+                            content: null,
+                            path: "/full.md",
+                        },
+                    ],
+                }),
+            ],
             {
-              name: "/full.md",
-              source: "attach",
-              type: "text",
-              content: null,
-              path: "/full.md",
+                sessionId: session.id,
+                sessionKkv: sk,
+                vfs,
+                seenPaths: ["/full.md"],
+                workplaceSeenPaths: ["/full.md"],
             },
-          ],
-        }),
-      ],
-      {
-        sessionId: session.id,
-        sessionKkv: sk,
-        vfs,
-        seenPaths: ["/full.md"],
-        workplaceSeenPaths: ["/full.md"],
-      },
-    ));
-    const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
-    assert.match(body, /"alreadyReferenced": true/);
-    assert.equal(body.includes("FULL-BODY"), false);
-  });
+        ));
+        const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
+        assert.match(body, /"alreadyReferenced": true/);
+        assert.equal(body.includes("FULL-BODY"), false);
+    });
 
-  it("T-S03: workplaceSeenPaths 缺省时回落 seenPaths（旧调用方零变化）", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.write("/gone.md", "GONE-BODY");
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
+    it("T-S03: workplaceSeenPaths 缺省时回落 seenPaths（旧调用方零变化）", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const vfs = ctx.sessionVfs(project.id, session.id);
+        await vfs.write("/gone.md", "GONE-BODY");
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
 
-    const prepared = unwrap(await promptAssembler.prepare(
-      [
-        userMsg("历史附件", {
-          sessionId: session.id,
-          attachments: [
+        const prepared = unwrap(await PromptAssembler.prepare(
+            [
+                userMsg("历史附件", {
+                    sessionId: session.id,
+                    attachments: [
+                        {
+                            name: "/gone.md",
+                            source: "workplace",
+                            type: "text",
+                            content: null,
+                            path: "/gone.md",
+                        },
+                    ],
+                }),
+            ],
             {
-              name: "/gone.md",
-              source: "workplace",
-              type: "text",
-              content: null,
-              path: "/gone.md",
+                sessionId: session.id,
+                sessionKkv: sk,
+                vfs,
+                // 只给 seenPaths，不给 workplaceSeenPaths ⇒ 回落同一集合。
+                seenPaths: ["/gone.md"],
             },
-          ],
-        }),
-      ],
-      {
-        sessionId: session.id,
-        sessionKkv: sk,
-        vfs,
-        // 只给 seenPaths，不给 workplaceSeenPaths ⇒ 回落同一集合。
-        seenPaths: ["/gone.md"],
-      },
-    ));
-    assert.equal(
-      prepared[0]!.attachments?.find((a) => a.source === "workplace")?.content,
-      "",
-      "缺省回落：workplace 附件仍按 seenPaths 省略"
-    );
-  });
+        ));
+        assert.equal(
+            prepared[0]!.attachments?.find((a) => a.source === "workplace")?.content,
+            "",
+            "缺省回落：workplace 附件仍按 seenPaths 省略"
+        );
+    });
 
-  it("T-S04: 显式 header 目录的**历史 workplace 附件** prepare 后仍 content===\"\"（省略语义不被 S0 改法破坏）", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.write("/hdr.md", "HEADER-BODY");
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
+    it("T-S04: 显式 header 目录的**历史 workplace 附件** prepare 后仍 content===\"\"（省略语义不被 S0 改法破坏）", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const vfs = ctx.sessionVfs(project.id, session.id);
+        await vfs.write("/hdr.md", "HEADER-BODY");
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
 
-    const prepared = unwrap(await promptAssembler.prepare(
-      [
-        userMsg("历史 workplace", {
-          sessionId: session.id,
-          attachments: [
+        const prepared = unwrap(await PromptAssembler.prepare(
+            [
+                userMsg("历史 workplace", {
+                    sessionId: session.id,
+                    attachments: [
+                        {
+                            name: "/hdr.md",
+                            source: "workplace",
+                            type: "text",
+                            content: null,
+                            path: "/hdr.md",
+                        },
+                    ],
+                }),
+            ],
             {
-              name: "/hdr.md",
-              source: "workplace",
-              type: "text",
-              content: null,
-              path: "/hdr.md",
+                sessionId: session.id,
+                sessionKkv: sk,
+                vfs,
+                // header 档：只在 visiblePaths、不在 prefixPaths。workplace 侧仍须省略——
+                // 这正是「双读」的意义：workplace 判定不吃收窄后的 attach 集合。
+                seenPaths: [],
+                workplaceSeenPaths: ["/hdr.md"],
             },
-          ],
-        }),
-      ],
-      {
-        sessionId: session.id,
-        sessionKkv: sk,
-        vfs,
-        // header 档：只在 visiblePaths、不在 prefixPaths。workplace 侧仍须省略——
-        // 这正是「双读」的意义：workplace 判定不吃收窄后的 attach 集合。
-        seenPaths: [],
-        workplaceSeenPaths: ["/hdr.md"],
-      },
-    ));
-    assert.equal(
-      prepared[0]!.attachments?.find((a) => a.source === "workplace")?.content,
-      "",
-      "workplace 附件在 workplaceSeen 命中时应省略，不重复注入 header"
-    );
-  });
+        ));
+        assert.equal(
+            prepared[0]!.attachments?.find((a) => a.source === "workplace")?.content,
+            "",
+            "workplace 附件在 workplaceSeen 命中时应省略，不重复注入 header"
+        );
+    });
 
-  it("T-S05: 双读互不串味——workplaceSeen 命中的路径不写共享 seen，后续 attach 仍得全文", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.write("/hdr.md", "HEADER-BODY");
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
+    it("T-S05: 双读互不串味——workplaceSeen 命中的路径不写共享 seen，后续 attach 仍得全文", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const vfs = ctx.sessionVfs(project.id, session.id);
+        await vfs.write("/hdr.md", "HEADER-BODY");
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
 
-    const prepared = unwrap(await promptAssembler.prepare(
-      [
-        userMsg("m1", {
-          id: "w1",
-          sessionId: session.id,
-          attachments: [
+        const prepared = unwrap(await PromptAssembler.prepare(
+            [
+                userMsg("m1", {
+                    id: "w1",
+                    sessionId: session.id,
+                    attachments: [
+                        {
+                            name: "/hdr.md",
+                            source: "workplace",
+                            type: "text",
+                            content: null,
+                            path: "/hdr.md",
+                        },
+                    ],
+                }),
+                userMsg("m2", {
+                    id: "a1",
+                    sessionId: session.id,
+                    attachments: [
+                        {
+                            name: "/hdr.md",
+                            source: "attach",
+                            type: "text",
+                            content: null,
+                            path: "/hdr.md",
+                        },
+                    ],
+                }),
+            ],
             {
-              name: "/hdr.md",
-              source: "workplace",
-              type: "text",
-              content: null,
-              path: "/hdr.md",
+                sessionId: session.id,
+                sessionKkv: sk,
+                vfs,
+                seenPaths: [],
+                workplaceSeenPaths: ["/hdr.md"],
             },
-          ],
-        }),
-        userMsg("m2", {
-          id: "a1",
-          sessionId: session.id,
-          attachments: [
-            {
-              name: "/hdr.md",
-              source: "attach",
-              type: "text",
-              content: null,
-              path: "/hdr.md",
-            },
-          ],
-        }),
-      ],
-      {
-        sessionId: session.id,
-        sessionKkv: sk,
-        vfs,
-        seenPaths: [],
-        workplaceSeenPaths: ["/hdr.md"],
-      },
-    ));
-    // workplaceSeen 只在 workplace 判定里被读——绝不能写进共享 seen，
-    // 否则第二条 attach 会被误判 alreadyReferenced（这正是本用例的牙齿）。
-    assert.match(MessageBodyText.fromBlocks(prepared[1]!.content.blocks), /1\|HEADER-BODY/);
-    assert.equal(
-      MessageBodyText.fromBlocks(prepared[1]!.content.blocks).includes("alreadyReferenced"),
-      false
-    );
-  });
+        ));
+        // workplaceSeen 只在 workplace 判定里被读——绝不能写进共享 seen，
+        // 否则第二条 attach 会被误判 alreadyReferenced（这正是本用例的牙齿）。
+        assert.match(MessageBodyText.fromBlocks(prepared[1]!.content.blocks), /1\|HEADER-BODY/);
+        assert.equal(
+            MessageBodyText.fromBlocks(prepared[1]!.content.blocks).includes("alreadyReferenced"),
+            false
+        );
+    });
 });
 
 describe("promptAssembler tool_result 透传 (T-S1)", () => {
-  it("T-S1a: 含 tool_result 的 user 消息在 extraInfo 非空时仍透传、block 类型保住", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    // 直接构造含 tool_result block 的 user 消息，不复用 userMsg（后者写死 textBlocks）。
-    const toolResultMsg: ChatMessageData = {
-      id: "tr1",
-      sessionId: session.id,
-      seq: 1,
-      role: "user",
-      content: {
-        blocks: [
-          {
-            type: "tool_result",
-            toolUseId: "tu_1",
-            content: "result text",
-          },
-        ],
-      },
-      provider: null,
-      raw: null,
-      createdAtMs: 0,
-      hidden: false,
-    };
-    const prepared = unwrap(await promptAssembler.prepare([toolResultMsg], {
-      sessionId: session.id,
-      sessionKkv: sk,
-      vfs: ctx.sessionVfs(project.id, session.id),
-      extraInfo: "自定义附加信息",
-    }));
-    assert.equal(prepared.length, 1);
-    assert.equal(prepared[0]!.content.blocks[0]!.type, "tool_result");
-    assert.equal(
-      (prepared[0]!.content.blocks[0] as { toolUseId: string }).toolUseId,
-      "tu_1",
-    );
-  });
+    it("T-S1a: 含 tool_result 的 user 消息在 extraInfo 非空时仍透传、block 类型保住", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        // 直接构造含 tool_result block 的 user 消息，不复用 userMsg（后者写死 textBlocks）。
+        const toolResultMsg: ChatMessageData = {
+            id: "tr1",
+            sessionId: session.id,
+            seq: 1,
+            role: "user",
+            content: {
+                blocks: [
+                    {
+                        type: "tool_result",
+                        toolUseId: "tu_1",
+                        content: "result text",
+                    },
+                ],
+            },
+            provider: null,
+            raw: null,
+            createdAtMs: 0,
+            hidden: false,
+        };
+        const prepared = unwrap(await PromptAssembler.prepare([toolResultMsg], {
+            sessionId: session.id,
+            sessionKkv: sk,
+            vfs: ctx.sessionVfs(project.id, session.id),
+            extraInfo: "自定义附加信息",
+        }));
+        assert.equal(prepared.length, 1);
+        assert.equal(prepared[0]!.content.blocks[0]!.type, "tool_result");
+        assert.equal(
+            (prepared[0]!.content.blocks[0] as { toolUseId: string }).toolUseId,
+            "tu_1",
+        );
+    });
 
-  it("T-S1b: 含 tool_result 的 user 消息在无 customAttach 时透传、block 类型保住", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    const toolResultMsg: ChatMessageData = {
-      id: "tr2",
-      sessionId: session.id,
-      seq: 1,
-      role: "user",
-      content: {
-        blocks: [
-          {
-            type: "tool_result",
-            toolUseId: "tu_2",
-            content: "result text",
-          },
-        ],
-      },
-      provider: null,
-      raw: null,
-      createdAtMs: 0,
-      hidden: false,
-    };
-    const prepared = unwrap(await promptAssembler.prepare([toolResultMsg], {
-      sessionId: session.id,
-      sessionKkv: sk,
-      vfs: ctx.sessionVfs(project.id, session.id),
-    }));
-    assert.equal(prepared.length, 1);
-    assert.equal(prepared[0]!.content.blocks[0]!.type, "tool_result");
-  });
+    it("T-S1b: 含 tool_result 的 user 消息在无 customAttach 时透传、block 类型保住", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        const toolResultMsg: ChatMessageData = {
+            id: "tr2",
+            sessionId: session.id,
+            seq: 1,
+            role: "user",
+            content: {
+                blocks: [
+                    {
+                        type: "tool_result",
+                        toolUseId: "tu_2",
+                        content: "result text",
+                    },
+                ],
+            },
+            provider: null,
+            raw: null,
+            createdAtMs: 0,
+            hidden: false,
+        };
+        const prepared = unwrap(await PromptAssembler.prepare([toolResultMsg], {
+            sessionId: session.id,
+            sessionKkv: sk,
+            vfs: ctx.sessionVfs(project.id, session.id),
+        }));
+        assert.equal(prepared.length, 1);
+        assert.equal(prepared[0]!.content.blocks[0]!.type, "tool_result");
+    });
 });
 
 /**
@@ -1316,301 +1316,301 @@ describe("promptAssembler tool_result 透传 (T-S1)", () => {
  * 预算 = 整个拼装共享一次 500k；恰好等于预算不降级；workplace 源豁免。
  */
 describe("promptAssembler 附件预算与降级 (T-A)", () => {
-  function attachFile(path: string): MessageAttachment {
-    return { name: path, source: "attach", type: "text", content: null, path };
-  }
+    function attachFile(path: string): MessageAttachment {
+        return { name: path, source: "attach", type: "text", content: null, path };
+    }
 
-  it("T-A1: 合计超 500k → 超限项 display:\"filename\" + 分段读取引导；预算内项仍 full", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    const small = "S".repeat(1_000);
-    const big = "B".repeat(ATTACH_PROMPT_CHAR_BUDGET);
-    await vfs.write("/small.md", small);
-    await vfs.write("/big.md", big);
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
+    it("T-A1: 合计超 500k → 超限项 display:\"filename\" + 分段读取引导；预算内项仍 full", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const vfs = ctx.sessionVfs(project.id, session.id);
+        const small = "S".repeat(1_000);
+        const big = "B".repeat(ATTACH_PROMPT_CHAR_BUDGET);
+        await vfs.write("/small.md", small);
+        await vfs.write("/big.md", big);
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
 
-    const prepared = unwrap(await promptAssembler.prepare(
-      [
-        userMsg("refs", {
-          sessionId: session.id,
-          attachments: [attachFile("/small.md"), attachFile("/big.md")],
-        }),
-      ],
-      { sessionId: session.id, sessionKkv: sk, vfs },
-    ));
-    const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
-    // 预算内项仍 full（行号正文）
-    assert.match(body, /1\|S{50}/);
-    assert.match(body, /"display": "full"/);
-    // 超限项降级：绕过 renderFileBlockBody，只给 filename + 引导文案
-    assert.match(body, /文件过长，可用 read 配合 offset\/limit 分段读取/);
-    assert.equal(body.includes("1|BBBB"), false);
-    // 超限项的 display 被强制为 filename
-    const bigBlock = body
-      .split("<action name=")
-      .find((chunk) => chunk.includes('"path": "/big.md"'));
-    assert.ok(bigBlock != null);
-    assert.match(bigBlock, /"display": "filename"/);
-  });
+        const prepared = unwrap(await PromptAssembler.prepare(
+            [
+                userMsg("refs", {
+                    sessionId: session.id,
+                    attachments: [attachFile("/small.md"), attachFile("/big.md")],
+                }),
+            ],
+            { sessionId: session.id, sessionKkv: sk, vfs },
+        ));
+        const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
+        // 预算内项仍 full（行号正文）
+        assert.match(body, /1\|S{50}/);
+        assert.match(body, /"display": "full"/);
+        // 超限项降级：绕过 renderFileBlockBody，只给 filename + 引导文案
+        assert.match(body, /文件过长，可用 read 配合 offset\/limit 分段读取/);
+        assert.equal(body.includes("1|BBBB"), false);
+        // 超限项的 display 被强制为 filename
+        const bigBlock = body
+            .split("<action name=")
+            .find((chunk) => chunk.includes('"path": "/big.md"'));
+        assert.ok(bigBlock != null);
+        assert.match(bigBlock, /"display": "filename"/);
+    });
 
-  it("T-A1 边界: 合计恰好等于 500k → 不降级", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    const half = "A".repeat(ATTACH_PROMPT_CHAR_BUDGET / 2);
-    await vfs.write("/a.md", half);
-    await vfs.write("/b.md", half);
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
+    it("T-A1 边界: 合计恰好等于 500k → 不降级", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const vfs = ctx.sessionVfs(project.id, session.id);
+        const half = "A".repeat(ATTACH_PROMPT_CHAR_BUDGET / 2);
+        await vfs.write("/a.md", half);
+        await vfs.write("/b.md", half);
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
 
-    const prepared = unwrap(await promptAssembler.prepare(
-      [
-        userMsg("refs", {
-          sessionId: session.id,
-          attachments: [attachFile("/a.md"), attachFile("/b.md")],
-        }),
-      ],
-      { sessionId: session.id, sessionKkv: sk, vfs },
-    ));
-    const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
-    assert.equal(body.includes("文件过长"), false);
-    assert.match(body, /1\|AAAA/);
-    assert.match(body, /"display": "full"/);
-  });
+        const prepared = unwrap(await PromptAssembler.prepare(
+            [
+                userMsg("refs", {
+                    sessionId: session.id,
+                    attachments: [attachFile("/a.md"), attachFile("/b.md")],
+                }),
+            ],
+            { sessionId: session.id, sessionKkv: sk, vfs },
+        ));
+        const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
+        assert.equal(body.includes("文件过长"), false);
+        assert.match(body, /1\|AAAA/);
+        assert.match(body, /"display": "full"/);
+    });
 
-  it("T-A3: 存量裸正文（无 VFS 读盘）的 binary attach → 正文为「二进制文件，不提供正文」", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.write("/blob.bin", "x");
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
+    it("T-A3: 存量裸正文（无 VFS 读盘）的 binary attach → 正文为「二进制文件，不提供正文」", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const vfs = ctx.sessionVfs(project.id, session.id);
+        await vfs.write("/blob.bin", "x");
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
 
-    const prepared = unwrap(await promptAssembler.prepare(
-      [
-        userMsg("m1", {
-          sessionId: session.id,
-          attachments: [
-            {
-              name: "/blob.bin",
-              source: "attach",
-              type: "text",
-              content: "1|blob.bin",
-              path: "/blob.bin",
-            },
-          ],
-        }),
-      ],
-      { sessionId: session.id, sessionKkv: sk, vfs },
-    ));
-    const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
-    assert.match(body, /二进制文件，不提供正文/);
-    assert.equal(body.includes("1|blob.bin"), false);
-    assert.match(body, /"display": "filename"/);
-  });
+        const prepared = unwrap(await PromptAssembler.prepare(
+            [
+                userMsg("m1", {
+                    sessionId: session.id,
+                    attachments: [
+                        {
+                            name: "/blob.bin",
+                            source: "attach",
+                            type: "text",
+                            content: "1|blob.bin",
+                            path: "/blob.bin",
+                        },
+                    ],
+                }),
+            ],
+            { sessionId: session.id, sessionKkv: sk, vfs },
+        ));
+        const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
+        assert.match(body, /二进制文件，不提供正文/);
+        assert.equal(body.includes("1|blob.bin"), false);
+        assert.match(body, /"display": "filename"/);
+    });
 
-  it("T-A4: workplace 侧目录规则 filename 档 → 仍 1|basename，且不吃预算不降级", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.write("/fn.md", "WORKPLACE-FILENAME-BODY");
-    await vfs.write("/huge.md", "H".repeat(ATTACH_PROMPT_CHAR_BUDGET + 1));
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    await sk.set(
-      session.id,
-      SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
-      RULE_SNAPSHOT_CANON_KEY,
-      RuleSnapshotCodec.serialize([{ path: "/fn.md", status: "filename" }]),
-    );
+    it("T-A4: workplace 侧目录规则 filename 档 → 仍 1|basename，且不吃预算不降级", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const vfs = ctx.sessionVfs(project.id, session.id);
+        await vfs.write("/fn.md", "WORKPLACE-FILENAME-BODY");
+        await vfs.write("/huge.md", "H".repeat(ATTACH_PROMPT_CHAR_BUDGET + 1));
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        await sk.set(
+            session.id,
+            SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+            RULE_SNAPSHOT_CANON_KEY,
+            RuleSnapshotCodec.serialize([{ path: "/fn.md", status: "filename" }]),
+        );
 
-    // 先用一条满预算的 attach 吃光预算，再看 workplace 侧是否被牵连
-    const prepared = unwrap(await promptAssembler.prepare(
-      [
-        userMsg("m1", {
-          id: "m1",
-          sessionId: session.id,
-          attachments: [attachFile("/huge.md")],
-        }),
-        userMsg("m2", {
-          id: "m2",
-          sessionId: session.id,
-          attachments: [
-            {
-              name: "/fn.md",
-              source: "workplace",
-              type: "text",
-              content: null,
-              path: "/fn.md",
-            },
-          ],
-        }),
-      ],
-      { sessionId: session.id, sessionKkv: sk, vfs, seenPaths: [] },
-    ));
-    // attach 侧确实被降级（预算生效）
-    assert.match(MessageBodyText.fromBlocks(prepared[0]!.content.blocks), /文件过长，可用 read/);
-    // workplace 侧豁免：仍是 1|basename，且没有二进制/超限文案
-    const body2 = MessageBodyText.fromBlocks(prepared[1]!.content.blocks);
-    assert.match(body2, /1\|fn\.md/);
-    assert.equal(body2.includes("文件过长"), false);
-    assert.equal(body2.includes("不提供正文"), false);
-  });
+        // 先用一条满预算的 attach 吃光预算，再看 workplace 侧是否被牵连
+        const prepared = unwrap(await PromptAssembler.prepare(
+            [
+                userMsg("m1", {
+                    id: "m1",
+                    sessionId: session.id,
+                    attachments: [attachFile("/huge.md")],
+                }),
+                userMsg("m2", {
+                    id: "m2",
+                    sessionId: session.id,
+                    attachments: [
+                        {
+                            name: "/fn.md",
+                            source: "workplace",
+                            type: "text",
+                            content: null,
+                            path: "/fn.md",
+                        },
+                    ],
+                }),
+            ],
+            { sessionId: session.id, sessionKkv: sk, vfs, seenPaths: [] },
+        ));
+        // attach 侧确实被降级（预算生效）
+        assert.match(MessageBodyText.fromBlocks(prepared[0]!.content.blocks), /文件过长，可用 read/);
+        // workplace 侧豁免：仍是 1|basename，且没有二进制/超限文案
+        const body2 = MessageBodyText.fromBlocks(prepared[1]!.content.blocks);
+        assert.match(body2, /1\|fn\.md/);
+        assert.equal(body2.includes("文件过长"), false);
+        assert.equal(body2.includes("不提供正文"), false);
+    });
 
-  it("T-A4b: workplace 侧 full 档不计入预算（预算被 attach 恰好吃满也不降级）", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.write("/w.md", "1|WORKPLACE-FULL");
-    // ⚠️ 前置必须**恰好吃满**（`= BUDGET`）而不是超预算：
-    // `tryConsume` 超限时不动 `used`，前置若真是 `BUDGET + 1` 则 used 恒停 0，
-    // 「预算被吃光」这个前提压根不成立，workplace 豁免与否都看不出差别——
-    // 用例照绿，豁免判据可以整个删掉。恰好吃满时 used = ATTACH_PROMPT_CHAR_BUDGET 才是真前提。
-    await vfs.write("/fill.md", "F".repeat(ATTACH_PROMPT_CHAR_BUDGET));
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
+    it("T-A4b: workplace 侧 full 档不计入预算（预算被 attach 恰好吃满也不降级）", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const vfs = ctx.sessionVfs(project.id, session.id);
+        await vfs.write("/w.md", "1|WORKPLACE-FULL");
+        // ⚠️ 前置必须**恰好吃满**（`= BUDGET`）而不是超预算：
+        // `tryConsume` 超限时不动 `used`，前置若真是 `BUDGET + 1` 则 used 恒停 0，
+        // 「预算被吃光」这个前提压根不成立，workplace 豁免与否都看不出差别——
+        // 用例照绿，豁免判据可以整个删掉。恰好吃满时 used = ATTACH_PROMPT_CHAR_BUDGET 才是真前提。
+        await vfs.write("/fill.md", "F".repeat(ATTACH_PROMPT_CHAR_BUDGET));
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
 
-    const prepared = unwrap(await promptAssembler.prepare(
-      [
-        userMsg("m1", {
-          id: "m1",
-          sessionId: session.id,
-          attachments: [attachFile("/fill.md")],
-        }),
-        userMsg("m2", {
-          id: "m2",
-          sessionId: session.id,
-          attachments: [
-            {
-              name: "/w.md",
-              source: "workplace",
-              type: "text",
-              content: null,
-              path: "/w.md",
-            },
-          ],
-        }),
-      ],
-      { sessionId: session.id, sessionKkv: sk, vfs, seenPaths: [] },
-    ));
-    // 前提自查：前置附件确实恰好吃满、未被降级（降了就说明 used 没被填满）
-    assert.equal(
-      MessageBodyText.fromBlocks(prepared[0]!.content.blocks).includes("文件过长"),
-      false,
-      "前置应恰好吃满预算而不降级"
-    );
-    const body2 = MessageBodyText.fromBlocks(prepared[1]!.content.blocks);
-    assert.match(body2, /1\|WORKPLACE-FULL/);
-    assert.equal(body2.includes("文件过长"), false);
-  });
+        const prepared = unwrap(await PromptAssembler.prepare(
+            [
+                userMsg("m1", {
+                    id: "m1",
+                    sessionId: session.id,
+                    attachments: [attachFile("/fill.md")],
+                }),
+                userMsg("m2", {
+                    id: "m2",
+                    sessionId: session.id,
+                    attachments: [
+                        {
+                            name: "/w.md",
+                            source: "workplace",
+                            type: "text",
+                            content: null,
+                            path: "/w.md",
+                        },
+                    ],
+                }),
+            ],
+            { sessionId: session.id, sessionKkv: sk, vfs, seenPaths: [] },
+        ));
+        // 前提自查：前置附件确实恰好吃满、未被降级（降了就说明 used 没被填满）
+        assert.equal(
+            MessageBodyText.fromBlocks(prepared[0]!.content.blocks).includes("文件过长"),
+            false,
+            "前置应恰好吃满预算而不降级"
+        );
+        const body2 = MessageBodyText.fromBlocks(prepared[1]!.content.blocks);
+        assert.match(body2, /1\|WORKPLACE-FULL/);
+        assert.equal(body2.includes("文件过长"), false);
+    });
 
-  it("T-A5: 降级附件仍写 seen → 同会话后续同路径走 alreadyReferenced，不重复试全文", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.write("/huge.md", "H".repeat(ATTACH_PROMPT_CHAR_BUDGET + 1));
-    await vfs.write("/filler.md", "F".repeat(ATTACH_PROMPT_CHAR_BUDGET));
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
+    it("T-A5: 降级附件仍写 seen → 同会话后续同路径走 alreadyReferenced，不重复试全文", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const vfs = ctx.sessionVfs(project.id, session.id);
+        await vfs.write("/huge.md", "H".repeat(ATTACH_PROMPT_CHAR_BUDGET + 1));
+        await vfs.write("/filler.md", "F".repeat(ATTACH_PROMPT_CHAR_BUDGET));
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
 
-    const prepared = unwrap(await promptAssembler.prepare(
-      [
-        userMsg("m1", {
-          id: "m1",
-          sessionId: session.id,
-          attachments: [attachFile("/huge.md"), attachFile("/filler.md")],
-        }),
-        userMsg("m2", {
-          id: "m2",
-          sessionId: session.id,
-          attachments: [attachFile("/huge.md")],
-        }),
-      ],
-      { sessionId: session.id, sessionKkv: sk, vfs },
-    ));
-    const body1 = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
-    assert.match(body1, /文件过长，可用 read/);
-    const body2 = MessageBodyText.fromBlocks(prepared[1]!.content.blocks);
-    assert.match(body2, /"alreadyReferenced": true/);
-    assert.match(body2, /"path": "\/huge\.md"/);
-    assert.equal(body2.includes("文件过长"), false);
-  });
+        const prepared = unwrap(await PromptAssembler.prepare(
+            [
+                userMsg("m1", {
+                    id: "m1",
+                    sessionId: session.id,
+                    attachments: [attachFile("/huge.md"), attachFile("/filler.md")],
+                }),
+                userMsg("m2", {
+                    id: "m2",
+                    sessionId: session.id,
+                    attachments: [attachFile("/huge.md")],
+                }),
+            ],
+            { sessionId: session.id, sessionKkv: sk, vfs },
+        ));
+        const body1 = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
+        assert.match(body1, /文件过长，可用 read/);
+        const body2 = MessageBodyText.fromBlocks(prepared[1]!.content.blocks);
+        assert.match(body2, /"alreadyReferenced": true/);
+        assert.match(body2, /"path": "\/huge\.md"/);
+        assert.equal(body2.includes("文件过长"), false);
+    });
 
-  it("T-A7: content 已是 action XML 的存量附件原样带过（不计量、不降级）", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.write("/huge.md", "H".repeat(ATTACH_PROMPT_CHAR_BUDGET));
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    const legacyXml =
-      '<action name="userAttach">\n{"path":"/huge.md","content":"1|OLD"}\n</action>';
+    it("T-A7: content 已是 action XML 的存量附件原样带过（不计量、不降级）", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const vfs = ctx.sessionVfs(project.id, session.id);
+        await vfs.write("/huge.md", "H".repeat(ATTACH_PROMPT_CHAR_BUDGET));
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        const legacyXml =
+            '<action name="userAttach">\n{"path":"/huge.md","content":"1|OLD"}\n</action>';
 
-    const prepared = unwrap(await promptAssembler.prepare(
-      [
-        userMsg("m1", {
-          sessionId: session.id,
-          attachments: [
-            {
-              name: "/huge.md",
-              source: "attach",
-              type: "text",
-              content: legacyXml,
-              path: "/huge.md",
-            },
-          ],
-        }),
-      ],
-      { sessionId: session.id, sessionKkv: sk, vfs },
-    ));
-    const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
-    // 主牙齿：原样带过 ⇒ **无 display 键**。走 fileRefAction 重排必然带上
-    // `display`，所以这条断言直接钉死「有没有被重排」，比断言文案有力得多。
-    assert.equal(body.includes('"display"'), false);
-    // 次牙齿：紧凑 JSON 形态原样保留。⚠️ 冒号后**不能**有空格——
-    // 带空格形态是 fileRefAction 的 `JSON.stringify(params, null, 2)` 出口产物，
-    // 写成带空格就把「重排后」当成了「原样带过」，写反了正确行为下当场红。
-    assert.match(body, /"content":"1\|OLD"/);
-    assert.match(body, /1\|OLD/);
-    assert.equal(body.includes("文件过长"), false);
-  });
+        const prepared = unwrap(await PromptAssembler.prepare(
+            [
+                userMsg("m1", {
+                    sessionId: session.id,
+                    attachments: [
+                        {
+                            name: "/huge.md",
+                            source: "attach",
+                            type: "text",
+                            content: legacyXml,
+                            path: "/huge.md",
+                        },
+                    ],
+                }),
+            ],
+            { sessionId: session.id, sessionKkv: sk, vfs },
+        ));
+        const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
+        // 主牙齿：原样带过 ⇒ **无 display 键**。走 fileRefAction 重排必然带上
+        // `display`，所以这条断言直接钉死「有没有被重排」，比断言文案有力得多。
+        assert.equal(body.includes('"display"'), false);
+        // 次牙齿：紧凑 JSON 形态原样保留。⚠️ 冒号后**不能**有空格——
+        // 带空格形态是 fileRefAction 的 `JSON.stringify(params, null, 2)` 出口产物，
+        // 写成带空格就把「重排后」当成了「原样带过」，写反了正确行为下当场红。
+        assert.match(body, /"content":"1\|OLD"/);
+        assert.match(body, /1\|OLD/);
+        assert.equal(body.includes("文件过长"), false);
+    });
 
-  it("T-A7 变体: 存量 action XML 正文撑到超预算仍不降级（钉「不计量」）", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.write("/x.md", "x");
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    // 正文长度 = 预算 + 1：若「已是 action XML」旁路被删、正文参与计量，
-    // 这条必定降级 → 断言红。旁路在，则一个字符都不计。
-    const fatContent = "O".repeat(ATTACH_PROMPT_CHAR_BUDGET + 1);
-    const legacyXml = `<action name="userAttach">\n{"path":"/x.md","content":"${fatContent}"}\n</action>`;
+    it("T-A7 变体: 存量 action XML 正文撑到超预算仍不降级（钉「不计量」）", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const vfs = ctx.sessionVfs(project.id, session.id);
+        await vfs.write("/x.md", "x");
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        // 正文长度 = 预算 + 1：若「已是 action XML」旁路被删、正文参与计量，
+        // 这条必定降级 → 断言红。旁路在，则一个字符都不计。
+        const fatContent = "O".repeat(ATTACH_PROMPT_CHAR_BUDGET + 1);
+        const legacyXml = `<action name="userAttach">\n{"path":"/x.md","content":"${fatContent}"}\n</action>`;
 
-    const prepared = unwrap(await promptAssembler.prepare(
-      [
-        userMsg("m1", {
-          sessionId: session.id,
-          attachments: [
-            {
-              name: "/x.md",
-              source: "attach",
-              type: "text",
-              content: legacyXml,
-              path: "/x.md",
-            },
-          ],
-        }),
-      ],
-      { sessionId: session.id, sessionKkv: sk, vfs },
-    ));
-    const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
-    assert.equal(body.includes("文件过长"), false);
-    assert.equal(body.includes('"display"'), false);
-    // 原样带过 ⇒ 正文一个不少（无行号前缀：本就未经 fileRefAction 重排）
-    assert.match(body, /"content":"OOO/);
+        const prepared = unwrap(await PromptAssembler.prepare(
+            [
+                userMsg("m1", {
+                    sessionId: session.id,
+                    attachments: [
+                        {
+                            name: "/x.md",
+                            source: "attach",
+                            type: "text",
+                            content: legacyXml,
+                            path: "/x.md",
+                        },
+                    ],
+                }),
+            ],
+            { sessionId: session.id, sessionKkv: sk, vfs },
+        ));
+        const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
+        assert.equal(body.includes("文件过长"), false);
+        assert.equal(body.includes('"display"'), false);
+        // 原样带过 ⇒ 正文一个不少（无行号前缀：本就未经 fileRefAction 重排）
+        assert.match(body, /"content":"OOO/);
   });
 
   it("T-A9: 预算跨消息累加——m1 恰好吃满 → m2 的 1000 字符附件降级", async () => {
@@ -1622,7 +1622,7 @@ describe("promptAssembler 附件预算与降级 (T-A)", () => {
     await vfs.write("/b.md", "B".repeat(1_000));
     const sk = SessionKkvServiceFactory.create(ctx.conn);
 
-    const prepared = unwrap(await promptAssembler.prepare(
+    const prepared = unwrap(await PromptAssembler.prepare(
       [
         userMsg("m1", { id: "m1", sessionId: session.id, attachments: [attachFile("/a.md")] }),
         userMsg("m2", { id: "m2", sessionId: session.id, attachments: [attachFile("/b.md")] }),
@@ -1659,7 +1659,7 @@ describe("promptAssembler 附件预算与降级 (T-A)", () => {
       "1|AAAAAAAAAA\n2|BBBBBBBBBB" +
       "\n</file>";
 
-    const prepared = unwrap(await promptAssembler.prepare(
+    const prepared = unwrap(await PromptAssembler.prepare(
       [
         userMsg("m1", { id: "m1", sessionId: session.id, attachments: [attachFile("/filler.md")] }),
         userMsg("m2", {

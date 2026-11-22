@@ -10,15 +10,15 @@ export type SqlTemplateErrorCode = "UNKNOWN_TAG" | "UNCLOSED_TAG" | "MALFORMED_T
  * Thrown when template syntax or expression evaluation fails.
  */
 export class SqlTemplateError extends Error {
-  readonly code: SqlTemplateErrorCode;
-  readonly offset?: number;
-  readonly tagName?: string;
+    readonly code: SqlTemplateErrorCode;
+    readonly offset?: number;
+    readonly tagName?: string;
 
-  constructor(code: SqlTemplateErrorCode, message: string, options?: { offset?: number; tagName?: string; cause?: unknown }) {
-    super(message, { cause: options?.cause });
-    this.name = "SqlTemplateError";
-    this.code = code;
-    this.offset = options?.offset;
-    this.tagName = options?.tagName;
-  }
+    constructor(code: SqlTemplateErrorCode, message: string, options?: { offset?: number; tagName?: string; cause?: unknown }) {
+        super(message, { cause: options?.cause });
+        this.name = "SqlTemplateError";
+        this.code = code;
+        this.offset = options?.offset;
+        this.tagName = options?.tagName;
+    }
 }

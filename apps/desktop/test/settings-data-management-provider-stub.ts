@@ -5,10 +5,10 @@
  * 本 view 只消费 retry（导入/拉取成功后刷新），替身保持同形即可。
  */
 export function useNovelMaster() {
-  return {
-    status: "ready" as const,
-    dbPath: undefined,
-    error: undefined,
-    retry: () => {},
-  };
+    return {
+        status: "ready" as const,
+        dbPath: undefined,
+        error: undefined,
+        retry: () => {},
+    };
 }

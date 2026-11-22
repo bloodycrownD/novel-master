@@ -15,166 +15,166 @@ import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix
 novelMasterTestFixture();
 
 describe("rollback execution redesign", () => {
-  it("T-RB-PARTIAL-WRITE: 多文件仅 diff 路径实质 write", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
-    const fileCount = 6;
-    const diffCount = 2;
+    it("T-RB-PARTIAL-WRITE: 多文件仅 diff 路径实质 write", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
+        const fileCount = 6;
+        const diffCount = 2;
 
-    const anchorAssistant = unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "anchor" }],
-    }));
-    for (let i = 0; i < fileCount; i++) {
-      await svfs.write(`/partial-${i}.md`, `anchor-${i}`, {
-        versionCheck: false,
-      });
-    }
-    unwrap(await ctx.messageCheckpoint.capture(
-      session.id,
-      project.id,
-      anchorAssistant.id,
-    ));
+        const anchorAssistant = unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "anchor" }],
+        }));
+        for (let i = 0; i < fileCount; i++) {
+            await svfs.write(`/partial-${i}.md`, `anchor-${i}`, {
+                versionCheck: false,
+            });
+        }
+        unwrap(await ctx.messageCheckpoint.capture(
+            session.id,
+            project.id,
+            anchorAssistant.id,
+        ));
 
-    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("tail")));
-    const tailAssistant = unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "tail" }],
-    }));
-    for (let i = 0; i < diffCount; i++) {
-      await svfs.write(`/partial-${i}.md`, `tail-${i}`, {
-        versionCheck: false,
-      });
-    }
-    unwrap(await ctx.messageCheckpoint.capture(
-      session.id,
-      project.id,
-      tailAssistant.id,
-    ));
+        unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("tail")));
+        const tailAssistant = unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "tail" }],
+        }));
+        for (let i = 0; i < diffCount; i++) {
+            await svfs.write(`/partial-${i}.md`, `tail-${i}`, {
+                versionCheck: false,
+            });
+        }
+        unwrap(await ctx.messageCheckpoint.capture(
+            session.id,
+            project.id,
+            tailAssistant.id,
+        ));
 
-    const resetSpy = mock.method(RevisionAwareVfsService.prototype, "resetHeadToVersion");
-    try {
-      await ctx.sessionFs.rollbackFilesToMessage(
-        session.id,
-        project.id,
-        anchorAssistant.id,
-      );
-    } finally {
-      resetSpy.mock.restore();
-    }
+        const resetSpy = mock.method(RevisionAwareVfsService.prototype, "resetHeadToVersion");
+        try {
+            await ctx.sessionFs.rollbackFilesToMessage(
+                session.id,
+                project.id,
+                anchorAssistant.id,
+            );
+        } finally {
+            resetSpy.mock.restore();
+        }
 
-    assert.equal(resetSpy.mock.callCount(), diffCount);
-    for (let i = 0; i < diffCount; i++) {
-      assert.equal(unwrap(await svfs.read(`/partial-${i}.md`)).content, `anchor-${i}`);
-    }
-    for (let i = diffCount; i < fileCount; i++) {
-      assert.equal(unwrap(await svfs.read(`/partial-${i}.md`)).content, `anchor-${i}`);
-    }
-  });
+        assert.equal(resetSpy.mock.callCount(), diffCount);
+        for (let i = 0; i < diffCount; i++) {
+            assert.equal(unwrap(await svfs.read(`/partial-${i}.md`)).content, `anchor-${i}`);
+        }
+        for (let i = diffCount; i < fileCount; i++) {
+            assert.equal(unwrap(await svfs.read(`/partial-${i}.md`)).content, `anchor-${i}`);
+        }
+    });
 
-  it("T-RB-SQL-ONCE: 回滚热路径不走 listDistinct+Set+deleteExceptReachable", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
+    it("T-RB-SQL-ONCE: 回滚热路径不走 listDistinct+Set+deleteExceptReachable", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
 
-    const anchorAssistant = unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "anchor" }],
-    }));
-    await svfs.write("/sql-once.md", "v1", { versionCheck: false });
-    unwrap(await ctx.messageCheckpoint.capture(
-      session.id,
-      project.id,
-      anchorAssistant.id,
-    ));
+        const anchorAssistant = unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "anchor" }],
+        }));
+        await svfs.write("/sql-once.md", "v1", { versionCheck: false });
+        unwrap(await ctx.messageCheckpoint.capture(
+            session.id,
+            project.id,
+            anchorAssistant.id,
+        ));
 
-    const tailAssistant = unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "tail" }],
-    }));
-    await svfs.write("/sql-once.md", "v2", { versionCheck: false });
-    unwrap(await ctx.messageCheckpoint.capture(
-      session.id,
-      project.id,
-      tailAssistant.id,
-    ));
+        const tailAssistant = unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "tail" }],
+        }));
+        await svfs.write("/sql-once.md", "v2", { versionCheck: false });
+        unwrap(await ctx.messageCheckpoint.capture(
+            session.id,
+            project.id,
+            tailAssistant.id,
+        ));
 
-    const listDistinctSpy = mock.method(
-      SqliteMessageCheckpointRepository.prototype,
-      "listDistinctCheckpointPointersForSession",
-    );
-    const deleteExceptSpy = mock.method(
-      SqliteVfsRevisionRepository.prototype,
-      "deleteExceptReachable",
-    );
-    const deleteUnrefSpy = mock.method(
-      SqliteVfsRevisionRepository.prototype,
-      "deleteUnreferencedUnderScope",
-    );
+        const listDistinctSpy = mock.method(
+            SqliteMessageCheckpointRepository.prototype,
+            "listDistinctCheckpointPointersForSession",
+        );
+        const deleteExceptSpy = mock.method(
+            SqliteVfsRevisionRepository.prototype,
+            "deleteExceptReachable",
+        );
+        const deleteUnrefSpy = mock.method(
+            SqliteVfsRevisionRepository.prototype,
+            "deleteUnreferencedUnderScope",
+        );
 
-    try {
-      await ctx.sessionFs.rollbackFilesToMessage(
-        session.id,
-        project.id,
-        anchorAssistant.id,
-      );
-    } finally {
-      listDistinctSpy.mock.restore();
-      deleteExceptSpy.mock.restore();
-      deleteUnrefSpy.mock.restore();
-    }
+        try {
+            await ctx.sessionFs.rollbackFilesToMessage(
+                session.id,
+                project.id,
+                anchorAssistant.id,
+            );
+        } finally {
+            listDistinctSpy.mock.restore();
+            deleteExceptSpy.mock.restore();
+            deleteUnrefSpy.mock.restore();
+        }
 
-    assert.equal(listDistinctSpy.mock.callCount(), 0);
-    assert.equal(deleteExceptSpy.mock.callCount(), 0);
-    assert.ok(deleteUnrefSpy.mock.callCount() >= 1);
-  });
+        assert.equal(listDistinctSpy.mock.callCount(), 0);
+        assert.equal(deleteExceptSpy.mock.callCount(), 0);
+        assert.ok(deleteUnrefSpy.mock.callCount() >= 1);
+    });
 
-  it("T-RB-STABLE-CP: 截断后仍可回滚到更早保留 checkpoint，正文正确", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
-    const checkpoints = new SqliteMessageCheckpointRepository(ctx.conn);
+    it("T-RB-STABLE-CP: 截断后仍可回滚到更早保留 checkpoint，正文正确", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
+        const checkpoints = new SqliteMessageCheckpointRepository(ctx.conn);
 
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("1")));
-    const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "cp1" }],
-    }));
-    await svfs.write("/stable.md", "chapter-1", { versionCheck: false });
-    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
+        const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("1")));
+        const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "cp1" }],
+        }));
+        await svfs.write("/stable.md", "chapter-1", { versionCheck: false });
+        unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
-    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("2")));
-    const assistant2 = unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "cp2" }],
-    }));
-    await svfs.write("/stable.md", "chapter-2", { versionCheck: false });
-    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id));
+        unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("2")));
+        const assistant2 = unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "cp2" }],
+        }));
+        await svfs.write("/stable.md", "chapter-2", { versionCheck: false });
+        unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id));
 
-    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("3")));
-    const assistant3 = unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "cp3" }],
-    }));
-    await svfs.write("/stable.md", "chapter-3", { versionCheck: false });
-    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant3.id));
+        unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("3")));
+        const assistant3 = unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "cp3" }],
+        }));
+        await svfs.write("/stable.md", "chapter-3", { versionCheck: false });
+        unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant3.id));
 
-    await ctx.sessionFs.rollbackFilesToMessage(
-      session.id,
-      project.id,
-      assistant2.id,
-    );
-    assert.equal(unwrap(await svfs.read("/stable.md")).content, "chapter-2");
-    assert.equal((outcomeValue(await ctx.messages.listBySession(session.id))).length, 4);
-    assert.ok(await checkpoints.hasCheckpoint(session.id, assistant1.id));
-    assert.ok(await checkpoints.hasCheckpoint(session.id, assistant2.id));
-    assert.equal(await checkpoints.hasCheckpoint(session.id, assistant3.id), false);
+        await ctx.sessionFs.rollbackFilesToMessage(
+            session.id,
+            project.id,
+            assistant2.id,
+        );
+        assert.equal(unwrap(await svfs.read("/stable.md")).content, "chapter-2");
+        assert.equal((outcomeValue(await ctx.messages.listBySession(session.id))).length, 4);
+        assert.ok(await checkpoints.hasCheckpoint(session.id, assistant1.id));
+        assert.ok(await checkpoints.hasCheckpoint(session.id, assistant2.id));
+        assert.equal(await checkpoints.hasCheckpoint(session.id, assistant3.id), false);
 
-    await ctx.sessionFs.rollbackFilesToMessage(
-      session.id,
-      project.id,
-      assistant1.id,
-    );
-    assert.equal(unwrap(await svfs.read("/stable.md")).content, "chapter-1");
-    assert.equal((outcomeValue(await ctx.messages.listBySession(session.id))).length, 2);
-    assert.ok(await checkpoints.hasCheckpoint(session.id, assistant1.id));
-    assert.equal(await checkpoints.hasCheckpoint(session.id, assistant2.id), false);
-  });
+        await ctx.sessionFs.rollbackFilesToMessage(
+            session.id,
+            project.id,
+            assistant1.id,
+        );
+        assert.equal(unwrap(await svfs.read("/stable.md")).content, "chapter-1");
+        assert.equal((outcomeValue(await ctx.messages.listBySession(session.id))).length, 2);
+        assert.ok(await checkpoints.hasCheckpoint(session.id, assistant1.id));
+        assert.equal(await checkpoints.hasCheckpoint(session.id, assistant2.id), false);
+    });
 });

@@ -9,12 +9,12 @@ import { ChatMessage } from "@/domain/chat/logic/message/chat-message.js";
 import type { DepthSlice } from "./depth-slice.js";
 
 interface HideMessageSeqRange {
-  readonly fromSeq: number;
-  readonly toSeq: number;
+    readonly fromSeq: number;
+    readonly toSeq: number;
 }
 
 export const HideMessageRange = {
-  /**
+    /**
    * 解析 hide-message 应作用的 seq 范围；无匹配消息时返回 `null`。
    *
    * to 侧楼层锚定（最终口径）：`startDepth` 只是启发式起点，从 slice 最新
@@ -33,37 +33,37 @@ export const HideMessageRange = {
    * @param slice - depth 区间
    * @param messageIds - slice 内待隐藏的消息 id
    */
-  resolve(visible: readonly ChatMessageData[], _slice: DepthSlice, messageIds: readonly string[]): HideMessageSeqRange | null {
-    if (messageIds.length === 0) {
-      return null;
-    }
+    resolve(visible: readonly ChatMessageData[], _slice: DepthSlice, messageIds: readonly string[]): HideMessageSeqRange | null {
+        if (messageIds.length === 0) {
+            return null;
+        }
 
-    const idSet = new Set(messageIds);
-    const inSlice = visible.filter((m) => idSet.has(m.id));
-    if (inSlice.length === 0) {
-      return null;
-    }
+        const idSet = new Set(messageIds);
+        const inSlice = visible.filter((m) => idSet.has(m.id));
+        if (inSlice.length === 0) {
+            return null;
+        }
 
-    const seqs = inSlice.map((m) => m.seq);
-    const minSeq = Math.min(...seqs);
-    const maxSeq = Math.max(...seqs);
+        const seqs = inSlice.map((m) => m.seq);
+        const minSeq = Math.min(...seqs);
+        const maxSeq = Math.max(...seqs);
 
-    let toSeq: number | null = null;
-    for (let i = visible.length - 1; i >= 0; i--) {
-      const m = visible[i];
-      if (m.seq > maxSeq || m.seq < minSeq) {
-        continue;
-      }
-      if (m.role === "user" && !ChatMessage.from(m).hasToolResult()) {
-        toSeq = m.seq - 1;
-        break;
-      }
-    }
-    if (toSeq == null || toSeq < minSeq) {
-      // toSeq < minSeq：锚点即 slice 内最老消息，没有比它更旧的可隐藏。
-      return null;
-    }
+        let toSeq: number | null = null;
+        for (let i = visible.length - 1; i >= 0; i--) {
+            const m = visible[i];
+            if (m.seq > maxSeq || m.seq < minSeq) {
+                continue;
+            }
+            if (m.role === "user" && !ChatMessage.from(m).hasToolResult()) {
+                toSeq = m.seq - 1;
+                break;
+            }
+        }
+        if (toSeq == null || toSeq < minSeq) {
+            // toSeq < minSeq：锚点即 slice 内最老消息，没有比它更旧的可隐藏。
+            return null;
+        }
 
-    return { fromSeq: minSeq, toSeq };
-  },
+        return { fromSeq: minSeq, toSeq };
+    },
 } as const;

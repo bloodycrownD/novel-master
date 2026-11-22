@@ -24,14 +24,15 @@
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { LogFactory } from "@/infra/log/logger.js";
+import { Concurrency } from "@/common/concurrency.js";
 
 const log = LogFactory.create("message-checkpoint.revision-gc");
 
-/** 模块级 in-flight 守卫：清扫进行中不重入。 */
-let orphanGcInFlight = false;
+/** 模块级 in-flight 守卫：清扫进行中不重入（计数忙碌旗，布尔置位经 `set` 映射）。 */
+const orphanGcBusy = Concurrency.createBusyFlag();
 
 export const DeferredRevisionOrphanGc = {
-  /**
+    /**
    * 事务提交后 fire-and-forget 调度全局孤儿清扫（回滚链挂点）。
    *
    * 不 await、不抛错（失败吞掉并打日志，收敛式语义下一轮回滚会再补）；
@@ -43,25 +44,25 @@ export const DeferredRevisionOrphanGc = {
    * toast/快照先行，全表 DELETE 最后；并发安全由驱动层 AsyncMutex 串行
    * 化保证（不会与后续事务并发踩踏）。
    */
-  schedule(conn: TdbcConnection): void {
-    if (orphanGcInFlight) {
-      return;
-    }
-    orphanGcInFlight = true;
-    setImmediate(() => {
-      void new SqliteVfsRevisionRepository(conn)
-        .deleteGlobalOrphans()
-        .then((deleted) => {
-          orphanGcInFlight = false;
-          if (deleted > 0) {
-            // 收敛式 GC 的轻量痕迹日志：仅在实际清到孤儿时输出。
-            log.info(`deferred orphan sweep deleted ${deleted} revision row(s)`);
-          }
-        })
-        .catch((error: unknown) => {
-          orphanGcInFlight = false;
-          log.warn("deferred orphan sweep failed", { error });
+    schedule(conn: TdbcConnection): void {
+        if (orphanGcBusy.isBusy()) {
+            return;
+        }
+        orphanGcBusy.set(true);
+        setImmediate(() => {
+            void new SqliteVfsRevisionRepository(conn)
+                .deleteGlobalOrphans()
+                .then((deleted) => {
+                    orphanGcBusy.set(false);
+                    if (deleted > 0) {
+                        // 收敛式 GC 的轻量痕迹日志：仅在实际清到孤儿时输出。
+                        log.info(`deferred orphan sweep deleted ${deleted} revision row(s)`);
+                    }
+                })
+                .catch((error: unknown) => {
+                    orphanGcBusy.set(false);
+                    log.warn("deferred orphan sweep failed", { error });
+                });
         });
-    });
-  },
+    },
 } as const;

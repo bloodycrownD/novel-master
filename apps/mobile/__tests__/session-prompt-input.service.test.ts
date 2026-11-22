@@ -7,7 +7,7 @@
  * 注入了 extra-info 块，就能守住「UI 预览与发给模型的提示词在 extra-info 段上一致」。
  *
  * r3-chip-1 / r3-test-1 ④：build 段分段弃权检查点（shouldBail 命中即抛
- * ChatPromptBuildBailedError，后续段不得执行）。这两组用例都**不整体 mock**
+ * null 哨兵（error-matrix-final R3），后续段不得执行）。这两组用例都**不整体 mock**
  * buildSessionPromptInputAdapter——真跑本文件的分段逻辑，只 mock 最底层 IO
  * （messages.listBySession / sessionVkv / vfs），段与段的边界用各段内部依赖
  * 的调用与否钉住。
@@ -28,28 +28,27 @@ import {describe, expect, it, jest} from '@jest/globals';
 import {TextBlocks, ATTACH_PROMPT_CHAR_BUDGET} from '@novel-master/core/chat';
 import {DefaultAgentDefinition} from '@novel-master/core/stored-config-validity';
 
-import {ChatPromptBuildBailedError} from '@novel-master/core';
 import {SessionPromptInputService} from '@/services/session-prompt-input.service'
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
 /** 从消息 content（{ blocks: [...] }）里拼出纯文本，供断言关键字。 */
 function bodyText(content: unknown): string {
-  if (
-    content == null ||
-    typeof content !== 'object' ||
-    !Array.isArray((content as {blocks?: unknown}).blocks)
-  ) {
-    return '';
-  }
-  return (content as {blocks: unknown[]}).blocks
-    .map(block =>
-      block != null &&
-      typeof block === 'object' &&
-      (block as {type?: string}).type === 'text'
-        ? String((block as {text?: unknown}).text ?? '')
-        : '',
-    )
-    .join('\n');
+    if (
+        content == null ||
+        typeof content !== 'object' ||
+        !Array.isArray((content as {blocks?: unknown}).blocks)
+    ) {
+        return '';
+    }
+    return (content as {blocks: unknown[]}).blocks
+        .map(block =>
+            block != null &&
+            typeof block === 'object' &&
+            (block as {type?: string}).type === 'text'
+                ? String((block as {text?: unknown}).text ?? '')
+                : '',
+        )
+        .join('\n');
 }
 
 /** 组装参与形态的规则文件（快照行顺序）；数量直接进入检查点计数公式。 */
@@ -73,111 +72,111 @@ type WorkplaceStatus = 'full' | 'header' | 'filename';
  *   prepare 侧 attach 附件 hydrate 走「file_cache miss → 读 vfs」这条路。
  */
 function makeStubRuntime(options?: {
-  readonly workplaceFiles?: readonly string[];
-  readonly workplaceStatuses?: Readonly<Record<string, WorkplaceStatus>>;
-  readonly messages?: readonly unknown[];
-  readonly vfsBodies?: Readonly<Record<string, string>>;
+    readonly workplaceFiles?: readonly string[];
+    readonly workplaceStatuses?: Readonly<Record<string, WorkplaceStatus>>;
+    readonly messages?: readonly unknown[];
+    readonly vfsBodies?: Readonly<Record<string, string>>;
 }): MobileNovelMasterRuntime {
-  const workplaceFiles = options?.workplaceFiles ?? [];
-  const statusOf = (path: string): WorkplaceStatus =>
-    options?.workplaceStatuses?.[path] ?? 'full';
-  /** 组装段的第一笔输入：快照 miss → evaluateRuleView 的返回值。 */
-  const ruleView = {
-    rows: workplaceFiles.map(path => ({
-      kind: 'file' as const,
-      path,
-      inclusionMode: 'show' as const,
-      displayState: statusOf(path),
-    })),
-    displayByPath: new Map(
-      workplaceFiles.map(path => [path, statusOf(path)] as const),
-    ),
-  };
-  /** file_cache 预取命中（键形如 `{status}:{path}`，与 fileCacheKey 同形）。 */
-  const prefetched = new Map(
-    workplaceFiles.map(path => [
-      `${statusOf(path)}:${path}`,
-      JSON.stringify({body: `# ${path}\n规则正文`, mtimeMs: 1000}),
-    ]),
-  );
-  const defaultMessages = [
-    {
-      id: 'm1',
-      sessionId: 's1',
-      role: 'user',
-      content: TextBlocks.of('你好，请记住附加信息'),
-      attachments: [],
-      hidden: false,
-    },
-  ];
-  return {
-    messages: {
-      listBySession: jest.fn(async () => ({kind: 'completed' as const, value: options?.messages ?? defaultMessages})),
-    },
-    state: {},
-    workplace: jest.fn(() => ({
-      // 错误通道迁移四期：workplace 读口走 Result。
-      evaluateRuleView: jest.fn(async () => ({ok: true as const, value: ruleView})),
-    })),
-    // 只搭 read：prepare 侧 attach hydrate 需要它。刻意**不**给
-    // findContentSize —— 真实 VFS 缺该方法时读侧降级回 vfs.read，
-    // 这里保持同款降级路径。
-    sessionVfs: jest.fn(() => ({
-      read: jest.fn(async (path: string) => ({
-        ok: true as const,
-        value: {
-          content: options?.vfsBodies?.[path] ?? `VFS-BODY ${path}`,
-          mtimeMs: 1000,
+    const workplaceFiles = options?.workplaceFiles ?? [];
+    const statusOf = (path: string): WorkplaceStatus =>
+        options?.workplaceStatuses?.[path] ?? 'full';
+    /** 组装段的第一笔输入：快照 miss → evaluateRuleView 的返回值。 */
+    const ruleView = {
+        rows: workplaceFiles.map(path => ({
+            kind: 'file' as const,
+            path,
+            inclusionMode: 'show' as const,
+            displayState: statusOf(path),
+        })),
+        displayByPath: new Map(
+            workplaceFiles.map(path => [path, statusOf(path)] as const),
+        ),
+    };
+    /** file_cache 预取命中（键形如 `{status}:{path}`，与 fileCacheKey 同形）。 */
+    const prefetched = new Map(
+        workplaceFiles.map(path => [
+            `${statusOf(path)}:${path}`,
+            JSON.stringify({body: `# ${path}\n规则正文`, mtimeMs: 1000}),
+        ]),
+    );
+    const defaultMessages = [
+        {
+            id: 'm1',
+            sessionId: 's1',
+            role: 'user',
+            content: TextBlocks.of('你好，请记住附加信息'),
+            attachments: [],
+            hidden: false,
         },
-      })),
-      // 附件预算探测（T-A8）：null = 未知长度，预算段保守放行。
-      findContentSize: jest.fn(async () => ({ok: true as const, value: null})),
-    })),
-    // skillAttach hydrate 用的技能服务工厂；本用例消息无 skillAttach 附件，
-    // prepare 惰性预算不会真正调用，给个空壳即可。
-    skills: jest.fn(() => ({})),
-    sessionKkv: {
-      get: jest.fn(async () => null),
-      getMany: jest.fn(async () => prefetched),
-      set: jest.fn(async () => undefined),
-      delete: jest.fn(async () => ({ok: true as const, value: undefined})),
-      clearSession: jest.fn(async () => undefined),
-      listKeys: jest.fn(async () => []),
-    },
-  } as unknown as MobileNovelMasterRuntime;
+    ];
+    return {
+        messages: {
+            listBySession: jest.fn(async () => ({kind: 'completed' as const, value: options?.messages ?? defaultMessages})),
+        },
+        state: {},
+        workplace: jest.fn(() => ({
+            // 错误通道迁移四期：workplace 读口走 Result。
+            evaluateRuleView: jest.fn(async () => ({ok: true as const, value: ruleView})),
+        })),
+        // 只搭 read：prepare 侧 attach hydrate 需要它。刻意**不**给
+        // findContentSize —— 真实 VFS 缺该方法时读侧降级回 vfs.read，
+        // 这里保持同款降级路径。
+        sessionVfs: jest.fn(() => ({
+            read: jest.fn(async (path: string) => ({
+                ok: true as const,
+                value: {
+                    content: options?.vfsBodies?.[path] ?? `VFS-BODY ${path}`,
+                    mtimeMs: 1000,
+                },
+            })),
+            // 附件预算探测（T-A8）：null = 未知长度，预算段保守放行。
+            findContentSize: jest.fn(async () => ({ok: true as const, value: null})),
+        })),
+        // skillAttach hydrate 用的技能服务工厂；本用例消息无 skillAttach 附件，
+        // prepare 惰性预算不会真正调用，给个空壳即可。
+        skills: jest.fn(() => ({})),
+        sessionKkv: {
+            get: jest.fn(async () => null),
+            getMany: jest.fn(async () => prefetched),
+            set: jest.fn(async () => undefined),
+            delete: jest.fn(async () => ({ok: true as const, value: undefined})),
+            clearSession: jest.fn(async () => undefined),
+            listKeys: jest.fn(async () => []),
+        },
+    } as unknown as MobileNovelMasterRuntime;
 }
 
 describe('buildSessionPromptInputAdapter (T-CA5 mobile)', () => {
-  it('definition.prompts.customAttach 非空时预览路径 messages 含 <extra-info> 块', async () => {
-    const runtime = makeStubRuntime();
-    const definition =
-      DefaultAgentDefinition.build('extra-info-agent');
-    // 与 domain prompts.customAttach 对齐；wrap 阶段在 </user-ops> 后注入 <extra-info>。
-    definition.prompts = {
-      ...definition.prompts,
-      customAttach: '这是常驻附加信息：优先级最高',
-    };
+    it('definition.prompts.customAttach 非空时预览路径 messages 含 <extra-info> 块', async () => {
+        const runtime = makeStubRuntime();
+        const definition =
+            DefaultAgentDefinition.build('extra-info-agent');
+        // 与 domain prompts.customAttach 对齐；wrap 阶段在 </user-ops> 后注入 <extra-info>。
+        definition.prompts = {
+            ...definition.prompts,
+            customAttach: '这是常驻附加信息：优先级最高',
+        };
 
-    const bundleResult = await SessionPromptInputService.build(
-      runtime,
-      {projectId: 'p1', sessionId: 's1'},
-      definition,
-    )
-    if (!bundleResult.ok) throw bundleResult.error;
-    const bundle = bundleResult.value;;
+        const bundleResult = await SessionPromptInputService.build(
+            runtime,
+            {projectId: 'p1', sessionId: 's1'},
+            definition,
+        )
+        if (!bundleResult.ok) throw bundleResult.error;
+        const bundle = bundleResult.value;;
 
-    const userBody = bundle.ctx.messages
-      .filter(m => m.role === 'user')
-      .map(m => bodyText(m.content))
-      .join('\n');
+        const userBody = bundle.ctx.messages
+            .filter(m => m.role === 'user')
+            .map(m => bodyText(m.content))
+            .join('\n');
 
-    expect(userBody).toMatch(/<extra-info>/);
-    expect(userBody).toMatch(/这是常驻附加信息：优先级最高/);
-  });
+        expect(userBody).toMatch(/<extra-info>/);
+        expect(userBody).toMatch(/这是常驻附加信息：优先级最高/);
+    });
 });
 
 describe('buildSessionPromptInputAdapter 分段弃权检查点（r3-test-1 ④）', () => {
-  /**
+    /**
    * 段序（与实现一一对应，含组装段内部检查点）：resolve agent → messages →
    * workplace（组装内：快照加载后 1 次 + 每文件 1 次）→ prepare。
    *
@@ -186,124 +185,128 @@ describe('buildSessionPromptInputAdapter 分段弃权检查点（r3-test-1 ④�
    * (4+N) = 组装段后（build 的第三道段界）；(5+N) = prepare 后（第四道）。
    * 组装真跑 ⇒ 序号与总数都含这 N 次逐文件检查，不随「组装短路」漂移。
    */
-  const N = WORKPLACE_FILES.length;
-  /** 组装内检查点数：快照加载后 1 次 + 每文件 1 次。 */
-  const ASSEMBLY_CHECKPOINTS = N + 1;
-  /** 恒假弃权开关下一轮问过的检查点总数 = build 段界 4 道 + 组装内。 */
-  const TOTAL_CHECKPOINTS = 4 + ASSEMBLY_CHECKPOINTS;
+    const N = WORKPLACE_FILES.length;
+    /** 组装内检查点数：快照加载后 1 次 + 每文件 1 次。 */
+    const ASSEMBLY_CHECKPOINTS = N + 1;
+    /** 恒假弃权开关下一轮问过的检查点总数 = build 段界 4 道 + 组装内。 */
+    const TOTAL_CHECKPOINTS = 4 + ASSEMBLY_CHECKPOINTS;
 
-  /** 组装参与形态的 runtime（开 workplace 块；见文件头 fixture 形态说明）。 */
-  const makeBailRuntime = (): MobileNovelMasterRuntime =>
-    makeStubRuntime({workplaceFiles: WORKPLACE_FILES});
+    /** 组装参与形态的 runtime（开 workplace 块；见文件头 fixture 形态说明）。 */
+    const makeBailRuntime = (): MobileNovelMasterRuntime =>
+        makeStubRuntime({workplaceFiles: WORKPLACE_FILES});
 
-  const makeBailDefinition = () => {
-    const definition = DefaultAgentDefinition.build('bail-agent');
-    // 显式开 workplace 块：不这样的话组装短路、检查点只剩 build 的 4 道，
-    // 断言含义就跟着 fixture 形态跑了（r4-app-3）。
-    definition.prompts = {...definition.prompts, workplace: '【工作区】'};
-    return definition;
-  };
-
-  const buildWithBailAt = async (bailAtCall: number) => {
-    const runtime = makeBailRuntime();
-    const definition = makeBailDefinition();
-    let calls = 0;
-    const observed = {
-      listBySession: () => (runtime.messages.listBySession as jest.Mock).mock.calls.length,
-      workplace: () => (runtime.workplace as jest.Mock).mock.calls.length,
-      sessionVfs: () => (runtime.sessionVfs as jest.Mock).mock.calls.length,
-      skills: () => (runtime.skills as jest.Mock).mock.calls.length,
-      // 组装段的 file_cache 批量预取次数（> 0 即证明组装真跑进了文件循环）。
-      prefetch: () =>
-        (runtime.sessionKkv.getMany as jest.Mock).mock.calls.length,
+    const makeBailDefinition = () => {
+        const definition = DefaultAgentDefinition.build('bail-agent');
+        // 显式开 workplace 块：不这样的话组装短路、检查点只剩 build 的 4 道，
+        // 断言含义就跟着 fixture 形态跑了（r4-app-3）。
+        definition.prompts = {...definition.prompts, workplace: '【工作区】'};
+        return definition;
     };
-    const shouldBail = () => {
-      calls += 1;
-      return calls === bailAtCall;
+
+    const buildWithBailAt = async (bailAtCall: number) => {
+        const runtime = makeBailRuntime();
+        const definition = makeBailDefinition();
+        let calls = 0;
+        const observed = {
+            listBySession: () => (runtime.messages.listBySession as jest.Mock).mock.calls.length,
+            workplace: () => (runtime.workplace as jest.Mock).mock.calls.length,
+            sessionVfs: () => (runtime.sessionVfs as jest.Mock).mock.calls.length,
+            skills: () => (runtime.skills as jest.Mock).mock.calls.length,
+            // 组装段的 file_cache 批量预取次数（> 0 即证明组装真跑进了文件循环）。
+            prefetch: () =>
+                (runtime.sessionKkv.getMany as jest.Mock).mock.calls.length,
+        };
+        const shouldBail = () => {
+            calls += 1;
+            return calls === bailAtCall;
+        };
+        const promise = SessionPromptInputService.build(
+            runtime,
+            {projectId: 'p1', sessionId: 's1'},
+            definition,
+            {shouldBail},
+        );
+        return {promise, observed, bailCalls: () => calls};
     };
-    const promise = SessionPromptInputService.build(
-      runtime,
-      {projectId: 'p1', sessionId: 's1'},
-      definition,
-      {shouldBail},
-    );
-    return {promise, observed, bailCalls: () => calls};
-  };
 
-  it('弃权开关恒假：build 走完全程，全部检查点各问一次', async () => {
-    const runtime = makeBailRuntime();
-    const definition = makeBailDefinition();
-    const shouldBail = jest.fn(() => false);
-    const bundleResult = await SessionPromptInputService.build(
-      runtime,
-      {projectId: 'p1', sessionId: 's1'},
-      definition,
-      {shouldBail},
-    )
-    if (!bundleResult.ok) throw bundleResult.error;
-    const bundle = bundleResult.value;;
-    expect(bundle.input).toBeDefined();
-    // 构成：build 的四道段界检查点（resolve 后 / messages 后 / 组装后 /
-    // prepare 后）+ 组装内 checkpoint（快照加载后 1 次 + 每文件 1 次）。
-    // 本夹具 N=2，实测总数 = 4 + 3 = 7（开块前是 4）。
-    expect(shouldBail).toHaveBeenCalledTimes(TOTAL_CHECKPOINTS);
-    // 前提：组装段真的跑了（否则总数退化成 4，断言就不表达「组装参与」了）。
-    expect(runtime.workplace as jest.Mock).toHaveBeenCalledTimes(1);
-    expect(runtime.sessionKkv.getMany as jest.Mock).toHaveBeenCalledTimes(1);
-  });
+    it('弃权开关恒假：build 走完全程，全部检查点各问一次', async () => {
+        const runtime = makeBailRuntime();
+        const definition = makeBailDefinition();
+        const shouldBail = jest.fn(() => false);
+        const bundleResult = await SessionPromptInputService.build(
+            runtime,
+            {projectId: 'p1', sessionId: 's1'},
+            definition,
+            {shouldBail},
+        )
+        if (!bundleResult.ok) throw bundleResult.error;
+        const bundle = bundleResult.value;;
+        expect(bundle.input).toBeDefined();
+        // 构成：build 的四道段界检查点（resolve 后 / messages 后 / 组装后 /
+        // prepare 后）+ 组装内 checkpoint（快照加载后 1 次 + 每文件 1 次）。
+        // 本夹具 N=2，实测总数 = 4 + 3 = 7（开块前是 4）。
+        expect(shouldBail).toHaveBeenCalledTimes(TOTAL_CHECKPOINTS);
+        // 前提：组装段真的跑了（否则总数退化成 4，断言就不表达「组装参与」了）。
+        expect(runtime.workplace as jest.Mock).toHaveBeenCalledTimes(1);
+        expect(runtime.sessionKkv.getMany as jest.Mock).toHaveBeenCalledTimes(1);
+    });
 
-  it('第 1 段翻真（agent 解析后）：抛 ChatPromptBuildBailedError，消息段未执行', async () => {
-    const {promise, observed} = await buildWithBailAt(1);
-    await expect(promise).rejects.toBeInstanceOf(ChatPromptBuildBailedError);
-    expect(observed.listBySession()).toBe(0);
-    expect(observed.prefetch()).toBe(0);
-  });
+    it('第 1 段翻真（agent 解析后）：返回 null 哨兵，消息段未执行', async () => {
+        const {promise, observed} = await buildWithBailAt(1);
+        const r = await promise;
+        expect(r.ok && r.value === null).toBe(true);
+        expect(observed.listBySession()).toBe(0);
+        expect(observed.prefetch()).toBe(0);
+    });
 
-  it('第 2 段翻真（消息拉取后）：抛错，workplace 段未执行', async () => {
-    const {promise, observed} = await buildWithBailAt(2);
-    await expect(promise).rejects.toBeInstanceOf(ChatPromptBuildBailedError);
-    expect(observed.listBySession()).toBe(1);
-    expect(observed.workplace()).toBe(0);
-    expect(observed.skills()).toBe(0);
-    expect(observed.prefetch()).toBe(0);
-  });
+    it('第 2 段翻真（消息拉取后）：弃权，workplace 段未执行', async () => {
+        const {promise, observed} = await buildWithBailAt(2);
+        const r = await promise;
+        expect(r.ok && r.value === null).toBe(true);
+        expect(observed.listBySession()).toBe(1);
+        expect(observed.workplace()).toBe(0);
+        expect(observed.skills()).toBe(0);
+        expect(observed.prefetch()).toBe(0);
+    });
 
-  it('第 3 段翻真（workplace 组装后）：抛错，prepare 段未执行', async () => {
-    // 第 (4+N) 次 = 组装内检查点问完之后、build 的第三道段界。
-    const {promise, observed} = await buildWithBailAt(4 + N);
-    await expect(promise).rejects.toBeInstanceOf(ChatPromptBuildBailedError);
-    expect(observed.workplace()).toBe(1);
-    expect(observed.sessionVfs()).toBe(1);
-    // 前提：组装真跑进了文件循环（否则这道「组装后」的段界是空的）。
-    expect(observed.prefetch()).toBe(1);
-    // prepare 的入参（含 skills()）整段未求值
-    expect(observed.skills()).toBe(0);
-  });
+    it('第 3 段翻真（workplace 组装后）：弃权，prepare 段未执行', async () => {
+        // 第 (4+N) 次 = 组装内检查点问完之后、build 的第三道段界。
+        const {promise, observed} = await buildWithBailAt(4 + N);
+        const r = await promise;
+        expect(r.ok && r.value === null).toBe(true);
+        expect(observed.workplace()).toBe(1);
+        expect(observed.sessionVfs()).toBe(1);
+        // 前提：组装真跑进了文件循环（否则这道「组装后」的段界是空的）。
+        expect(observed.prefetch()).toBe(1);
+        // prepare 的入参（含 skills()）整段未求值
+        expect(observed.skills()).toBe(0);
+    });
 
-  it('第 4 段翻真（prepare 后）：抛错，layout 组装段未执行', async () => {
-    // 第 (5+N) 次 = prepare 跑完、build 的第四道（最后一道）段界。
-    const {promise, observed, bailCalls} = await buildWithBailAt(5 + N);
-    await expect(promise).rejects.toBeInstanceOf(ChatPromptBuildBailedError);
-    expect(observed.skills()).toBe(1);
-    expect(observed.prefetch()).toBe(1);
-    // 只问了 5+N 次（= 4 道段界 + 组装内 1+N）：第 4 道段界之后没有 layout
-    // 段的检查点，也没有落库式副作用。
-    expect(bailCalls()).toBe(TOTAL_CHECKPOINTS);
-  });
+    it('第 4 段翻真（prepare 后）：弃权，layout 组装段未执行', async () => {
+        // 第 (5+N) 次 = prepare 跑完、build 的第四道（最后一道）段界。
+        const {promise, observed, bailCalls} = await buildWithBailAt(5 + N);
+        const r = await promise;
+        expect(r.ok && r.value === null).toBe(true);
+        expect(observed.skills()).toBe(1);
+        expect(observed.prefetch()).toBe(1);
+        // 只问了 5+N 次（= 4 道段界 + 组装内 1+N）：第 4 道段界之后没有 layout
+        // 段的检查点，也没有落库式副作用。
+        expect(bailCalls()).toBe(TOTAL_CHECKPOINTS);
+    });
 
-  it('不传 shouldBail：行为不变（预览等非 chip 消费方不受弃权影响）', async () => {
-    const runtime = makeStubRuntime();
-    const definition = DefaultAgentDefinition.build('plain-agent');
-    const bundleResult = await SessionPromptInputService.build(
-      runtime,
-      {projectId: 'p1', sessionId: 's1'},
-      definition,
-    )
-    if (!bundleResult.ok) throw bundleResult.error;
-    const bundle = bundleResult.value;;
-    expect(bundle.rawMessages).toHaveLength(1);
-    expect(bundle.input).toBeDefined();
-  });
+    it('不传 shouldBail：行为不变（预览等非 chip 消费方不受弃权影响）', async () => {
+        const runtime = makeStubRuntime();
+        const definition = DefaultAgentDefinition.build('plain-agent');
+        const bundleResult = await SessionPromptInputService.build(
+            runtime,
+            {projectId: 'p1', sessionId: 's1'},
+            definition,
+        )
+        if (!bundleResult.ok) throw bundleResult.error;
+        const bundle = bundleResult.value;;
+        expect(bundle.rawMessages).toHaveLength(1);
+        expect(bundle.input).toBeDefined();
+    });
 });
 
 /**
@@ -330,128 +333,128 @@ describe('buildSessionPromptInputAdapter 分段弃权检查点（r3-test-1 ④�
  * 时这条会红。
  */
 describe('buildSessionPromptInputAdapter 附件预算降级 parity（T-A8）', () => {
-  /** 预览路径要 hydrate 的超大附件路径。 */
-  const HUGE_PATH = '/huge.md';
-  /**
+    /** 预览路径要 hydrate 的超大附件路径。 */
+    const HUGE_PATH = '/huge.md';
+    /**
    * 超预算正文长度 = 预算 + 1。
    *
    * 预算来源：core `ATTACH_PROMPT_CHAR_BUDGET`（public 子路径已导出），
    * 直接引用常量——预算值若调整，这里自动跟随，不会以「不降级」红脸告警。
    */
-  const OVER_BUDGET_BODY = 'H'.repeat(ATTACH_PROMPT_CHAR_BUDGET + 1);
+    const OVER_BUDGET_BODY = 'H'.repeat(ATTACH_PROMPT_CHAR_BUDGET + 1);
 
-  it('超预算文本附件在预览路径降级为 filename 档引导文案（与实发链同口径）', async () => {
-    const runtime = makeStubRuntime({
-      messages: [
-        {
-          id: 'm1',
-          sessionId: 's1',
-          role: 'user',
-          content: TextBlocks.of('帮我看看这个附件'),
-          hidden: false,
-          // content: null ⇒ prepare 走 file_cache miss → 读 vfs 的首次全文路径。
-          attachments: [
-            {
-              name: HUGE_PATH,
-              source: 'attach',
-              type: 'text',
-              content: null,
-              path: HUGE_PATH,
-            },
-          ],
-        },
-      ],
-      vfsBodies: {[HUGE_PATH]: OVER_BUDGET_BODY},
+    it('超预算文本附件在预览路径降级为 filename 档引导文案（与实发链同口径）', async () => {
+        const runtime = makeStubRuntime({
+            messages: [
+                {
+                    id: 'm1',
+                    sessionId: 's1',
+                    role: 'user',
+                    content: TextBlocks.of('帮我看看这个附件'),
+                    hidden: false,
+                    // content: null ⇒ prepare 走 file_cache miss → 读 vfs 的首次全文路径。
+                    attachments: [
+                        {
+                            name: HUGE_PATH,
+                            source: 'attach',
+                            type: 'text',
+                            content: null,
+                            path: HUGE_PATH,
+                        },
+                    ],
+                },
+            ],
+            vfsBodies: {[HUGE_PATH]: OVER_BUDGET_BODY},
+        });
+        const definition = DefaultAgentDefinition.build('budget-agent');
+
+        const bundleResult = await SessionPromptInputService.build(
+            runtime,
+            {projectId: 'p1', sessionId: 's1'},
+            definition,
+        )
+        if (!bundleResult.ok) throw bundleResult.error;
+        const bundle = bundleResult.value;;
+
+        const attachXml = bundle.ctx.messages[0]?.attachments?.[0]?.content ?? '';
+        // ① 降级文案：与实发链同一份 OVERSIZED_ATTACH_NOTE。
+        expect(attachXml).toMatch(/文件过长，可用 read 配合 offset\/limit 分段读取/);
+        // ② display 强制 filename 档（action JSON 里的 display 字段）。
+        expect(attachXml).toMatch(/"display": "filename"/);
+        // ③ 正文确实没进 XML（否则「降级」只是加了一句提示，白烧 token）。
+        expect(attachXml).not.toContain('HHH');
+        // ④ 包裹后的消息体里同样能看到降级文案（预览渲染消费的就是它）。
+        expect(bodyText(bundle.ctx.messages[0]?.content)).toMatch(
+            /文件过长，可用 read 配合 offset\/limit 分段读取/,
+        );
     });
-    const definition = DefaultAgentDefinition.build('budget-agent');
-
-    const bundleResult = await SessionPromptInputService.build(
-      runtime,
-      {projectId: 'p1', sessionId: 's1'},
-      definition,
-    )
-    if (!bundleResult.ok) throw bundleResult.error;
-    const bundle = bundleResult.value;;
-
-    const attachXml = bundle.ctx.messages[0]?.attachments?.[0]?.content ?? '';
-    // ① 降级文案：与实发链同一份 OVERSIZED_ATTACH_NOTE。
-    expect(attachXml).toMatch(/文件过长，可用 read 配合 offset\/limit 分段读取/);
-    // ② display 强制 filename 档（action JSON 里的 display 字段）。
-    expect(attachXml).toMatch(/"display": "filename"/);
-    // ③ 正文确实没进 XML（否则「降级」只是加了一句提示，白烧 token）。
-    expect(attachXml).not.toContain('HHH');
-    // ④ 包裹后的消息体里同样能看到降级文案（预览渲染消费的就是它）。
-    expect(bodyText(bundle.ctx.messages[0]?.content)).toMatch(
-      /文件过长，可用 read 配合 offset\/limit 分段读取/,
-    );
-  });
 });
 
 describe('buildSessionPromptInputAdapter S0 双读接线（d-s0/G-1）', () => {
-  /** 复用既有 harness 的路径常量：一个 full 档、一个 header 档。 */
-  const FULL_PATH = WORKPLACE_FILES[0];
-  const HEADER_PATH = WORKPLACE_FILES[1];
+    /** 复用既有 harness 的路径常量：一个 full 档、一个 header 档。 */
+    const FULL_PATH = WORKPLACE_FILES[0];
+    const HEADER_PATH = WORKPLACE_FILES[1];
 
-  it('workplace 附件被省略（visiblePaths 已接线）、attach 附件拿到全文（prefixPaths 只吃 full 档）', async () => {
-    const runtime = makeStubRuntime({
-      workplaceFiles: WORKPLACE_FILES,
-      workplaceStatuses: {[FULL_PATH]: 'full', [HEADER_PATH]: 'header'},
-      messages: [
-        {
-          id: 'wp1',
-          sessionId: 's1',
-          role: 'user',
-          content: TextBlocks.of('历史 workplace 附件'),
-          hidden: false,
-          attachments: [
-            {
-              name: HEADER_PATH,
-              source: 'workplace',
-              type: 'text',
-              content: null,
-              path: HEADER_PATH,
-            },
-          ],
-        },
-        {
-          id: 'at1',
-          sessionId: 's1',
-          role: 'user',
-          content: TextBlocks.of('再引一次'),
-          hidden: false,
-          attachments: [
-            {
-              name: HEADER_PATH,
-              source: 'attach',
-              type: 'text',
-              content: null,
-              path: HEADER_PATH,
-            },
-          ],
-        },
-      ],
-      vfsBodies: {[HEADER_PATH]: 'HEADER-BODY'},
+    it('workplace 附件被省略（visiblePaths 已接线）、attach 附件拿到全文（prefixPaths 只吃 full 档）', async () => {
+        const runtime = makeStubRuntime({
+            workplaceFiles: WORKPLACE_FILES,
+            workplaceStatuses: {[FULL_PATH]: 'full', [HEADER_PATH]: 'header'},
+            messages: [
+                {
+                    id: 'wp1',
+                    sessionId: 's1',
+                    role: 'user',
+                    content: TextBlocks.of('历史 workplace 附件'),
+                    hidden: false,
+                    attachments: [
+                        {
+                            name: HEADER_PATH,
+                            source: 'workplace',
+                            type: 'text',
+                            content: null,
+                            path: HEADER_PATH,
+                        },
+                    ],
+                },
+                {
+                    id: 'at1',
+                    sessionId: 's1',
+                    role: 'user',
+                    content: TextBlocks.of('再引一次'),
+                    hidden: false,
+                    attachments: [
+                        {
+                            name: HEADER_PATH,
+                            source: 'attach',
+                            type: 'text',
+                            content: null,
+                            path: HEADER_PATH,
+                        },
+                    ],
+                },
+            ],
+            vfsBodies: {[HEADER_PATH]: 'HEADER-BODY'},
+        });
+        const definition = DefaultAgentDefinition.build('s0-agent');
+        // 显式开 workplace 块：不开则组装短路，两集合恒为 []，本用例没有牙齿。
+        definition.prompts = {...definition.prompts, workplace: '【工作区】'};
+
+        const bundleResult = await SessionPromptInputService.build(
+            runtime,
+            {projectId: 'p1', sessionId: 's1'},
+            definition,
+        )
+        if (!bundleResult.ok) throw bundleResult.error;
+        const bundle = bundleResult.value;;
+
+        const [workplaceMsg, attachMsg] = bundle.ctx.messages;
+        // ① workplace 侧读 workplaceSeen（= visiblePaths，全量可见档）：header
+        //    档也命中 ⇒ 省略（content 置空，wrap 时不重复注入）。
+        expect(workplaceMsg?.attachments?.[0]?.content).toBe('');
+        // ② attach 侧读 seen（= prefixPaths，仅 full 档）：header 档不在其中
+        //    ⇒ 拿全文，而不是 alreadyReferenced 短提示。
+        const attachBody = attachMsg?.attachments?.[0]?.content ?? '';
+        expect(attachBody).toContain('HEADER-BODY');
+        expect(attachBody).not.toContain('alreadyReferenced');
     });
-    const definition = DefaultAgentDefinition.build('s0-agent');
-    // 显式开 workplace 块：不开则组装短路，两集合恒为 []，本用例没有牙齿。
-    definition.prompts = {...definition.prompts, workplace: '【工作区】'};
-
-    const bundleResult = await SessionPromptInputService.build(
-      runtime,
-      {projectId: 'p1', sessionId: 's1'},
-      definition,
-    )
-    if (!bundleResult.ok) throw bundleResult.error;
-    const bundle = bundleResult.value;;
-
-    const [workplaceMsg, attachMsg] = bundle.ctx.messages;
-    // ① workplace 侧读 workplaceSeen（= visiblePaths，全量可见档）：header
-    //    档也命中 ⇒ 省略（content 置空，wrap 时不重复注入）。
-    expect(workplaceMsg?.attachments?.[0]?.content).toBe('');
-    // ② attach 侧读 seen（= prefixPaths，仅 full 档）：header 档不在其中
-    //    ⇒ 拿全文，而不是 alreadyReferenced 短提示。
-    const attachBody = attachMsg?.attachments?.[0]?.content ?? '';
-    expect(attachBody).toContain('HEADER-BODY');
-    expect(attachBody).not.toContain('alreadyReferenced');
-  });
 });

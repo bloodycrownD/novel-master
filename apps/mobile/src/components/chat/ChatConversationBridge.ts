@@ -32,17 +32,17 @@
  */
 import {Guards} from '@novel-master/core/common';
 import type {
-  ChatTranscriptScrollSnapshot,
-  TranscriptFlags,
-  TranscriptLabels,
-  TranscriptRestoreScroll,
-  TranscriptRow,
-  TranscriptScrollIntent,
-  TranscriptStreamBlockCommitPayload,
-  TranscriptStreamCheckpoint,
-  TranscriptStreamDeltaPayload,
-  TranscriptStreamResetPayload,
-  TranscriptStreamStatusPayload,
+    ChatTranscriptScrollSnapshot,
+    TranscriptFlags,
+    TranscriptLabels,
+    TranscriptRestoreScroll,
+    TranscriptRow,
+    TranscriptScrollIntent,
+    TranscriptStreamBlockCommitPayload,
+    TranscriptStreamCheckpoint,
+    TranscriptStreamDeltaPayload,
+    TranscriptStreamResetPayload,
+    TranscriptStreamStatusPayload,
 } from './ChatTranscriptBridge';
 // 主题键集的唯一真源在 web 侧 shared/host-theme——本文件与 web 侧 model 都从这里取，
 // 不再各抄一份（原先两份手抄零约束，宿主加 token 时都不红）。
@@ -76,15 +76,15 @@ export const CONVERSATION_READY_VERSION = TRANSCRIPT_READY_VERSION;
  * 一次 `themeUpdate` 下发全文档生效（dispatcher fan-out 三方）。
  */
 export type ConversationTheme = {
-  readonly background: string;
-  readonly text: string;
-  readonly textSecondary: string;
-  readonly primary: string;
-  readonly primaryMuted: string;
-  readonly selection: string;
-  readonly danger: string;
-  readonly surface: string;
-  readonly borderLight: string;
+    readonly background: string;
+    readonly text: string;
+    readonly textSecondary: string;
+    readonly primary: string;
+    readonly primaryMuted: string;
+    readonly selection: string;
+    readonly danger: string;
+    readonly surface: string;
+    readonly borderLight: string;
 };
 
 /**
@@ -106,50 +106,50 @@ export const CONVERSATION_THEME_KEYS: readonly (keyof ConversationTheme)[] = HOS
  * `NativeChatComposer` 的 toolbar / hintRow / 发送钮直调，枚举语义不变）。
  */
 export type ConversationDockAction =
-  | 'send'
-  | 'terminate'
-  | 'needModel'
-  | 'fullscreen'
-  | 'atPicker'
-  | 'skillPicker';
+    | 'send'
+    | 'terminate'
+    | 'needModel'
+    | 'fullscreen'
+    | 'atPicker'
+    | 'skillPicker';
 
 /* ------------------------------------------------------------------ *
  * 下行消息清单（v2 信封 · D4c 收口后纯转录域）
  * ------------------------------------------------------------------ */
 
 type ConversationInitPayload = {
-  readonly theme: ConversationTheme;
-  readonly flags: TranscriptFlags;
-  /** 转录渲染层文案（spec §2.2.8）；缺省时 web 回退内置中文常量。 */
-  readonly labels?: TranscriptLabels;
-  /**
+    readonly theme: ConversationTheme;
+    readonly flags: TranscriptFlags;
+    /** 转录渲染层文案（spec §2.2.8）；缺省时 web 回退内置中文常量。 */
+    readonly labels?: TranscriptLabels;
+    /**
    * 转录 only 变体（子会话屏，transcript-converge）：无输入 dock 的降级形态。
    * web 侧据此给 #app 挂 transcript-only 类（CSS 隐藏
    * dock）；可选字段、旧 dist 忽略，v 号不动。
    */
-  readonly transcriptOnly?: boolean;
+    readonly transcriptOnly?: boolean;
 };
 
 /** `sessionSnapshot` 分片载荷（字段分布约定与旧包逐字一致，见 ChatTranscriptBridge 注释）。 */
 type ConversationSnapshotPayload = {
-  readonly sessionKey: string;
-  readonly rows: readonly TranscriptRow[];
-  readonly hasMore: boolean;
-  /** 流式检查点（spec §2.2.2）：流式片/末片携带，最后到达者为准。 */
-  readonly stream?: TranscriptStreamCheckpoint;
-  /** 仅末片携带。 */
-  readonly scrollIntent?: TranscriptScrollIntent;
-  readonly restoreScroll?: TranscriptRestoreScroll;
-  readonly generation: number;
-  readonly chunkIndex: number;
-  readonly chunkTotal: number;
+    readonly sessionKey: string;
+    readonly rows: readonly TranscriptRow[];
+    readonly hasMore: boolean;
+    /** 流式检查点（spec §2.2.2）：流式片/末片携带，最后到达者为准。 */
+    readonly stream?: TranscriptStreamCheckpoint;
+    /** 仅末片携带。 */
+    readonly scrollIntent?: TranscriptScrollIntent;
+    readonly restoreScroll?: TranscriptRestoreScroll;
+    readonly generation: number;
+    readonly chunkIndex: number;
+    readonly chunkTotal: number;
 };
 
 /** 下行信封（v2）。 */
 type ConversationEnvelope<T extends string, P> = {
-  readonly v: typeof CONVERSATION_BRIDGE_V;
-  readonly type: T;
-  readonly payload: P;
+    readonly v: typeof CONVERSATION_BRIDGE_V;
+    readonly type: T;
+    readonly payload: P;
 };
 
 /**
@@ -164,24 +164,24 @@ type ConversationEnvelope<T extends string, P> = {
  * `keyboardLiftNonce` 恒为 0），web 侧清单已删除该条。
  */
 export type ConversationHostMessage =
-  | ConversationEnvelope<'init', ConversationInitPayload>
-  | ConversationEnvelope<'themeUpdate', {theme: ConversationTheme}>
-  | ConversationEnvelope<'flagsUpdate', {flags: TranscriptFlags}>
-  | ConversationEnvelope<'sessionSnapshot', ConversationSnapshotPayload>
-  | ConversationEnvelope<
-      'prependPage',
-      {rows: readonly TranscriptRow[]; prependedCount: number}
-    >
-  | ConversationEnvelope<'appendTailRows', {rows: readonly TranscriptRow[]}>
-  | ConversationEnvelope<'streamDelta', TranscriptStreamDeltaPayload>
-  | ConversationEnvelope<
-      'streamBlockCommit',
-      TranscriptStreamBlockCommitPayload
-    >
-  | ConversationEnvelope<'streamReset', TranscriptStreamResetPayload>
-  | ConversationEnvelope<'streamStatus', TranscriptStreamStatusPayload>
-  | ConversationEnvelope<'closeMenu', Record<string, never>>
-  | ConversationEnvelope<'closeMermaidViewer', Record<string, never>>;
+    | ConversationEnvelope<'init', ConversationInitPayload>
+    | ConversationEnvelope<'themeUpdate', {theme: ConversationTheme}>
+    | ConversationEnvelope<'flagsUpdate', {flags: TranscriptFlags}>
+    | ConversationEnvelope<'sessionSnapshot', ConversationSnapshotPayload>
+    | ConversationEnvelope<
+            'prependPage',
+            {rows: readonly TranscriptRow[]; prependedCount: number}
+        >
+    | ConversationEnvelope<'appendTailRows', {rows: readonly TranscriptRow[]}>
+    | ConversationEnvelope<'streamDelta', TranscriptStreamDeltaPayload>
+    | ConversationEnvelope<
+            'streamBlockCommit',
+            TranscriptStreamBlockCommitPayload
+        >
+    | ConversationEnvelope<'streamReset', TranscriptStreamResetPayload>
+    | ConversationEnvelope<'streamStatus', TranscriptStreamStatusPayload>
+    | ConversationEnvelope<'closeMenu', Record<string, never>>
+    | ConversationEnvelope<'closeMermaidViewer', Record<string, never>>;
 
 /* ------------------------------------------------------------------ *
  * 上行（Web → Host）宽松解码
@@ -193,20 +193,20 @@ export type ConversationHostMessage =
  * 宿主「先 decode 再 if-type 分发」的写法同款。
  */
 type ConversationUpstreamEnvelope = {
-  readonly v?: number;
-  readonly type: string;
-  readonly payload: Record<string, unknown>;
+    readonly v?: number;
+    readonly type: string;
+    readonly payload: Record<string, unknown>;
 };
 
 /** 解码失败的原因（`ready` 单独一类：它是被 v 号判定的，不是形状问题）。 */
 type ConversationDecodeFailure = 'malformed' | 'stale-ready';
 
 type ConversationDecodeResult =
-  | {readonly ok: true; readonly message: ConversationUpstreamEnvelope}
-  | {readonly ok: false; readonly reason: ConversationDecodeFailure};
+    | {readonly ok: true; readonly message: ConversationUpstreamEnvelope}
+    | {readonly ok: false; readonly reason: ConversationDecodeFailure};
 
 export namespace ChatConversationBridge {
-  /**
+    /**
    * 宽松 decoder（spec §合成 dispatcher 契约第 1 条，**自带、禁止复用
    * `decodeTranscriptToHost`**）。
    *
@@ -219,65 +219,65 @@ export namespace ChatConversationBridge {
    *   单例恒为 v:1；剥离后的 composer 域残余上行（旧 dist 的 change 等）也按
    *   「宽松放行、宿主不消费」处理，校验即丢消息反而掩盖问题。
    */
-  // prettier-ignore
-  export function decodeConversationUpstream(raw: unknown): ConversationDecodeResult {
-    let parsed: unknown = raw;
-    if (typeof raw === 'string') {
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
-        return {ok: false, reason: 'malformed'};
-      }
+    // prettier-ignore
+    export function decodeConversationUpstream(raw: unknown): ConversationDecodeResult {
+        let parsed: unknown = raw;
+        if (typeof raw === 'string') {
+            try {
+                parsed = JSON.parse(raw);
+            } catch {
+                return {ok: false, reason: 'malformed'};
+            }
+        }
+        if (!Guards.isRecord(parsed)) {
+            return {ok: false, reason: 'malformed'};
+        }
+        const type = parsed.type;
+        if (typeof type !== 'string' || type === '') {
+            return {ok: false, reason: 'malformed'};
+        }
+        if (type === 'ready' && parsed.v !== CONVERSATION_BRIDGE_V) {
+            return {ok: false, reason: 'stale-ready'};
+        }
+        return {
+            ok: true,
+            message: {
+                v: typeof parsed.v === 'number' ? parsed.v : undefined,
+                type,
+                payload: Guards.isRecord(parsed.payload) ? parsed.payload : {},
+            },
+        };
     }
-    if (!Guards.isRecord(parsed)) {
-      return {ok: false, reason: 'malformed'};
-    }
-    const type = parsed.type;
-    if (typeof type !== 'string' || type === '') {
-      return {ok: false, reason: 'malformed'};
-    }
-    if (type === 'ready' && parsed.v !== CONVERSATION_BRIDGE_V) {
-      return {ok: false, reason: 'stale-ready'};
-    }
-    return {
-      ok: true,
-      message: {
-        v: typeof parsed.v === 'number' ? parsed.v : undefined,
-        type,
-        payload: Guards.isRecord(parsed.payload) ? parsed.payload : {},
-      },
-    };
-  }
 
-  /** ready 携带的能力清单（缺省/非数组 → 空清单；「未声明 = 不支持」是硬约定）。 */
-  // prettier-ignore
-  export function readReadyCapabilities(payload: Record<string, unknown>): readonly string[] {
-    const raw = payload.capabilities;
-    return Array.isArray(raw) ? (raw as readonly string[]) : [];
-  }
+    /** ready 携带的能力清单（缺省/非数组 → 空清单；「未声明 = 不支持」是硬约定）。 */
+    // prettier-ignore
+    export function readReadyCapabilities(payload: Record<string, unknown>): readonly string[] {
+        const raw = payload.capabilities;
+        return Array.isArray(raw) ? (raw as readonly string[]) : [];
+    }
 
-  /** `scrollSnapshot` → 滚动缓存快照（schema 版本不符返回 null；与旧宿主同口径）。 */
-  // prettier-ignore
-  export function parseConversationScrollSnapshot(message: ConversationUpstreamEnvelope, schemaVersion: number): ChatTranscriptScrollSnapshot | null {
-    if (message.type !== 'scrollSnapshot') {
-      return null;
+    /** `scrollSnapshot` → 滚动缓存快照（schema 版本不符返回 null；与旧宿主同口径）。 */
+    // prettier-ignore
+    export function parseConversationScrollSnapshot(message: ConversationUpstreamEnvelope, schemaVersion: number): ChatTranscriptScrollSnapshot | null {
+        if (message.type !== 'scrollSnapshot') {
+            return null;
+        }
+        const {
+            schemaVersion: msgSchemaVersion,
+            offsetY,
+            nearBottom,
+        } = message.payload;
+        if (msgSchemaVersion !== schemaVersion) {
+            return null;
+        }
+        if (typeof offsetY !== 'number' || typeof nearBottom !== 'boolean') {
+            return null;
+        }
+        return {
+            schemaVersion:
+                msgSchemaVersion as ChatTranscriptScrollSnapshot['schemaVersion'],
+            offsetY,
+            nearBottom,
+        };
     }
-    const {
-      schemaVersion: msgSchemaVersion,
-      offsetY,
-      nearBottom,
-    } = message.payload;
-    if (msgSchemaVersion !== schemaVersion) {
-      return null;
-    }
-    if (typeof offsetY !== 'number' || typeof nearBottom !== 'boolean') {
-      return null;
-    }
-    return {
-      schemaVersion:
-        msgSchemaVersion as ChatTranscriptScrollSnapshot['schemaVersion'],
-      offsetY,
-      nearBottom,
-    };
-  }
 }

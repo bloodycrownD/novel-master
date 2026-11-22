@@ -17,8 +17,8 @@ import type { Result } from "@/errors/either.js";
  * 等命名窗口由应用层算出具体日期后传入。
  */
 export interface UsageStatsRange {
-  readonly fromDay: string;
-  readonly toDay: string;
+    readonly fromDay: string;
+    readonly toDay: string;
 }
 
 /**
@@ -32,14 +32,14 @@ export interface UsageStatsRange {
  * - 具体字符串：只统计 `model_name` 相等的行。
  */
 export interface UsageStatsFilter {
-  /**
+    /**
    * 时间范围：缺省语义按查询分级——`getSummary` / `getModelBreakdown` /
    * `listRequestUsage` 不限时间（全历史）；`getDailyBuckets` 必填，
    * 否则以 `err` 返回 `CHAT_INVALID_ARGUMENT`（日桶序列需要界）。
    */
-  readonly range?: UsageStatsRange;
-  readonly model?: string | null;
-  /**
+    readonly range?: UsageStatsRange;
+    readonly model?: string | null;
+    /**
    * 服务商筛选（与 model 复合）：
    * - `undefined`：全部服务商；
    * - `null`：只统计「其他」桶——`provider_id IS NULL` 的历史行
@@ -47,50 +47,50 @@ export interface UsageStatsFilter {
    * - 具体字符串：只统计 `provider_id` 相等的行（服务商已删除仍按
    *   原 id 匹配，展示名由 UI 层解析兑底）。
    */
-  readonly providerId?: string | null;
+    readonly providerId?: string | null;
 }
 
 /** 范围内汇总（命中率由展示层用 cacheReadTokens / billedInputTokens 计算）。 */
 export interface UsageStatsSummary {
-  readonly calls: number;
-  readonly promptTokens: number;
-  readonly completionTokens: number;
-  readonly totalTokens: number;
-  readonly cacheReadTokens: number;
-  readonly cacheCreationTokens: number;
-  /**
+    readonly calls: number;
+    readonly promptTokens: number;
+    readonly completionTokens: number;
+    readonly totalTokens: number;
+    readonly cacheReadTokens: number;
+    readonly cacheCreationTokens: number;
+    /**
    * 计费口径全部输入：anthropic 行为 prompt + cache_read + cache_creation，
    * 其余协议为 prompt；仅对 cache 列非 NULL 的行求和（缺失行不入分母）。
    */
-  readonly billedInputTokens: number;
-  /**
+    readonly billedInputTokens: number;
+    /**
    * 平均首字延迟（ms）：AVG(first_token_ms)，仅对非 NULL 行求均值；
    * 非流式请求的 first_token_ms = duration_ms（按完成时刻计），
    * 会进入均值。存量数据全 NULL 时返回 null（UI 空态依据）。
    */
-  readonly avgFirstTokenMs: number | null;
-  /**
+    readonly avgFirstTokenMs: number | null;
+    /**
    * 平均 token 速率（tokens/s）：SUM(completion_tokens) ÷
    * SUM(duration_ms − first_token_ms) / 1000 的加权口径，仅统计两列
    * 非 NULL 且 duration_ms > first_token_ms 的行（排除等待首字的纯生成
    * 速率；非流式行 first=duration 不入分母）。无有效行为 null。
    */
-  readonly avgTokensPerSecond: number | null;
+    readonly avgTokensPerSecond: number | null;
 }
 
 /** 天或小时桶（`bucketStartMs` 为桶起点，本地时区边界）。 */
 export interface UsageStatsBucket {
-  readonly bucketStartMs: number;
-  readonly calls: number;
-  readonly promptTokens: number;
-  readonly completionTokens: number;
-  readonly cacheReadTokens: number;
-  readonly cacheCreationTokens: number;
-  readonly billedInputTokens: number;
-  /** 桶内平均首字延迟（ms）；无有效行为 null（口径同 UsageStatsSummary）。 */
-  readonly avgFirstTokenMs: number | null;
-  /** 桶内平均 token 速率（tokens/s）；无有效行为 null（口径同 UsageStatsSummary）。 */
-  readonly avgTokensPerSecond: number | null;
+    readonly bucketStartMs: number;
+    readonly calls: number;
+    readonly promptTokens: number;
+    readonly completionTokens: number;
+    readonly cacheReadTokens: number;
+    readonly cacheCreationTokens: number;
+    readonly billedInputTokens: number;
+    /** 桶内平均首字延迟（ms）；无有效行为 null（口径同 UsageStatsSummary）。 */
+    readonly avgFirstTokenMs: number | null;
+    /** 桶内平均 token 速率（tokens/s）；无有效行为 null（口径同 UsageStatsSummary）。 */
+    readonly avgTokensPerSecond: number | null;
 }
 
 /**
@@ -99,14 +99,14 @@ export interface UsageStatsBucket {
  * 「其他模型」桶：未记录行与不在当前已保存模型集合内的行归并成一行）。
  */
 export interface UsageStatsModelRow {
-  readonly providerId: string | null;
-  readonly modelName: string | null;
-  readonly calls: number;
-  readonly promptTokens: number;
-  readonly completionTokens: number;
-  readonly totalTokens: number;
-  readonly cacheReadTokens: number;
-  readonly billedInputTokens: number;
+    readonly providerId: string | null;
+    readonly modelName: string | null;
+    readonly calls: number;
+    readonly promptTokens: number;
+    readonly completionTokens: number;
+    readonly totalTokens: number;
+    readonly cacheReadTokens: number;
+    readonly billedInputTokens: number;
 }
 
 /**
@@ -116,30 +116,30 @@ export interface UsageStatsModelRow {
  * 历史请求照常出现在流水里。
  */
 export interface UsageStatsRequestRow {
-  /** 请求完成落库时刻（本地时区展示）。 */
-  readonly createdAtMs: number;
-  readonly modelName: string | null;
-  readonly promptTokens: number;
-  readonly completionTokens: number;
-  readonly totalTokens: number;
-  readonly cacheReadTokens: number | null;
-  readonly cacheCreationTokens: number | null;
-  readonly firstTokenMs: number | null;
-  readonly durationMs: number | null;
+    /** 请求完成落库时刻（本地时区展示）。 */
+    readonly createdAtMs: number;
+    readonly modelName: string | null;
+    readonly promptTokens: number;
+    readonly completionTokens: number;
+    readonly totalTokens: number;
+    readonly cacheReadTokens: number | null;
+    readonly cacheCreationTokens: number | null;
+    readonly firstTokenMs: number | null;
+    readonly durationMs: number | null;
 }
 
 /** 请求流水分页查询入参。 */
 export interface UsageStatsRequestPageQuery {
-  readonly offset: number;
-  /** 每页条数（服务层限制 1–200）。 */
-  readonly limit: number;
+    readonly offset: number;
+    /** 每页条数（服务层限制 1–200）。 */
+    readonly limit: number;
 }
 
 /** 请求流水分页结果。 */
 export interface UsageStatsRequestPage {
-  readonly rows: readonly UsageStatsRequestRow[];
-  /** 符合筛选的总条数（供 UI 判断是否还有下一页）。 */
-  readonly total: number;
+    readonly rows: readonly UsageStatsRequestRow[];
+    /** 符合筛选的总条数（供 UI 判断是否还有下一页）。 */
+    readonly total: number;
 }
 
 /**
@@ -153,14 +153,14 @@ export interface UsageStatsRequestPage {
  * 前保持 null，属预期行为。
  */
 export interface SessionUsageLastRequest {
-  readonly seq: number;
-  readonly modelName: string | null;
-  readonly provider: string | null;
-  readonly promptTokens: number;
-  readonly completionTokens: number;
-  readonly cacheReadTokens: number | null;
-  readonly cacheCreationTokens: number | null;
-  readonly atMs: number;
+    readonly seq: number;
+    readonly modelName: string | null;
+    readonly provider: string | null;
+    readonly promptTokens: number;
+    readonly completionTokens: number;
+    readonly cacheReadTokens: number | null;
+    readonly cacheCreationTokens: number | null;
+    readonly atMs: number;
 }
 
 /**
@@ -179,16 +179,16 @@ export interface SessionUsageLastRequest {
  * `{last: null, visibleMessageCount: 0, toolUseCount: 0}`。
  */
 export interface SessionUsageDetail {
-  readonly last: SessionUsageLastRequest | null;
-  /** 可见口径消息数（hidden 剔除，不筛角色）。 */
-  readonly visibleMessageCount: number;
-  /**
+    readonly last: SessionUsageLastRequest | null;
+    /** 可见口径消息数（hidden 剔除，不筛角色）。 */
+    readonly visibleMessageCount: number;
+    /**
    * 会话内 assistant 消息 `tool_use` 块总数（含 hidden 行——累计口径）。
    * 会话 KKV `usage_stats.toolUseCount` 缓存优先（跟随会话生命周期）；
    * miss 时解压 assistant 行现算并回填缓存。失效挂点见
    * `session-kkv-domains` 的 usage_stats 域注释。
    */
-  readonly toolUseCount: number;
+    readonly toolUseCount: number;
 }
 
 /**
@@ -198,52 +198,52 @@ export interface SessionUsageDetail {
  * 内容分离——删除会话/消息/回滚截尾都不删账本行，统计数字因此不随内容消失）。
  */
 export interface UsageStatsService {
-  /** 范围内汇总（`filter.range` 缺省时为全历史）。 */
-  getSummary(filter: UsageStatsFilter): Promise<Result<UsageStatsSummary, AppError>>;
+    /** 范围内汇总（`filter.range` 缺省时为全历史）。 */
+    getSummary(filter: UsageStatsFilter): Promise<Result<UsageStatsSummary, AppError>>;
 
-  /**
+    /**
    * 按本地时区天边界切桶，`fromDay` 到 `toDay` 逐日稠密产出（无数据日
    * 为零值桶）；`filter.range` 必填，否则以 `err` 返回 `CHAT_INVALID_ARGUMENT`。
    */
-  getDailyBuckets(filter: UsageStatsFilter): Promise<Result<UsageStatsBucket[], AppError>>;
+    getDailyBuckets(filter: UsageStatsFilter): Promise<Result<UsageStatsBucket[], AppError>>;
 
-  /**
+    /**
    * 指定本地日期（`YYYY-MM-DD`）的 24 个小时桶（只应用 `filter.model` 与 `filter.providerId`，
    * 时间范围由 `dayLocalDate` 本身界定；DST 日按实际构造出的桶边界为准）。
    */
-  getHourlyBuckets(
-    dayLocalDate: string,
-    filter: UsageStatsFilter
-  ): Promise<Result<UsageStatsBucket[], AppError>>;
+    getHourlyBuckets(
+        dayLocalDate: string,
+        filter: UsageStatsFilter
+    ): Promise<Result<UsageStatsBucket[], AppError>>;
 
-  /**
+    /**
    * 分模型汇总（非配置模型与未记录行归并为 `modelName` 为 null 的「其他」桶；
    * `filter.range` 缺省时为全历史）。
    */
-  getModelBreakdown(filter: UsageStatsFilter): Promise<Result<UsageStatsModelRow[], AppError>>;
+    getModelBreakdown(filter: UsageStatsFilter): Promise<Result<UsageStatsModelRow[], AppError>>;
 
-  /**
+    /**
    * 请求流水分页：按时间倒序逐条列出范围（与模型筛选同口径）内的
    * LLM 请求记录，供「流水」页签展示；`filter.range` 缺省时为全历史。
    */
-  listRequestUsage(
-    filter: UsageStatsFilter,
-    page: UsageStatsRequestPageQuery
-  ): Promise<Result<UsageStatsRequestPage, AppError>>;
+    listRequestUsage(
+        filter: UsageStatsFilter,
+        page: UsageStatsRequestPageQuery
+    ): Promise<Result<UsageStatsRequestPage, AppError>>;
 
-  /**
+    /**
    * 可选模型列表：来自当前服务商配置的已保存模型（vendor_model_id 去重，
    * 与全局模型选择器同源），不从历史消息 distinct——历史已下线模型不出现；
    * 「其他」桶由 UI 侧补齐。
    */
-  listModels(): Promise<string[]>;
+    listModels(): Promise<string[]>;
 
-  /**
+    /**
    * 会话维度用量详情（metric-detail-sheet 弹窗）：最近一条 usage 行 +
    * 可见消息数 + 工具调用数（会话 KKV 缓存优先，miss 现算回填）。会话
    * 累计输入/输出已移除（2026-09-29 拍板，含 hidden 的累计对用户无意义）。
    * 不进 `UsageStatsFilter`——filter 服务统计页时间轴语义，会话详情是
    * 独立读型（spec 拍板）。
    */
-  getSessionUsageDetail(sessionId: string): Promise<Result<SessionUsageDetail, AppError>>;
+    getSessionUsageDetail(sessionId: string): Promise<Result<SessionUsageDetail, AppError>>;
 }

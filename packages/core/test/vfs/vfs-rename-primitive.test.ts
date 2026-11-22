@@ -19,233 +19,233 @@ import {  unwrap  } from "../helpers/result-unwrap.js";
 novelMasterTestFixture();
 
 async function seed70Files(vfs: VfsService, prefix: string): Promise<void> {
-  unwrap(await vfs.mkdir(prefix));
-  for (let i = 0; i < 70; i++) {
-    unwrap(await vfs.write(`${prefix}/file-${i}.md`, `content-${i}`, {
-      versionCheck: false,
-    }));
-  }
+    unwrap(await vfs.mkdir(prefix));
+    for (let i = 0; i < 70; i++) {
+        unwrap(await vfs.write(`${prefix}/file-${i}.md`, `content-${i}`, {
+            versionCheck: false,
+        }));
+    }
 }
 
 describe("vfs rename primitive", () => {
-  it("T-V1: 70 文件目录 rename < 100ms", async () => {
-    const ctx = getNovelMasterTestContext();
-    const suffix = testIsolationSuffix();
-    const project = unwrap(await ctx.projects.create(`P-V1-${suffix}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
+    it("T-V1: 70 文件目录 rename < 100ms", async () => {
+        const ctx = getNovelMasterTestContext();
+        const suffix = testIsolationSuffix();
+        const project = unwrap(await ctx.projects.create(`P-V1-${suffix}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
 
-    const oldDir = "/原著2";
-    const newDir = "/原著";
-    await seed70Files(svfs, oldDir);
+        const oldDir = "/原著2";
+        const newDir = "/原著";
+        await seed70Files(svfs, oldDir);
 
-    const start = performance.now();
-    await svfs.renamePrefix(oldDir, newDir);
-    const elapsed = performance.now() - start;
+        const start = performance.now();
+        await svfs.renamePrefix(oldDir, newDir);
+        const elapsed = performance.now() - start;
 
-    assert.ok(
-      elapsed < 100,
-      `70 文件目录 rename 耗时 ${elapsed.toFixed(1)}ms，超 100ms 阈值`,
-    );
-  });
+        assert.ok(
+            elapsed < 100,
+            `70 文件目录 rename 耗时 ${elapsed.toFixed(1)}ms，超 100ms 阈值`,
+        );
+    });
 
-  it("T-V2: rename 后新旧 path 不共存", async () => {
-    const ctx = getNovelMasterTestContext();
-    const suffix = testIsolationSuffix();
-    const project = unwrap(await ctx.projects.create(`P-V2-${suffix}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
-    const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
+    it("T-V2: rename 后新旧 path 不共存", async () => {
+        const ctx = getNovelMasterTestContext();
+        const suffix = testIsolationSuffix();
+        const project = unwrap(await ctx.projects.create(`P-V2-${suffix}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
+        const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
 
-    // 通过 VfsService 获取 scopeKey（session scope）
-    const scopeKey = `session:${project.id}:${session.id}`;
+        // 通过 VfsService 获取 scopeKey（session scope）
+        const scopeKey = `session:${project.id}:${session.id}`;
 
-    const oldDir = "/旧目录";
-    const newDir = "/新目录";
-    await seed70Files(svfs, oldDir);
+        const oldDir = "/旧目录";
+        const newDir = "/新目录";
+        await seed70Files(svfs, oldDir);
 
-    // rename 前旧路径可查
-    const before = unwrap(await entryRepo.findByPath(scopeKey, `${oldDir}/file-0.md`));
-    assert.notEqual(before, null, "rename 前旧路径应存在");
+        // rename 前旧路径可查
+        const before = unwrap(await entryRepo.findByPath(scopeKey, `${oldDir}/file-0.md`));
+        assert.notEqual(before, null, "rename 前旧路径应存在");
 
-    unwrap(await svfs.renamePrefix(oldDir, newDir));
+        unwrap(await svfs.renamePrefix(oldDir, newDir));
 
-    // rename 后旧路径不可查
-    const afterOld = unwrap(await entryRepo.findByPath(scopeKey, `${oldDir}/file-0.md`));
-    assert.equal(afterOld, null, "rename 后旧路径不应存在");
+        // rename 后旧路径不可查
+        const afterOld = unwrap(await entryRepo.findByPath(scopeKey, `${oldDir}/file-0.md`));
+        assert.equal(afterOld, null, "rename 后旧路径不应存在");
 
-    // rename 后新路径可查
-    const afterNew = unwrap(await entryRepo.findByPath(scopeKey, `${newDir}/file-0.md`));
-    assert.notEqual(afterNew, null, "rename 后新路径应存在");
-    assert.equal(afterNew!.entryKind, "file", "rename 后新路径应为文件");
-  });
+        // rename 后新路径可查
+        const afterNew = unwrap(await entryRepo.findByPath(scopeKey, `${newDir}/file-0.md`));
+        assert.notEqual(afterNew, null, "rename 后新路径应存在");
+        assert.equal(afterNew!.entryKind, "file", "rename 后新路径应为文件");
+    });
 
-  it("T-V3: rename 后历史 revision 仍可达", async () => {
-    const ctx = getNovelMasterTestContext();
-    const suffix = testIsolationSuffix();
-    const project = unwrap(await ctx.projects.create(`P-V3-${suffix}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
-    const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
-    const revisionRepo = new SqliteVfsRevisionRepository(ctx.conn);
+    it("T-V3: rename 后历史 revision 仍可达", async () => {
+        const ctx = getNovelMasterTestContext();
+        const suffix = testIsolationSuffix();
+        const project = unwrap(await ctx.projects.create(`P-V3-${suffix}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
+        const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
+        const revisionRepo = new SqliteVfsRevisionRepository(ctx.conn);
 
-    const scopeKey = `session:${project.id}:${session.id}`;
-    const oldPath = "/历史测试文件.md";
-    const newPath = "/改名后文件.md";
+        const scopeKey = `session:${project.id}:${session.id}`;
+        const oldPath = "/历史测试文件.md";
+        const newPath = "/改名后文件.md";
 
-    // 写若干版本
-    unwrap(await svfs.write(oldPath, "v1", { versionCheck: false }));
-    unwrap(await svfs.write(oldPath, "v2", { versionCheck: false }));
-    unwrap(await svfs.write(oldPath, "v3", { versionCheck: false }));
+        // 写若干版本
+        unwrap(await svfs.write(oldPath, "v1", { versionCheck: false }));
+        unwrap(await svfs.write(oldPath, "v2", { versionCheck: false }));
+        unwrap(await svfs.write(oldPath, "v3", { versionCheck: false }));
 
-    // 记录 rename 前的 entry_id
-    const entryBefore = unwrap(await entryRepo.findByPath(scopeKey, oldPath));
-    assert.notEqual(entryBefore, null);
-    const entryId = entryBefore!.entryId;
+        // 记录 rename 前的 entry_id
+        const entryBefore = unwrap(await entryRepo.findByPath(scopeKey, oldPath));
+        assert.notEqual(entryBefore, null);
+        const entryId = entryBefore!.entryId;
 
-    // rename
-    unwrap(await svfs.renamePath(oldPath, newPath));
+        // rename
+        unwrap(await svfs.renamePath(oldPath, newPath));
 
-    // rename 后 entry_id 不变
-    const entryAfter = unwrap(await entryRepo.findByPath(scopeKey, newPath));
-    assert.notEqual(entryAfter, null);
-    assert.equal(entryAfter!.entryId, entryId, "rename 后 entry_id 应不变");
+        // rename 后 entry_id 不变
+        const entryAfter = unwrap(await entryRepo.findByPath(scopeKey, newPath));
+        assert.notEqual(entryAfter, null);
+        assert.equal(entryAfter!.entryId, entryId, "rename 后 entry_id 应不变");
 
-    // 历史 revision 仍可达
-    for (const ver of [1, 2, 3]) {
-      const rev = unwrap(await revisionRepo.findByEntryAndVersion(entryId, ver));
-      assert.notEqual(rev, null, `revision v${ver} 在 rename 后应可达`);
-      assert.equal(rev!.status, "active", `revision v${ver} 应为 active`);
-    }
+        // 历史 revision 仍可达
+        for (const ver of [1, 2, 3]) {
+            const rev = unwrap(await revisionRepo.findByEntryAndVersion(entryId, ver));
+            assert.notEqual(rev, null, `revision v${ver} 在 rename 后应可达`);
+            assert.equal(rev!.status, "active", `revision v${ver} 应为 active`);
+        }
 
-    // 按旧 path 查 revision 不可达（entry 已不存在于旧 path）
-    const oldEntry = unwrap(await entryRepo.findByPath(scopeKey, oldPath));
-    assert.equal(oldEntry, null, "rename 后旧路径对应 entry 应不存在");
-  });
+        // 按旧 path 查 revision 不可达（entry 已不存在于旧 path）
+        const oldEntry = unwrap(await entryRepo.findByPath(scopeKey, oldPath));
+        assert.equal(oldEntry, null, "rename 后旧路径对应 entry 应不存在");
+    });
 
-  it("T-V4: 空目录 renamePrefix 成功且目录行路径更新", async () => {
-    const ctx = getNovelMasterTestContext();
-    const suffix = testIsolationSuffix();
-    const project = unwrap(await ctx.projects.create(`P-V4-${suffix}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
-    const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
+    it("T-V4: 空目录 renamePrefix 成功且目录行路径更新", async () => {
+        const ctx = getNovelMasterTestContext();
+        const suffix = testIsolationSuffix();
+        const project = unwrap(await ctx.projects.create(`P-V4-${suffix}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
+        const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
 
-    const scopeKey = `session:${project.id}:${session.id}`;
-    const oldDir = "/空目录";
-    const newDir = "/改名后";
+        const scopeKey = `session:${project.id}:${session.id}`;
+        const oldDir = "/空目录";
+        const newDir = "/改名后";
 
-    unwrap(await svfs.mkdir(oldDir));
-    unwrap(await svfs.renamePrefix(oldDir, newDir));
+        unwrap(await svfs.mkdir(oldDir));
+        unwrap(await svfs.renamePrefix(oldDir, newDir));
 
-    // directory 行整体改到新路径，旧路径无残留
-    const moved = unwrap(await entryRepo.findByPath(scopeKey, newDir));
-    assert.notEqual(moved, null, "rename 后新目录行应存在");
-    assert.equal(moved!.entryKind, "directory", "rename 后应为 directory 行");
-    assert.equal(
-      unwrap(await entryRepo.findByPath(scopeKey, oldDir)),
-      null,
-      "rename 后旧目录行不应存在",
-    );
+        // directory 行整体改到新路径，旧路径无残留
+        const moved = unwrap(await entryRepo.findByPath(scopeKey, newDir));
+        assert.notEqual(moved, null, "rename 后新目录行应存在");
+        assert.equal(moved!.entryKind, "directory", "rename 后应为 directory 行");
+        assert.equal(
+            unwrap(await entryRepo.findByPath(scopeKey, oldDir)),
+            null,
+            "rename 后旧目录行不应存在",
+        );
 
-    // rename 后的空目录仍可正常写入子项
-    unwrap(await svfs.write(`${newDir}/a.md`, "a"));
-    assert.equal(unwrap(await svfs.read(`${newDir}/a.md`)).content, "a");
-  });
+        // rename 后的空目录仍可正常写入子项
+        unwrap(await svfs.write(`${newDir}/a.md`, "a"));
+        assert.equal(unwrap(await svfs.read(`${newDir}/a.md`)).content, "a");
+    });
 
-  // 本例不含子树同名目录（子项路径里没有第二段 `a_b%c-<suffix>`），
-  // 「子树内同名段被二次替换」那条由 T-V6 钉。
-  it("T-V5: 目录名含 %/_ 时 renamePrefix 根行与子项均迁移、旧路径无残留", async () => {
-    const ctx = getNovelMasterTestContext();
-    const suffix = testIsolationSuffix();
-    const project = unwrap(await ctx.projects.create(`P-V5-${suffix}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
-    const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
+    // 本例不含子树同名目录（子项路径里没有第二段 `a_b%c-<suffix>`），
+    // 「子树内同名段被二次替换」那条由 T-V6 钉。
+    it("T-V5: 目录名含 %/_ 时 renamePrefix 根行与子项均迁移、旧路径无残留", async () => {
+        const ctx = getNovelMasterTestContext();
+        const suffix = testIsolationSuffix();
+        const project = unwrap(await ctx.projects.create(`P-V5-${suffix}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
+        const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
 
-    const scopeKey = `session:${project.id}:${session.id}`;
-    // %/_ 是 LIKE 通配字符：renamePrefix 依赖 ScopePrefix.escapeLike + ESCAPE '\'
-    // 做子项前缀匹配，路径含它们时不能把 `a_b` 误当 `a%b` 之类的模式，
-    // 也不能因转义遗漏漏迁子项。这里用固定后缀隔离，避免子项 LIKE
-    // 误匹配到其它用例的路径。
-    const oldDir = `/a_b%c-${suffix}`;
-    const newDir = `/新_名%d-${suffix}`;
+        const scopeKey = `session:${project.id}:${session.id}`;
+        // %/_ 是 LIKE 通配字符：renamePrefix 依赖 ScopePrefix.escapeLike + ESCAPE '\'
+        // 做子项前缀匹配，路径含它们时不能把 `a_b` 误当 `a%b` 之类的模式，
+        // 也不能因转义遗漏漏迁子项。这里用固定后缀隔离，避免子项 LIKE
+        // 误匹配到其它用例的路径。
+        const oldDir = `/a_b%c-${suffix}`;
+        const newDir = `/新_名%d-${suffix}`;
 
-    unwrap(await svfs.mkdir(oldDir));
-    unwrap(await svfs.write(`${oldDir}/x.md`, "x", { versionCheck: false }));
+        unwrap(await svfs.mkdir(oldDir));
+        unwrap(await svfs.write(`${oldDir}/x.md`, "x", { versionCheck: false }));
 
-    unwrap(await svfs.renamePrefix(oldDir, newDir));
+        unwrap(await svfs.renamePrefix(oldDir, newDir));
 
-    // 根行迁移到新路径，旧路径无残留
-    const movedRoot = unwrap(await entryRepo.findByPath(scopeKey, newDir));
-    assert.notEqual(movedRoot, null, "rename 后新目录行应存在");
-    assert.equal(movedRoot!.entryKind, "directory");
-    assert.equal(
-      unwrap(await entryRepo.findByPath(scopeKey, oldDir)),
-      null,
-      "rename 后旧目录行不应存在",
-    );
+        // 根行迁移到新路径，旧路径无残留
+        const movedRoot = unwrap(await entryRepo.findByPath(scopeKey, newDir));
+        assert.notEqual(movedRoot, null, "rename 后新目录行应存在");
+        assert.equal(movedRoot!.entryKind, "directory");
+        assert.equal(
+            unwrap(await entryRepo.findByPath(scopeKey, oldDir)),
+            null,
+            "rename 后旧目录行不应存在",
+        );
 
-    // 子项行随前缀迁移，旧子项路径无残留
-    const movedChild = unwrap(await entryRepo.findByPath(scopeKey, `${newDir}/x.md`));
-    assert.notEqual(movedChild, null, "rename 后新子项行应存在");
-    assert.equal(movedChild!.entryKind, "file");
-    assert.equal(
-      unwrap(await entryRepo.findByPath(scopeKey, `${oldDir}/x.md`)),
-      null,
-      "rename 后旧子项行不应存在",
-    );
-    assert.equal(unwrap(await svfs.read(`${newDir}/x.md`)).content, "x");
-  });
+        // 子项行随前缀迁移，旧子项路径无残留
+        const movedChild = unwrap(await entryRepo.findByPath(scopeKey, `${newDir}/x.md`));
+        assert.notEqual(movedChild, null, "rename 后新子项行应存在");
+        assert.equal(movedChild!.entryKind, "file");
+        assert.equal(
+            unwrap(await entryRepo.findByPath(scopeKey, `${oldDir}/x.md`)),
+            null,
+            "rename 后旧子项行不应存在",
+        );
+        assert.equal(unwrap(await svfs.read(`${newDir}/x.md`)).content, "x");
+    });
 
-  // CS-01：SET 表达式曾用 REPLACE(path, oldWithSlash, newWithSlash)，
-  // 它替换的是**整串中出现的所有匹配**而不是「仅前缀那一处」。子树内部再出现
-  // 一次同名目录时，深层那一段也被替换 ⇒ 文件被静默搬到磁盘上不存在的路径
-  // （正文仍在、用户再也点不到）。
-  it("T-V6: 子树内含同名目录时 renamePrefix 只改前缀（深层同名段不被二次替换）", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create("P-V6-same-name-in-subtree"));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
-    const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
+    // CS-01：SET 表达式曾用 REPLACE(path, oldWithSlash, newWithSlash)，
+    // 它替换的是**整串中出现的所有匹配**而不是「仅前缀那一处」。子树内部再出现
+    // 一次同名目录时，深层那一段也被替换 ⇒ 文件被静默搬到磁盘上不存在的路径
+    // （正文仍在、用户再也点不到）。
+    it("T-V6: 子树内含同名目录时 renamePrefix 只改前缀（深层同名段不被二次替换）", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create("P-V6-same-name-in-subtree"));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
+        const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
 
-    // scope_key 已按 project/session 唯一，固定路径即可隔离（同 T-V5 先例）
-    const scopeKey = `session:${project.id}:${session.id}`;
+        // scope_key 已按 project/session 唯一，固定路径即可隔离（同 T-V5 先例）
+        const scopeKey = `session:${project.id}:${session.id}`;
 
-    unwrap(await svfs.write("/a/sub/a/notes.md", "同款正文", { versionCheck: false }));
+        unwrap(await svfs.write("/a/sub/a/notes.md", "同款正文", { versionCheck: false }));
 
-    unwrap(await svfs.renamePrefix("/a", "/a_新"));
+        unwrap(await svfs.renamePrefix("/a", "/a_新"));
 
-    // 期望路径存在
-    const expected = unwrap(await entryRepo.findByPath(
-      scopeKey,
-      "/a_新/sub/a/notes.md",
-    ));
-    assert.notEqual(expected, null, "深层同名段不该被替换，期望路径应存在");
+        // 期望路径存在
+        const expected = unwrap(await entryRepo.findByPath(
+            scopeKey,
+            "/a_新/sub/a/notes.md",
+        ));
+        assert.notEqual(expected, null, "深层同名段不该被替换，期望路径应存在");
 
-    // 二次替换产生的错位路径必须不存在（这是 REPLACE 实现的产物）
-    assert.equal(
-      unwrap(await entryRepo.findByPath(scopeKey, "/a_新/sub/a_新/notes.md")),
-      null,
-      "深层同名段被二次替换，产出磁盘上不存在的错位路径",
-    );
-    // 旧深层路径无残留
-    assert.equal(
-      unwrap(await entryRepo.findByPath(scopeKey, "/a/sub/a/notes.md")),
-      null,
-      "旧深层路径不应有残留",
-    );
-    // 旧根已迁走
-    assert.equal(
-      unwrap(await entryRepo.findByPath(scopeKey, "/a")),
-      null,
-      "旧目录根不应有残留",
-    );
-    // 正文未丢、可读
-    assert.equal(
-      unwrap(await svfs.read("/a_新/sub/a/notes.md")).content,
-      "同款正文",
-      "迁移后正文应保持不变",
-    );
-  });
+        // 二次替换产生的错位路径必须不存在（这是 REPLACE 实现的产物）
+        assert.equal(
+            unwrap(await entryRepo.findByPath(scopeKey, "/a_新/sub/a_新/notes.md")),
+            null,
+            "深层同名段被二次替换，产出磁盘上不存在的错位路径",
+        );
+        // 旧深层路径无残留
+        assert.equal(
+            unwrap(await entryRepo.findByPath(scopeKey, "/a/sub/a/notes.md")),
+            null,
+            "旧深层路径不应有残留",
+        );
+        // 旧根已迁走
+        assert.equal(
+            unwrap(await entryRepo.findByPath(scopeKey, "/a")),
+            null,
+            "旧目录根不应有残留",
+        );
+        // 正文未丢、可读
+        assert.equal(
+            unwrap(await svfs.read("/a_新/sub/a/notes.md")).content,
+            "同款正文",
+            "迁移后正文应保持不变",
+        );
+    });
 });

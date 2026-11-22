@@ -10,12 +10,13 @@ import { UserVfsActionXml } from "@/domain/vfs/logic/user-vfs-action-xml.js";
 import {Coerce} from "@/common/coerce.js";
 import {AnnotateDraftSchema, type AnnotateDraft} from "../../model/annotate-draft.schema.js";
 import {MessageAttachmentSchema, type MessageAttachment} from "../../model/message-attachment.schema.js";
-import {userVfsTurns} from "../vfs-turn/user-vfs-turn-view.js";
+import {UserVfsTurns} from "../vfs-turn/user-vfs-turn-view.js";
 
 type AttachmentDisplayKind = "full" | "filename" | "header";
 
 /** 附件 XML 编解码器。 */
-class AttachmentXmlCodec {
+export const AttachmentXmlCodec = {
+
     /** `userAttach` / `workplaceChange`：全文 / filename / header（行号正文）。 */
     encodeFileRef(params: {
         readonly action: "userAttach" | "workplaceChange";
@@ -28,7 +29,8 @@ class AttachmentXmlCodec {
             content: params.content,
             display: params.display,
         });
-    }
+    },
+
 
     /** 目录树：`kind: "dirTree"`，content = ASCII 树（无外层 `<dir>`）。 */
     encodeDirTree(path: string, treeBody: string): string {
@@ -37,7 +39,8 @@ class AttachmentXmlCodec {
             content: treeBody,
             kind: "dirTree",
         });
-    }
+    },
+
 
     /** 由文件形批注草稿构造落库附件（`source:user_ops` + `action:annotate`）。 */
     encodeAnnotateAttachment(draft: AnnotateDraft): MessageAttachment {
@@ -68,7 +71,8 @@ class AttachmentXmlCodec {
             path,
             action: "annotate",
         };
-    }
+    },
+
 
     /** 从消息 attachments 解析可 Undo 恢复的工作区批注草稿；每条新 mint id。 */
     decodeAnnotateDrafts(attachments: readonly MessageAttachment[] | null | undefined): AnnotateDraft[] {
@@ -92,7 +96,7 @@ class AttachmentXmlCodec {
             let startCol: number | undefined;
             let endCol: number | undefined;
             if (typeof att.content === "string") {
-                const actions = userVfsTurns.parseActions(att.content);
+                const actions = UserVfsTurns.parseActions(att.content);
                 const annotate = actions.find((a) => a.name === "annotate");
                 if (annotate != null) {
                     if (!path) {
@@ -129,7 +133,6 @@ class AttachmentXmlCodec {
             });
         }
         return out;
-    }
-}
+    },
+} as const;
 
-export const attachmentXmlCodec = new AttachmentXmlCodec();

@@ -10,44 +10,44 @@ import {  getNovelMasterTestContext, novelMasterTestFixture  } from "../helpers/
 novelMasterTestFixture();
 
 describe("smart 规则懒加载口径", () => {
-  it("T-WE3c: ruleEnabled true/false 排序输出一致，disabled+smart 不退化为 name 字典序（core/B-1）", async () => {
-    const ctx = getNovelMasterTestContext();
-    const gvfs = ctx.globalVfs();
-    await gvfs.write("/novel/第十章.md", "TEN");
-    await gvfs.write("/novel/第四章.md", "FOUR");
-    await gvfs.write("/novel/第一章.md", "ONE");
+    it("T-WE3c: ruleEnabled true/false 排序输出一致，disabled+smart 不退化为 name 字典序（core/B-1）", async () => {
+        const ctx = getNovelMasterTestContext();
+        const gvfs = ctx.globalVfs();
+        await gvfs.write("/novel/第十章.md", "TEN");
+        await gvfs.write("/novel/第四章.md", "FOUR");
+        await gvfs.write("/novel/第一章.md", "ONE");
 
-    const wt = WorkplaceServiceFactory.create(ctx.conn, { kind: "global" });
-    const ruleBase = {
-      logicalPath: "/novel",
-      sortField: "smart" as const,
-      sortOrder: "asc" as const,
-      headCount: 0,
-      tailCount: 0,
-      fillPolicy: "hidden" as const,
-    };
-    const listNovelPaths = async () =>
-      (unwrap(await wt.buildListRows()))
-        .filter((r) => r.path.startsWith("/novel/"))
-        .map((r) => r.path);
+        const wt = WorkplaceServiceFactory.create(ctx.conn, { kind: "global" });
+        const ruleBase = {
+            logicalPath: "/novel",
+            sortField: "smart" as const,
+            sortOrder: "asc" as const,
+            headCount: 0,
+            tailCount: 0,
+            fillPolicy: "hidden" as const,
+        };
+        const listNovelPaths = async () =>
+            (unwrap(await wt.buildListRows()))
+                .filter((r) => r.path.startsWith("/novel/"))
+                .map((r) => r.path);
 
-    // 同一规则集：仅切 ruleEnabled，排序输出应一致（与 created/updated 的
-    // disabled-仍生效基线对齐；修复前 disabled 时拿到空规则集退化成自然排序）
-    await wt.setDirRule({ ...ruleBase, ruleEnabled: true });
-    const enabledPaths = await listNovelPaths();
-    await wt.setDirRule({ ...ruleBase, ruleEnabled: false });
-    const disabledPaths = await listNovelPaths();
-    assert.deepEqual(disabledPaths, enabledPaths);
+        // 同一规则集：仅切 ruleEnabled，排序输出应一致（与 created/updated 的
+        // disabled-仍生效基线对齐；修复前 disabled 时拿到空规则集退化成自然排序）
+        await wt.setDirRule({ ...ruleBase, ruleEnabled: true });
+        const enabledPaths = await listNovelPaths();
+        await wt.setDirRule({ ...ruleBase, ruleEnabled: false });
+        const disabledPaths = await listNovelPaths();
+        assert.deepEqual(disabledPaths, enabledPaths);
 
-    // disabled+smart 仍是智能序（中文数字升序），而非 name 字典序——用同库
-    // sortField=name 的实际输出做对照，证明未退化
-    await wt.setDirRule({ ...ruleBase, sortField: "name" });
-    const namePaths = await listNovelPaths();
-    assert.notDeepEqual(disabledPaths, namePaths);
-    assert.deepEqual(enabledPaths, [
-      "/novel/第一章.md",
-      "/novel/第四章.md",
-      "/novel/第十章.md",
-    ]);
-  });
+        // disabled+smart 仍是智能序（中文数字升序），而非 name 字典序——用同库
+        // sortField=name 的实际输出做对照，证明未退化
+        await wt.setDirRule({ ...ruleBase, sortField: "name" });
+        const namePaths = await listNovelPaths();
+        assert.notDeepEqual(disabledPaths, namePaths);
+        assert.deepEqual(enabledPaths, [
+            "/novel/第一章.md",
+            "/novel/第四章.md",
+            "/novel/第十章.md",
+        ]);
+    });
 });

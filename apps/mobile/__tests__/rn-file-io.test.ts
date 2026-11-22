@@ -8,93 +8,93 @@ import {RnFileIo} from '@/services/rn-file-io'
 const mockBlobUtilShape: {shape: unknown} = {shape: null};
 
 jest.mock('react-native-blob-util', () => ({
-  get fs() {
-    return (mockBlobUtilShape.shape as {fs?: unknown} | null)?.fs;
-  },
-  get default() {
-    return (mockBlobUtilShape.shape as {default?: unknown} | null)?.default;
-  },
+    get fs() {
+        return (mockBlobUtilShape.shape as {fs?: unknown} | null)?.fs;
+    },
+    get default() {
+        return (mockBlobUtilShape.shape as {default?: unknown} | null)?.default;
+    },
 }));
 
 describe('rn-file-io', () => {
-  afterEach(() => {
-    mockBlobUtilShape.shape = null;
-  });
-
-  describe('localUriToFsPath', () => {
-    it('解码中文文件名的 percent-encoding', () => {
-      expect(
-        RnFileIo.localUriToFsPath(
-          'file:///storage/emulated/0/Download/%E6%88%91%E7%9A%84%E5%A4%87%E4%BB%BD.nmbackup',
-        ),
-      ).toBe('/storage/emulated/0/Download/我的备份.nmbackup');
+    afterEach(() => {
+        mockBlobUtilShape.shape = null;
     });
 
-    it('无 file:// 前缀时原样解码', () => {
-      expect(RnFileIo.localUriToFsPath('/cache/%E8%A7%92%E8%89%B2/card.json')).toBe(
-        '/cache/角色/card.json',
-      );
+    describe('localUriToFsPath', () => {
+        it('解码中文文件名的 percent-encoding', () => {
+            expect(
+                RnFileIo.localUriToFsPath(
+                    'file:///storage/emulated/0/Download/%E6%88%91%E7%9A%84%E5%A4%87%E4%BB%BD.nmbackup',
+                ),
+            ).toBe('/storage/emulated/0/Download/我的备份.nmbackup');
+        });
+
+        it('无 file:// 前缀时原样解码', () => {
+            expect(RnFileIo.localUriToFsPath('/cache/%E8%A7%92%E8%89%B2/card.json')).toBe(
+                '/cache/角色/card.json',
+            );
+        });
+
+        it('普通 ascii 路径不受影响', () => {
+            expect(RnFileIo.localUriToFsPath('file:///cache/import.zip')).toBe(
+                '/cache/import.zip',
+            );
+        });
     });
 
-    it('普通 ascii 路径不受影响', () => {
-      expect(RnFileIo.localUriToFsPath('file:///cache/import.zip')).toBe(
-        '/cache/import.zip',
-      );
-    });
-  });
+    describe('toFileUri', () => {
+        it('补上缺失的 file:// 前缀', () => {
+            expect(RnFileIo.toFileUri('/cache/a.zip')).toBe('file:///cache/a.zip');
+        });
 
-  describe('toFileUri', () => {
-    it('补上缺失的 file:// 前缀', () => {
-      expect(RnFileIo.toFileUri('/cache/a.zip')).toBe('file:///cache/a.zip');
+        it('已有前缀时不再叠加', () => {
+            expect(RnFileIo.toFileUri('file:///cache/a.zip')).toBe('file:///cache/a.zip');
+        });
     });
 
-    it('已有前缀时不再叠加', () => {
-      expect(RnFileIo.toFileUri('file:///cache/a.zip')).toBe('file:///cache/a.zip');
-    });
-  });
+    describe('bytes ↔ base64', () => {
+        it('roundtrip 还原任意字节（含 0x00 与 0xff）', () => {
+            const bytes = new Uint8Array(512);
+            for (let i = 0; i < bytes.length; i++) {
+                bytes[i] = i % 256;
+            }
+            expect(
+                Encoding.base64ToBytes(Encoding.bytesToBase64(bytes)),
+            ).toEqual(bytes);
+        });
 
-  describe('bytes ↔ base64', () => {
-    it('roundtrip 还原任意字节（含 0x00 与 0xff）', () => {
-      const bytes = new Uint8Array(512);
-      for (let i = 0; i < bytes.length; i++) {
-        bytes[i] = i % 256;
-      }
-      expect(
-        Encoding.base64ToBytes(Encoding.bytesToBase64(bytes)),
-      ).toEqual(bytes);
-    });
-
-    it('空字节 roundtrip 为空', () => {
-      expect(
-        Encoding.base64ToBytes(Encoding.bytesToBase64(new Uint8Array(0))),
-      ).toEqual(new Uint8Array(0));
-    });
-  });
-
-  describe('bytesToAsciiString', () => {
-    it('逐字节映射为 ascii 字符', () => {
-      expect(RnFileIo.bytesToAsciiString(new Uint8Array([0x41, 0x42, 0x43]))).toBe(
-        'ABC',
-      );
-    });
-  });
-
-  describe('blobFs CJS/ESM 双形态', () => {
-    it('CJS 形态（顶层 fs）直接返回', () => {
-      const fs = {dirs: {CacheDir: '/cache'}, tag: 'cjs-fs'};
-      mockBlobUtilShape.shape = {fs};
-      expect(RnFileIo.blobFs()).toBe(fs);
+        it('空字节 roundtrip 为空', () => {
+            expect(
+                Encoding.base64ToBytes(Encoding.bytesToBase64(new Uint8Array(0))),
+            ).toEqual(new Uint8Array(0));
+        });
     });
 
-    it('ESM 形态（default.fs）兜底返回', () => {
-      const fs = {dirs: {CacheDir: '/cache'}, tag: 'esm-fs'};
-      mockBlobUtilShape.shape = {default: {fs}};
-      expect(RnFileIo.blobFs()).toBe(fs);
+    describe('bytesToAsciiString', () => {
+        it('逐字节映射为 ascii 字符', () => {
+            expect(RnFileIo.bytesToAsciiString(new Uint8Array([0x41, 0x42, 0x43]))).toBe(
+                'ABC',
+            );
+        });
     });
 
-    it('两种形态都缺失时抛错', () => {
-      mockBlobUtilShape.shape = {};
-      expect(() => RnFileIo.blobFs()).toThrow('react-native-blob-util.fs unavailable');
+    describe('blobFs CJS/ESM 双形态', () => {
+        it('CJS 形态（顶层 fs）直接返回', () => {
+            const fs = {dirs: {CacheDir: '/cache'}, tag: 'cjs-fs'};
+            mockBlobUtilShape.shape = {fs};
+            expect(RnFileIo.blobFs()).toBe(fs);
+        });
+
+        it('ESM 形态（default.fs）兜底返回', () => {
+            const fs = {dirs: {CacheDir: '/cache'}, tag: 'esm-fs'};
+            mockBlobUtilShape.shape = {default: {fs}};
+            expect(RnFileIo.blobFs()).toBe(fs);
+        });
+
+        it('两种形态都缺失时抛错', () => {
+            mockBlobUtilShape.shape = {};
+            expect(() => RnFileIo.blobFs()).toThrow('react-native-blob-util.fs unavailable');
+        });
     });
-  });
 });

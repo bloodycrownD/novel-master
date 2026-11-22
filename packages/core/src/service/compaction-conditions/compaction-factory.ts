@@ -25,58 +25,58 @@ import type { CompactionConditionsStore } from "./compaction-conditions-store.po
  * 同时暴露当前配置的 `hideStartDepth`，供执行器读取起始深度。
  */
 export interface CompactionConditionEvaluator {
-  /** True when enabled conditions match (token ratio and/or visible floor). */
-  shouldRequestCompaction(session: AgentSession, evaluation: CompactionEvaluationContext): Promise<Result<boolean, AppError>>;
-  /**
+    /** True when enabled conditions match (token ratio and/or visible floor). */
+    shouldRequestCompaction(session: AgentSession, evaluation: CompactionEvaluationContext): Promise<Result<boolean, AppError>>;
+    /**
    * 当前持久化配置的 hide-message 起始深度；
    * 未配置或无文档时回落到 {@link DEFAULT_HIDE_START_DEPTH}。
    */
-  getHideStartDepth(): Promise<Result<number, AppError>>;
+    getHideStartDepth(): Promise<Result<number, AppError>>;
 }
 
 interface CreateCompactionConditionEvaluatorDeps {
-  readonly conditionsStore: CompactionConditionsStore;
-  readonly tokenCounters: TokenCounterRegistry;
-  readonly providerModels: ProviderModelService;
+    readonly conditionsStore: CompactionConditionsStore;
+    readonly tokenCounters: TokenCounterRegistry;
+    readonly providerModels: ProviderModelService;
 }
 
 export const CompactionFactory = {
-  /** Creates {@link DefaultCompactionConditionsStore} on KKV module `nm-compaction-conditions`. */
-  createConditionsStore(conn: TdbcConnection): CompactionConditionsStore {
-    return new DefaultCompactionConditionsStore(createKkvService(conn));
-  },
+    /** Creates {@link DefaultCompactionConditionsStore} on KKV module `nm-compaction-conditions`. */
+    createConditionsStore(conn: TdbcConnection): CompactionConditionsStore {
+        return new DefaultCompactionConditionsStore(createKkvService(conn));
+    },
 
-  /** Factory for compaction condition evaluation (OR triggers). */
-  createEvaluator(deps: CreateCompactionConditionEvaluatorDeps): CompactionConditionEvaluator {
-    return {
-      async shouldRequestCompaction(session, evaluation) {
-        const conditions = await deps.conditionsStore.getConditions();
-        if (!conditions.ok) return Result.err(conditions.error);
-        if (conditions.value == null || !conditions.value.enabled) {
-          return Result.ok(false);
-        }
-        const triggers: CompactionConditionTrigger[] = [];
-        if (conditions.value.tokenRatio != null) {
-          const options = {
-            tokenRatio: conditions.value.tokenRatio,
-            resolveContextWindow: (evaluation: CompactionEvaluationContext) => deps.providerModels.getContextWindow(evaluation.modelContext.savedModelId),
-            resolveTokenizerOverride: (evaluation: CompactionEvaluationContext) => deps.providerModels.getTokenCounterMode(evaluation.modelContext.savedModelId),
-          };
-          triggers.push(new TokenRatioConditionTrigger(options, deps.tokenCounters));
-        }
-        if (conditions.value.visibleFloor != null) {
-          triggers.push(new VisibleFloorTrigger(conditions.value.visibleFloor));
-        }
-        if (triggers.length === 0) {
-          return Result.ok(false);
-        }
-        return new CompositeConditionTrigger(triggers).shouldTrigger(session, evaluation);
-      },
-      async getHideStartDepth() {
-        const conditions = await deps.conditionsStore.getConditions();
-        if (!conditions.ok) return Result.err(conditions.error);
-        return Result.ok(conditions.value?.hideStartDepth ?? DEFAULT_HIDE_START_DEPTH);
-      },
-    };
-  },
+    /** Factory for compaction condition evaluation (OR triggers). */
+    createEvaluator(deps: CreateCompactionConditionEvaluatorDeps): CompactionConditionEvaluator {
+        return {
+            async shouldRequestCompaction(session, evaluation) {
+                const conditions = await deps.conditionsStore.getConditions();
+                if (!conditions.ok) return Result.err(conditions.error);
+                if (conditions.value == null || !conditions.value.enabled) {
+                    return Result.ok(false);
+                }
+                const triggers: CompactionConditionTrigger[] = [];
+                if (conditions.value.tokenRatio != null) {
+                    const options = {
+                        tokenRatio: conditions.value.tokenRatio,
+                        resolveContextWindow: (evaluation: CompactionEvaluationContext) => deps.providerModels.getContextWindow(evaluation.modelContext.savedModelId),
+                        resolveTokenizerOverride: (evaluation: CompactionEvaluationContext) => deps.providerModels.getTokenCounterMode(evaluation.modelContext.savedModelId),
+                    };
+                    triggers.push(new TokenRatioConditionTrigger(options, deps.tokenCounters));
+                }
+                if (conditions.value.visibleFloor != null) {
+                    triggers.push(new VisibleFloorTrigger(conditions.value.visibleFloor));
+                }
+                if (triggers.length === 0) {
+                    return Result.ok(false);
+                }
+                return new CompositeConditionTrigger(triggers).shouldTrigger(session, evaluation);
+            },
+            async getHideStartDepth() {
+                const conditions = await deps.conditionsStore.getConditions();
+                if (!conditions.ok) return Result.err(conditions.error);
+                return Result.ok(conditions.value?.hideStartDepth ?? DEFAULT_HIDE_START_DEPTH);
+            },
+        };
+    },
 } as const;

@@ -11,261 +11,261 @@ import {beforeEach, afterEach, describe, expect, it, jest} from '@jest/globals';
 import {SimpleEventBus} from '@novel-master/core/events';
 import {ABORT_KEY} from '@novel-master/core/abort';
 import {
-  EVENT_AGENT_RUN_FINISHED,
-  EVENT_AGENT_RUN_STARTED,
-  EVENT_AGENT_STREAM_TEXT_DELTA,
-  EVENT_SUBAGENT_CHILD_SESSION_CREATED,
+    EVENT_AGENT_RUN_FINISHED,
+    EVENT_AGENT_RUN_STARTED,
+    EVENT_AGENT_STREAM_TEXT_DELTA,
+    EVENT_SUBAGENT_CHILD_SESSION_CREATED,
 } from '@novel-master/core/events';
 import {agentActivity} from '@/runtime/agent-activity';
 import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
 import type {SessionStreamWebviewHandle} from '@/services/session-stream-unit';
 
 const mockRunAgentTurn = jest.fn(
-  () => new Promise(() => undefined) as Promise<unknown>,
+    () => new Promise(() => undefined) as Promise<unknown>,
 );
 
 function buildHarness(options?: {
-  abortHas?: (key: string) => boolean;
+    abortHas?: (key: string) => boolean;
 }): {
-  manager: SessionStreamUnitManager;
-  eventBus: SimpleEventBus;
-  abortRegistry: {
-    has: jest.Mock;
-    abort: jest.Mock;
-  };
+    manager: SessionStreamUnitManager;
+    eventBus: SimpleEventBus;
+    abortRegistry: {
+        has: jest.Mock;
+        abort: jest.Mock;
+    };
 } {
-  const eventBus = new SimpleEventBus();
-  const abortRegistry = {
-    has: jest.fn(options?.abortHas ?? (() => false)),
-    abort: jest.fn(),
-  };  const manager = new SessionStreamUnitManager({
-    runtime: {
-      eventBus,
-      abortRegistry,
-      sessions: {get: async () => ({id: 's', title: '会话'})},
-      projects: {get: async () => ({id: 'p', name: '项目'})},
-      messages: {
-        listBySessionTail: jest.fn(async () => ({kind: 'completed' as const, value: []})),
-        listBySessionPage: jest.fn(async () => ({kind: 'completed' as const, value: []})),
-      },
-    } as never,
-    runAgentTurn: mockRunAgentTurn as never,
-    // Step 2 水合分片的让步点注入同步 mock（fake timers 下无需真实定时器）
-    yieldQuantum: async () => undefined,
-  });
-  manager.markHydrated();
-  return {manager, eventBus, abortRegistry};
+    const eventBus = new SimpleEventBus();
+    const abortRegistry = {
+        has: jest.fn(options?.abortHas ?? (() => false)),
+        abort: jest.fn(),
+    };  const manager = new SessionStreamUnitManager({
+        runtime: {
+            eventBus,
+            abortRegistry,
+            sessions: {get: async () => ({id: 's', title: '会话'})},
+            projects: {get: async () => ({id: 'p', name: '项目'})},
+            messages: {
+                listBySessionTail: jest.fn(async () => ({kind: 'completed' as const, value: []})),
+                listBySessionPage: jest.fn(async () => ({kind: 'completed' as const, value: []})),
+            },
+        } as never,
+        runAgentTurn: mockRunAgentTurn as never,
+        // Step 2 水合分片的让步点注入同步 mock（fake timers 下无需真实定时器）
+        yieldQuantum: async () => undefined,
+    });
+    manager.markHydrated();
+    return {manager, eventBus, abortRegistry};
 }
 
 /** 记录流式/控制消息的探针句柄。 */
 function probeHandle(
-  handleId: string,
-  options?: {visible?: boolean},
+    handleId: string,
+    options?: {visible?: boolean},
 ): SessionStreamWebviewHandle & {
-  streamPayloads: unknown[];
-  controlMessages: unknown[];
+    streamPayloads: unknown[];
+    controlMessages: unknown[];
 } {
-  const streamPayloads: unknown[] = [];
-  const controlMessages: unknown[] = [];
-  return {
-    handleId,
-    isVisible: () => options?.visible ?? true,
-    onStreamPayload: payload => {
-      streamPayloads.push(payload);
-    },
-    onControlMessage: message => {
-      controlMessages.push(message);
-    },
-    streamPayloads,
-    controlMessages,
-  };
+    const streamPayloads: unknown[] = [];
+    const controlMessages: unknown[] = [];
+    return {
+        handleId,
+        isVisible: () => options?.visible ?? true,
+        onStreamPayload: payload => {
+            streamPayloads.push(payload);
+        },
+        onControlMessage: message => {
+            controlMessages.push(message);
+        },
+        streamPayloads,
+        controlMessages,
+    };
 }
 
 describe('T-U9: 双屏 webview 句柄分发 + 停止入口（Step 6）', () => {
-  let h: ReturnType<typeof buildHarness>;
+    let h: ReturnType<typeof buildHarness>;
 
-  beforeEach(() => {
-    jest.useFakeTimers();
-    agentActivity.setActive(false);
-    mockRunAgentTurn.mockClear();
-    h = buildHarness();
-  });
-
-  afterEach(() => {
-    h.manager.dispose();
-    jest.useRealTimers();
-    agentActivity.setActive(false);
-  });
-
-  function startMainRun(): void {
-    h.manager.startRun('s1', 'p1', 'hi');
-    h.eventBus.publish(EVENT_AGENT_RUN_STARTED, {
-      sessionId: 's1',
-      projectId: 'p1',
-      runId: 'r1',
-    });
-  }
-
-  it('同会话两句柄：流式只达最后 attach 的可见句柄，控制消息全句柄广播', async () => {
-    startMainRun();
-    const first = probeHandle('screen-a');
-    const second = probeHandle('screen-b');
-    h.manager.attachWebview('s1', first);
-    h.manager.attachWebview('s1', second);
-
-    h.eventBus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
-      sessionId: 's1',
-      runId: 'r1',
-      text: '正文',
-    });
-    // 冲刷 ingress(32ms) + apply(64ms)：合并段以 stream-batch 推给流式目标句柄。
-    jest.advanceTimersByTime(96);
-
-    expect(first.streamPayloads).toHaveLength(0);
-    expect(second.streamPayloads).toHaveLength(1);
-    expect(second.streamPayloads[0]).toMatchObject({type: 'stream-batch'});
-
-    // 摘除最后 attach 的句柄后，流式回落到前一可见句柄。
-    h.manager.detachWebview('s1', 'screen-b');
-    h.eventBus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
-      sessionId: 's1',
-      runId: 'r1',
-      text: '续写',
-    });
-    jest.advanceTimersByTime(96);
-    expect(first.streamPayloads).toHaveLength(1);
-    expect(second.streamPayloads).toHaveLength(1);
-
-    // 控制消息对当前 attach 的全句柄广播；reset 带被清掉的 streamIds，
-    // 并在下一拍触发 force-snapshot。screen-b 已摘除，不再收到。
-    const streamingId = h.manager.snapshot('s1')?.streamRows[0]?.streamId;
-    h.manager.requestStreamReset('s1');
-    expect(first.controlMessages).toEqual([
-      {type: 'reset-stream', streamIds: [streamingId]},
-    ]);
-    jest.advanceTimersByTime(0);
-    expect(first.controlMessages).toEqual([
-      {type: 'reset-stream', streamIds: [streamingId]},
-      {type: 'force-snapshot'},
-    ]);
-    expect(second.controlMessages).toEqual([]);
-    // clearStreamProjection 生效：快照里不再有流式行（旧 partial 不复活）
-    expect(h.manager.snapshot('s1')?.streamRows).toEqual([]);
-  });
-
-  it('主会话 + 子会话（消费型单元）双屏并行：流式各达各屏、pending 链接跨屏可见', async () => {
-    startMainRun();
-
-    // 子会话 run（subagent child）以 child sessionId 发 RUN_STARTED：
-    // manager lazy 建消费型单元——子会话屏订阅有投影。
-    h.eventBus.publish(EVENT_SUBAGENT_CHILD_SESSION_CREATED, {
-      parentSessionId: 's1',
-      childSessionId: 's2',
-      title: '任务一',
-    });
-    h.eventBus.publish(EVENT_AGENT_RUN_STARTED, {
-      sessionId: 's2',
-      projectId: 'p1',
-      runId: 'child-run-1',
+    beforeEach(() => {
+        jest.useFakeTimers();
+        agentActivity.setActive(false);
+        mockRunAgentTurn.mockClear();
+        h = buildHarness();
     });
 
-    const mainScreen = probeHandle('main-screen');
-    const subScreen = probeHandle('sub-screen');
-    h.manager.attachWebview('s1', mainScreen);
-    h.manager.attachWebview('s2', subScreen);
-
-    // 父会话 pendingChildren 登记进投影（title 映射供任务卡可点性消费）。
-    const mainView = h.manager.snapshot('s1');
-    expect(mainView?.pendingChildren).toEqual(['s2']);
-    expect(mainView?.pendingChildrenByTitle.get('任务一')).toBe('s2');
-
-    // 两屏的流式按 sessionId 各达各屏，互不串扰。
-    h.eventBus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
-      sessionId: 's1',
-      runId: 'r1',
-      text: '主会话正文',
-    });
-    h.eventBus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
-      sessionId: 's2',
-      runId: 'child-run-1',
-      text: '子会话正文',
-    });
-    jest.advanceTimersByTime(96);
-
-    const mainBatches = mainScreen.streamPayloads.filter(
-      p => (p as {type: string}).type === 'stream-batch',
-    );
-    const subBatches = subScreen.streamPayloads.filter(
-      p => (p as {type: string}).type === 'stream-batch',
-    );
-    expect(mainBatches).toHaveLength(1);
-    expect(subBatches).toHaveLength(1);
-    expect(
-      (mainBatches[0] as {segments: {kind: string; delta: string}[]}).segments,
-    ).toEqual([{kind: 'text', delta: '主会话正文'}]);
-    expect(
-      (subBatches[0] as {segments: {kind: string; delta: string}[]}).segments,
-    ).toEqual([{kind: 'text', delta: '子会话正文'}]);
-
-    // 消费型单元不占 refcount：并行期间 refcount 只计发起方 run（=1）。
-    expect(agentActivity.isActive()).toBe(true);
-  });
-
-  it('多会话并行逐个停止互不影响；全部停止后无残留（stop→abortRegistry.abort）', () => {
-    // 两个发起型 run（s1/s3）并行 + abortRegistry 记录在途 controller
-    // （abort 即摘除，模拟 core 的 unregister 时序）。
-    const registryByKey = new Set([ABORT_KEY.agent('s1'), ABORT_KEY.agent('s3')]);
-    h.manager.dispose();
-    h = buildHarness({
-      abortHas: key => registryByKey.has(key),
-    });
-    h.abortRegistry.abort.mockImplementation((key: string) => {
-      registryByKey.delete(key);
+    afterEach(() => {
+        h.manager.dispose();
+        jest.useRealTimers();
+        agentActivity.setActive(false);
     });
 
-    h.manager.startRun('s1', 'p1', 'hi');
-    h.eventBus.publish(EVENT_AGENT_RUN_STARTED, {
-      sessionId: 's1',
-      projectId: 'p1',
-      runId: 'r1',
+    function startMainRun(): void {
+        h.manager.startRun('s1', 'p1', 'hi');
+        h.eventBus.publish(EVENT_AGENT_RUN_STARTED, {
+            sessionId: 's1',
+            projectId: 'p1',
+            runId: 'r1',
+        });
+    }
+
+    it('同会话两句柄：流式只达最后 attach 的可见句柄，控制消息全句柄广播', async () => {
+        startMainRun();
+        const first = probeHandle('screen-a');
+        const second = probeHandle('screen-b');
+        h.manager.attachWebview('s1', first);
+        h.manager.attachWebview('s1', second);
+
+        h.eventBus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
+            sessionId: 's1',
+            runId: 'r1',
+            text: '正文',
+        });
+        // 冲刷 ingress(32ms) + apply(64ms)：合并段以 stream-batch 推给流式目标句柄。
+        jest.advanceTimersByTime(96);
+
+        expect(first.streamPayloads).toHaveLength(0);
+        expect(second.streamPayloads).toHaveLength(1);
+        expect(second.streamPayloads[0]).toMatchObject({type: 'stream-batch'});
+
+        // 摘除最后 attach 的句柄后，流式回落到前一可见句柄。
+        h.manager.detachWebview('s1', 'screen-b');
+        h.eventBus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
+            sessionId: 's1',
+            runId: 'r1',
+            text: '续写',
+        });
+        jest.advanceTimersByTime(96);
+        expect(first.streamPayloads).toHaveLength(1);
+        expect(second.streamPayloads).toHaveLength(1);
+
+        // 控制消息对当前 attach 的全句柄广播；reset 带被清掉的 streamIds，
+        // 并在下一拍触发 force-snapshot。screen-b 已摘除，不再收到。
+        const streamingId = h.manager.snapshot('s1')?.streamRows[0]?.streamId;
+        h.manager.requestStreamReset('s1');
+        expect(first.controlMessages).toEqual([
+            {type: 'reset-stream', streamIds: [streamingId]},
+        ]);
+        jest.advanceTimersByTime(0);
+        expect(first.controlMessages).toEqual([
+            {type: 'reset-stream', streamIds: [streamingId]},
+            {type: 'force-snapshot'},
+        ]);
+        expect(second.controlMessages).toEqual([]);
+        // clearStreamProjection 生效：快照里不再有流式行（旧 partial 不复活）
+        expect(h.manager.snapshot('s1')?.streamRows).toEqual([]);
     });
-    h.manager.startRun('s3', 'p1', 'hi');
-    h.eventBus.publish(EVENT_AGENT_RUN_STARTED, {
-      sessionId: 's3',
-      projectId: 'p1',
-      runId: 'r3',
+
+    it('主会话 + 子会话（消费型单元）双屏并行：流式各达各屏、pending 链接跨屏可见', async () => {
+        startMainRun();
+
+        // 子会话 run（subagent child）以 child sessionId 发 RUN_STARTED：
+        // manager lazy 建消费型单元——子会话屏订阅有投影。
+        h.eventBus.publish(EVENT_SUBAGENT_CHILD_SESSION_CREATED, {
+            parentSessionId: 's1',
+            childSessionId: 's2',
+            title: '任务一',
+        });
+        h.eventBus.publish(EVENT_AGENT_RUN_STARTED, {
+            sessionId: 's2',
+            projectId: 'p1',
+            runId: 'child-run-1',
+        });
+
+        const mainScreen = probeHandle('main-screen');
+        const subScreen = probeHandle('sub-screen');
+        h.manager.attachWebview('s1', mainScreen);
+        h.manager.attachWebview('s2', subScreen);
+
+        // 父会话 pendingChildren 登记进投影（title 映射供任务卡可点性消费）。
+        const mainView = h.manager.snapshot('s1');
+        expect(mainView?.pendingChildren).toEqual(['s2']);
+        expect(mainView?.pendingChildrenByTitle.get('任务一')).toBe('s2');
+
+        // 两屏的流式按 sessionId 各达各屏，互不串扰。
+        h.eventBus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
+            sessionId: 's1',
+            runId: 'r1',
+            text: '主会话正文',
+        });
+        h.eventBus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
+            sessionId: 's2',
+            runId: 'child-run-1',
+            text: '子会话正文',
+        });
+        jest.advanceTimersByTime(96);
+
+        const mainBatches = mainScreen.streamPayloads.filter(
+            p => (p as {type: string}).type === 'stream-batch',
+        );
+        const subBatches = subScreen.streamPayloads.filter(
+            p => (p as {type: string}).type === 'stream-batch',
+        );
+        expect(mainBatches).toHaveLength(1);
+        expect(subBatches).toHaveLength(1);
+        expect(
+            (mainBatches[0] as {segments: {kind: string; delta: string}[]}).segments,
+        ).toEqual([{kind: 'text', delta: '主会话正文'}]);
+        expect(
+            (subBatches[0] as {segments: {kind: string; delta: string}[]}).segments,
+        ).toEqual([{kind: 'text', delta: '子会话正文'}]);
+
+        // 消费型单元不占 refcount：并行期间 refcount 只计发起方 run（=1）。
+        expect(agentActivity.isActive()).toBe(true);
     });
 
-    expect(h.manager.activeSessionIds()).toEqual(['s1', 's3']);
+    it('多会话并行逐个停止互不影响；全部停止后无残留（stop→abortRegistry.abort）', () => {
+        // 两个发起型 run（s1/s3）并行 + abortRegistry 记录在途 controller
+        // （abort 即摘除，模拟 core 的 unregister 时序）。
+        const registryByKey = new Set([ABORT_KEY.agent('s1'), ABORT_KEY.agent('s3')]);
+        h.manager.dispose();
+        h = buildHarness({
+            abortHas: key => registryByKey.has(key),
+        });
+        h.abortRegistry.abort.mockImplementation((key: string) => {
+            registryByKey.delete(key);
+        });
 
-    // 停止 s1（会话列表「停止生成」入口）：abort 只命中 s1，s3 不受影响。
-    expect(h.manager.stop(ABORT_KEY.agent('s1'))).toBe(true);
-    expect(h.abortRegistry.abort).toHaveBeenCalledWith(ABORT_KEY.agent('s1'));
-    expect(h.abortRegistry.abort).toHaveBeenCalledTimes(1);
-    // 停止后 core 发 FINISHED 收尾（事件路径）——s1 单元 settled、出活跃集。
-    h.eventBus.publish(EVENT_AGENT_RUN_FINISHED, {
-      sessionId: 's1',
-      projectId: 'p1',
-      runId: 'r1',
-      stopReason: 'end_turn',
-    } as never);
-    expect(h.manager.hasActiveRun('s1')).toBe(false);
-    expect(h.manager.hasActiveRun('s3')).toBe(true);
+        h.manager.startRun('s1', 'p1', 'hi');
+        h.eventBus.publish(EVENT_AGENT_RUN_STARTED, {
+            sessionId: 's1',
+            projectId: 'p1',
+            runId: 'r1',
+        });
+        h.manager.startRun('s3', 'p1', 'hi');
+        h.eventBus.publish(EVENT_AGENT_RUN_STARTED, {
+            sessionId: 's3',
+            projectId: 'p1',
+            runId: 'r3',
+        });
 
-    // 全部停止后：无 active 单元、refcount 归零。
-    h.manager.stop(ABORT_KEY.agent('s3'));
-    h.eventBus.publish(EVENT_AGENT_RUN_FINISHED, {
-      sessionId: 's3',
-      projectId: 'p1',
-      runId: 'r3',
-      stopReason: 'end_turn',
-    } as never);
-    expect(h.manager.activeSessionIds()).toEqual([]);
-    expect(agentActivity.isActive()).toBe(false);
+        expect(h.manager.activeSessionIds()).toEqual(['s1', 's3']);
 
-    // 无在途 controller 的会话 stop 返回 false（不误触）。
-    expect(h.manager.stop(ABORT_KEY.agent('s1'))).toBe(false);
-  });
+        // 停止 s1（会话列表「停止生成」入口）：abort 只命中 s1，s3 不受影响。
+        expect(h.manager.stop(ABORT_KEY.agent('s1'))).toBe(true);
+        expect(h.abortRegistry.abort).toHaveBeenCalledWith(ABORT_KEY.agent('s1'));
+        expect(h.abortRegistry.abort).toHaveBeenCalledTimes(1);
+        // 停止后 core 发 FINISHED 收尾（事件路径）——s1 单元 settled、出活跃集。
+        h.eventBus.publish(EVENT_AGENT_RUN_FINISHED, {
+            sessionId: 's1',
+            projectId: 'p1',
+            runId: 'r1',
+            stopReason: 'end_turn',
+        } as never);
+        expect(h.manager.hasActiveRun('s1')).toBe(false);
+        expect(h.manager.hasActiveRun('s3')).toBe(true);
+
+        // 全部停止后：无 active 单元、refcount 归零。
+        h.manager.stop(ABORT_KEY.agent('s3'));
+        h.eventBus.publish(EVENT_AGENT_RUN_FINISHED, {
+            sessionId: 's3',
+            projectId: 'p1',
+            runId: 'r3',
+            stopReason: 'end_turn',
+        } as never);
+        expect(h.manager.activeSessionIds()).toEqual([]);
+        expect(agentActivity.isActive()).toBe(false);
+
+        // 无在途 controller 的会话 stop 返回 false（不误触）。
+        expect(h.manager.stop(ABORT_KEY.agent('s1'))).toBe(false);
+    });
 });
 
 /**
@@ -277,67 +277,67 @@ describe('T-U9: 双屏 webview 句柄分发 + 停止入口（Step 6）', () => {
  * force-snapshot 让宿主按「已清空」的投影重发快照（partial 不复活）。
  */
 describe('T-SP19: 中断 partial 投影与 requestStreamReset', () => {
-  let h: ReturnType<typeof buildHarness>;
+    let h: ReturnType<typeof buildHarness>;
 
-  beforeEach(() => {
-    jest.useFakeTimers();
-    agentActivity.setActive(false);
-    h = buildHarness();
-  });
+    beforeEach(() => {
+        jest.useFakeTimers();
+        agentActivity.setActive(false);
+        h = buildHarness();
+    });
 
-  afterEach(() => {
-    h.manager.dispose();
-    jest.useRealTimers();
-    agentActivity.setActive(false);
-  });
+    afterEach(() => {
+        h.manager.dispose();
+        jest.useRealTimers();
+        agentActivity.setActive(false);
+    });
 
-  it('interrupted partial → 唯一 finished 流式行；reset 后清空并补发 force-snapshot', () => {
-    const unit = h.manager.adoptInterruptedUnit('s1', 'p1');
-    expect(
-      unit.hydrateFromRunState({
-        runId: 'r-old',
-        startedAtMs: 1_000,
-        settledAtMs: 4_000,
-        metrics: {
-          textChars: 4,
-          thinkingChars: 4,
-          completionTokens: 1,
-          tokenSource: 'heuristic',
-        },
-        partialText: '半截正文',
-        partialThinking: '半截思考',
-        pendingChildren: [],
-      }),
-    ).toBe(true);
+    it('interrupted partial → 唯一 finished 流式行；reset 后清空并补发 force-snapshot', () => {
+        const unit = h.manager.adoptInterruptedUnit('s1', 'p1');
+        expect(
+            unit.hydrateFromRunState({
+                runId: 'r-old',
+                startedAtMs: 1_000,
+                settledAtMs: 4_000,
+                metrics: {
+                    textChars: 4,
+                    thinkingChars: 4,
+                    completionTokens: 1,
+                    tokenSource: 'heuristic',
+                },
+                partialText: '半截正文',
+                partialThinking: '半截思考',
+                pendingChildren: [],
+            }),
+        ).toBe(true);
 
-    const interruptedId = 'st:s1:interrupted:4000';
-    expect(h.manager.snapshot('s1')?.streamRows).toEqual([
-      {
-        streamId: interruptedId,
-        status: 'finished',
-        text: '半截正文',
-        thinking: '半截思考',
-        tools: [],
-        messageId: null,
-      },
-    ]);
+        const interruptedId = 'st:s1:interrupted:4000';
+        expect(h.manager.snapshot('s1')?.streamRows).toEqual([
+            {
+                streamId: interruptedId,
+                status: 'finished',
+                text: '半截正文',
+                thinking: '半截思考',
+                tools: [],
+                messageId: null,
+            },
+        ]);
 
-    const screen = probeHandle('screen');
-    h.manager.attachWebview('s1', screen);
+        const screen = probeHandle('screen');
+        h.manager.attachWebview('s1', screen);
 
-    // rollback/fork：先清单元投影，再广播 reset-stream（streamId 原样透传）。
-    h.manager.requestStreamReset('s1');
-    expect(screen.controlMessages).toEqual([
-      {type: 'reset-stream', streamIds: [interruptedId]},
-    ]);
-    expect(h.manager.snapshot('s1')?.streamRows).toEqual([]);
+        // rollback/fork：先清单元投影，再广播 reset-stream（streamId 原样透传）。
+        h.manager.requestStreamReset('s1');
+        expect(screen.controlMessages).toEqual([
+            {type: 'reset-stream', streamIds: [interruptedId]},
+        ]);
+        expect(h.manager.snapshot('s1')?.streamRows).toEqual([]);
 
-    // 下一拍 force-snapshot：宿主按清空后的投影重发快照，partial 行不复活。
-    jest.advanceTimersByTime(0);
-    expect(screen.controlMessages).toEqual([
-      {type: 'reset-stream', streamIds: [interruptedId]},
-      {type: 'force-snapshot'},
-    ]);
-    expect(h.manager.snapshot('s1')?.streamRows).toEqual([]);
-  });
+        // 下一拍 force-snapshot：宿主按清空后的投影重发快照，partial 行不复活。
+        jest.advanceTimersByTime(0);
+        expect(screen.controlMessages).toEqual([
+            {type: 'reset-stream', streamIds: [interruptedId]},
+            {type: 'force-snapshot'},
+        ]);
+        expect(h.manager.snapshot('s1')?.streamRows).toEqual([]);
+    });
 });

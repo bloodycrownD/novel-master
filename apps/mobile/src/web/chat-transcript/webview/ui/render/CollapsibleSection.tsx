@@ -8,89 +8,89 @@
 import type {ComponentChildren} from 'preact';
 
 type CollapsibleHeaderProps = {
-  /** header 基础 class（tool-group-header / thinking-header）。 */
-  headerClass: string;
-  title: string;
-  /** data-action 委托动作（toggle-tool-group / toggle-attach-group / toggle-thinking）。 */
-  action: string;
-  /** 委托 data-* 属性名（不含 data- 前缀）与值。 */
-  dataKey: string;
-  dataValue: string;
-  expanded: boolean;
+    /** header 基础 class（tool-group-header / thinking-header）。 */
+    headerClass: string;
+    title: string;
+    /** data-action 委托动作（toggle-tool-group / toggle-attach-group / toggle-thinking）。 */
+    action: string;
+    /** 委托 data-* 属性名（不含 data- 前缀）与值。 */
+    dataKey: string;
+    dataValue: string;
+    expanded: boolean;
 };
 
 export function CollapsibleHeader({
-  headerClass,
-  title,
-  action,
-  dataKey,
-  dataValue,
-  expanded,
+    headerClass,
+    title,
+    action,
+    dataKey,
+    dataValue,
+    expanded,
 }: CollapsibleHeaderProps) {
-  // 标题/箭头 class 由 header 基名派生：把 `-header` 后缀换成 `-title`/`-chevron`
-  // （tool-group-header → tool-group-title，thinking-header → thinking-title）。
-  // 注意不是加后缀——CSS 选择器是 .tool-group-title / .thinking-title。
-  const base = headerClass.replace(/-header$/, '');
-  return (
-    <div
-      className={headerClass}
-      data-action={action}
-      {...({['data-' + dataKey]: dataValue} as Record<string, string>)}
-    >
-      <span className={base + '-title'}>{title}</span>
-      {/* 折叠三角：css border 三角（chevron--open/closed，见 transcript.css）——
+    // 标题/箭头 class 由 header 基名派生：把 `-header` 后缀换成 `-title`/`-chevron`
+    // （tool-group-header → tool-group-title，thinking-header → thinking-title）。
+    // 注意不是加后缀——CSS 选择器是 .tool-group-title / .thinking-title。
+    const base = headerClass.replace(/-header$/, '');
+    return (
+        <div
+            className={headerClass}
+            data-action={action}
+            {...({['data-' + dataKey]: dataValue} as Record<string, string>)}
+        >
+            <span className={base + '-title'}>{title}</span>
+            {/* 折叠三角：css border 三角（chevron--open/closed，见 transcript.css）——
           不再用 ▼/▶ 字符。几何形状码位的 glyph 随系统字体漂移，鸿蒙 7 真机
           （2026-10-12 实报）把 ▶ 画成 email 标签形三角，与荣耀的灰色三角形状
           不一致；css 三角跨系统形状一致。字符移除后 className 断言随
           collapsible-section-classes.test 同步。 */}
-      <span
-        className={
-          base + '-chevron chevron--' + (expanded ? 'open' : 'closed')
-        }
-      />
-    </div>
-  );
+            <span
+                className={
+                    base + '-chevron chevron--' + (expanded ? 'open' : 'closed')
+                }
+            />
+        </div>
+    );
 }
 
 type CollapsibleSectionProps = {
-  title: string;
-  /** data-action 委托动作（toggle-tool-group / toggle-attach-group）。 */
-  action: string;
-  /** 委托 data-* 属性名（不含 data- 前缀）与值。 */
-  dataKey: string;
-  dataValue: string;
-  expanded: boolean;
-  /** 外层 section 基础 class；divided 修饰由 dividedClass 追加。 */
-  sectionClass: string;
-  /** 分割线修饰 class（含前导空格；空串 = 无分割线）。 */
-  dividedClass: string;
-  children: ComponentChildren;
+    title: string;
+    /** data-action 委托动作（toggle-tool-group / toggle-attach-group）。 */
+    action: string;
+    /** 委托 data-* 属性名（不含 data- 前缀）与值。 */
+    dataKey: string;
+    dataValue: string;
+    expanded: boolean;
+    /** 外层 section 基础 class；divided 修饰由 dividedClass 追加。 */
+    sectionClass: string;
+    /** 分割线修饰 class（含前导空格；空串 = 无分割线）。 */
+    dividedClass: string;
+    children: ComponentChildren;
 };
 
 export function CollapsibleSection({
-  title,
-  action,
-  dataKey,
-  dataValue,
-  expanded,
-  sectionClass,
-  dividedClass,
-  children,
+    title,
+    action,
+    dataKey,
+    dataValue,
+    expanded,
+    sectionClass,
+    dividedClass,
+    children,
 }: CollapsibleSectionProps) {
-  return (
-    <div
-      className={sectionClass + dividedClass}
-      {...({['data-' + dataKey]: dataValue} as Record<string, string>)}
-    >
-      <CollapsibleHeader
-        headerClass="tool-group-header"
-        title={title}
-        action={action}
-        dataKey={dataKey}
-        dataValue={dataValue}
-        expanded={expanded}
-      />
-      {expanded ? <div className="tool-group-items">{children}</div> : null}
-    </div>
-  );
+    return (
+        <div
+            className={sectionClass + dividedClass}
+            {...({['data-' + dataKey]: dataValue} as Record<string, string>)}
+        >
+            <CollapsibleHeader
+                headerClass="tool-group-header"
+                title={title}
+                action={action}
+                dataKey={dataKey}
+                dataValue={dataValue}
+                expanded={expanded}
+            />
+            {expanded ? <div className="tool-group-items">{children}</div> : null}
+        </div>
+    );
 }

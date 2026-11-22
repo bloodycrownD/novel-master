@@ -3,21 +3,21 @@ import { describe, it } from "node:test";
 import { AsyncMutex } from "@novel-master/core/tdbc";
 
 describe("AsyncMutex", () => {
-  it("serializes concurrent tasks", async () => {
-    const mutex = new AsyncMutex();
-    const order: number[] = [];
+    it("serializes concurrent tasks", async () => {
+        const mutex = new AsyncMutex();
+        const order: number[] = [];
 
-    const first = mutex.run(async () => {
-      order.push(1);
-      await new Promise((r) => setTimeout(r, 20));
-      order.push(2);
+        const first = mutex.run(async () => {
+            order.push(1);
+            await new Promise((r) => setTimeout(r, 20));
+            order.push(2);
+        });
+
+        const second = mutex.run(async () => {
+            order.push(3);
+        });
+
+        await Promise.all([first, second]);
+        assert.deepEqual(order, [1, 2, 3]);
     });
-
-    const second = mutex.run(async () => {
-      order.push(3);
-    });
-
-    await Promise.all([first, second]);
-    assert.deepEqual(order, [1, 2, 3]);
-  });
 });

@@ -19,24 +19,24 @@
 
 /** 单槽回调的存取面；`take` 后槽回到空态。 */
 export interface CallbackSlot<T> {
-  /** 写入当次回调（覆盖上一次未取走的值）。 */
-  set(callback: T): void;
-  /** 读取并清空槽；空槽返回 null。 */
-  take(): T | null;
+    /** 写入当次回调（覆盖上一次未取走的值）。 */
+    set(callback: T): void;
+    /** 读取并清空槽；空槽返回 null。 */
+    take(): T | null;
 }
 
 export const CallbackSlot = {
-  create: <T>(): CallbackSlot<T> => {
-    let callback: T | null = null;
-    return {
-      set(next) {
-        callback = next;
-      },
-      take() {
-        const taken = callback;
-        callback = null;
-        return taken;
-      },
-    };
-  },
+    create: <T>(): CallbackSlot<T> => {
+        let callback: T | null = null;
+        return {
+            set(next) {
+                callback = next;
+            },
+            take() {
+                const taken = callback;
+                callback = null;
+                return taken;
+            },
+        };
+    },
 } as const;

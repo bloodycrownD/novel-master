@@ -49,77 +49,77 @@ const DIST_ENTRY_REL = "dist/public/kkv.js";
  * @returns {string} 解析结果（文件系统路径，posix 分隔符）
  */
 function resolveKkvDistViaNode(): string {
-  const script =
-    "process.stdout.write(import.meta.resolve('@novel-master/core/kkv'));";
-  try {
-    const stdout = execFileSync(
-      process.execPath,
-      ["--input-type=module", "--eval", script],
-      { cwd: CORE_ROOT, encoding: "utf8" }
-    );
-    return fileURLToPath(stdout.trim()).replace(/\\/g, "/");
-  } catch (err) {
-    // 恒红防护：新 clone / 未 build 环境必须给出可操作的失败信息，
-    // 而不是抛一句 "Cannot find module" 让人猜。
-    assert.fail(
-      `纯 node 子进程解析 @novel-master/core/kkv 失败：${(err as Error).message}\n` +
-        `本测试需要已构建的 dist 产物，请先跑 \`npm run build -w @novel-master/core\`。\n` +
-        `若 dist 已存在仍失败，说明 packages/core/package.json 的 "./kkv" exports 被改坏了` +
-        `（注意该子路径只有 types/import 条件，删掉 import 条件会让 node 直接报未导出）。`
-    );
-  }
+    const script =
+        "process.stdout.write(import.meta.resolve('@novel-master/core/kkv'));";
+    try {
+        const stdout = execFileSync(
+            process.execPath,
+            ["--input-type=module", "--eval", script],
+            { cwd: CORE_ROOT, encoding: "utf8" }
+        );
+        return fileURLToPath(stdout.trim()).replace(/\\/g, "/");
+    } catch (err) {
+        // 恒红防护：新 clone / 未 build 环境必须给出可操作的失败信息，
+        // 而不是抛一句 "Cannot find module" 让人猜。
+        assert.fail(
+            `纯 node 子进程解析 @novel-master/core/kkv 失败：${(err as Error).message}\n` +
+                `本测试需要已构建的 dist 产物，请先跑 \`npm run build -w @novel-master/core\`。\n` +
+                `若 dist 已存在仍失败，说明 packages/core/package.json 的 "./kkv" exports 被改坏了` +
+                `（注意该子路径只有 types/import 条件，删掉 import 条件会让 node 直接报未导出）。`
+        );
+    }
 }
 
 describe("kkv 子路径的 dist 解析守卫（X4）", () => {
-  it("dist 产物存在（否则后续断言都是假绿）", () => {
-    const distEntry = fileURLToPath(new URL(`../../${DIST_ENTRY_REL}`, import.meta.url));
-    assert.ok(
-      existsSync(distEntry),
-      `缺少 ${DIST_ENTRY_REL}。先跑 \`npm run build -w @novel-master/core\` 再跑本测试。`
-    );
-  });
+    it("dist 产物存在（否则后续断言都是假绿）", () => {
+        const distEntry = fileURLToPath(new URL(`../../${DIST_ENTRY_REL}`, import.meta.url));
+        assert.ok(
+            existsSync(distEntry),
+            `缺少 ${DIST_ENTRY_REL}。先跑 \`npm run build -w @novel-master/core\` 再跑本测试。`
+        );
+    });
 
-  it("@novel-master/core/kkv 解析到公共 barrel dist/public/kkv.js", () => {
-    const resolved = resolveKkvDistViaNode();
-    assert.ok(
-      resolved.includes("packages/core/dist/public/kkv"),
-      `@novel-master/core/kkv 必须解析到公共 barrel（…/packages/core/dist/public/kkv.js），` +
-        `实际解析到：${resolved}\n` +
-        `若它指向 src/service/kkv/index.ts 或 src/public/kkv.ts，说明 package.json 的 "./kkv" exports 被改回了非 dist 路径。`
-    );
-    assert.ok(
-      !resolved.includes("/src/"),
-      `@novel-master/core/kkv 不应解析进 src/ 源码树，实际：${resolved}`
-    );
-  });
+    it("@novel-master/core/kkv 解析到公共 barrel dist/public/kkv.js", () => {
+        const resolved = resolveKkvDistViaNode();
+        assert.ok(
+            resolved.includes("packages/core/dist/public/kkv"),
+            `@novel-master/core/kkv 必须解析到公共 barrel（…/packages/core/dist/public/kkv.js），` +
+                `实际解析到：${resolved}\n` +
+                `若它指向 src/service/kkv/index.ts 或 src/public/kkv.ts，说明 package.json 的 "./kkv" exports 被改回了非 dist 路径。`
+        );
+        assert.ok(
+            !resolved.includes("/src/"),
+            `@novel-master/core/kkv 不应解析进 src/ 源码树，实际：${resolved}`
+        );
+    });
 
-  it("解析到的 dist 模块可 import 且导出非空", async () => {
-    const resolved = resolveKkvDistViaNode();
-    const mod = (await import(`file:///${resolved}`)) as Record<string, unknown>;
-    const named = Object.keys(mod).filter(k => k !== "default");
-    assert.ok(
-      named.length > 0,
-      `${resolved} 解析成功但没有任何 named export，公共 barrel 可能是空壳。`
-    );
-    assert.ok(
-      named.includes("createKkvService"),
-      `公共 barrel 应导出 createKkvService，实际导出：${named.join(", ")}`
-    );
-  });
+    it("解析到的 dist 模块可 import 且导出非空", async () => {
+        const resolved = resolveKkvDistViaNode();
+        const mod = (await import(`file:///${resolved}`)) as Record<string, unknown>;
+        const named = Object.keys(mod).filter(k => k !== "default");
+        assert.ok(
+            named.length > 0,
+            `${resolved} 解析成功但没有任何 named export，公共 barrel 可能是空壳。`
+        );
+        assert.ok(
+            named.includes("createKkvService"),
+            `公共 barrel 应导出 createKkvService，实际导出：${named.join(", ")}`
+        );
+    });
 
-  it("src 侧（tsx paths 解析）与 dist 侧导出一致（D-207 双向不漂移）", async () => {
-    // src 侧走 tsconfig paths（tsconfig.test.json 的 "./src/public/kkv.ts"），
-    // dist 侧走 node exports。两边是同一份公共 barrel 的两种产物形态，
-    // 导出集合必须一致——不一致就说明有一侧漏了 re-export。
-    const resolved = resolveKkvDistViaNode();
-    const distMod = (await import(`file:///${resolved}`)) as Record<string, unknown>;
-    const srcMod = (await import("@novel-master/core/kkv")) as Record<string, unknown>;
-    const names = (m: Record<string, unknown>) =>
-      Object.keys(m).filter(k => k !== "default").sort();
-    assert.deepEqual(
-      names(distMod),
-      names(srcMod),
-      "dist 侧与 src 侧的 public/kkv 导出集合不一致（dist 是旧产物？请重新 build core）。"
-    );
-  });
+    it("src 侧（tsx paths 解析）与 dist 侧导出一致（D-207 双向不漂移）", async () => {
+        // src 侧走 tsconfig paths（tsconfig.test.json 的 "./src/public/kkv.ts"），
+        // dist 侧走 node exports。两边是同一份公共 barrel 的两种产物形态，
+        // 导出集合必须一致——不一致就说明有一侧漏了 re-export。
+        const resolved = resolveKkvDistViaNode();
+        const distMod = (await import(`file:///${resolved}`)) as Record<string, unknown>;
+        const srcMod = (await import("@novel-master/core/kkv")) as Record<string, unknown>;
+        const names = (m: Record<string, unknown>) =>
+            Object.keys(m).filter(k => k !== "default").sort();
+        assert.deepEqual(
+            names(distMod),
+            names(srcMod),
+            "dist 侧与 src 侧的 public/kkv 导出集合不一致（dist 是旧产物？请重新 build core）。"
+        );
+    });
 });

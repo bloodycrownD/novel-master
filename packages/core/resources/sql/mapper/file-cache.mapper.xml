@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  file_cache 表的 SQL mapper（schema 见 resources/sql/schema/file-cache.sql）。
+
+  覆盖两张配套表：
+  - session_file_cache_blob：同 body 全库单份压缩行（content_hash 主键）；
+  - session_file_cache_entry：会话侧轻量引用行（session_id + key 主键）。
+
+  结构约定与 chat-message.mapper.xml 一致：语句 id 与消费方法同名（camelCase），
+  logic 层 DeferredFileCacheGc.run 的回收语句同样归入本 mapper。
+  动态 IN 清单走 <foreach>（集合吃 params，空集合不渲染）；调用处仍按 400 分片。
+-->
+<mapper namespace="file_cache">
+
+  <select id="selectEntryHash">
+    SELECT content_hash, mtime_ms
+    FROM session_file_cache_entry
+    WHERE session_id = #{sessionId} AND key = #{key}
+  </select>
+
+  <select id="selectBlobBody">
+    SELECT encoding, bytes FROM session_file_cache_blob WHERE content_hash = #{contentHash}
+  </select>
+
+  <select id="listEntriesByKeys">
+    SELECT key, content_hash, mtime_ms
+    FROM session_file_cache_entry
+    WHERE session_id = #{sessionId} AND key IN (<foreach collection="keys" item="k" separator=", ">#{k}</foreach>)
+  </select>
+
+  <select id="listBlobsByHashes">
+    SELECT content_hash, encoding, bytes
+    FROM session_file_cache_blob
+    WHERE content_hash IN (<foreach collection="hashes" item="h" separator=", ">#{h}</foreach>)
+  </select>
+
+  <select id="blobExists">
+    SELECT 1 AS hit FROM session_file_cache_blob WHERE content_hash = #{contentHash}
+  </select>
+
+  <insert id="insertBlob">
+    INSERT OR IGNORE INTO session_file_cache_blob (content_hash, encoding, bytes, byte_len)
+    VALUES (#{contentHash}, #{encoding}, #{bytes}, #{byteLen})
+  </insert>
+
+  <insert id="upsertEntry">
+    INSERT INTO session_file_cache_entry (session_id, key, content_hash, mtime_ms)
+    VALUES (#{sessionId}, #{key}, #{contentHash}, #{mtimeMs})
+    ON CONFLICT(session_id, key) DO UPDATE
+    SET content_hash = excluded.content_hash, mtime_ms = excluded.mtime_ms
+  </insert>
+
+  <delete id="deleteEntry">
+    DELETE FROM session_file_cache_entry WHERE session_id = #{sessionId} AND key = #{key}
+  </delete>
+
+  <!-- clearDomain 与 clearSession 共用（语义同为「清本会话全部引用行」；blob 留给 GC）。 -->
+  <delete id="deleteEntriesBySession">
+    DELETE
+    FROM session_file_cache_entry
+    WHERE session_id = #{sessionId}
+  </delete>
+
+  <!-- 引用集 = entry 全表（所有会话），NOT IN 子查询显式过滤 NULL content_hash（防 NULL 语义陷阱）。 -->
+  <delete id="deleteOrphanBlobs">
+    DELETE
+    FROM session_file_cache_blob
+    WHERE content_hash NOT IN (SELECT content_hash
+    FROM session_file_cache_entry
+    WHERE content_hash IS NOT NULL)
+  </delete>
+
+</mapper>

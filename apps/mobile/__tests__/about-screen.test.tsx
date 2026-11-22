@@ -3,38 +3,38 @@ import TestRenderer, {act} from 'react-test-renderer';
 import {AboutScreen} from '@/screens/stack/AboutScreen';
 
 jest.mock('@/runtime/novel-master-context', () => ({
-  useNovelMaster: () => ({
-    appUi: {
-      get: jest.fn().mockResolvedValue({ok: true, value: undefined}),
-      set: jest.fn().mockResolvedValue(undefined),
-    },
-  }),
+    useNovelMaster: () => ({
+        appUi: {
+            get: jest.fn().mockResolvedValue({ok: true, value: undefined}),
+            set: jest.fn().mockResolvedValue(undefined),
+        },
+    }),
 }));
 
 jest.mock('@/theme/ThemeProvider', () => ({
-  useTheme: () => ({
-    tokens: {
-      background: '#fff',
-      text: '#000',
-      textSecondary: '#666',
-      surfaceElevated: '#f5f5f5',
-      borderLight: '#eee',
-    },
-  }),
+    useTheme: () => ({
+        tokens: {
+            background: '#fff',
+            text: '#000',
+            textSecondary: '#666',
+            surfaceElevated: '#f5f5f5',
+            borderLight: '#eee',
+        },
+    }),
 }));
 
 jest.mock('@/components/chrome/ToastHost', () => ({
-  useToast: () => ({showToast: jest.fn()}),
+    useToast: () => ({showToast: jest.fn()}),
 }));
 
 describe('AboutScreen', () => {
-  it('renders version text', async () => {
-    let tree!: TestRenderer.ReactTestRenderer;
-    await act(async () => {
-      tree = TestRenderer.create(<AboutScreen />);
+    it('renders version text', async () => {
+        let tree!: TestRenderer.ReactTestRenderer;
+        await act(async () => {
+            tree = TestRenderer.create(<AboutScreen />);
+        });
+        const json = JSON.stringify(tree!.toJSON());
+        expect(json).toMatch(/版本/);
+        expect(json).toMatch(/Novel Master/);
     });
-    const json = JSON.stringify(tree!.toJSON());
-    expect(json).toMatch(/版本/);
-    expect(json).toMatch(/Novel Master/);
-  });
 });

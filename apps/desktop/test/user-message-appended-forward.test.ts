@@ -7,37 +7,37 @@ import { UserMessageAppendedForwarder } from "../src/main/ipc/forward-user-messa
 import { IPC_CHANNELS } from "../shared/ipc-types.js";
 
 afterEach(() => {
-  UserMessageAppendedForwarder.setTarget(() => undefined);
+    UserMessageAppendedForwarder.setTarget(() => undefined);
 });
 
 test("T-AN5: notifyUserMessageAppended 推送 nm:agent/userMessageAppended {sessionId}", () => {
-  const sent: Array<{ channel: string; payload: unknown }> = [];
-  UserMessageAppendedForwarder.setTarget(() => {
-    return {
-      send(channel: string, payload: unknown) {
-        sent.push({ channel, payload });
-      },
-    } as never;
-  });
+    const sent: Array<{ channel: string; payload: unknown }> = [];
+    UserMessageAppendedForwarder.setTarget(() => {
+        return {
+            send(channel: string, payload: unknown) {
+                sent.push({ channel, payload });
+            },
+        } as never;
+    });
 
-  UserMessageAppendedForwarder.notify({ sessionId: "s-append" });
+    UserMessageAppendedForwarder.notify({ sessionId: "s-append" });
 
-  assert.equal(sent.length, 1);
-  assert.equal(sent[0]?.channel, IPC_CHANNELS.AGENT_USER_MESSAGE_APPENDED);
-  assert.equal(
-    IPC_CHANNELS.AGENT_USER_MESSAGE_APPENDED,
-    "nm:agent/userMessageAppended",
-  );
-  assert.deepEqual(sent[0]?.payload, { sessionId: "s-append" });
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0]?.channel, IPC_CHANNELS.AGENT_USER_MESSAGE_APPENDED);
+    assert.equal(
+        IPC_CHANNELS.AGENT_USER_MESSAGE_APPENDED,
+        "nm:agent/userMessageAppended",
+    );
+    assert.deepEqual(sent[0]?.payload, { sessionId: "s-append" });
 });
 
 test("T-AN5: 通道不得复用 RUN_* / COMPOSER_ATTACHMENTS_SUGGEST", () => {
-  assert.notEqual(
-    IPC_CHANNELS.AGENT_USER_MESSAGE_APPENDED,
-    IPC_CHANNELS.COMPOSER_ATTACHMENTS_SUGGEST,
-  );
-  assert.notEqual(
-    IPC_CHANNELS.AGENT_USER_MESSAGE_APPENDED,
-    IPC_CHANNELS.AGENT_STREAM,
-  );
+    assert.notEqual(
+        IPC_CHANNELS.AGENT_USER_MESSAGE_APPENDED,
+        IPC_CHANNELS.COMPOSER_ATTACHMENTS_SUGGEST,
+    );
+    assert.notEqual(
+        IPC_CHANNELS.AGENT_USER_MESSAGE_APPENDED,
+        IPC_CHANNELS.AGENT_STREAM,
+    );
 });

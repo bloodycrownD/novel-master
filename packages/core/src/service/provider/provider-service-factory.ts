@@ -20,66 +20,66 @@ import type { ModelRequestService } from "./model-request.port.js";
 import type { ModelRetryPolicyService } from "./model-retry-policy.port.js";
 
 export interface ProviderServiceBundle {
-  readonly providers: ProviderService;
-  readonly providerModels: ProviderModelService;
-  readonly modelRequests: ModelRequestService;
-  readonly providerRepo: SqliteProviderRepository;
-  readonly savedModelRepo: SqliteSavedModelRepository;
+    readonly providers: ProviderService;
+    readonly providerModels: ProviderModelService;
+    readonly modelRequests: ModelRequestService;
+    readonly providerRepo: SqliteProviderRepository;
+    readonly savedModelRepo: SqliteSavedModelRepository;
 }
 
 export const ProviderServiceFactory = {
-  /**
+    /**
    * Creates provider, model, and request services.
    *
    * @param conn - Open connection after {@link NovelMasterBootstrap.bootstrap}
    * @param secretStore - SKSP composite store
    */
-  create(conn: TdbcConnection, secretStore: SecretStore): ProviderServiceBundle {
-    const providerRepo = new SqliteProviderRepository(conn);
-    const kkv = createKkvService(conn);
-    const suggestionRepo = new KkvModelSuggestionRepository(kkv);
-    const savedRepo = new SqliteSavedModelRepository(conn);
+    create(conn: TdbcConnection, secretStore: SecretStore): ProviderServiceBundle {
+        const providerRepo = new SqliteProviderRepository(conn);
+        const kkv = createKkvService(conn);
+        const suggestionRepo = new KkvModelSuggestionRepository(kkv);
+        const savedRepo = new SqliteSavedModelRepository(conn);
 
-    const providers = new DefaultProviderService({
-      providers: providerRepo,
-      suggestions: suggestionRepo,
-      savedModels: savedRepo,
-      secretStore,
-      conn,
-    });
+        const providers = new DefaultProviderService({
+            providers: providerRepo,
+            suggestions: suggestionRepo,
+            savedModels: savedRepo,
+            secretStore,
+            conn,
+        });
 
-    const retryPolicies = ProviderServiceFactory.createRetryPolicy(conn);
+        const retryPolicies = ProviderServiceFactory.createRetryPolicy(conn);
 
-    const providerModels = new DefaultProviderModelService({
-      providers,
-      providerRepo,
-      suggestions: suggestionRepo,
-      savedModels: savedRepo,
-      secretStore,
-      conn,
-    });
+        const providerModels = new DefaultProviderModelService({
+            providers,
+            providerRepo,
+            suggestions: suggestionRepo,
+            savedModels: savedRepo,
+            secretStore,
+            conn,
+        });
 
-    const modelRequests = new DefaultModelRequestService({
-      providers: providerRepo,
-      savedModels: savedRepo,
-      secretStore,
-      retryPolicies,
-    });
+        const modelRequests = new DefaultModelRequestService({
+            providers: providerRepo,
+            savedModels: savedRepo,
+            secretStore,
+            retryPolicies,
+        });
 
-    return {
-      providers,
-      providerModels,
-      modelRequests,
-      providerRepo,
-      savedModelRepo: savedRepo,
-    };
-  },
+        return {
+            providers,
+            providerModels,
+            modelRequests,
+            providerRepo,
+            savedModelRepo: savedRepo,
+        };
+    },
 
-  /**
+    /**
    * Creates model retry policy storage on KKV module `nm-model-retry`.
    */
-  createRetryPolicy(conn: TdbcConnection): ModelRetryPolicyService {
-    const kkv = createKkvService(conn);
-    return new DefaultModelRetryPolicyService(kkv);
-  },
+    createRetryPolicy(conn: TdbcConnection): ModelRetryPolicyService {
+        const kkv = createKkvService(conn);
+        return new DefaultModelRetryPolicyService(kkv);
+    },
 } as const;

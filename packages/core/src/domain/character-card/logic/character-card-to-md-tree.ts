@@ -13,7 +13,7 @@ import { Guards } from "@/common/guards.js";
 import { Json } from "@/common/json.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { SerializationStringifyText } from "@/infra/serialization/stringify-text.js";
+import { SerializationStringifyText } from "@/common/serialization/stringify-text.js";
 import type { MdTree } from "../model/character-card.js";
 
 const SPEC_V2 = "chara_card_v2";

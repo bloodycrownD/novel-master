@@ -3,30 +3,30 @@ import {  describe, it  } from "node:test";
 import {  StreamPartialBlocks  } from "../../../src/infra/llm-protocol/logic/stream-partial-blocks.js";
 
 describe("buildStreamPartialBlocks", () => {
-  it("T1: keeps partial thinking without empty text block", () => {
-    const blocks = StreamPartialBlocks.build({
-      text: "",
-      thinking: "half thought",
+    it("T1: keeps partial thinking without empty text block", () => {
+        const blocks = StreamPartialBlocks.build({
+            text: "",
+            thinking: "half thought",
+        });
+        assert.equal(blocks.length, 1);
+        assert.equal(blocks[0]?.type, "thinking");
+        if (blocks[0]?.type === "thinking") {
+            assert.equal(blocks[0].text, "half thought");
+        }
     });
-    assert.equal(blocks.length, 1);
-    assert.equal(blocks[0]?.type, "thinking");
-    if (blocks[0]?.type === "thinking") {
-      assert.equal(blocks[0].text, "half thought");
-    }
-  });
 
-  it("T2: returns empty when nothing streamed", () => {
-    assert.deepEqual(StreamPartialBlocks.build({ text: "", thinking: "" }), []);
-  });
-
-  it("includes text and tool_use when present", () => {
-    const blocks = StreamPartialBlocks.build({
-      text: "hi",
-      thinking: "",
-      toolUses: [{ id: "1", name: "read", input: { path: "/a" } }],
+    it("T2: returns empty when nothing streamed", () => {
+        assert.deepEqual(StreamPartialBlocks.build({ text: "", thinking: "" }), []);
     });
-    assert.equal(blocks.length, 2);
-    assert.equal(blocks[0]?.type, "text");
-    assert.equal(blocks[1]?.type, "tool_use");
-  });
+
+    it("includes text and tool_use when present", () => {
+        const blocks = StreamPartialBlocks.build({
+            text: "hi",
+            thinking: "",
+            toolUses: [{ id: "1", name: "read", input: { path: "/a" } }],
+        });
+        assert.equal(blocks.length, 2);
+        assert.equal(blocks[0]?.type, "text");
+        assert.equal(blocks[1]?.type, "tool_use");
+    });
 });

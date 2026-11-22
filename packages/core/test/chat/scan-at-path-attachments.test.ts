@@ -4,165 +4,165 @@
  */
 import assert from "node:assert/strict";
 import {  describe, it  } from "node:test";
-import {  attachmentScanner  } from "../../src/domain/chat/logic/attachment/attachment-scanner.js";
+import {  AttachmentScanner  } from "../../src/domain/chat/logic/attachment/attachment-scanner.js";
 import {  MessageAttachmentSchema, messageAttachmentsSchema, type MessageAttachment  } from "../../src/domain/chat/model/message-attachment.schema.js";
 import {  tCore  } from "../helpers/core-i18n.js";
 
 describe("scanAtPathAttachments (T-AT5 / T-AT6)", () => {
-  it("T-AT5: 正文含手输 @path 且 chips 无该 path → 生成 source:attach（path 带 /）", () => {
-    const text = "请看 @notes/a.md 与补充";
-    const scanned = attachmentScanner.scanAtPaths(text);
-    assert.equal(scanned.length, 1);
-    assert.equal(scanned[0]!.source, "attach");
-    assert.equal(scanned[0]!.path, "/notes/a.md");
-    assert.match(text, /@notes\/a\.md/);
-  });
+    it("T-AT5: 正文含手输 @path 且 chips 无该 path → 生成 source:attach（path 带 /）", () => {
+        const text = "请看 @notes/a.md 与补充";
+        const scanned = AttachmentScanner.scanAtPaths(text);
+        assert.equal(scanned.length, 1);
+        assert.equal(scanned[0]!.source, "attach");
+        assert.equal(scanned[0]!.path, "/notes/a.md");
+        assert.match(text, /@notes\/a\.md/);
+    });
 
-  it("T-AT5: 合并后 content 仍含 @path token（未剥离）", () => {
-    const text = "见 @notes/a.md";
-    const chips: MessageAttachment[] = [];
-    const merged = attachmentScanner.mergeScannedAtPaths(text, chips);
-    assert.equal(merged.length, 1);
-    assert.equal(merged[0]!.path, "/notes/a.md");
-    assert.ok(text.includes("@notes/a.md"));
-  });
+    it("T-AT5: 合并后 content 仍含 @path token（未剥离）", () => {
+        const text = "见 @notes/a.md";
+        const chips: MessageAttachment[] = [];
+        const merged = AttachmentScanner.mergeScannedAtPaths(text, chips);
+        assert.equal(merged.length, 1);
+        assert.equal(merged[0]!.path, "/notes/a.md");
+        assert.ok(text.includes("@notes/a.md"));
+    });
 
-  it("T-AT6: chips 已有 path 且正文再写同一 @path → 去重仅一条", () => {
-    const text = "再提 @notes/a.md";
-    const chips: MessageAttachment[] = [
-      {
-        name: "a.md",
-        source: "attach",
-        type: "text",
-        content: null,
-        path: "notes/a.md",
-      },
-    ];
-    const merged = attachmentScanner.mergeScannedAtPaths(text, chips);
-    assert.equal(merged.length, 1);
-    // 已有优先，保留原 path 写法
-    assert.equal(merged[0]!.path, "notes/a.md");
-  });
+    it("T-AT6: chips 已有 path 且正文再写同一 @path → 去重仅一条", () => {
+        const text = "再提 @notes/a.md";
+        const chips: MessageAttachment[] = [
+            {
+                name: "a.md",
+                source: "attach",
+                type: "text",
+                content: null,
+                path: "notes/a.md",
+            },
+        ];
+        const merged = AttachmentScanner.mergeScannedAtPaths(text, chips);
+        assert.equal(merged.length, 1);
+        // 已有优先，保留原 path 写法
+        assert.equal(merged[0]!.path, "notes/a.md");
+    });
 
-  it("允许多个不同 path 与中文路径；落库一律带前导 /", () => {
-    const text = "见 @docs/说明.md 和 @foo/bar.txt";
-    const scanned = attachmentScanner.scanAtPaths(text);
-    assert.equal(scanned.length, 2);
-    assert.deepEqual(scanned.map((a) => a.path).sort(), ["/docs/说明.md", "/foo/bar.txt"]);
-  });
+    it("允许多个不同 path 与中文路径；落库一律带前导 /", () => {
+        const text = "见 @docs/说明.md 和 @foo/bar.txt";
+        const scanned = AttachmentScanner.scanAtPaths(text);
+        assert.equal(scanned.length, 2);
+        assert.deepEqual(scanned.map((a) => a.path).sort(), ["/docs/说明.md", "/foo/bar.txt"]);
+    });
 
-  it("目录尾 /：type=dir，落库可保留尾 /，seen 去重去尾", () => {
-    const scanned = attachmentScanner.scanAtPaths("树 @notes/ @notes");
-    assert.equal(scanned.length, 1);
-    assert.equal(scanned[0]!.type, "dir");
-    assert.equal(scanned[0]!.path, "/notes/");
-  });
+    it("目录尾 /：type=dir，落库可保留尾 /，seen 去重去尾", () => {
+        const scanned = AttachmentScanner.scanAtPaths("树 @notes/ @notes");
+        assert.equal(scanned.length, 1);
+        assert.equal(scanned[0]!.type, "dir");
+        assert.equal(scanned[0]!.path, "/notes/");
+    });
 });
 
 /** 测试内解包；失败直接抛出以便定位。 */
 function fromPaths(paths: readonly string[]): MessageAttachment[] {
-  const r = attachmentScanner.fromPaths(paths);
-  if (!r.ok) throw r.error;
-  return r.value;
+    const r = AttachmentScanner.fromPaths(paths);
+    if (!r.ok) throw r.error;
+    return r.value;
 }
 
 describe("attachmentsFromPaths（显式路径列表 → 合规新写入附件）", () => {
-  it("name === MessageAttachmentSchema.storageName(path)、action=userAttach、content=null、source=attach", () => {
-    const [first] = fromPaths(["notes/a.md"]);
-    assert.ok(first);
-    assert.equal(first.source, "attach");
-    assert.equal(first.path, "/notes/a.md");
-    assert.equal(first.name, MessageAttachmentSchema.storageName("/notes/a.md"));
-    assert.equal(first.name, "/notes/a.md");
-    assert.equal(first.action, "userAttach");
-    assert.equal(first.content, null);
-  });
+    it("name === MessageAttachmentSchema.storageName(path)、action=userAttach、content=null、source=attach", () => {
+        const [first] = fromPaths(["notes/a.md"]);
+        assert.ok(first);
+        assert.equal(first.source, "attach");
+        assert.equal(first.path, "/notes/a.md");
+        assert.equal(first.name, MessageAttachmentSchema.storageName("/notes/a.md"));
+        assert.equal(first.name, "/notes/a.md");
+        assert.equal(first.action, "userAttach");
+        assert.equal(first.content, null);
+    });
 
-  it("产出形态可直接过 messageAttachmentsSchema.parse（落库硬 parse 非 safeParse）", () => {
-    const built = fromPaths(["notes/a.md", "notes/", "pic.png", "blob.bin"]);
-    // 牙齿的反面：合规形态必须 parse 通过（name 覆写 + action 补齐都在）。
-    assert.doesNotThrow(() => messageAttachmentsSchema.parse(built));
-  });
+    it("产出形态可直接过 messageAttachmentsSchema.parse（落库硬 parse 非 safeParse）", () => {
+        const built = fromPaths(["notes/a.md", "notes/", "pic.png", "blob.bin"]);
+        // 牙齿的反面：合规形态必须 parse 通过（name 覆写 + action 补齐都在）。
+        assert.doesNotThrow(() => messageAttachmentsSchema.parse(built));
+    });
 
-  it("牙齿：name 若沿用 basename（不覆写）必被 zod refine 拒绝", () => {
-    const [first] = fromPaths(["notes/a.md"]);
-    assert.ok(first);
-    const basenameForm: MessageAttachment = { ...first, name: "a.md" };
-    // 带 action 时 name 必须是 MessageAttachmentSchema.storageName(path)，basename 形态 100% 抛错。
-    assert.throws(() => messageAttachmentsSchema.parse([basenameForm]));
-  });
+    it("牙齿：name 若沿用 basename（不覆写）必被 zod refine 拒绝", () => {
+        const [first] = fromPaths(["notes/a.md"]);
+        assert.ok(first);
+        const basenameForm: MessageAttachment = { ...first, name: "a.md" };
+        // 带 action 时 name 必须是 MessageAttachmentSchema.storageName(path)，basename 形态 100% 抛错。
+        assert.throws(() => messageAttachmentsSchema.parse([basenameForm]));
+    });
 
-  it("重复路径按 seen key 去重（含相对写法与带前导 / 的同形路径）", () => {
-    const built = fromPaths(["notes/a.md", "/notes/a.md", "notes/a.md", "notes/b.md"]);
-    assert.equal(built.length, 2);
-    assert.deepEqual(built.map((a) => a.path), ["/notes/a.md", "/notes/b.md"]);
-  });
+    it("重复路径按 seen key 去重（含相对写法与带前导 / 的同形路径）", () => {
+        const built = fromPaths(["notes/a.md", "/notes/a.md", "notes/a.md", "notes/b.md"]);
+        assert.equal(built.length, 2);
+        assert.deepEqual(built.map((a) => a.path), ["/notes/a.md", "/notes/b.md"]);
+    });
 
-  it("目录 / 图片 / 二进制形态分派保留（type + 落库 path 形态）", () => {
-    const built = fromPaths(["notes/", "pic.png", "data.bin"]);
-    assert.equal(built.length, 3);
-    assert.equal(built[0]!.type, "dir");
-    assert.equal(built[0]!.path, "/notes/");
-    assert.equal(built[0]!.name, "/notes/");
-    assert.equal(built[1]!.type, "image");
-    assert.equal(built[1]!.path, "/pic.png");
-    assert.equal(built[2]!.type, "text");
-    assert.equal(built[2]!.path, "/data.bin");
-    for (const a of built) {
-      assert.equal(a.action, "userAttach");
-      assert.equal(a.content, null);
-      assert.equal(a.name, MessageAttachmentSchema.storageName(a.path));
-    }
-  });
+    it("目录 / 图片 / 二进制形态分派保留（type + 落库 path 形态）", () => {
+        const built = fromPaths(["notes/", "pic.png", "data.bin"]);
+        assert.equal(built.length, 3);
+        assert.equal(built[0]!.type, "dir");
+        assert.equal(built[0]!.path, "/notes/");
+        assert.equal(built[0]!.name, "/notes/");
+        assert.equal(built[1]!.type, "image");
+        assert.equal(built[1]!.path, "/pic.png");
+        assert.equal(built[2]!.type, "text");
+        assert.equal(built[2]!.path, "/data.bin");
+        for (const a of built) {
+            assert.equal(a.action, "userAttach");
+            assert.equal(a.content, null);
+            assert.equal(a.name, MessageAttachmentSchema.storageName(a.path));
+        }
+    });
 
-  it("空串 / 纯空白元素返回 CHAT_INVALID_ARGUMENT（调用方转 ToolError）", () => {
-    for (const paths of [["notes/a.md", ""], ["   "]]) {
-      const r = attachmentScanner.fromPaths(paths);
-      assert.equal(r.ok, false);
-      if (r.ok) continue;
-      assert.equal(r.error.key, "CHAT_INVALID_ARGUMENT");
-      assert.match(renderError(r.error), /附件路径/);
-      assert.equal(r.error.details?.path, paths[paths.length - 1]);
-    }
-  });
+    it("空串 / 纯空白元素返回 CHAT_INVALID_ARGUMENT（调用方转 ToolError）", () => {
+        for (const paths of [["notes/a.md", ""], ["   "]]) {
+            const r = AttachmentScanner.fromPaths(paths);
+            assert.equal(r.ok, false);
+            if (r.ok) continue;
+            assert.equal(r.error.key, "CHAT_INVALID_ARGUMENT");
+            assert.match(renderError(r.error), /附件路径/);
+            assert.equal(r.error.details?.path, paths[paths.length - 1]);
+        }
+    });
 
-  it("路径穿越写法返回 CHAT_INVALID_ARGUMENT（不再抛旧 VfsError / AttachmentPathArgumentError）", () => {
-    const r = attachmentScanner.fromPaths(["/../evil"]);
-    assert.equal(r.ok, false);
-    if (r.ok) return;
-    assert.equal(r.error.key, "CHAT_INVALID_ARGUMENT");
-    assert.match(renderError(r.error), /Invalid path/);
-    assert.equal(r.error.details?.path, "/../evil");
-  });
+    it("路径穿越写法返回 CHAT_INVALID_ARGUMENT（不再抛旧 VfsError / AttachmentPathArgumentError）", () => {
+        const r = AttachmentScanner.fromPaths(["/../evil"]);
+        assert.equal(r.ok, false);
+        if (r.ok) return;
+        assert.equal(r.error.key, "CHAT_INVALID_ARGUMENT");
+        assert.match(renderError(r.error), /Invalid path/);
+        assert.equal(r.error.details?.path, "/../evil");
+    });
 
-  it("空列表 → 空数组（不抛）", () => {
-    assert.deepEqual(fromPaths([]), []);
-  });
+    it("空列表 → 空数组（不抛）", () => {
+        assert.deepEqual(fromPaths([]), []);
+    });
 });
 
 describe("F-A4: mobile 双终止符明文 `@path@` 在 core 扫描下照常可用（实现零改动）", () => {
-  it("`@notes/a.md@` → /notes/a.md；目录尾 `@notes/@` → /notes/", () => {
-    const file = attachmentScanner.scanAtPaths("看 @notes/a.md@ 谢谢");
-    assert.equal(file.length, 1);
-    assert.equal(file[0]!.source, "attach");
-    assert.equal(file[0]!.path, "/notes/a.md");
+    it("`@notes/a.md@` → /notes/a.md；目录尾 `@notes/@` → /notes/", () => {
+        const file = AttachmentScanner.scanAtPaths("看 @notes/a.md@ 谢谢");
+        assert.equal(file.length, 1);
+        assert.equal(file[0]!.source, "attach");
+        assert.equal(file[0]!.path, "/notes/a.md");
 
-    const dir = attachmentScanner.scanAtPaths("搬 @notes/@ 好了");
-    assert.equal(dir.length, 1);
-    assert.equal(dir[0]!.path, "/notes/");
-  });
+        const dir = AttachmentScanner.scanAtPaths("搬 @notes/@ 好了");
+        assert.equal(dir.length, 1);
+        assert.equal(dir[0]!.path, "/notes/");
+    });
 });
 
 /** 错误用户可见文案：带 messageKey 时经 tCore 渲染（G1-G3 descriptor 契约），否则回退 message。 */
 function renderError(error: unknown): string {
-  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
-  return textOf(error);
+    const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
+    return textOf(error);
 }
 
 /** 含 cause 链（ToolError 包装 AppError 时 messageKey 在 cause 上）。 */
 function textOf(error: unknown): string {
-  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
-  if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
-  if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
-  return e.message;
+    const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
+    if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
+    if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
+    return e.message;
 }

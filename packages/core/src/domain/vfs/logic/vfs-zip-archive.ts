@@ -23,28 +23,28 @@ const EOCD_MAX_COMMENT_BYTES = 0xffff;
 type ZipArchiveCheckDepth = "magic" | "complete";
 
 export const VfsZipArchive = {
-  /**
+    /**
    * 校验 ZIP 归档字节。
    *
    * `"magic"` 认 `PK\x03\x04`（本地文件头）/ `PK\x05\x06`（空归档）/
    * `PK\x07\x08`（spanned）；`"complete"` 在其上自文件尾向前回扫 EOCD
    * （`PK\x05\x06`），用于发现截断或损坏的归档。
    */
-  assert(bytes: Uint8Array, depth: ZipArchiveCheckDepth): Result<void, AppError<"VFS_ZIP_INVALID_ARCHIVE">> {
-    const hasMagic = bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b && (bytes[2] === 0x03 || bytes[2] === 0x05 || bytes[2] === 0x07) && (bytes[3] === 0x04 || bytes[3] === 0x06 || bytes[3] === 0x08);
-    if (!hasMagic) {
-      return Result.err(new AppError("VFS_ZIP_INVALID_ARCHIVE", { detail: `not a ZIP archive (${bytes.length} bytes)` }));
-    }
-    if (depth === "magic") {
-      return Result.ok(undefined);
-    }
-    const searchStart = Math.max(0, bytes.length - (EOCD_MIN_BYTES + EOCD_MAX_COMMENT_BYTES));
-    for (let i = bytes.length - EOCD_MIN_BYTES; i >= searchStart; i--) {
-      const sig = (bytes[i]! | (bytes[i + 1]! << 8) | (bytes[i + 2]! << 16) | (bytes[i + 3]! << 24)) >>> 0;
-      if (sig === EOCD_SIGNATURE) {
-        return Result.ok(undefined);
-      }
-    }
-    return Result.err(new AppError("VFS_ZIP_INVALID_ARCHIVE", { detail: `ZIP archive incomplete or corrupt (${bytes.length} bytes, missing EOCD)` }));
-  },
+    assert(bytes: Uint8Array, depth: ZipArchiveCheckDepth): Result<void, AppError<"VFS_ZIP_INVALID_ARCHIVE">> {
+        const hasMagic = bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b && (bytes[2] === 0x03 || bytes[2] === 0x05 || bytes[2] === 0x07) && (bytes[3] === 0x04 || bytes[3] === 0x06 || bytes[3] === 0x08);
+        if (!hasMagic) {
+            return Result.err(new AppError("VFS_ZIP_INVALID_ARCHIVE", { detail: `not a ZIP archive (${bytes.length} bytes)` }));
+        }
+        if (depth === "magic") {
+            return Result.ok(undefined);
+        }
+        const searchStart = Math.max(0, bytes.length - (EOCD_MIN_BYTES + EOCD_MAX_COMMENT_BYTES));
+        for (let i = bytes.length - EOCD_MIN_BYTES; i >= searchStart; i--) {
+            const sig = (bytes[i]! | (bytes[i + 1]! << 8) | (bytes[i + 2]! << 16) | (bytes[i + 3]! << 24)) >>> 0;
+            if (sig === EOCD_SIGNATURE) {
+                return Result.ok(undefined);
+            }
+        }
+        return Result.err(new AppError("VFS_ZIP_INVALID_ARCHIVE", { detail: `ZIP archive incomplete or corrupt (${bytes.length} bytes, missing EOCD)` }));
+    },
 } as const;

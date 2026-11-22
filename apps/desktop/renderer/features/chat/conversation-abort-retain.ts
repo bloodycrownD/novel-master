@@ -1,28 +1,25 @@
 import type {
-  AgentRunFinishedPayload,
-  AgentStepCommittedPayload,
+    AgentRunFinishedPayload,
+    AgentStepCommittedPayload,
 } from "@shared/logic/events";
 import { RunLifecycle } from "@shared/logic/agent";
 import { ipcMessagesAppend } from "@/ipc/client";
 import { flushAgentStepUi } from "./flush-run-ui";
 
 export type AbortRetainLifecycle = {
-  getUiRunning(): boolean;
-  getTranscriptFreezeCount(): number | null;
-  getAbortRetainPending(): boolean;
-  clearAbortRetainPending(): void;
+    getUiRunning(): boolean;
+    getTranscriptFreezeCount(): number | null;
+    getAbortRetainPending(): boolean;
+    clearAbortRetainPending(): void;
 };
 
 /** Stream delta ingress：Composer 停态后丢弃迟到 delta。 */
 export function shouldAcceptStreamIngress(uiRunning: boolean): boolean {
-  return uiRunning;
+    return uiRunning;
 }
 
-export function stepCommittedShouldReload(
-  lifecycle: AbortRetainLifecycle,
-  phase: AgentStepCommittedPayload["phase"],
-): boolean {
-  return RunLifecycle.shouldApply(lifecycle.getUiRunning(), lifecycle.getTranscriptFreezeCount(), phase === "assistant" ? {abortRetainPending: lifecycle.getAbortRetainPending(), phase: "assistant"} : undefined);
+export function stepCommittedShouldReload( lifecycle: AbortRetainLifecycle, phase: AgentStepCommittedPayload["phase"] ): boolean {
+    return RunLifecycle.shouldApply(lifecycle.getUiRunning(), lifecycle.getTranscriptFreezeCount(), phase === "assistant" ? {abortRetainPending: lifecycle.getAbortRetainPending(), phase: "assistant"} : undefined);
 }
 
 /**
@@ -38,92 +35,76 @@ export function stepCommittedShouldReload(
  * 三者叠加的结果是：用户消息已落库、composer 正文已清空、面板永不刷新 =
  * 消息凭空消失。强制全量 reload 是这里唯一安全且充分的收口。
  */
-export function shouldReloadOnRunFinished(
-  uiRunning: boolean,
-  freezeCount: number | null,
-  runId: string,
-): boolean {
-  return (
-    runId === "" || RunLifecycle.shouldApply(uiRunning, freezeCount)
-  );
+export function shouldReloadOnRunFinished( uiRunning: boolean, freezeCount: number | null, runId: string ): boolean {
+    return (
+        runId === "" || RunLifecycle.shouldApply(uiRunning, freezeCount)
+    );
 }
 
 export async function commitAbortOverlayFallbackIfNeeded(options: {
-  sessionId: string;
-  streamingText: string;
-  reloadMessages: () => void | Promise<void>;
+    sessionId: string;
+    streamingText: string;
+    reloadMessages: () => void | Promise<void>;
 }): Promise<void> {
-  const text = options.streamingText.trim();
-  if (text.length === 0) {
-    return;
-  }
-  await ipcMessagesAppend({
-    sessionId: options.sessionId,
-    role: "assistant",
-    text,
-  });
-  await options.reloadMessages();
-}
-
-export function handleStepCommittedAbortRetain(
-  payload: AgentStepCommittedPayload,
-  lifecycle: AbortRetainLifecycle,
-  reloadMessages: () => void | Promise<void>,
-  onStreamReset: () => void,
-): void {
-  if (!stepCommittedShouldReload(lifecycle, payload.phase)) {
-    return;
-  }
-  const abortRetainReload =
-    payload.phase === "assistant" && lifecycle.getAbortRetainPending();
-  void flushAgentStepUi(
-    payload.phase,
-    reloadMessages,
-    abortRetainReload ? () => undefined : onStreamReset,
-  )
-    .catch(() => undefined)
-    .finally(() => {
-      if (abortRetainReload) {
-        lifecycle.clearAbortRetainPending();
-        onStreamReset();
-      }
+    const text = options.streamingText.trim();
+    if (text.length === 0) {
+        return;
+    }
+    await ipcMessagesAppend({
+        sessionId: options.sessionId,
+        role: "assistant",
+        text,
     });
+    await options.reloadMessages();
 }
 
-export function handleRunFinishedAbortRetain(
-  payload: AgentRunFinishedPayload,
-  lifecycle: AbortRetainLifecycle,
-  options: {
+export function handleStepCommittedAbortRetain( payload: AgentStepCommittedPayload, lifecycle: AbortRetainLifecycle, reloadMessages: () => void | Promise<void>, onStreamReset: () => void ): void {
+    if (!stepCommittedShouldReload(lifecycle, payload.phase)) {
+        return;
+    }
+    const abortRetainReload = payload.phase === "assistant" && lifecycle.getAbortRetainPending();
+    void flushAgentStepUi( payload.phase, reloadMessages, abortRetainReload ? () => undefined : onStreamReset )
+        .catch(() => undefined)
+        .finally(() => {
+            if (abortRetainReload) {
+                lifecycle.clearAbortRetainPending();
+                onStreamReset();
+            }
+        });
+}
+
+type RunFinishedAbortRetainOptions = {
     finishUiRun: (payload: AgentRunFinishedPayload) => boolean;
     shouldReloadAfterFinish: boolean;
     streamingText: string;
     sessionId: string;
     reloadMessages: () => void | Promise<void>;
     onStreamReset: () => void;
-  },
-): boolean {
-  if (!options.finishUiRun(payload)) {
-    return false;
-  }
-  if (lifecycle.getAbortRetainPending()) {
-    void commitAbortOverlayFallbackIfNeeded({
-      sessionId: options.sessionId,
-      streamingText: options.streamingText,
-      reloadMessages: options.reloadMessages,
-    })
-      .then(() => {
-        lifecycle.clearAbortRetainPending();
+};
+
+export function handleRunFinishedAbortRetain( payload: AgentRunFinishedPayload, lifecycle: AbortRetainLifecycle, options: RunFinishedAbortRetainOptions ): boolean {
+    if (!options.finishUiRun(payload)) {
+        return false;
+    }
+    if (lifecycle.getAbortRetainPending()) {
+        void commitAbortOverlayFallbackIfNeeded({
+            sessionId: options.sessionId,
+            streamingText: options.streamingText,
+            reloadMessages: options.reloadMessages,
+        })
+            .then(() => {
+                lifecycle.clearAbortRetainPending();
+                options.onStreamReset();
+            })
+            .catch(() => {
+                lifecycle.clearAbortRetainPending();
+                options.onStreamReset();
+            });
+    } else {
         options.onStreamReset();
-      })
-      .catch(() => {
-        lifecycle.clearAbortRetainPending();
-        options.onStreamReset();
-      });
-  } else {
-    options.onStreamReset();
-  }
-  if (options.shouldReloadAfterFinish) {
-    void options.reloadMessages();
-  }
-  return true;
+    }
+    if (options.shouldReloadAfterFinish) {
+        void options.reloadMessages();
+    }
+    return true;
 }

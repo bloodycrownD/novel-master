@@ -52,39 +52,39 @@ const log = LogFactory.create("tokenizer.session-api-store");
  * 按 0 处理，值原样使用。
  */
 interface SessionApiPromptTokenEntry {
-  readonly promptTokens: number;
-  readonly atMs: number;
-  readonly savedModelId?: string;
-  readonly anchorSeq?: number;
+    readonly promptTokens: number;
+    readonly atMs: number;
+    readonly savedModelId?: string;
+    readonly anchorSeq?: number;
 }
 
 export const SessionApiPromptTokenEntry = {
-  /** 可选指纹字段：非空字符串才带上该键（缺省即无该指纹）。 */
-  optionalSavedModelId: (savedModelId: string | undefined): { savedModelId?: string } =>
-    savedModelId != null && savedModelId.length > 0
-      ? { savedModelId }
-      : {},
+    /** 可选指纹字段：非空字符串才带上该键（缺省即无该指纹）。 */
+    optionalSavedModelId: (savedModelId: string | undefined): { savedModelId?: string } =>
+        savedModelId != null && savedModelId.length > 0
+            ? { savedModelId }
+            : {},
 
-  /** 可选增量锚点：有限数且 ≥ 0 才带上（缺省即无锚点、读口不加增量）。 */
-  optionalAnchorSeq: (anchorSeq: number | undefined): { anchorSeq?: number } =>
-    anchorSeq != null && Number.isFinite(anchorSeq) && anchorSeq >= 0
-      ? { anchorSeq }
-      : {},
+    /** 可选增量锚点：有限数且 ≥ 0 才带上（缺省即无锚点、读口不加增量）。 */
+    optionalAnchorSeq: (anchorSeq: number | undefined): { anchorSeq?: number } =>
+        anchorSeq != null && Number.isFinite(anchorSeq) && anchorSeq >= 0
+            ? { anchorSeq }
+            : {},
 
-  /**
+    /**
    * 序列化为 session KKV 值（紧凑 JSON）。
    *
    * nm-style: keep-local — 可选指纹/锚点的省略规则是落库格式契约，写口与测试共用
    */
-  serialize: (entry: SessionApiPromptTokenEntry): string =>
-    JSON.stringify({
-      promptTokens: entry.promptTokens,
-      atMs: entry.atMs,
-      ...SessionApiPromptTokenEntry.optionalSavedModelId(entry.savedModelId),
-      ...SessionApiPromptTokenEntry.optionalAnchorSeq(entry.anchorSeq),
-    }),
+    serialize: (entry: SessionApiPromptTokenEntry): string =>
+        JSON.stringify({
+            promptTokens: entry.promptTokens,
+            atMs: entry.atMs,
+            ...SessionApiPromptTokenEntry.optionalSavedModelId(entry.savedModelId),
+            ...SessionApiPromptTokenEntry.optionalAnchorSeq(entry.anchorSeq),
+        }),
 
-  /**
+    /**
    * 解析 session KKV 值；缺失 / 损坏 / `promptTokens` 非有限数或为负 /
    * `atMs` 缺失或非有限数 → 一律 null（读口据此回退本地估算）。可选指纹
    * `savedModelId` 只在类型正确且非空时带上。
@@ -100,45 +100,45 @@ export const SessionApiPromptTokenEntry = {
    *
    * nm-style: keep-local — 「缺 atMs/promptTokens 即整体 miss」是读口径契约，读口与测试共用
    */
-  parse: (raw: string | null | undefined): SessionApiPromptTokenEntry | null => {
-    if (raw == null || raw.length === 0) {
-      return null;
-    }
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      return null;
-    }
-    if (parsed == null || typeof parsed !== "object") {
-      return null;
-    }
-    const { promptTokens, atMs, savedModelId, anchorSeq } = parsed as Partial<Record<keyof SessionApiPromptTokenEntry, unknown>>;
-    if (
-      typeof promptTokens !== "number" ||
-      !Number.isFinite(promptTokens) ||
-      promptTokens < 0
-    ) {
-      return null;
-    }
-    if (typeof atMs !== "number" || !Number.isFinite(atMs)) {
-      return null;
-    }
-    return {
-      promptTokens,
-      atMs,
-      ...(typeof savedModelId === "string" && savedModelId.length > 0
-        ? { savedModelId }
-        : {}),
-      ...(typeof anchorSeq === "number" &&
-      Number.isFinite(anchorSeq) &&
-      anchorSeq >= 0
-        ? { anchorSeq }
-        : {}),
-    };
-  },
+    parse: (raw: string | null | undefined): SessionApiPromptTokenEntry | null => {
+        if (raw == null || raw.length === 0) {
+            return null;
+        }
+        let parsed: unknown;
+        try {
+            parsed = JSON.parse(raw);
+        } catch {
+            return null;
+        }
+        if (parsed == null || typeof parsed !== "object") {
+            return null;
+        }
+        const { promptTokens, atMs, savedModelId, anchorSeq } = parsed as Partial<Record<keyof SessionApiPromptTokenEntry, unknown>>;
+        if (
+            typeof promptTokens !== "number" ||
+            !Number.isFinite(promptTokens) ||
+            promptTokens < 0
+        ) {
+            return null;
+        }
+        if (typeof atMs !== "number" || !Number.isFinite(atMs)) {
+            return null;
+        }
+        return {
+            promptTokens,
+            atMs,
+            ...(typeof savedModelId === "string" && savedModelId.length > 0
+                ? { savedModelId }
+                : {}),
+            ...(typeof anchorSeq === "number" &&
+            Number.isFinite(anchorSeq) &&
+            anchorSeq >= 0
+                ? { anchorSeq }
+                : {}),
+        };
+    },
 
-  /**
+    /**
    * 读一条 prompt 占用值：进程内 Map 命中即返回（热路径零 IO）；miss 时读
    * session KKV 并回填 Map，让后续 step 的压缩评估走热层。
    *
@@ -147,66 +147,66 @@ export const SessionApiPromptTokenEntry = {
    *
    * nm-style: keep-local — 与 write/invalidate 成对的 store 读口，KKV 读失败按 miss 的降级口径单点
    */
-  read: async (sessionKkv: SessionKkvService | null | undefined, sessionId: string): Promise<SessionApiPromptTokenEntry | null> => {
-    const hot = sessionApiPromptTokenCache.get(sessionId);
-    if (hot != null) {
-      return {
-        promptTokens: hot.promptTokens,
-        atMs: hot.updatedAt,
-        ...SessionApiPromptTokenEntry.optionalSavedModelId(hot.savedModelId),
-        ...SessionApiPromptTokenEntry.optionalAnchorSeq(hot.anchorSeq),
-      };
-    }
-    if (sessionKkv == null) {
-      return null;
-    }
+    read: async (sessionKkv: SessionKkvService | null | undefined, sessionId: string): Promise<SessionApiPromptTokenEntry | null> => {
+        const hot = sessionApiPromptTokenCache.get(sessionId);
+        if (hot != null) {
+            return {
+                promptTokens: hot.promptTokens,
+                atMs: hot.updatedAt,
+                ...SessionApiPromptTokenEntry.optionalSavedModelId(hot.savedModelId),
+                ...SessionApiPromptTokenEntry.optionalAnchorSeq(hot.anchorSeq),
+            };
+        }
+        if (sessionKkv == null) {
+            return null;
+        }
 
-    let raw: string | null;
-    try {
-      raw = await sessionKkv.get(sessionId, SESSION_KKV_DOMAIN_PROMPT_TOKENS, PROMPT_TOKENS_LAST_USAGE_KEY);
-    } catch (error) {
-      // 展示/判定派生值：库异常按 miss 处理，让读口回退本地估算，不打断 run。
-      log.warn(`KKV 读取失败（session=${sessionId}）`, { error });
-      return null;
-    }
+        let raw: string | null;
+        try {
+            raw = await sessionKkv.get(sessionId, SESSION_KKV_DOMAIN_PROMPT_TOKENS, PROMPT_TOKENS_LAST_USAGE_KEY);
+        } catch (error) {
+            // 展示/判定派生值：库异常按 miss 处理，让读口回退本地估算，不打断 run。
+            log.warn(`KKV 读取失败（session=${sessionId}）`, { error });
+            return null;
+        }
 
-    const entry = SessionApiPromptTokenEntry.parse(raw);
-    if (entry == null) {
-      return null;
-    }
-    sessionApiPromptTokenCache.set(sessionId, {
-      promptTokens: entry.promptTokens,
-      updatedAt: entry.atMs,
-      ...SessionApiPromptTokenEntry.optionalSavedModelId(entry.savedModelId),
-      ...SessionApiPromptTokenEntry.optionalAnchorSeq(entry.anchorSeq),
-    });
-    return entry;
-  },
+        const entry = SessionApiPromptTokenEntry.parse(raw);
+        if (entry == null) {
+            return null;
+        }
+        sessionApiPromptTokenCache.set(sessionId, {
+            promptTokens: entry.promptTokens,
+            updatedAt: entry.atMs,
+            ...SessionApiPromptTokenEntry.optionalSavedModelId(entry.savedModelId),
+            ...SessionApiPromptTokenEntry.optionalAnchorSeq(entry.anchorSeq),
+        });
+        return entry;
+    },
 
-  /**
+    /**
    * 写一条 prompt 占用值：同步写进程内热层，KKV 侧 fire-and-forget。
    *
    * KKV 写失败只记 warn——展示派生值，失败只丢「跨重启保持同一口径」这一
    * 好处（下一次 completed run 会重写），不该让 run 收尾链冒泡错误。
    */
-  write: (sessionKkv: SessionKkvService | null | undefined, sessionId: string, entry: SessionApiPromptTokenEntry): void => {
-    sessionApiPromptTokenCache.set(sessionId, {
-      promptTokens: entry.promptTokens,
-      updatedAt: entry.atMs,
-      ...SessionApiPromptTokenEntry.optionalSavedModelId(entry.savedModelId),
-      ...SessionApiPromptTokenEntry.optionalAnchorSeq(entry.anchorSeq),
-    });
-    if (sessionKkv == null) {
-      return;
-    }
-    const payload = SessionApiPromptTokenEntry.serialize(entry);
-    const write = sessionKkv.set(sessionId, SESSION_KKV_DOMAIN_PROMPT_TOKENS, PROMPT_TOKENS_LAST_USAGE_KEY, payload);
-    void write.catch((error) => {
-      log.warn(`KKV 写入失败（session=${sessionId}）`, { error });
-    });
-  },
+    write: (sessionKkv: SessionKkvService | null | undefined, sessionId: string, entry: SessionApiPromptTokenEntry): void => {
+        sessionApiPromptTokenCache.set(sessionId, {
+            promptTokens: entry.promptTokens,
+            updatedAt: entry.atMs,
+            ...SessionApiPromptTokenEntry.optionalSavedModelId(entry.savedModelId),
+            ...SessionApiPromptTokenEntry.optionalAnchorSeq(entry.anchorSeq),
+        });
+        if (sessionKkv == null) {
+            return;
+        }
+        const payload = SessionApiPromptTokenEntry.serialize(entry);
+        const write = sessionKkv.set(sessionId, SESSION_KKV_DOMAIN_PROMPT_TOKENS, PROMPT_TOKENS_LAST_USAGE_KEY, payload);
+        void write.catch((error) => {
+            log.warn(`KKV 写入失败（session=${sessionId}）`, { error });
+        });
+    },
 
-  /**
+    /**
    * 失效一条 prompt 占用值：进程内 Map 与 session KKV 行双删。
    *
    * 凡改变「当前可见 prompt」或模型绑定、应丢弃陈旧 API 占用的路径，成功后
@@ -221,15 +221,15 @@ export const SessionApiPromptTokenEntry = {
    * 唯一该保持 fire-and-forget 的是 `agent-runner` 的 run 收尾两处（run 收尾
    * 不等 IO），那里显式写 `void` + 注释标明意图。
    */
-  invalidate: async (sessionKkv: SessionKkvService | null | undefined, sessionId: string): Promise<void> => {
-    sessionApiPromptTokenCache.invalidate(sessionId);
-    if (sessionKkv == null) {
-      return;
-    }
-    try {
-      await sessionKkv.delete(sessionId, SESSION_KKV_DOMAIN_PROMPT_TOKENS, PROMPT_TOKENS_LAST_USAGE_KEY);
-    } catch (error) {
-      log.warn(`KKV 删除失败（session=${sessionId}）`, { error });
-    }
-  },
+    invalidate: async (sessionKkv: SessionKkvService | null | undefined, sessionId: string): Promise<void> => {
+        sessionApiPromptTokenCache.invalidate(sessionId);
+        if (sessionKkv == null) {
+            return;
+        }
+        try {
+            await sessionKkv.delete(sessionId, SESSION_KKV_DOMAIN_PROMPT_TOKENS, PROMPT_TOKENS_LAST_USAGE_KEY);
+        } catch (error) {
+            log.warn(`KKV 删除失败（session=${sessionId}）`, { error });
+        }
+    },
 } as const;

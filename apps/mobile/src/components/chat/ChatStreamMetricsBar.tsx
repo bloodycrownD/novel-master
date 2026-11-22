@@ -8,69 +8,70 @@
 import React from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import {type AgentStreamMetricsView, AgentStreamMetrics} from '@/hooks/useAgentStreamMetrics';
+import {coreT} from '@/i18n/core';
 import {useTheme} from '@/theme/ThemeProvider';
 
 type Props = {
-  metrics: AgentStreamMetricsView;
-  /**
+    metrics: AgentStreamMetricsView;
+    /**
    * 中断现场的冻结指标（Step 7）：为 true 时文案前缀「已中断 ·」——
    * PRD「状态为已中断」的正面可感知标识，不动 webview 协议。
    */
-  readonly interrupted?: boolean;
-  /** 点击指标条打开用量详情 sheet（metric-detail-sheet）；不传则禁用按压。 */
-  readonly onPress?: () => void;
+    readonly interrupted?: boolean;
+    /** 点击指标条打开用量详情 sheet（metric-detail-sheet）；不传则禁用按压。 */
+    readonly onPress?: () => void;
 };
 
 export function ChatStreamMetricsBar({
-  metrics,
-  interrupted,
-  onPress,
+    metrics,
+    interrupted,
+    onPress,
 }: Props) {
-  const {tokens} = useTheme();
-  const line = AgentStreamMetrics.buildChatLine(metrics);
+    const {tokens} = useTheme();
+    const line = AgentStreamMetrics.buildChatLine(metrics);
 
-  return (
-    <Pressable
-      disabled={!onPress}
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={`流式指标，${line}`}
-      style={({pressed}) => [
-        styles.bar,
-        {backgroundColor: tokens.bgSecondary},
-        pressed && styles.pressed,
-      ]}
-    >
-      {interrupted ? (
-        <Text style={[styles.badge, {color: tokens.danger}]}>已中断</Text>
-      ) : null}
-      <Text
-        style={[styles.line, {color: tokens.textSecondary}]}
-        numberOfLines={2}
-      >
-        {line}
-      </Text>
-    </Pressable>
-  );
+    return (
+        <Pressable
+            disabled={!onPress}
+            onPress={onPress}
+            accessibilityRole="button"
+            accessibilityLabel={coreT({key: "ui.stats.metrics_bar_aria", params: {line}})}
+            style={({pressed}) => [
+                styles.bar,
+                {backgroundColor: tokens.bgSecondary},
+                pressed && styles.pressed,
+            ]}
+        >
+            {interrupted ? (
+                <Text style={[styles.badge, {color: tokens.danger}]}>{coreT({key: "ui.transcript.tool_status.interrupted"})}</Text>
+            ) : null}
+            <Text
+                style={[styles.line, {color: tokens.textSecondary}]}
+                numberOfLines={2}
+            >
+                {line}
+            </Text>
+        </Pressable>
+    );
 }
 
 const styles = StyleSheet.create({
-  bar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-  },
-  pressed: {opacity: 0.5},
-  badge: {
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: '600',
-  },
-  line: {
-    flex: 1,
-    fontSize: 12,
-    lineHeight: 17,
-  },
+    bar: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        paddingHorizontal: 16,
+        paddingVertical: 6,
+    },
+    pressed: {opacity: 0.5},
+    badge: {
+        fontSize: 12,
+        lineHeight: 17,
+        fontWeight: '600',
+    },
+    line: {
+        flex: 1,
+        fontSize: 12,
+        lineHeight: 17,
+    },
 });

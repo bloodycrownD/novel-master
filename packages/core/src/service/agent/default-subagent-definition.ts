@@ -17,16 +17,16 @@ import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
  * 注册工具可用。
  */
 export const DEFAULT_SUBAGENT_DEFINITION: AgentDefinition = {
-  name: "general",
-  description: "通用助手，可以读写文件、搜索内容，完成主代理委派的任务。",
-  mode: "subagent",
-  prompts: {
-    system: "你是一个通用助手，可以读写文件、搜索内容，完成主代理委派的任务。",
-    persist: [],
-    dynamic: [],
-    // 常驻工作区开启：子 agent 每轮注入 <workplace> 前缀（按父工作区规则评估、
-    // 快照存子 session 自己的 KKV）。确记语沿用 DEFAULT_WORKPLACE_ASSISTANT_TEXT。
-    workplace: "i have seen workplace",
-  },
-  tools: undefined,
+    name: "general",
+    description: "通用助手，可以读写文件、搜索内容，完成主代理委派的任务。",
+    mode: "subagent",
+    prompts: {
+        system: "你是一个通用助手，可以读写文件、搜索内容，完成主代理委派的任务。",
+        persist: [],
+        dynamic: [],
+        // 常驻工作区开启：子 agent 每轮注入 <workplace> 前缀（按父工作区规则评估、
+        // 快照存子 session 自己的 KKV）。确记语沿用 DEFAULT_WORKPLACE_ASSISTANT_TEXT。
+        workplace: "i have seen workplace",
+    },
+    tools: undefined,
 };

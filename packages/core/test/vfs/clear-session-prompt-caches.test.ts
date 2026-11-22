@@ -17,97 +17,97 @@ import {  LogFactory  } from "@novel-master/core/log";
 import type { LogRecord } from "@novel-master/core/log";
 
 afterEach(() => {
-  sessionApiPromptTokenCache.clearAll();
+    sessionApiPromptTokenCache.clearAll();
 });
 
 describe("clearSessionPromptCaches", () => {
-  it("清空 rule_snapshot/file_cache 并 invalidate token cache，保留 user_vfs_pending", async () => {
-    const kkv = createMemorySessionKkv();
-    const sessionId = "s-clear-ok";
-    await kkv.set(sessionId, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, "canon", "snap");
-    await kkv.set(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/a.md", "a");
-    await kkv.set(
-      sessionId,
-      SESSION_KKV_DOMAIN_USER_VFS_PENDING,
-      "queue",
-      "[]",
-    );
-    sessionApiPromptTokenCache.set(sessionId, {
-      promptTokens: 42,
-      updatedAt: Date.now(),
-    });
-    assert.ok(sessionApiPromptTokenCache.get(sessionId) != null);
+    it("清空 rule_snapshot/file_cache 并 invalidate token cache，保留 user_vfs_pending", async () => {
+        const kkv = createMemorySessionKkv();
+        const sessionId = "s-clear-ok";
+        await kkv.set(sessionId, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, "canon", "snap");
+        await kkv.set(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/a.md", "a");
+        await kkv.set(
+            sessionId,
+            SESSION_KKV_DOMAIN_USER_VFS_PENDING,
+            "queue",
+            "[]",
+        );
+        sessionApiPromptTokenCache.set(sessionId, {
+            promptTokens: 42,
+            updatedAt: Date.now(),
+        });
+        assert.ok(sessionApiPromptTokenCache.get(sessionId) != null);
 
-    await SessionPromptCaches.clear(sessionId, kkv);
+        await SessionPromptCaches.clear(sessionId, kkv);
 
-    assert.deepEqual(
-      await kkv.listKeys(sessionId, SESSION_KKV_DOMAIN_RULE_SNAPSHOT),
-      [],
-    );
-    assert.deepEqual(
-      await kkv.listKeys(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE),
-      [],
-    );
-    assert.equal(
-      await kkv.get(sessionId, SESSION_KKV_DOMAIN_USER_VFS_PENDING, "queue"),
-      "[]",
-    );
-    assert.equal(sessionApiPromptTokenCache.get(sessionId), undefined);
-  });
-
-  it("第四件：工具调用数缓存失效写哨兵空串（cr-fix-spec-r2 s3/C-3）", async () => {
-    const kkv = createMemorySessionKkv();
-    const sessionId = "s-clear-tool-use";
-    await kkv.set(
-      sessionId,
-      SESSION_KKV_DOMAIN_USAGE_STATS,
-      USAGE_STATS_TOOL_USE_COUNT_KEY,
-      "12",
-    );
-
-    await SessionPromptCaches.clear(sessionId, kkv);
-
-    // 哨兵语义（s3/B-1）：键在、值非数字（parseInt("")=NaN 当 miss）——
-    // 与 delete 不同，读口靠它复核「原值仍等于 miss 时所见」防陈旧回写。
-    const value = await kkv.get(
-      sessionId,
-      SESSION_KKV_DOMAIN_USAGE_STATS,
-      USAGE_STATS_TOOL_USE_COUNT_KEY,
-    );
-    assert.equal(value, "");
-    assert.ok(Number.isNaN(Number.parseInt(value ?? "", 10)));
-  });
-
-  it("clearDomain 抛错时吞错 + warn 日志，且短路后续步骤不抛出", async () => {
-    const boom: SessionKkvService = Object.assign(createMemorySessionKkv(), {
-      clearDomain: async (): Promise<void> => {
-        throw new Error("kkv-boom");
-      },
-    });
-    const sessionId = "s-clear-boom";
-    await boom.set(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/a.md", "a");
-    sessionApiPromptTokenCache.set(sessionId, {
-      promptTokens: 7,
-      updatedAt: Date.now(),
+        assert.deepEqual(
+            await kkv.listKeys(sessionId, SESSION_KKV_DOMAIN_RULE_SNAPSHOT),
+            [],
+        );
+        assert.deepEqual(
+            await kkv.listKeys(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE),
+            [],
+        );
+        assert.equal(
+            await kkv.get(sessionId, SESSION_KKV_DOMAIN_USER_VFS_PENDING, "queue"),
+            "[]",
+        );
+        assert.equal(sessionApiPromptTokenCache.get(sessionId), undefined);
     });
 
-    const records: LogRecord[] = [];
-    LogFactory.setDefaultSink({ write: (record) => records.push(record) });
-    try {
-      await assert.doesNotReject(SessionPromptCaches.clear(sessionId, boom));
-    } finally {
-      LogFactory.restoreDefaultSink();
-    }
+    it("第四件：工具调用数缓存失效写哨兵空串（cr-fix-spec-r2 s3/C-3）", async () => {
+        const kkv = createMemorySessionKkv();
+        const sessionId = "s-clear-tool-use";
+        await kkv.set(
+            sessionId,
+            SESSION_KKV_DOMAIN_USAGE_STATS,
+            USAGE_STATS_TOOL_USE_COUNT_KEY,
+            "12",
+        );
 
-    const warns = records.filter((record) => record.level === "warn");
-    assert.equal(warns.length, 1);
-    assert.equal(warns[0]!.scope, "vfs.clear-session-prompt-caches");
-    assert.match(warns[0]!.message, /清空提示词缓存失败/);
-    // 首步抛错后整体短路：file_cache 未被清、token cache 未被 invalidate
-    assert.deepEqual(
-      await boom.listKeys(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE),
-      ["full:/a.md"],
-    );
-    assert.ok(sessionApiPromptTokenCache.get(sessionId) != null);
-  });
+        await SessionPromptCaches.clear(sessionId, kkv);
+
+        // 哨兵语义（s3/B-1）：键在、值非数字（parseInt("")=NaN 当 miss）——
+        // 与 delete 不同，读口靠它复核「原值仍等于 miss 时所见」防陈旧回写。
+        const value = await kkv.get(
+            sessionId,
+            SESSION_KKV_DOMAIN_USAGE_STATS,
+            USAGE_STATS_TOOL_USE_COUNT_KEY,
+        );
+        assert.equal(value, "");
+        assert.ok(Number.isNaN(Number.parseInt(value ?? "", 10)));
+    });
+
+    it("clearDomain 抛错时吞错 + warn 日志，且短路后续步骤不抛出", async () => {
+        const boom: SessionKkvService = Object.assign(createMemorySessionKkv(), {
+            clearDomain: async (): Promise<void> => {
+                throw new Error("kkv-boom");
+            },
+        });
+        const sessionId = "s-clear-boom";
+        await boom.set(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/a.md", "a");
+        sessionApiPromptTokenCache.set(sessionId, {
+            promptTokens: 7,
+            updatedAt: Date.now(),
+        });
+
+        const records: LogRecord[] = [];
+        LogFactory.setDefaultSink({ write: (record) => records.push(record) });
+        try {
+            await assert.doesNotReject(SessionPromptCaches.clear(sessionId, boom));
+        } finally {
+            LogFactory.restoreDefaultSink();
+        }
+
+        const warns = records.filter((record) => record.level === "warn");
+        assert.equal(warns.length, 1);
+        assert.equal(warns[0]!.scope, "vfs.clear-session-prompt-caches");
+        assert.match(warns[0]!.message, /清空提示词缓存失败/);
+        // 首步抛错后整体短路：file_cache 未被清、token cache 未被 invalidate
+        assert.deepEqual(
+            await boom.listKeys(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE),
+            ["full:/a.md"],
+        );
+        assert.ok(sessionApiPromptTokenCache.get(sessionId) != null);
+    });
 });

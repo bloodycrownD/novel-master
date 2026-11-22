@@ -9,123 +9,123 @@ import {DateTime} from '@novel-master/core/common';
 import {SUMMARY_EMPTY_TEXT, UsageStats} from '@/screens/stack/token-usage/format'
 
 describe('token-usage/format', () => {
-  describe('hitRate', () => {
-    it('分母为 0 返回 null（无 cache 数据，展示空态而非 0）', () => {
-      expect(UsageStats.hitRate(100, 0)).toBeNull();
+    describe('hitRate', () => {
+        it('分母为 0 返回 null（无 cache 数据，展示空态而非 0）', () => {
+            expect(UsageStats.hitRate(100, 0)).toBeNull();
+        });
+
+        it('分母为负返回 null', () => {
+            expect(UsageStats.hitRate(100, -1)).toBeNull();
+        });
+
+        it('正常输入返回比值', () => {
+            expect(UsageStats.hitRate(30, 100)).toBe(0.3);
+            expect(UsageStats.hitRate(0, 100)).toBe(0);
+        });
     });
 
-    it('分母为负返回 null', () => {
-      expect(UsageStats.hitRate(100, -1)).toBeNull();
+    describe('formatHitRate', () => {
+        it('null 显示横杠', () => {
+            expect(UsageStats.formatHitRate(null)).toBe('—');
+        });
+
+        it('百分比取整', () => {
+            expect(UsageStats.formatHitRate(0.256)).toBe('26%');
+            expect(UsageStats.formatHitRate(1)).toBe('100%');
+            expect(UsageStats.formatHitRate(0)).toBe('0%');
+        });
     });
 
-    it('正常输入返回比值', () => {
-      expect(UsageStats.hitRate(30, 100)).toBe(0.3);
-      expect(UsageStats.hitRate(0, 100)).toBe(0);
-    });
-  });
+    describe('isCustomRangeValid', () => {
+        it('同一天有效', () => {
+            expect(
+                UsageStats.isCustomRangeValid(new Date(2026, 0, 1), new Date(2026, 0, 1)),
+            ).toBe(true);
+        });
 
-  describe('formatHitRate', () => {
-    it('null 显示横杠', () => {
-      expect(UsageStats.formatHitRate(null)).toBe('—');
-    });
+        it('十年区间也有效（跨度不设上限，T-M6）', () => {
+            expect(
+                UsageStats.isCustomRangeValid(new Date(2016, 0, 1), new Date(2026, 0, 1)),
+            ).toBe(true);
+        });
 
-    it('百分比取整', () => {
-      expect(UsageStats.formatHitRate(0.256)).toBe('26%');
-      expect(UsageStats.formatHitRate(1)).toBe('100%');
-      expect(UsageStats.formatHitRate(0)).toBe('0%');
-    });
-  });
-
-  describe('isCustomRangeValid', () => {
-    it('同一天有效', () => {
-      expect(
-        UsageStats.isCustomRangeValid(new Date(2026, 0, 1), new Date(2026, 0, 1)),
-      ).toBe(true);
+        it('to 早于 from 无效', () => {
+            expect(
+                UsageStats.isCustomRangeValid(new Date(2026, 0, 10), new Date(2026, 0, 1)),
+            ).toBe(false);
+        });
     });
 
-    it('十年区间也有效（跨度不设上限，T-M6）', () => {
-      expect(
-        UsageStats.isCustomRangeValid(new Date(2016, 0, 1), new Date(2026, 0, 1)),
-      ).toBe(true);
+    describe('resolveRangeDays（RangeKind → 自然日闭区间）', () => {
+        it('today = {D, D}', () => {
+            const now = new Date();
+            expect(UsageStats.resolveRangeDays('today', null, null)).toEqual({
+                fromDay: DateTime.localDayKey(now.getTime()),
+                toDay: DateTime.localDayKey(now.getTime()),
+            });
+        });
+
+        it('last7 = {D-6, D}、last30 = {D-29, D}（日历偏移，T-M2）', () => {
+            const now = new Date();
+            expect(UsageStats.resolveRangeDays('last7', null, null)).toEqual({
+                fromDay: UsageStats.localDayKeyOffset(now, -6),
+                toDay: DateTime.localDayKey(now.getTime()),
+            });
+            expect(UsageStats.resolveRangeDays('last30', null, null)).toEqual({
+                fromDay: UsageStats.localDayKeyOffset(now, -29),
+                toDay: DateTime.localDayKey(now.getTime()),
+            });
+        });
+
+        it('custom 由选择器结果产日期字符串', () => {
+            expect(
+                UsageStats.resolveRangeDays('custom', new Date(2026, 2, 7), new Date(2026, 2, 8)),
+            ).toEqual({fromDay: '2026-03-07', toDay: '2026-03-08'});
+        });
+
+        it('custom 未选定日期时兑底回退近 7 天（类型完备分支）', () => {
+            const now = new Date();
+            expect(UsageStats.resolveRangeDays('custom', null, null)).toEqual({
+                fromDay: UsageStats.localDayKeyOffset(now, -6),
+                toDay: DateTime.localDayKey(now.getTime()),
+            });
+        });
     });
 
-    it('to 早于 from 无效', () => {
-      expect(
-        UsageStats.isCustomRangeValid(new Date(2026, 0, 10), new Date(2026, 0, 1)),
-      ).toBe(false);
-    });
-  });
-
-  describe('resolveRangeDays（RangeKind → 自然日闭区间）', () => {
-    it('today = {D, D}', () => {
-      const now = new Date();
-      expect(UsageStats.resolveRangeDays('today', null, null)).toEqual({
-        fromDay: DateTime.localDayKey(now.getTime()),
-        toDay: DateTime.localDayKey(now.getTime()),
-      });
+    describe('DateTime.localDayKey', () => {
+        it('本地日期补零为 yyyy-MM-dd', () => {
+            expect(DateTime.localDayKey(new Date(2026, 0, 5).getTime())).toBe('2026-01-05');
+            expect(DateTime.localDayKey(new Date(2026, 11, 31).getTime())).toBe(
+                '2026-12-31',
+            );
+        });
     });
 
-    it('last7 = {D-6, D}、last30 = {D-29, D}（日历偏移，T-M2）', () => {
-      const now = new Date();
-      expect(UsageStats.resolveRangeDays('last7', null, null)).toEqual({
-        fromDay: UsageStats.localDayKeyOffset(now, -6),
-        toDay: DateTime.localDayKey(now.getTime()),
-      });
-      expect(UsageStats.resolveRangeDays('last30', null, null)).toEqual({
-        fromDay: UsageStats.localDayKeyOffset(now, -29),
-        toDay: DateTime.localDayKey(now.getTime()),
-      });
+    describe('formatTokensPerSecond', () => {
+        it('null 返回调用方空态文案', () => {
+            expect(UsageStats.formatTokensPerSecond(null, SUMMARY_EMPTY_TEXT)).toBe('—');
+        });
+
+        it('小于 100 保留一位小数', () => {
+            expect(UsageStats.formatTokensPerSecond(12.34, '—')).toBe('12.3 tok/s');
+        });
+
+        it('大于等于 100 取整', () => {
+            expect(UsageStats.formatTokensPerSecond(123.6, '—')).toBe('124 tok/s');
+        });
     });
 
-    it('custom 由选择器结果产日期字符串', () => {
-      expect(
-        UsageStats.resolveRangeDays('custom', new Date(2026, 2, 7), new Date(2026, 2, 8)),
-      ).toEqual({fromDay: '2026-03-07', toDay: '2026-03-08'});
-    });
+    describe('formatFirstTokenMs', () => {
+        it('null 返回调用方空态文案', () => {
+            expect(UsageStats.formatFirstTokenMs(null, SUMMARY_EMPTY_TEXT)).toBe('—');
+        });
 
-    it('custom 未选定日期时兑底回退近 7 天（类型完备分支）', () => {
-      const now = new Date();
-      expect(UsageStats.resolveRangeDays('custom', null, null)).toEqual({
-        fromDay: UsageStats.localDayKeyOffset(now, -6),
-        toDay: DateTime.localDayKey(now.getTime()),
-      });
-    });
-  });
+        it('毫秒级取整展示', () => {
+            expect(UsageStats.formatFirstTokenMs(850, '—')).toBe('850 ms');
+        });
 
-  describe('DateTime.localDayKey', () => {
-    it('本地日期补零为 yyyy-MM-dd', () => {
-      expect(DateTime.localDayKey(new Date(2026, 0, 5).getTime())).toBe('2026-01-05');
-      expect(DateTime.localDayKey(new Date(2026, 11, 31).getTime())).toBe(
-        '2026-12-31',
-      );
+        it('秒级保留一位小数', () => {
+            expect(UsageStats.formatFirstTokenMs(1850, '—')).toBe('1.9 s');
+        });
     });
-  });
-
-  describe('formatTokensPerSecond', () => {
-    it('null 返回调用方空态文案', () => {
-      expect(UsageStats.formatTokensPerSecond(null, SUMMARY_EMPTY_TEXT)).toBe('—');
-    });
-
-    it('小于 100 保留一位小数', () => {
-      expect(UsageStats.formatTokensPerSecond(12.34, '—')).toBe('12.3 tok/s');
-    });
-
-    it('大于等于 100 取整', () => {
-      expect(UsageStats.formatTokensPerSecond(123.6, '—')).toBe('124 tok/s');
-    });
-  });
-
-  describe('formatFirstTokenMs', () => {
-    it('null 返回调用方空态文案', () => {
-      expect(UsageStats.formatFirstTokenMs(null, SUMMARY_EMPTY_TEXT)).toBe('—');
-    });
-
-    it('毫秒级取整展示', () => {
-      expect(UsageStats.formatFirstTokenMs(850, '—')).toBe('850 ms');
-    });
-
-    it('秒级保留一位小数', () => {
-      expect(UsageStats.formatFirstTokenMs(1850, '—')).toBe('1.9 s');
-    });
-  });
 });

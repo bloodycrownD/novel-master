@@ -36,103 +36,108 @@ type RunStateWritethroughWriteFn = (state: SessionRunState) => Promise<void>;
 
 /** 写通 coalescer 实例（三态语义见模块注释）。 */
 export interface RunStateWritethrough {
-  /** 全量快照暂存 + 节流调度（大载荷自动升到慢档）。 */
-  append(state: SessionRunState): void;
-  /** 立即写（同步发起；无待写数据 no-op；dispose 后 no-op）。 */
-  flush(): void;
-  /** 丢弃未写数据并停用（此后一切方法 no-op）。 */
-  dispose(): void;
-  /** 是否已停用（诊断/测试用）。 */
-  isDisposed(): boolean;
-  /** 是否有待写数据（诊断/测试用）。 */
-  hasPending(): boolean;
+    /** 全量快照暂存 + 节流调度（大载荷自动升到慢档）。 */
+    append(state: SessionRunState): void;
+    /** 立即写（同步发起；无待写数据 no-op；dispose 后 no-op）。 */
+    flush(): void;
+    /** 丢弃未写数据并停用（此后一切方法 no-op）。 */
+    dispose(): void;
+    /** 是否已停用（诊断/测试用）。 */
+    isDisposed(): boolean;
+    /** 是否有待写数据（诊断/测试用）。 */
+    hasPending(): boolean;
 }
 
 /** 估算单次载荷大小（字符数）：partial 两段 + pending 链接 JSON。 */
 type RunStateWritethroughOptions = {
-  /** 正常档间隔（测试可覆盖）。 */
-  readonly intervalMs?: number;
-  /** 慢档间隔（测试可覆盖）。 */
-  readonly slowIntervalMs?: number;
-  /** 大载荷阈值字符数（测试可覆盖）。 */
-  readonly largePayloadChars?: number;
+    /** 正常档间隔（测试可覆盖）。 */
+    readonly intervalMs?: number;
+    /** 慢档间隔（测试可覆盖）。 */
+    readonly slowIntervalMs?: number;
+    /** 大载荷阈值字符数（测试可覆盖）。 */
+    readonly largePayloadChars?: number;
+};
+
+/** 写通 coalescer 的共享状态槽：timer/scheduledMs 是被重绑的调度游标，pending 是待写快照，disposed 是僵尸写防御闸。 */
+type RunStateWritethroughSlot = {
+    pending: SessionRunState | null;
+    timer: ReturnType<typeof setTimeout> | null;
+    /** 当前定时器的档位（毫秒）：仅当新载荷要求更慢的档时才重排。 */
+    scheduledMs: number;
+    disposed: boolean;
 };
 
 export namespace RunStateWritethrough {
-  export function create(write: RunStateWritethroughWriteFn, options?: RunStateWritethroughOptions): RunStateWritethrough {
-    const intervalMs = options?.intervalMs ?? RUN_STATE_WRITETHROUGH_INTERVAL_MS;
-    const slowIntervalMs = options?.slowIntervalMs ?? RUN_STATE_WRITETHROUGH_SLOW_INTERVAL_MS;
-    const largePayloadChars = options?.largePayloadChars ?? RUN_STATE_WRITETHROUGH_LARGE_PAYLOAD_CHARS;
-
-    let pending: SessionRunState | null = null;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    /** 当前定时器的档位（毫秒）：仅当新载荷要求更慢的档时才重排。 */
-    let scheduledMs = 0;
-    let disposed = false;
-
-    const clearTimer = (): void => {
-      if (timer != null) {
-        clearTimeout(timer);
-        timer = null;
-      }
-      scheduledMs = 0;
-    };
+    function clearTimer(slot: RunStateWritethroughSlot): void {
+        if (slot.timer != null) {
+            clearTimeout(slot.timer);
+            slot.timer = null;
+        }
+        slot.scheduledMs = 0;
+    }
 
     /** 定时到期/flush 的共同落点：取走 pending 并同步发起写（吞错留日志）。 */
-    const writeNow = (): void => {
-      timer = null;
-      scheduledMs = 0;
-      if (pending == null) {
-        return;
-      }
-      const state = pending;
-      pending = null;
-      write(state).catch(err => {
-        console.error('[novel-master/run-state-writethrough] write failed', err);
-      });
-    };
-
-    return {
-      append(state: SessionRunState): void {
-        if (disposed) {
-          return;
+    function writeNow(slot: RunStateWritethroughSlot, write: RunStateWritethroughWriteFn): void {
+        slot.timer = null;
+        slot.scheduledMs = 0;
+        if (slot.pending == null) {
+            return;
         }
-        pending = state;
-        const payloadChars = (state.partialText?.length ?? 0) + (state.partialThinking?.length ?? 0) + (state.pendingChildrenJson?.length ?? 0);
-        const wantMs = payloadChars > largePayloadChars ? slowIntervalMs : intervalMs;
-        if (timer == null) {
-          timer = setTimeout(writeNow, wantMs);
-          scheduledMs = wantMs;
-        } else if (wantMs > scheduledMs) {
-          // 载荷变大 → 升到慢档重排（推迟写，防写放大）；变小则等本轮到期
-          // 后自然恢复快档，不做提前重排。
-          clearTimer();
-          timer = setTimeout(writeNow, wantMs);
-          scheduledMs = wantMs;
-        }
-      },
+        const state = slot.pending;
+        slot.pending = null;
+        write(state).catch(err => {
+            console.error('[novel-master/run-state-writethrough] write failed', err);
+        });
+    }
 
-      flush(): void {
-        if (disposed) {
-          return;
-        }
-        clearTimer();
-        writeNow();
-      },
+    export function create(write: RunStateWritethroughWriteFn, options?: RunStateWritethroughOptions): RunStateWritethrough {
+        const intervalMs = options?.intervalMs ?? RUN_STATE_WRITETHROUGH_INTERVAL_MS;
+        const slowIntervalMs = options?.slowIntervalMs ?? RUN_STATE_WRITETHROUGH_SLOW_INTERVAL_MS;
+        const largePayloadChars = options?.largePayloadChars ?? RUN_STATE_WRITETHROUGH_LARGE_PAYLOAD_CHARS;
 
-      dispose(): void {
-        clearTimer();
-        pending = null;
-        disposed = true;
-      },
+        const slot: RunStateWritethroughSlot = {pending: null, timer: null, scheduledMs: 0, disposed: false};
 
-      isDisposed(): boolean {
-        return disposed;
-      },
+        return {
+            append(state: SessionRunState): void {
+                if (slot.disposed) {
+                    return;
+                }
+                slot.pending = state;
+                const payloadChars = (state.partialText?.length ?? 0) + (state.partialThinking?.length ?? 0) + (state.pendingChildrenJson?.length ?? 0);
+                const wantMs = payloadChars > largePayloadChars ? slowIntervalMs : intervalMs;
+                if (slot.timer == null) {
+                    slot.timer = setTimeout(() => writeNow(slot, write), wantMs);
+                    slot.scheduledMs = wantMs;
+                } else if (wantMs > slot.scheduledMs) {
+                    // 载荷变大 → 升到慢档重排（推迟写，防写放大）；变小则等本轮到期
+                    // 后自然恢复快档，不做提前重排。
+                    clearTimer(slot);
+                    slot.timer = setTimeout(() => writeNow(slot, write), wantMs);
+                    slot.scheduledMs = wantMs;
+                }
+            },
 
-      hasPending(): boolean {
-        return pending != null;
-      },
-    };
-  }
+            flush(): void {
+                if (slot.disposed) {
+                    return;
+                }
+                clearTimer(slot);
+                writeNow(slot, write);
+            },
+
+            dispose(): void {
+                clearTimer(slot);
+                slot.pending = null;
+                slot.disposed = true;
+            },
+
+            isDisposed(): boolean {
+                return slot.disposed;
+            },
+
+            hasPending(): boolean {
+                return slot.pending != null;
+            },
+        };
+    }
 }

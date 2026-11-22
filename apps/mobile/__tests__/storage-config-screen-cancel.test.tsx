@@ -29,219 +29,219 @@ const mockGetCloudSyncLocalStatus = jest.fn<() => Promise<unknown>>();
 const mockExportMobileLogs = jest.fn();
 
 jest.mock('@/theme/ThemeProvider', () => ({
-  useTheme: () => ({
-    tokens: {
-      background: '#fff',
-      surface: '#f5f5f5',
-      text: '#111',
-      textSecondary: '#666',
-      textTertiary: '#999',
-      border: '#ddd',
-      bgSecondary: '#eee',
-      primary: '#007aff',
-      danger: '#f00',
-      warning: '#a60',
-      warningMuted: '#fee',
-      success: '#0a0',
-    },
-  }),
+    useTheme: () => ({
+        tokens: {
+            background: '#fff',
+            surface: '#f5f5f5',
+            text: '#111',
+            textSecondary: '#666',
+            textTertiary: '#999',
+            border: '#ddd',
+            bgSecondary: '#eee',
+            primary: '#007aff',
+            danger: '#f00',
+            warning: '#a60',
+            warningMuted: '#fee',
+            success: '#0a0',
+        },
+    }),
 }));
 
 jest.mock('@/components/chrome/ToastHost', () => ({
-  useToast: () => ({showToast: mockShowToast}),
+    useToast: () => ({showToast: mockShowToast}),
 }));
 
 jest.mock('@/hooks/useRuntime', () => ({
-  useRuntime: () => ({abortRegistry: {abort: mockAbort}}),
+    useRuntime: () => ({abortRegistry: {abort: mockAbort}}),
 }));
 
 jest.mock('@/runtime/novel-master-context', () => ({
-  useNovelMaster: () => ({retry: mockRetry}),
+    useNovelMaster: () => ({retry: mockRetry}),
 }));
 
 jest.mock('@react-navigation/native', () => ({
-  useFocusEffect: () => undefined,
-  useNavigation: () => ({navigate: mockNavigate}),
+    useFocusEffect: () => undefined,
+    useNavigation: () => ({navigate: mockNavigate}),
 }));
 
 jest.mock('@/runtime/agent-activity', () => ({
-  agentActivity: {isActive: () => false, subscribe: () => () => undefined},
+    agentActivity: {isActive: () => false, subscribe: () => () => undefined},
 }));
 
 jest.mock('@/services/db-backup.service', () => {
-  const legacy = {
-  exportDatabaseBackup: (..._args: unknown[]) => mockExportDatabaseBackup(),
-  importDatabaseBackup: (..._args: unknown[]) => mockImportDatabaseBackup(),
+    const legacy = {
+    exportDatabaseBackup: (..._args: unknown[]) => mockExportDatabaseBackup(),
+    importDatabaseBackup: (..._args: unknown[]) => mockImportDatabaseBackup(),
 };
-  return {...legacy, DbBackupService: {exportViaPicker: legacy.exportDatabaseBackup, importViaPicker: legacy.importDatabaseBackup}};
+    return {...legacy, DbBackupService: {exportViaPicker: legacy.exportDatabaseBackup, importViaPicker: legacy.importDatabaseBackup}};
 });
 
 jest.mock('@/services/db-maintenance.service', () => ({
-  DbMaintenanceService: {
-    getStats: (..._args: unknown[]) => mockGetDatabaseMaintenanceStats(),
-    run: (..._args: unknown[]) => mockRunDatabaseMaintenance(),
-  },
+    DbMaintenanceService: {
+        getStats: (..._args: unknown[]) => mockGetDatabaseMaintenanceStats(),
+        run: (..._args: unknown[]) => mockRunDatabaseMaintenance(),
+    },
 }));
 
 jest.mock('@/services/log-export', () => {
-  const legacy = {
-  exportMobileLogs: (..._args: unknown[]) => mockExportMobileLogs(),
+    const legacy = {
+    exportMobileLogs: (..._args: unknown[]) => mockExportMobileLogs(),
 };
-  return {...legacy, LogExport: {export: legacy.exportMobileLogs}};
+    return {...legacy, LogExport: {export: legacy.exportMobileLogs}};
 });
 
 jest.mock('@/services/cloud-sync-config.store', () => {
-  const legacy = {
-  getCloudSyncLocalStatus: (..._args: unknown[]) => mockGetCloudSyncLocalStatus(),
+    const legacy = {
+    getCloudSyncLocalStatus: (..._args: unknown[]) => mockGetCloudSyncLocalStatus(),
 };
-  return {...legacy, CloudSyncConfigStore: {getLocalStatus: legacy.getCloudSyncLocalStatus}};
+    return {...legacy, CloudSyncConfigStore: {getLocalStatus: legacy.getCloudSyncLocalStatus}};
 });
 
 jest.mock('@/components/profile/ProfileStatusCard', () => ({
-  ProfileStatusCard: () => null,
+    ProfileStatusCard: () => null,
 }));
 
 jest.mock('@/components/profile/ProfileMenuItem', () => {
-  const mockReact = require('react');
-  const {Pressable} = require('react-native');
-  return {
-    ProfileMenuItem: (props: {label: string; value?: string; onPress: () => void}) =>
-      mockReact.createElement(Pressable, {
-        testID: `menu-${props.label}`,
-        value: props.value,
-        onPress: props.onPress,
-      }),
-  };
+    const mockReact = require('react');
+    const {Pressable} = require('react-native');
+    return {
+        ProfileMenuItem: (props: {label: string; value?: string; onPress: () => void}) =>
+            mockReact.createElement(Pressable, {
+                testID: `menu-${props.label}`,
+                value: props.value,
+                onPress: props.onPress,
+            }),
+    };
 });
 
 beforeEach(() => {
-  jest.clearAllMocks();
-  mockGetDatabaseMaintenanceStats.mockResolvedValue({
-    ok: true,
-    value: {fileBytes: 2048, reclaimableBytes: 1024},
-  });
-  mockGetCloudSyncLocalStatus.mockResolvedValue({
-    ok: true,
-    value: {configured: false},
-  });
+    jest.clearAllMocks();
+    mockGetDatabaseMaintenanceStats.mockResolvedValue({
+        ok: true,
+        value: {fileBytes: 2048, reclaimableBytes: 1024},
+    });
+    mockGetCloudSyncLocalStatus.mockResolvedValue({
+        ok: true,
+        value: {configured: false},
+    });
 });
 
 afterEach(() => {
-  jest.restoreAllMocks();
+    jest.restoreAllMocks();
 });
 
 function renderScreen(): TestRenderer.ReactTestRenderer {
-  let renderer!: TestRenderer.ReactTestRenderer;
-  act(() => {
-    renderer = TestRenderer.create(<StorageConfigScreen />);
-  });
-  return renderer;
+    let renderer!: TestRenderer.ReactTestRenderer;
+    act(() => {
+        renderer = TestRenderer.create(<StorageConfigScreen />);
+    });
+    return renderer;
 }
 
 function pressMenuItem(renderer: TestRenderer.ReactTestRenderer, label: string): void {
-  act(() => {
-    renderer.root.findByProps({testID: `menu-${label}`}).props.onPress();
-  });
+    act(() => {
+        renderer.root.findByProps({testID: `menu-${label}`}).props.onPress();
+    });
 }
 
 /** 触发 Alert 二次确认里的指定按钮（导出无 Alert，导入/清理有）。 */
 function confirmAlert(buttonText: string): void {
-  jest.spyOn(Alert, 'alert').mockImplementation((_title, _message, buttons) => {
-    buttons?.find(button => button.text === buttonText)?.onPress?.();
-  });
+    jest.spyOn(Alert, 'alert').mockImplementation((_title, _message, buttons) => {
+        buttons?.find(button => button.text === buttonText)?.onPress?.();
+    });
 }
 
 describe('StorageConfigScreen 长任务取消入口 — Step 14', () => {
-  it('导出数据库在途显示取消入口，点击调 backup("local") abort，取消后静默复位', async () => {
-    let rejectExport!: (error: unknown) => void;
-    mockExportDatabaseBackup.mockImplementation(
-      () =>
-        new Promise((_resolve, reject) => {
-          rejectExport = reject;
-        }),
-    );
+    it('导出数据库在途显示取消入口，点击调 backup("local") abort，取消后静默复位', async () => {
+        let rejectExport!: (error: unknown) => void;
+        mockExportDatabaseBackup.mockImplementation(
+            () =>
+                new Promise((_resolve, reject) => {
+                    rejectExport = reject;
+                }),
+        );
 
-    const renderer = renderScreen();
-    pressMenuItem(renderer, '导出数据库');
-    expect(mockExportDatabaseBackup).toHaveBeenCalledTimes(1);
+        const renderer = renderScreen();
+        pressMenuItem(renderer, '导出数据库');
+        expect(mockExportDatabaseBackup).toHaveBeenCalledTimes(1);
 
-    const cancel = renderer.root.findByProps({testID: 'menu-取消'});
-    expect(cancel.props.value).toBe('导出数据库');
-    act(() => {
-      cancel.props.onPress();
-    });
-    expect(mockAbort).toHaveBeenCalledTimes(1);
-    expect(mockAbort).toHaveBeenCalledWith(ABORT_KEY.backup('local'));
+        const cancel = renderer.root.findByProps({testID: 'menu-取消'});
+        expect(cancel.props.value).toBe('导出数据库');
+        act(() => {
+            cancel.props.onPress();
+        });
+        expect(mockAbort).toHaveBeenCalledTimes(1);
+        expect(mockAbort).toHaveBeenCalledWith(ABORT_KEY.backup('local'));
 
-    await act(async () => {
-      rejectExport(AbortError.create());
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+        await act(async () => {
+            rejectExport(AbortError.create());
+            await Promise.resolve();
+            await Promise.resolve();
+        });
 
-    expect(renderer.root.findAllByProps({testID: 'menu-取消'})).toHaveLength(0);
-    expect(renderer.root.findByProps({testID: 'menu-导出数据库'}).props.value).toBe('分享备份文件');
-    expect(mockShowToast).not.toHaveBeenCalled();
-  });
-
-  it('导入数据库在途同样可取消，取消不弹错误提示', async () => {
-    let rejectImport!: (error: unknown) => void;
-    mockImportDatabaseBackup.mockImplementation(
-      () =>
-        new Promise((_resolve, reject) => {
-          rejectImport = reject;
-        }),
-    );
-    confirmAlert('继续选择文件');
-
-    const renderer = renderScreen();
-    pressMenuItem(renderer, '导入数据库');
-    expect(mockImportDatabaseBackup).toHaveBeenCalledTimes(1);
-
-    const cancel = renderer.root.findByProps({testID: 'menu-取消'});
-    expect(cancel.props.value).toBe('导入数据库');
-    act(() => {
-      cancel.props.onPress();
-    });
-    expect(mockAbort).toHaveBeenCalledWith(ABORT_KEY.backup('local'));
-
-    await act(async () => {
-      rejectImport(AbortError.create());
-      await Promise.resolve();
-      await Promise.resolve();
+        expect(renderer.root.findAllByProps({testID: 'menu-取消'})).toHaveLength(0);
+        expect(renderer.root.findByProps({testID: 'menu-导出数据库'}).props.value).toBe('分享备份文件');
+        expect(mockShowToast).not.toHaveBeenCalled();
     });
 
-    expect(renderer.root.findAllByProps({testID: 'menu-取消'})).toHaveLength(0);
-    expect(mockShowToast).not.toHaveBeenCalled();
-  });
+    it('导入数据库在途同样可取消，取消不弹错误提示', async () => {
+        let rejectImport!: (error: unknown) => void;
+        mockImportDatabaseBackup.mockImplementation(
+            () =>
+                new Promise((_resolve, reject) => {
+                    rejectImport = reject;
+                }),
+        );
+        confirmAlert('继续选择文件');
 
-  it('数据清理在途不提供取消入口（VACUUM 不可中断）', async () => {
-    let resolveCleanup!: (value: unknown) => void;
-    mockRunDatabaseMaintenance.mockImplementation(
-      () =>
-        new Promise(resolve => {
-          resolveCleanup = resolve;
-        }),
-    );
-    confirmAlert('开始清理');
+        const renderer = renderScreen();
+        pressMenuItem(renderer, '导入数据库');
+        expect(mockImportDatabaseBackup).toHaveBeenCalledTimes(1);
 
-    const renderer = renderScreen();
-    pressMenuItem(renderer, '数据清理');
-    expect(mockRunDatabaseMaintenance).toHaveBeenCalledTimes(1);
-    // backupBusy 为空：清理在途不出现任何取消入口。
-    expect(renderer.root.findAllByProps({testID: 'menu-取消'})).toHaveLength(0);
+        const cancel = renderer.root.findByProps({testID: 'menu-取消'});
+        expect(cancel.props.value).toBe('导入数据库');
+        act(() => {
+            cancel.props.onPress();
+        });
+        expect(mockAbort).toHaveBeenCalledWith(ABORT_KEY.backup('local'));
 
-    await act(async () => {
-      resolveCleanup({ok: true, value: {beforeBytes: 2048, afterBytes: 1024}});
-      await Promise.resolve();
-      await Promise.resolve();
+        await act(async () => {
+            rejectImport(AbortError.create());
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+
+        expect(renderer.root.findAllByProps({testID: 'menu-取消'})).toHaveLength(0);
+        expect(mockShowToast).not.toHaveBeenCalled();
     });
-    expect(mockAbort).not.toHaveBeenCalled();
-    expect(renderer.root.findAllByProps({testID: 'menu-取消'})).toHaveLength(0);
-  });
 
-  it('取消入口文案走 settings.long_task.cancel descriptor（双端共享同一 key）', () => {
-    const source = readFileSync(join(__dirname, '../src/screens/stack/StorageConfigScreen.tsx'), 'utf8');
-    expect(source).toMatch(/settingsTranslator\(\{key: 'settings\.long_task\.cancel'\}\)/);
-  });
+    it('数据清理在途不提供取消入口（VACUUM 不可中断）', async () => {
+        let resolveCleanup!: (value: unknown) => void;
+        mockRunDatabaseMaintenance.mockImplementation(
+            () =>
+                new Promise(resolve => {
+                    resolveCleanup = resolve;
+                }),
+        );
+        confirmAlert('开始清理');
+
+        const renderer = renderScreen();
+        pressMenuItem(renderer, '数据清理');
+        expect(mockRunDatabaseMaintenance).toHaveBeenCalledTimes(1);
+        // backupBusy 为空：清理在途不出现任何取消入口。
+        expect(renderer.root.findAllByProps({testID: 'menu-取消'})).toHaveLength(0);
+
+        await act(async () => {
+            resolveCleanup({ok: true, value: {beforeBytes: 2048, afterBytes: 1024}});
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        expect(mockAbort).not.toHaveBeenCalled();
+        expect(renderer.root.findAllByProps({testID: 'menu-取消'})).toHaveLength(0);
+    });
+
+    it('取消入口文案走 settings.long_task.cancel descriptor（双端共享同一 key）', () => {
+        const source = readFileSync(join(__dirname, '../src/screens/stack/StorageConfigScreen.tsx'), 'utf8');
+        expect(source).toMatch(/settingsTranslator\(\{key: 'settings\.long_task\.cancel'\}\)/);
+    });
 });

@@ -18,14 +18,7 @@
  *   一致；usage 到达后按 ①「基线 + 增量」口径。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  SlidingTokenRate,
-  StreamTokenAnchor,
-  formatStreamMetricsLineText,
-  type IncrementalTokenCounter,
-  type StreamTokenSource,
-  type TokenRateSampler,
-} from "@shared/logic/format";
+import { SlidingTokenRate, StreamTokenAnchor, formatStreamMetricsLineText, type IncrementalTokenCounter, type StreamTokenSource, type TokenRateSampler } from "@shared/logic/format";
 import { CHARACTERS_PER_TOKEN_RATIO } from "@shared/logic/provider";
 
 /**
@@ -36,35 +29,33 @@ import { CHARACTERS_PER_TOKEN_RATIO } from "@shared/logic/provider";
 type AgentStreamTokenSource = StreamTokenSource;
 
 /** 实时 token 估算器工厂（不注入 = 启发式；返回 null = 回退启发式）。 */
-type AgentStreamEstimatorFactory = () =>
-  | IncrementalTokenCounter
-  | null;
+type AgentStreamEstimatorFactory = () => IncrementalTokenCounter | null;
 
 type AgentStreamMetricsSnapshot = {
-  readonly elapsedMs: number;
-  readonly textChars: number;
-  readonly thinkingChars: number;
-  readonly completionTokens: number;
-  readonly tokenSource: AgentStreamTokenSource;
+    readonly elapsedMs: number;
+    readonly textChars: number;
+    readonly thinkingChars: number;
+    readonly completionTokens: number;
+    readonly tokenSource: AgentStreamTokenSource;
 };
 
 export type AgentStreamMetricsView = AgentStreamMetricsSnapshot & {
-  readonly running: boolean;
-  /** 速率（token/秒）：运行中为实时滑窗值；冻结态为收尾末值；null=省略速率段。 */
-  readonly tokensPerSecond: number | null;
+    readonly running: boolean;
+    /** 速率（token/秒）：运行中为实时滑窗值；冻结态为收尾末值；null=省略速率段。 */
+    readonly tokensPerSecond: number | null;
 };
 
 type MetricsAcc = {
-  textChars: number;
-  thinkingChars: number;
-  completionTokens: number;
-  tokenSource: AgentStreamTokenSource;
-  /**
+    textChars: number;
+    thinkingChars: number;
+    completionTokens: number;
+    tokenSource: AgentStreamTokenSource;
+    /**
    * usage 基线（①）：`completionTokens = max(0, baseTokens + 增量估算)`。
    * 未收到 usage 时为 0；usage 到达时重锚为 `真值 − 当时的增量估算`。
    */
-  baseTokens: number;
-  startedAtMs: number;
+    baseTokens: number;
+    startedAtMs: number;
 };
 
 /**
@@ -75,43 +66,36 @@ type MetricsAcc = {
  * 信号——「桌面端指标条一直是启发式数字」这件事此前完全静默（mobile 侧同名
  * 分支有 `console.warn`，双端不对称），真机上零线索。
  */
-let warnedEstimatorFactoryFailure = false;
+const estimatorWarnState = { warned: false };
 
-function snapshotFromAcc(
-  acc: MetricsAcc,
-  elapsedMs: number,
-): AgentStreamMetricsSnapshot {
-  return {
-    elapsedMs,
-    textChars: acc.textChars,
-    thinkingChars: acc.thinkingChars,
-    completionTokens: acc.completionTokens,
-    tokenSource: acc.tokenSource,
-  };
+function snapshotFromAcc(acc: MetricsAcc, elapsedMs: number): AgentStreamMetricsSnapshot {
+    return {
+        elapsedMs,
+        textChars: acc.textChars,
+        thinkingChars: acc.thinkingChars,
+        completionTokens: acc.completionTokens,
+        tokenSource: acc.tokenSource,
+    };
 }
 
-function toView(
-  running: boolean,
-  snap: AgentStreamMetricsSnapshot,
-  tokensPerSecond: number | null,
-): AgentStreamMetricsView {
-  return { ...snap, running, tokensPerSecond };
+function toView(running: boolean, snap: AgentStreamMetricsSnapshot, tokensPerSecond: number | null): AgentStreamMetricsView {
+    return { ...snap, running, tokensPerSecond };
 }
 
 function emptyAcc(): MetricsAcc {
-  return {
-    textChars: 0,
-    thinkingChars: 0,
-    completionTokens: 0,
-    tokenSource: "heuristic",
-    baseTokens: 0,
-    startedAtMs: 0,
-  };
+    return {
+        textChars: 0,
+        thinkingChars: 0,
+        completionTokens: 0,
+        tokenSource: "heuristic",
+        baseTokens: 0,
+        startedAtMs: 0,
+    };
 }
 
 /** heuristic 折算：对累计字符长度取 ceil（全量计数口径）。 */
 function heuristicTokens(totalChars: number): number {
-  return Math.ceil(totalChars / CHARACTERS_PER_TOKEN_RATIO);
+    return Math.ceil(totalChars / CHARACTERS_PER_TOKEN_RATIO);
 }
 
 /**
@@ -121,21 +105,19 @@ function heuristicTokens(totalChars: number): number {
  * null（样本不足）时省略速率段。
  */
 // nm-style: keep-local — use-agent-stream-metrics.test 直引断言文案拼装（5 个调用点）；内联会破坏测试锁名。
-export function buildAgentStreamMetricsLabel(
-  metrics: AgentStreamMetricsView,
-): string {
-  return formatStreamMetricsLineText({
-    running: metrics.running,
-    elapsedMs: metrics.elapsedMs,
-    completionTokens: metrics.completionTokens,
-    tokensPerSecond: metrics.tokensPerSecond ?? null,
-  });
+export function buildAgentStreamMetricsLabel(metrics: AgentStreamMetricsView): string {
+    return formatStreamMetricsLineText({
+        running: metrics.running,
+        elapsedMs: metrics.elapsedMs,
+        completionTokens: metrics.completionTokens,
+        tokensPerSecond: metrics.tokensPerSecond ?? null,
+    });
 }
 
 /** 冻结的「上次生成」快照：末值速率随快照一起冻结（见下 running 翻假的收尾分支）。 */
 type LastRunSnapshot = {
-  readonly snapshot: AgentStreamMetricsSnapshot;
-  readonly tokensPerSecond: number | null;
+    readonly snapshot: AgentStreamMetricsSnapshot;
+    readonly tokensPerSecond: number | null;
 };
 
 /**
@@ -154,24 +136,23 @@ type LastRunSnapshot = {
  * （正文/思考各一条），与指标累积器同批重置。
  */
 // nm-style: keep-local — React hook 本身是状态边界（acc/估算器/采样序列的 ref 生命周期与 250ms tick），use-agent-stream-metrics-hook.test.tsx 动态 import 渲染验证；内联进组件会拆散状态机并破坏测试锁名。
-export function useAgentStreamMetrics(
-  running: boolean,
-  runKey?: string | null,
-  tokenEstimatorFactory?: AgentStreamEstimatorFactory,
-): {
-  readonly metrics: AgentStreamMetricsView | null;
-  readonly noteTextDelta: (delta: string) => void;
-  readonly noteThinkingDelta: (delta: string) => void;
-  readonly noteUsage: (completionTokens: number) => void;
-} {
-  const accRef = useRef<MetricsAcc>(emptyAcc());
-  /** 工厂可能每次渲染换引用：用 ref 取最新值，避免 effect 依赖抖动。 */
-  const estimatorFactoryRef = useRef(tokenEstimatorFactory);
-  estimatorFactoryRef.current = tokenEstimatorFactory;
-  /** 实时 token 估算器（正文/思考各一条；未注入/构造失败为 null）。 */
-  const textEstimatorRef = useRef<IncrementalTokenCounter | null>(null);
-  const thinkingEstimatorRef = useRef<IncrementalTokenCounter | null>(null);
-  /**
+/** hook 的返回契约：metrics 视图 + 三个 delta/usage 记账入口（提名后签名可单行，prettier 对对象字面量返回类型会强拆参数）。 */
+type AgentStreamMetricsHook = {
+    readonly metrics: AgentStreamMetricsView | null;
+    readonly noteTextDelta: (delta: string) => void;
+    readonly noteThinkingDelta: (delta: string) => void;
+    readonly noteUsage: (completionTokens: number) => void;
+};
+
+export function useAgentStreamMetrics(running: boolean, runKey?: string | null, tokenEstimatorFactory?: AgentStreamEstimatorFactory): AgentStreamMetricsHook {
+    const accRef = useRef<MetricsAcc>(emptyAcc());
+    /** 工厂可能每次渲染换引用：用 ref 取最新值，避免 effect 依赖抖动。 */
+    const estimatorFactoryRef = useRef(tokenEstimatorFactory);
+    estimatorFactoryRef.current = tokenEstimatorFactory;
+    /** 实时 token 估算器（正文/思考各一条；未注入/构造失败为 null）。 */
+    const textEstimatorRef = useRef<IncrementalTokenCounter | null>(null);
+    const thinkingEstimatorRef = useRef<IncrementalTokenCounter | null>(null);
+    /**
    * 速率采样序列（core 共用采样器）：token 变化才记样本，校正点重 seed
    * （source 翻转与窗口折叠两种情形；翻转/折叠前末值留作 freeze 回落）。
    * 序列由本 hook 持有——live 与冻结读同一份，冻结值 = 收尾时的末值快照
@@ -180,132 +161,134 @@ export function useAgentStreamMetrics(
    * 惰性初始化：`useRef(createTokenRateSampler())` 每次渲染都会白建一个
    * 采样器再丢弃，改在首次渲染时按需建（ref 稳定，全生命周期复用）。
    */
-  const rateSamplerRef = useRef<TokenRateSampler | null>(null);
-  if (rateSamplerRef.current === null) {
-    rateSamplerRef.current = SlidingTokenRate.createSampler();
-  }
-  const rateSampler: TokenRateSampler = rateSamplerRef.current;
-  const [lastRun, setLastRun] = useState<LastRunSnapshot | null>(null);
-  const [tick, setTick] = useState(0);
-
-  /** 当前增量估算（不含基线）：注入估算器时=正文+思考尾窗估算，否则启发式。 */
-  const estimateIncrementTokens = useCallback((): number => {
-    const text = textEstimatorRef.current;
-    const thinking = thinkingEstimatorRef.current;
-    if (text != null && thinking != null) {
-      return text.tokens + thinking.tokens;
+    const rateSamplerRef = useRef<TokenRateSampler | null>(null);
+    if (rateSamplerRef.current === null) {
+        rateSamplerRef.current = SlidingTokenRate.createSampler();
     }
-    const acc = accRef.current;
-    return heuristicTokens(acc.textChars + acc.thinkingChars);
-  }, []);
+    const rateSampler: TokenRateSampler = rateSamplerRef.current;
+    const [lastRun, setLastRun] = useState<LastRunSnapshot | null>(null);
+    const [tick, setTick] = useState(0);
 
-  /** 重算 `completionTokens = max(0, 基线 + 增量估算)`（delta 归账后调用）。 */
-  const recomputeCompletionTokens = useCallback((): void => {
-    const acc = accRef.current;
-    const inc = estimateIncrementTokens();
-    acc.completionTokens = StreamTokenAnchor.composeTokens(acc.baseTokens, inc);
-  }, [estimateIncrementTokens]);
-
-  useEffect(() => {
-    if (running) {
-      accRef.current = { ...emptyAcc(), startedAtMs: Date.now() };
-      // 新 run：估算器与采样序列一起重 seed（防跨 run 差分污染首个窗口）。
-      const factory = estimatorFactoryRef.current;
-      let text: IncrementalTokenCounter | null = null;
-      let thinking: IncrementalTokenCounter | null = null;
-      if (factory != null) {
-        try {
-          const created = factory();
-          const createdSecond = created == null ? null : factory();
-          if (created != null && createdSecond != null) {
-            text = created;
-            thinking = createdSecond;
-          }
-        } catch (err) {
-          // 估算器构造失败：回退启发式（不阻断指标条）。首次打一条中文告警
-          // （与 mobile 侧 `getOrCreateEncoding` 失败分支对齐），后续同类失败
-          // 静默——回退行为本身不变。
-          if (!warnedEstimatorFactoryFailure) {
-            warnedEstimatorFactoryFailure = true;
-            console.warn(
-              "[novel-master/use-agent-stream-metrics] 估算器构造失败，回退启发式（不阻断指标条）",
-              err,
-            );
-          }
-          text = null;
-          thinking = null;
+    /** 当前增量估算（不含基线）：注入估算器时=正文+思考尾窗估算，否则启发式。 */
+    const estimateIncrementTokens = useCallback((): number => {
+        const text = textEstimatorRef.current;
+        const thinking = thinkingEstimatorRef.current;
+        if (text != null && thinking != null) {
+            return text.tokens + thinking.tokens;
         }
-      }
-      textEstimatorRef.current = text;
-      thinkingEstimatorRef.current = thinking;
-      text?.reset();
-      thinking?.reset();
-      rateSampler.reset();
-      setLastRun(null);
-      const id = setInterval(() => setTick((t) => t + 1), 250);
-      return () => clearInterval(id);
-    }
-    const acc = accRef.current;
-    if (acc.startedAtMs > 0) {
-      setLastRun({
-        snapshot: snapshotFromAcc(acc, Math.max(0, Date.now() - acc.startedAtMs)),
-        tokensPerSecond: rateSampler.freeze(),
-      });
-      accRef.current = emptyAcc();
-    }
-    // 收尾后一并清掉采样序列：冻结值已随 lastRun 取出，序列不再留到下轮。
-    rateSampler.reset();
-    return undefined;
-  }, [running, runKey, rateSampler]);
+        const acc = accRef.current;
+        return heuristicTokens(acc.textChars + acc.thinkingChars);
+    }, []);
 
-  const noteTextDelta = useCallback((delta: string) => {
-    if (delta.length === 0) {
-      return;
-    }
-    const acc = accRef.current;
-    acc.textChars += delta.length;
-    textEstimatorRef.current?.push(delta);
-    recomputeCompletionTokens();
-    rateSampler.sample(acc.completionTokens, acc.tokenSource, Date.now());
-  }, [rateSampler, recomputeCompletionTokens]);
+    /** 重算 `completionTokens = max(0, 基线 + 增量估算)`（delta 归账后调用）。 */
+    const recomputeCompletionTokens = useCallback((): void => {
+        const acc = accRef.current;
+        const inc = estimateIncrementTokens();
+        acc.completionTokens = StreamTokenAnchor.composeTokens(acc.baseTokens, inc);
+    }, [estimateIncrementTokens]);
 
-  const noteThinkingDelta = useCallback((delta: string) => {
-    if (delta.length === 0) {
-      return;
-    }
-    const acc = accRef.current;
-    acc.thinkingChars += delta.length;
-    thinkingEstimatorRef.current?.push(delta);
-    recomputeCompletionTokens();
-    rateSampler.sample(acc.completionTokens, acc.tokenSource, Date.now());
-  }, [rateSampler, recomputeCompletionTokens]);
+    useEffect(() => {
+        if (running) {
+            accRef.current = { ...emptyAcc(), startedAtMs: Date.now() };
+            // 新 run：估算器与采样序列一起重 seed（防跨 run 差分污染首个窗口）。
+            const factory = estimatorFactoryRef.current;
+            let text: IncrementalTokenCounter | null = null;
+            let thinking: IncrementalTokenCounter | null = null;
+            if (factory != null) {
+                try {
+                    const created = factory();
+                    const createdSecond = created == null ? null : factory();
+                    if (created != null && createdSecond != null) {
+                        text = created;
+                        thinking = createdSecond;
+                    }
+                } catch (err) {
+                    // 估算器构造失败：回退启发式（不阻断指标条）。首次打一条中文告警
+                    // （与 mobile 侧 `getOrCreateEncoding` 失败分支对齐），后续同类失败
+                    // 静默——回退行为本身不变。
+                    if (!estimatorWarnState.warned) {
+                        estimatorWarnState.warned = true;
+                        console.warn("[novel-master/use-agent-stream-metrics] 估算器构造失败，回退启发式（不阻断指标条）", err);
+                    }
+                    text = null;
+                    thinking = null;
+                }
+            }
+            textEstimatorRef.current = text;
+            thinkingEstimatorRef.current = thinking;
+            text?.reset();
+            thinking?.reset();
+            rateSampler.reset();
+            setLastRun(null);
+            const id = setInterval(() => setTick((t) => t + 1), 250);
+            return () => clearInterval(id);
+        }
+        const acc = accRef.current;
+        if (acc.startedAtMs > 0) {
+            setLastRun({
+                snapshot: snapshotFromAcc(acc, Math.max(0, Date.now() - acc.startedAtMs)),
+                tokensPerSecond: rateSampler.freeze(),
+            });
+            accRef.current = emptyAcc();
+        }
+        // 收尾后一并清掉采样序列：冻结值已随 lastRun 取出，序列不再留到下轮。
+        rateSampler.reset();
+        return undefined;
+    }, [running, runKey, rateSampler]);
 
-  const noteUsage = useCallback((completionTokens: number) => {
-    if (!Number.isFinite(completionTokens) || completionTokens < 0) {
-      return;
-    }
-    const acc = accRef.current;
-    // 重锚基线：真值成为基线，后续 delta 的增量继续叠加（①）。
-    const inc = estimateIncrementTokens();
-    acc.baseTokens = StreamTokenAnchor.reanchorBase(completionTokens, inc);
-    acc.completionTokens = Math.max(0, completionTokens);
-    acc.tokenSource = "usage";
-    rateSampler.sample(acc.completionTokens, acc.tokenSource, Date.now());
-  }, [rateSampler, estimateIncrementTokens]);
-
-  void tick;
-
-  let metrics: AgentStreamMetricsView | null = null;
-  if (running && accRef.current.startedAtMs > 0) {
-    const elapsedMs = Math.max(0, Date.now() - accRef.current.startedAtMs);
-    metrics = toView(
-      true,
-      snapshotFromAcc(accRef.current, elapsedMs),
-      rateSamplerRef.current.rateAt(Date.now()),
+    const noteTextDelta = useCallback(
+        (delta: string) => {
+            if (delta.length === 0) {
+                return;
+            }
+            const acc = accRef.current;
+            acc.textChars += delta.length;
+            textEstimatorRef.current?.push(delta);
+            recomputeCompletionTokens();
+            rateSampler.sample(acc.completionTokens, acc.tokenSource, Date.now());
+        },
+        [rateSampler, recomputeCompletionTokens]
     );
-  } else if (lastRun != null) {
-    metrics = toView(false, lastRun.snapshot, lastRun.tokensPerSecond);
-  }
 
-  return { metrics, noteTextDelta, noteThinkingDelta, noteUsage };
+    const noteThinkingDelta = useCallback(
+        (delta: string) => {
+            if (delta.length === 0) {
+                return;
+            }
+            const acc = accRef.current;
+            acc.thinkingChars += delta.length;
+            thinkingEstimatorRef.current?.push(delta);
+            recomputeCompletionTokens();
+            rateSampler.sample(acc.completionTokens, acc.tokenSource, Date.now());
+        },
+        [rateSampler, recomputeCompletionTokens]
+    );
+
+    const noteUsage = useCallback(
+        (completionTokens: number) => {
+            if (!Number.isFinite(completionTokens) || completionTokens < 0) {
+                return;
+            }
+            const acc = accRef.current;
+            // 重锚基线：真值成为基线，后续 delta 的增量继续叠加（①）。
+            const inc = estimateIncrementTokens();
+            acc.baseTokens = StreamTokenAnchor.reanchorBase(completionTokens, inc);
+            acc.completionTokens = Math.max(0, completionTokens);
+            acc.tokenSource = "usage";
+            rateSampler.sample(acc.completionTokens, acc.tokenSource, Date.now());
+        },
+        [rateSampler, estimateIncrementTokens]
+    );
+
+    void tick;
+
+    let metrics: AgentStreamMetricsView | null = null;
+    if (running && accRef.current.startedAtMs > 0) {
+        const elapsedMs = Math.max(0, Date.now() - accRef.current.startedAtMs);
+        metrics = toView(true, snapshotFromAcc(accRef.current, elapsedMs), rateSamplerRef.current.rateAt(Date.now()));
+    } else if (lastRun != null) {
+        metrics = toView(false, lastRun.snapshot, lastRun.tokensPerSecond);
+    }
+
+    return { metrics, noteTextDelta, noteThinkingDelta, noteUsage };
 }

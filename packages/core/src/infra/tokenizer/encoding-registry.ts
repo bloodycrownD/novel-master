@@ -47,76 +47,77 @@ const log = LogFactory.create("tokenizer.encoding-registry");
  * 泛型参数让各端拿回自己的具体类型。
  */
 export interface EncodingHandle {
-  encode(text: string): { readonly length: number };
+    encode(text: string): { readonly length: number };
 }
 
 /** 编码表构造器：入参为编码名，返回可共享的句柄；抛错视为构造失败。 */
 type EncodingFactory<T extends EncodingHandle = EncodingHandle> = (
-  encodingName: string,
+    encodingName: string,
 ) => T;
 
 /** 失败缓存的重试 TTL（毫秒）：5 分钟内的重复取用不触发重建。 */
 const ENCODING_RETRY_TTL_MS = 5 * 60 * 1000;
 
 interface RegistryEntry {
-  /** 单例句柄；`null` = 上次构造失败（看 `failedAt` 判断是否允许重试）。 */
-  readonly encoding: EncodingHandle | null;
-  /** 失败时刻（仅 `encoding === null` 时有意义）。 */
-  readonly failedAt: number | null;
+    /** 单例句柄；`null` = 上次构造失败（看 `failedAt` 判断是否允许重试）。 */
+    readonly encoding: EncodingHandle | null;
+    /** 失败时刻（仅 `encoding === null` 时有意义）。 */
+    readonly failedAt: number | null;
 }
 
 /** 编码表缓存：键为 `enc:<encodingName>`。 */
 const encodingByKey = new Map<string, RegistryEntry>();
 
-/**
- * 构造器覆盖钩子（仅测试用）：`null` = 调用方注入真实构造。
- * 设成抛错的函数即可复现「编码表建不起来」这条降级路径。
- */
-let encodingFactory: EncodingFactory | null = null;
-
-/** 时钟（仅测试可通过 {@link EncodingRegistry.setClockForTests} 替换为假时钟）。 */
-// nm-style: keep-local — 可替换时钟是测试冻结时间的状态旋钮（模块级可变量），不是转手 wrapper。
-let clock: () => number = () => Date.now();
+/** registry 的测试旋钮槽（模块内 holder，对象管理）：构造器覆盖与时钟替换。 */
+const registryKnobs = {
+    /**
+   * 构造器覆盖钩子（仅测试用）：`null` = 调用方注入真实构造。
+   * 设成抛错的函数即可复现「编码表建不起来」这条降级路径。
+   */
+    factory: null as EncodingFactory | null,
+    /** 时钟（仅测试可通过 {@link EncodingRegistry.setClockForTests} 替换为假时钟）。 */
+    clock: () => Date.now(),
+};
 
 export const EncodingRegistry = {
-  /**
+    /**
    * 按**编码名**取（单例）编码表；构造失败返回 `null`（TTL 内不重试）。
    *
    * `build` 由调用方注入（各端各自的分词器构造方式）；缓存命中时 `build` 不会被
    * 调用。返回的是**共享句柄**，调用方不得 `free()`（见模块头注释）。
    */
-  get<T extends EncodingHandle>(encodingName: string, build: () => T): T | null {
-    const key = `enc:${encodingName}`;
-    const cached = encodingByKey.get(key);
-    if (cached !== undefined) {
-      if (cached.encoding !== null) {
-        return cached.encoding as T;
-      }
-      // 失败缓存：TTL 未满继续返回 null，不重试。
-      if (
-        cached.failedAt != null &&
-        clock() - cached.failedAt < ENCODING_RETRY_TTL_MS
-      ) {
-        return null;
-      }
-      // 超过 TTL：丢弃失败记录，允许重试。
-      encodingByKey.delete(key);
-    }
+    get<T extends EncodingHandle>(encodingName: string, build: () => T): T | null {
+        const key = `enc:${encodingName}`;
+        const cached = encodingByKey.get(key);
+        if (cached !== undefined) {
+            if (cached.encoding !== null) {
+                return cached.encoding as T;
+            }
+            // 失败缓存：TTL 未满继续返回 null，不重试。
+            if (
+                cached.failedAt != null &&
+                registryKnobs.clock() - cached.failedAt < ENCODING_RETRY_TTL_MS
+            ) {
+                return null;
+            }
+            // 超过 TTL：丢弃失败记录，允许重试。
+            encodingByKey.delete(key);
+        }
 
-    let encoding: T | null = null;
-    let failedAt: number | null = null;
-    try {
-      encoding = (encodingFactory ? encodingFactory(encodingName) : build()) as T;
-    } catch (err) {
-      log.warn(`tiktoken encoding init failed (${key})`, { error: err });
-      encoding = null;
-      failedAt = clock();
-    }
-    encodingByKey.set(key, { encoding, failedAt });
-    return encoding;
-  },
+        let encoding: T | null = null;
+        let failedAt: number | null = null;
+        try {
+            encoding = (registryKnobs.factory ? registryKnobs.factory(encodingName) : build()) as T;
+        } catch (err) {
+            log.warn(`tiktoken encoding init failed (${key})`, { error: err });
+            encoding = null;
+            failedAt = registryKnobs.clock();
+        }
+        encodingByKey.set(key, { encoding, failedAt });
+        return encoding;
+    },
 
-  /**
+    /**
    * 测试钩子：只清空编码表缓存（不动构造器与时钟）。
    *
    * 刻意与 {@link EncodingRegistry.setFactoryForTests} 分开：后者已经会顺带作废缓存，若这里再顺手
@@ -125,24 +126,24 @@ export const EncodingRegistry = {
    *
    * 注意这里**不 `free()`**（见模块头「free 生命周期」）。
    */
-  clearForTests(): void {
-    encodingByKey.clear();
-  },
+    clearForTests(): void {
+        encodingByKey.clear();
+    },
 
-  /**
+    /**
    * 测试钩子：覆盖编码表构造器（传 `null` 还原为调用方注入的 `build`）。
    * 构造器换了，已缓存的表不再由它产出，必须一并作废。
    */
-  setFactoryForTests<T extends EncodingHandle>(factory: EncodingFactory<T> | null): void {
-    encodingFactory = factory as EncodingFactory | null;
-    encodingByKey.clear();
-  },
+    setFactoryForTests<T extends EncodingHandle>(factory: EncodingFactory<T> | null): void {
+        registryKnobs.factory = factory as EncodingFactory | null;
+        encodingByKey.clear();
+    },
 
-  /**
+    /**
    * 测试钩子：替换 TTL 判定用的时钟（传 `null` 还原 `Date.now`）。
    * 仅供需要快进失败重试窗口的用例使用，生产代码不应触碰。
    */
-  setClockForTests(now: (() => number) | null): void {
-    clock = now ?? (() => Date.now());
-  },
+    setClockForTests(now: (() => number) | null): void {
+        registryKnobs.clock = now ?? (() => Date.now());
+    },
 } as const;

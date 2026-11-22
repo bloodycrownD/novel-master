@@ -6,15 +6,15 @@ import {type AppError, Result} from '@novel-master/core/errors';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 
 export namespace ModelDisplayLabel {
-  /** Primary row label: derived displayName (`服务商名称/modelName`). */
-  export async function resolve(runtime: MobileNovelMasterRuntime, savedModelId: string): Promise<Result<string, AppError>> {
-    const saved = await runtime.providerModels.getSavedById(savedModelId);
-    if (!saved.ok) return Result.err(saved.error);
-    if (saved.value == null) {
-      return Result.ok(savedModelId);
+    /** Primary row label: derived displayName (`服务商名称/modelName`). */
+    export async function resolve(runtime: MobileNovelMasterRuntime, savedModelId: string): Promise<Result<string, AppError>> {
+        const saved = await runtime.providerModels.getSavedById(savedModelId);
+        if (!saved.ok) return Result.err(saved.error);
+        if (saved.value == null) {
+            return Result.ok(savedModelId);
+        }
+        const provider = await runtime.providers.get(saved.value.providerId);
+        if (!provider.ok) return Result.err(provider.error);
+        return Result.ok(SavedModelDisplayName.format(provider.value.displayName, saved.value.modelName));
     }
-    const provider = await runtime.providers.get(saved.value.providerId);
-    if (!provider.ok) return Result.err(provider.error);
-    return Result.ok(SavedModelDisplayName.format(provider.value.displayName, saved.value.modelName));
-  }
 }

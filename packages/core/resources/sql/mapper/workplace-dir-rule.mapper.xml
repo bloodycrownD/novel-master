@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  workplace_dir_rule 表的 SQL mapper（DDL 见 resources/sql/schema/workplace.sql）。
+
+  结构约定（与 chat-message.mapper.xml 样板一致）：
+  - 语句 id 与 SqliteWorkplaceRepository 方法同名（camelCase）；列清单走
+    <sql id> 片段 + <include ref> 展开，生成物里每条语句都是完整字面量。
+  - XML 保留字符转义：< 写 &lt;（必须）；> 可保留字面量。
+  - 单条 upsert 用命名占位符，batch 版本走位置占位符 ?（表驱动 batch 接口要求），
+    两者共享 insertColumns 片段，ON CONFLICT 子句两处需同步修改。
+-->
+<mapper namespace="workplace_dir_rule">
+
+  <sql id="selectColumns">scope_key, logical_path, rule_enabled, sort_field, sort_order, head_count, tail_count, fill_policy</sql>
+
+  <sql id="insertColumns">( scope_key, logical_path, rule_enabled, sort_field, sort_order, head_count, tail_count, fill_policy )</sql>
+
+  <insert id="upsertDirRule">
+    INSERT INTO workplace_dir_rule <include ref="insertColumns"/>
+    VALUES ( #{scopeKey}, #{logicalPath}, #{ruleEnabled}, #{sortField}, #{sortOrder}, #{headCount}, #{tailCount},
+    #{fillPolicy} )
+    ON CONFLICT(scope_key, logical_path) DO UPDATE
+    SET rule_enabled = excluded.rule_enabled, sort_field = excluded.sort_field, sort_order = excluded.sort_order,
+    head_count = excluded.head_count, tail_count = excluded.tail_count, fill_policy = excluded.fill_policy
+  </insert>
+
+  <!-- 8 个位置占位符与 insertColumns 列顺序一一对应（conn.batch 逐行绑定）。 -->
+  <insert id="batchUpsertDirRules">
+    INSERT INTO workplace_dir_rule <include ref="insertColumns"/>
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(scope_key, logical_path) DO UPDATE
+    SET rule_enabled = excluded.rule_enabled, sort_field = excluded.sort_field, sort_order = excluded.sort_order,
+    head_count = excluded.head_count, tail_count = excluded.tail_count, fill_policy = excluded.fill_policy
+  </insert>
+
+  <delete id="deleteScope">
+    DELETE
+    FROM workplace_dir_rule
+    WHERE scope_key = #{scopeKey}
+  </delete>
+
+  <select id="listDirRules">
+    SELECT <include ref="selectColumns"/>
+    FROM workplace_dir_rule
+    WHERE scope_key = #{scopeKey}
+  </select>
+
+  <select id="findDirRule">
+    SELECT <include ref="selectColumns"/>
+    FROM workplace_dir_rule
+    WHERE scope_key = #{scopeKey} AND logical_path = #{logicalPath}
+  </select>
+
+  <delete id="deleteRulesUnderLogicalPrefix">
+    DELETE
+    FROM workplace_dir_rule
+    WHERE scope_key = #{scopeKey} AND (logical_path = #{path} OR logical_path LIKE #{childPattern} ESCAPE '\\')
+  </delete>
+
+  <!-- 一条 UPDATE：精确匹配自身（替换为 newBase）或子路径（拼接 newBase + 剩余部分）。 -->
+  <update id="renameRulesUnderLogicalPrefix">
+    UPDATE workplace_dir_rule
+    SET logical_path = CASE WHEN logical_path = #{oldBase} THEN #{newBase} ELSE #{newBase} || substr(logical_path,
+    length(#{oldBase}) + 1) END
+    WHERE scope_key = #{scopeKey} AND (logical_path = #{oldBase} OR logical_path LIKE #{childPattern} ESCAPE '\\')
+  </update>
+
+</mapper>

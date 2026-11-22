@@ -22,7 +22,7 @@ import {fileEditorOnSessionVfsSavedSlot} from '@/components/agent/file-editor-sa
 import {promptTurnDetailSlot} from '@/components/prompt/prompt-turn-callback';
 import {SessionDefaultTitle} from '@/utils/session-default-title';
 import {ChatLinkNav} from './chat-link-nav';
-import {chatLinkResolver} from '@novel-master/core/chat';
+import {ChatLinkResolver} from '@novel-master/core/chat';
 import {Result, AppError} from '@novel-master/core/errors';
 import {coreT} from '@/i18n/core';
 
@@ -35,869 +35,871 @@ export type ConversationPanel = 'chat' | 'workspace';
 
 /** token 标签刷新防抖槽（单槽服务当前会话）。 */
 type ChatTokenSlot = {
-  key: string;
-  hasLabel: boolean;
-  sessionId: string | null;
-  timer: ReturnType<typeof setTimeout> | null;
-  deferred: {
-    promise: Promise<void>;
-    resolve: (value: Promise<void>) => void;
-  } | null;
-  running: Promise<void> | null;
+    key: string;
+    hasLabel: boolean;
+    sessionId: string | null;
+    timer: ReturnType<typeof setTimeout> | null;
+    deferred: {
+        promise: Promise<void>;
+        resolve: (value: Promise<void>) => void;
+    } | null;
+    running: Promise<void> | null;
 };
 
 /** refreshChatMeta 的在途复用槽。 */
 type ChatMetaInflight = {
-  key: string;
-  round: number;
-  promise: Promise<void>;
+    key: string;
+    round: number;
+    promise: Promise<void>;
 };
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 type UseChatTabScopeParams = {
-  runtime: MobileNovelMasterRuntime;
-  projectId: string | undefined;
-  sessionId: string | undefined;
-  setCurrentProject: (projectId: string) => Promise<void>;
-  setCurrentSession: (sessionId: string) => Promise<void>;
-  refreshScope: () => Promise<void>;
-  showToast: (message: string) => void;
-  navigation: Nav;
+    runtime: MobileNovelMasterRuntime;
+    projectId: string | undefined;
+    sessionId: string | undefined;
+    setCurrentProject: (projectId: string) => Promise<void>;
+    setCurrentSession: (sessionId: string) => Promise<void>;
+    refreshScope: () => Promise<void>;
+    showToast: (message: string) => void;
+    navigation: Nav;
 };
 
 export function useChatTabScope({runtime, projectId, sessionId, setCurrentProject, setCurrentSession, refreshScope, showToast, navigation}: UseChatTabScopeParams) {
-  const [projects, setProjects] = useState<ChatProject[]>([]);
-  const [sessions, setSessions] = useState<ChatSession[]>([]);
-  const [currentProject, setCurrentProjectMeta] = useState<ChatProject | undefined>();
-  const [panel, setPanel] = useState<SessionListPanel>('sessions');
-  const [chatSubview, setSubview] = useState<ChatSubview>('sessions');
-  // chatSubview 的同步镜像：chip 精确升级轮的弃权判据要在异步链里同步读
-  // 「视图是否还在对话」——state 本身闭包老化，ref 永远最新。
-  // 赋值放 useLayoutEffect 而非 render body（cr2-B-1）：并发根下被丢弃的
-  // 渲染同样会执行 render body 的赋值，ref 可能停在从未提交过的值上；误判
-  // 方向对称，其中「误判在 conversation」恰好让 2.2s 计数照跑。同文件
-  // tokenLabelSessionRef 是同一口径的先例。
-  const chatSubviewRef = useRef<ChatSubview>(chatSubview);
-  useLayoutEffect(() => {
-    chatSubviewRef.current = chatSubview;
-  }, [chatSubview]);
-  const [convPanel, setConvPanel] = useState<ConversationPanel>('chat');
-  const [projectDrawerOpen, setProjectDrawerOpen] = useState(false);
-  const [sessionDrawerOpen, setSessionDrawerOpen] = useState(false);
-  const [vfsRefreshKey, setVfsKey] = useState(0);
-  const [menuSessionId, setMenuSessionId] = useState<string | undefined>();
-  const [sessionRenamePrompt, setSessionRenamePrompt] = useState<{sessionId: string; initialTitle: string} | undefined>();
-  // agentMeta 未加载窗口用 undefined 表达（au/B-1）：undefined = 锁定/占位，
-  // 绝不用 source:'none' 占位冒充「已删待重选」——none 仅在 loadChatAgentMeta
-  // 归一（agent 解析失败）成功落位后才出现。
-  const [agentMeta, setAgentMeta] = useState<ChatAgentMeta>();
-  const [hasWorkspaceModel, setHasWorkspaceModel] = useState(false);
+    const [projects, setProjects] = useState<ChatProject[]>([]);
+    const [sessions, setSessions] = useState<ChatSession[]>([]);
+    const [currentProject, setCurrentProjectMeta] = useState<ChatProject | undefined>();
+    const [panel, setPanel] = useState<SessionListPanel>('sessions');
+    const [chatSubview, setSubview] = useState<ChatSubview>('sessions');
+    // chatSubview 的同步镜像：chip 精确升级轮的弃权判据要在异步链里同步读
+    // 「视图是否还在对话」——state 本身闭包老化，ref 永远最新。
+    // 赋值放 useLayoutEffect 而非 render body（cr2-B-1）：并发根下被丢弃的
+    // 渲染同样会执行 render body 的赋值，ref 可能停在从未提交过的值上；误判
+    // 方向对称，其中「误判在 conversation」恰好让 2.2s 计数照跑。同文件
+    // tokenLabelSessionRef 是同一口径的先例。
+    const chatSubviewRef = useRef<ChatSubview>(chatSubview);
+    useLayoutEffect(() => {
+        chatSubviewRef.current = chatSubview;
+    }, [chatSubview]);
+    const [convPanel, setConvPanel] = useState<ConversationPanel>('chat');
+    const [projectDrawerOpen, setProjectDrawerOpen] = useState(false);
+    const [sessionDrawerOpen, setSessionDrawerOpen] = useState(false);
+    const [vfsRefreshKey, setVfsKey] = useState(0);
+    const [menuSessionId, setMenuSessionId] = useState<string | undefined>();
+    const [sessionRenamePrompt, setSessionRenamePrompt] = useState<{sessionId: string; initialTitle: string} | undefined>();
+    // agentMeta 未加载窗口用 undefined 表达（au/B-1）：undefined = 锁定/占位，
+    // 绝不用 source:'none' 占位冒充「已删待重选」——none 仅在 loadChatAgentMeta
+    // 归一（agent 解析失败）成功落位后才出现。
+    const [agentMeta, setAgentMeta] = useState<ChatAgentMeta>();
+    const [hasWorkspaceModel, setHasWorkspaceModel] = useState(false);
 
-  // token 标签刷新防抖窗口（message-token-cache Step 4 / T-TC6）：300ms
-  // trailing。transcript 变化、回滚、置位/压缩、meta 刷新链尾等多个触发源
-  // 会在短时间内连发，这里在 hook 读口把它们合并成一次 service 调用。
-  // 与 desktop service 层同款语义：窗口内触发重置计时共享同一次执行；
-  // 在途时新触发复用在途并安排追赶轮（最后一次触发必产生一次计算）。
-  // 进会话首刷曾单设 1200ms 错峰窗口（token-count-perf-r2 Part D 由 1200→300
-  // 收回）：当时设 1200 的理由是「首帧轮整串装配+读口 0.2~1.2s 重活会堵切会话
-  // 交互」——如今侧滑取消已落地（tnc）、精确计数挪进 Kotlin 原生线程、JS 侧
-  // 只剩 ~200-400ms 装配，错峰保护的收益没了、代价（chip 晚 1s 亮）却全在用户
-  // 脸上。首刷回落与常规刷新同档 300ms，多触发源合并语义不变。
-  const CHAT_TOKEN_LABEL_DEBOUNCE_MS = 300;
+    // token 标签刷新防抖窗口（message-token-cache Step 4 / T-TC6）：300ms
+    // trailing。transcript 变化、回滚、置位/压缩、meta 刷新链尾等多个触发源
+    // 会在短时间内连发，这里在 hook 读口把它们合并成一次 service 调用。
+    // 与 desktop service 层同款语义：窗口内触发重置计时共享同一次执行；
+    // 在途时新触发复用在途并安排追赶轮（最后一次触发必产生一次计算）。
+    // 进会话首刷曾单设 1200ms 错峰窗口（token-count-perf-r2 Part D 由 1200→300
+    // 收回）：当时设 1200 的理由是「首帧轮整串装配+读口 0.2~1.2s 重活会堵切会话
+    // 交互」——如今侧滑取消已落地（tnc）、精确计数挪进 Kotlin 原生线程、JS 侧
+    // 只剩 ~200-400ms 装配，错峰保护的收益没了、代价（chip 晚 1s 亮）却全在用户
+    // 脸上。首刷回落与常规刷新同档 300ms，多触发源合并语义不变。
+    const CHAT_TOKEN_LABEL_DEBOUNCE_MS = 300;
 
-  // 升级回调的会话身份闸（cr-fix-spec-r2 s2/B-1 场景①）：记录最近一次
-  // 刷新所属会话，升级回调写回前比对——跨会话切换后，旧会话在途升级的
-  // 精确标签不得写进新会话的 meta（service 层 gen 闸之外的双保险）。
-  const tokenLabelSessionRef = useRef<string | null>(null);
+    // 升级回调的会话身份闸（cr-fix-spec-r2 s2/B-1 场景①）：记录最近一次
+    // 刷新所属会话，升级回调写回前比对——跨会话切换后，旧会话在途升级的
+    // 精确标签不得写进新会话的 meta（service 层 gen 闸之外的双保险）。
+    const tokenLabelSessionRef = useRef<string | null>(null);
 
-  // 切会话立即清 chip（2026-09-30 用户实报「切换会话显示上一个会话的
-  // token 才刷新」）：token 标签属于它会话——会话一变就同步归位 '…'
-  // （加载态），并让身份闸接管所有权（旧会话迟到的一切写回被丢弃）。
-  // 原本下方两处「保留旧值」的注释以为 loadChatAgentMeta 重建 meta 时会
-  // 清场，实现里 `...meta` 不含 tokenLabel、显式的 `prev?.tokenLabel` 又
-  // 把旧值带进来——残留整整一轮刷新窗口（防抖 300ms + 装配/读数 ~1s）的
-  // **错误数字**。同会话内的刷新（压缩/发送后重算）不受影响：sessionId
-  // 没变，本 effect 不触发，保留旧值的语义照旧成立。
-  // 用 useLayoutEffect 而非 useEffect（r4-app-2）：清场必须发生在**提交后、
-  // 绘制前**——useEffect 是 post-paint 的，切会话那一帧仍可能把旧数字绘出来，
-  // 「一帧不漏」就只剩注释里的口号。布局阶段同步归位后（布局期写 state 的
-  // 补渲染也在绘制前完成），旧数字没有任何一帧可见；跨会话切换一次会话
-  // 才走一遍，这次额外渲染的代价可忽略。
-  useLayoutEffect(() => {
-    tokenLabelSessionRef.current = sessionId ?? null;
-    setAgentMeta(prev => (prev == null || sessionId == null ? prev : {...prev, tokenLabel: '…'}));
-  }, [sessionId]);
+    // 切会话立即清 chip（2026-09-30 用户实报「切换会话显示上一个会话的
+    // token 才刷新」）：token 标签属于它会话——会话一变就同步归位 '…'
+    // （加载态），并让身份闸接管所有权（旧会话迟到的一切写回被丢弃）。
+    // 原本下方两处「保留旧值」的注释以为 loadChatAgentMeta 重建 meta 时会
+    // 清场，实现里 `...meta` 不含 tokenLabel、显式的 `prev?.tokenLabel` 又
+    // 把旧值带进来——残留整整一轮刷新窗口（防抖 300ms + 装配/读数 ~1s）的
+    // **错误数字**。同会话内的刷新（压缩/发送后重算）不受影响：sessionId
+    // 没变，本 effect 不触发，保留旧值的语义照旧成立。
+    // 用 useLayoutEffect 而非 useEffect（r4-app-2）：清场必须发生在**提交后、
+    // 绘制前**——useEffect 是 post-paint 的，切会话那一帧仍可能把旧数字绘出来，
+    // 「一帧不漏」就只剩注释里的口号。布局阶段同步归位后（布局期写 state 的
+    // 补渲染也在绘制前完成），旧数字没有任何一帧可见；跨会话切换一次会话
+    // 才走一遍，这次额外渲染的代价可忽略。
+    useLayoutEffect(() => {
+        tokenLabelSessionRef.current = sessionId ?? null;
+        setAgentMeta(prev => (prev == null || sessionId == null ? prev : {...prev, tokenLabel: '…'}));
+    }, [sessionId]);
 
-  // 防抖槽（复用 refreshChatMetaInflightRef 的在途槽模式，单槽服务当前会话）：
-  // - deferred：trailing 计时挂起中，窗口内所有 caller 共享「这一次执行」；
-  // - running：在途执行链（到期执行若上一轮仍在途则挂其后串行，绝不并发）；
-  // - hasLabel：本会话是否已刷出过非空标签——run 在途冻结的「有东西可看」
-  //   判据（声明在 runChatTokenLabelRefresh 之前，供其在执行时读写）；
-  // - sessionId：挂起计时器**那一轮**的会话身份（scheduleTrailing 里与 timer
-  //   同处写入）——换会话/卸载时按它收口精确升级的延迟计时，cancel 打的是
-  //   发起轮而非当前轮。其余消费点不读它。
-  const initialSlot: ChatTokenSlot = {
-    key: '',
-    hasLabel: false,
-    sessionId: null,
-    timer: null,
-    deferred: null,
-    running: null,
-  };
-  const chatTokenLabelDebounceRef = useRef<ChatTokenSlot>(initialSlot);
+    // 防抖槽（复用 refreshChatMetaInflightRef 的在途槽模式，单槽服务当前会话）：
+    // - deferred：trailing 计时挂起中，窗口内所有 caller 共享「这一次执行」；
+    // - running：在途执行链（到期执行若上一轮仍在途则挂其后串行，绝不并发）；
+    // - hasLabel：本会话是否已刷出过非空标签——run 在途冻结的「有东西可看」
+    //   判据（声明在 runChatTokenLabelRefresh 之前，供其在执行时读写）；
+    // - sessionId：挂起计时器**那一轮**的会话身份（scheduleTrailing 里与 timer
+    //   同处写入）——换会话/卸载时按它收口精确升级的延迟计时，cancel 打的是
+    //   发起轮而非当前轮。其余消费点不读它。
+    const initialSlot: ChatTokenSlot = {
+        key: '',
+        hasLabel: false,
+        sessionId: null,
+        timer: null,
+        deferred: null,
+        running: null,
+    };
+    const chatTokenLabelDebounceRef = useRef<ChatTokenSlot>(initialSlot);
 
-  // nm-style: keep-local — 回调承载 token 标签防抖槽/在途/弃权状态机，内联回 useCallback 会让调用参数跨行
-  const runRefreshImpl = async () => {
-    // meta 未加载（undefined）时保持未加载态：partial 更新不能凭空造出
-    // 残缺的 meta 对象（缺字段的假 meta 会被当成已加载渲染）。
-    if (projectId == null || sessionId == null) {
-      setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel: ''}));
-      return;
-    }
-    tokenLabelSessionRef.current = sessionId;
-    // run 在途冻结（2026-09-30 拍板「chip 首帧先修」）：run 进行中提示词
-    // 不变，而一次首帧刷新 = 整串装配 0.7~1.2s + 读口 resolve 1.2~1.7s，
-    // 与流式渲染同拍挤占 JS 线程与单 SQLite 连接（append/settle 各一轮
-    // ~2.4s，真机实锤）。判定放在防抖**执行时**而非排程时：run 结束沿
-    // （onSettled / 末条转录事件）触发的刷新 300ms 后才执行，彼时 core 的
-    // finally 已反注册 abortRegistry，补刷照常落地。只在该会话已显示过
-    // 标签时冻结——切进运行中会话的首帧不冻，否则 chip 会空白到 run 结束。
-    const slot = chatTokenLabelDebounceRef.current;
-    if (slot.key === `${projectId}#${sessionId}` && slot.hasLabel && runtime.abortRegistry.has(ABORT_KEY.agent(sessionId))) {
-      return;
-    }
-    // 已有标签时保留旧值而非 '…'：压缩/发送后的重算在大上下文上可达数秒
-    // （native 整串计数），旧读数先顶着、新值落地即替换；会话切换路径由
-    // loadChatAgentMeta 重建 meta（tokenLabel 归 ''）先清场，不会串显。
-    setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel: prev.tokenLabel || '…'}));
-    try {
-      const tokenLabelOptions: promptTokens.TokenLabelOptions = {
-        // 两阶段升级回调（统计优先口径）：首帧若是估算档（如切模型后无 api
-        // 基线），后台跑完家族真分词器精确计数后回填——`glm =` 稍后到位，
-        // 首帧 `gpt ≈` 先顶着，不再干等原生整串计数 ~5.8s。写回前过会话
-        // 身份闸：本回调发起后若已切到别的会话，旧会话的标签就地丢弃。
-        onPreciseUpgrade: upgraded => {
-          if (tokenLabelSessionRef.current !== sessionId) {
+    // nm-style: keep-local — 回调承载 token 标签防抖槽/在途/弃权状态机，内联回 useCallback 会让调用参数跨行
+    const runRefreshImpl = async () => {
+        // meta 未加载（undefined）时保持未加载态：partial 更新不能凭空造出
+        // 残缺的 meta 对象（缺字段的假 meta 会被当成已加载渲染）。
+        if (projectId == null || sessionId == null) {
+            setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel: ''}));
             return;
-          }
-          setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel: upgraded}));
-        },
-        // 中途弃权（2026-09-30 回滚竞态）：本刷新起跑后 run 才注册时，冻结闸
-        // 管不到已经在跑的这一轮——build 分段间检查本判定，run 起步即弃权
-        // 返回空串，把 JS 线程与 SQLite 让给发送链（曾把 POST 从 +1.2s 拖到
-        // +19.6s）。只在已有标签可保时弃权：切进运行中会话的首帧照算。
-        shouldBail: () =>
-          // 视图已切走（2026-10-01 切会话后卡顿）：这轮刷新没有观众——
-          // 弃权空串保旧标签，重进会话时触发链会重新算。不受 hasLabel
-          // 限制：新会话首刷撞上退出同样该弃（chip 空白到下次进入，可接受）。
-          chatSubviewRef.current !== 'conversation' || (chatTokenLabelDebounceRef.current.hasLabel && runtime.abortRegistry.has(ABORT_KEY.agent(sessionId))),
-        // 精确升级轮的追加弃权（2026-10-01 侧滑退出被堵 2.2s 实锤）：升级是
-        // 秒级后台重活，视图已切走（退出/切会话）就别再跑了——它占着 JS
-        // 线程与原生模块队列，正是堵返回键的那只手。
-        //
-        // 双条件（cr2-E-2）：只看视图不够——会话 A→B 切换时 chatSubview 仍是
-        // conversation，A 的挂起升级会越窗照跑（build 0.7~1.2s + 整串计数，
-        // 合计 2.2s 堵 JS），恰好落在本轮要消灭的「切会话后卡」窗口；快速
-        // 进出同一会话同理。这里闭包里的 sessionId 是**发起这一轮**的身份，
-        // 与 tokenLabelSessionRef（当前展示身份）不等即说明已经切走。
-        shouldBailPrecise: () => chatSubviewRef.current !== 'conversation' || tokenLabelSessionRef.current !== sessionId,
-      };
-      const tokenLabelPromise = promptTokens.ChatPromptTokenLabel.loadResilient(runtime, {projectId, sessionId}, tokenLabelOptions);
-      const labelResult = await tokenLabelPromise;
-      // 真失败（错误通道迁移四期：build/resolve/fallback 的已知失败走
-      // Result.err）：清标签同样过闸——旧会话的失败不得抹掉新会话的显示。
-      // 这里**刻意不过 frozen**：真失败（DB 读取、家族解析）时宁可清空，
-      // 也不留一个可能过时的精确值（原 catch 注释口径不变）。
-      if (!labelResult.ok) {
-        if (tokenLabelSessionRef.current === sessionId) {
-          setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel: ''}));
         }
-        return;
-      }
-      const tokenLabel = labelResult.value;
-      // 空串 = 中途弃权：保留旧标签，不写 meta、不置 hasLabel。
-      // 落地前过会话身份闸（2026-09-30 切会话残留第三源）：防抖槽换 key 不
-      // 取消在途轮，本刷新闭包里的 sessionId 若已被切走，读数就地丢弃——
-      // 与升级回调（上方 upgraded 闸）同一口径。
-      // run 在途冻结（token-source-freeze，2026-11-06）：发送期间已有标签时，
-      // 本次读数不写——首帧估算档（cl100k 近似，标签 `gpt ≈`）会把上一轮精确的
-      // `deepseek =` 顶掉，用户看到的就是「一发消息 chip 就退回 gpt」。旧值只差
-      // 新增的一条消息，run 结束后的刷新（onSettled → transcript 变化）会算出
-      // 新的精确值；首刷（hasLabel=false）不冻，否则切进运行中会话时 chip 会
-      // 空白到 run 结束。
-      const frozen = slot.hasLabel && runtime.abortRegistry.has(ABORT_KEY.agent(sessionId));
-      if (tokenLabel && tokenLabelSessionRef.current === sessionId && !frozen) {
-        setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel}));
-        // 冻结判据维护：刷出非空标签后，本会话才有「可冻结的旧值」可保。
-        if (chatTokenLabelDebounceRef.current.key === `${projectId}#${sessionId}`) {
-          chatTokenLabelDebounceRef.current.hasLabel = true;
+        tokenLabelSessionRef.current = sessionId;
+        // run 在途冻结（2026-09-30 拍板「chip 首帧先修」）：run 进行中提示词
+        // 不变，而一次首帧刷新 = 整串装配 0.7~1.2s + 读口 resolve 1.2~1.7s，
+        // 与流式渲染同拍挤占 JS 线程与单 SQLite 连接（append/settle 各一轮
+        // ~2.4s，真机实锤）。判定放在防抖**执行时**而非排程时：run 结束沿
+        // （onSettled / 末条转录事件）触发的刷新 300ms 后才执行，彼时 core 的
+        // finally 已反注册 abortRegistry，补刷照常落地。只在该会话已显示过
+        // 标签时冻结——切进运行中会话的首帧不冻，否则 chip 会空白到 run 结束。
+        const slot = chatTokenLabelDebounceRef.current;
+        if (slot.key === `${projectId}#${sessionId}` && slot.hasLabel && runtime.abortRegistry.has(ABORT_KEY.agent(sessionId))) {
+            return;
         }
-      }
-    } catch {
-      // 失败清标签同样过闸：旧会话的失败不得抹掉新会话的显示。
-      // 这里**刻意不过 frozen**：真失败（DB 读取抛错、家族解析
-      // 异常）时宁可清空，也不留一个可能过时的精确值。代价是 run 在途且本次
-      // 刷新恰好 reject 的窗口里 chip 仍会被清空——已知边界，见 cr-fix-spec
-      // K 节 P3；触发概率极低（该路径只在底层读取整体失败时走到）。
-      if (tokenLabelSessionRef.current === sessionId) {
-        setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel: ''}));
-      }
-    }
-  };
-  const runRefreshDeps = [runtime, projectId, sessionId];
-  const runRefresh = useCallback(runRefreshImpl, runRefreshDeps);
+        // 已有标签时保留旧值而非 '…'：压缩/发送后的重算在大上下文上可达数秒
+        // （native 整串计数），旧读数先顶着、新值落地即替换；会话切换路径由
+        // loadChatAgentMeta 重建 meta（tokenLabel 归 ''）先清场，不会串显。
+        setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel: prev.tokenLabel || '…'}));
+        try {
+            const tokenLabelOptions: promptTokens.TokenLabelOptions = {
+                // 两阶段升级回调（统计优先口径）：首帧若是估算档（如切模型后无 api
+                // 基线），后台跑完家族真分词器精确计数后回填——`glm =` 稍后到位，
+                // 首帧 `gpt ≈` 先顶着，不再干等原生整串计数 ~5.8s。写回前过会话
+                // 身份闸：本回调发起后若已切到别的会话，旧会话的标签就地丢弃。
+                onPreciseUpgrade: upgraded => {
+                    if (tokenLabelSessionRef.current !== sessionId) {
+                        return;
+                    }
+                    setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel: upgraded}));
+                },
+                // 中途弃权（2026-09-30 回滚竞态）：本刷新起跑后 run 才注册时，冻结闸
+                // 管不到已经在跑的这一轮——build 分段间检查本判定，run 起步即弃权
+                // 返回空串，把 JS 线程与 SQLite 让给发送链（曾把 POST 从 +1.2s 拖到
+                // +19.6s）。只在已有标签可保时弃权：切进运行中会话的首帧照算。
+                shouldBail: () =>
+                    // 视图已切走（2026-10-01 切会话后卡顿）：这轮刷新没有观众——
+                    // 弃权空串保旧标签，重进会话时触发链会重新算。不受 hasLabel
+                    // 限制：新会话首刷撞上退出同样该弃（chip 空白到下次进入，可接受）。
+                    chatSubviewRef.current !== 'conversation' || (chatTokenLabelDebounceRef.current.hasLabel && runtime.abortRegistry.has(ABORT_KEY.agent(sessionId))),
+                // 精确升级轮的追加弃权（2026-10-01 侧滑退出被堵 2.2s 实锤）：升级是
+                // 秒级后台重活，视图已切走（退出/切会话）就别再跑了——它占着 JS
+                // 线程与原生模块队列，正是堵返回键的那只手。
+                //
+                // 双条件（cr2-E-2）：只看视图不够——会话 A→B 切换时 chatSubview 仍是
+                // conversation，A 的挂起升级会越窗照跑（build 0.7~1.2s + 整串计数，
+                // 合计 2.2s 堵 JS），恰好落在本轮要消灭的「切会话后卡」窗口；快速
+                // 进出同一会话同理。这里闭包里的 sessionId 是**发起这一轮**的身份，
+                // 与 tokenLabelSessionRef（当前展示身份）不等即说明已经切走。
+                shouldBailPrecise: () => chatSubviewRef.current !== 'conversation' || tokenLabelSessionRef.current !== sessionId,
+            };
+            const tokenLabelPromise = promptTokens.ChatPromptTokenLabel.loadResilient(runtime, {projectId, sessionId}, tokenLabelOptions);
+            const labelResult = await tokenLabelPromise;
+            // 真失败（错误通道迁移四期：build/resolve/fallback 的已知失败走
+            // Result.err）：清标签同样过闸——旧会话的失败不得抹掉新会话的显示。
+            // 这里**刻意不过 frozen**：真失败（DB 读取、家族解析）时宁可清空，
+            // 也不留一个可能过时的精确值（原 catch 注释口径不变）。
+            if (!labelResult.ok) {
+                if (tokenLabelSessionRef.current === sessionId) {
+                    setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel: ''}));
+                }
+                return;
+            }
+            const tokenLabel = labelResult.value;
+            // 空串 = 中途弃权：保留旧标签，不写 meta、不置 hasLabel。
+            // 落地前过会话身份闸（2026-09-30 切会话残留第三源）：防抖槽换 key 不
+            // 取消在途轮，本刷新闭包里的 sessionId 若已被切走，读数就地丢弃——
+            // 与升级回调（上方 upgraded 闸）同一口径。
+            // run 在途冻结（token-source-freeze，2026-11-06）：发送期间已有标签时，
+            // 本次读数不写——首帧估算档（cl100k 近似，标签 `gpt ≈`）会把上一轮精确的
+            // `deepseek =` 顶掉，用户看到的就是「一发消息 chip 就退回 gpt」。旧值只差
+            // 新增的一条消息，run 结束后的刷新（onSettled → transcript 变化）会算出
+            // 新的精确值；首刷（hasLabel=false）不冻，否则切进运行中会话时 chip 会
+            // 空白到 run 结束。
+            const frozen = slot.hasLabel && runtime.abortRegistry.has(ABORT_KEY.agent(sessionId));
+            if (tokenLabel && tokenLabelSessionRef.current === sessionId && !frozen) {
+                setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel}));
+                // 冻结判据维护：刷出非空标签后，本会话才有「可冻结的旧值」可保。
+                if (chatTokenLabelDebounceRef.current.key === `${projectId}#${sessionId}`) {
+                    chatTokenLabelDebounceRef.current.hasLabel = true;
+                }
+            }
+        } catch {
+            // 失败清标签同样过闸：旧会话的失败不得抹掉新会话的显示。
+            // 这里**刻意不过 frozen**：真失败（DB 读取抛错、家族解析
+            // 异常）时宁可清空，也不留一个可能过时的精确值。代价是 run 在途且本次
+            // 刷新恰好 reject 的窗口里 chip 仍会被清空——已知边界，见 cr-fix-spec
+            // K 节 P3；触发概率极低（该路径只在底层读取整体失败时走到）。
+            if (tokenLabelSessionRef.current === sessionId) {
+                setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel: ''}));
+            }
+        }
+    };
+    const runRefreshDeps = [runtime, projectId, sessionId];
+    const runRefresh = useCallback(runRefreshImpl, runRefreshDeps);
 
-  // nm-style: keep-local — 回调承载防抖槽与会话身份闸状态机，内联回 useCallback 会让调用参数跨行
-  const refreshLabelImpl = (): Promise<void> => {
-    const key = `${projectId ?? ''}#${sessionId ?? ''}`;
-    const slot = chatTokenLabelDebounceRef.current;
-    if (slot.key !== key) {
-      // 换会话：旧 key 的计时作废（在途一轮让它自然落定，不再挂新 caller）。
-      //
-      // 顺带收口旧会话挂起的**精确升级延迟计时**（cr2-E-2）：那一轮已经没人
-      // 看得上了，越窗后跑起来正是堵返回键的那只手。cancel 的目标必须是
-      // 「发起那一轮」的会话身份，所以在 slot.key 赋值之前读 slot.sessionId
-      // ——写在赋值之后读到的是新会话，cancel 会打偏。
-      const stale = slot.sessionId;
-      promptTokens.PreciseUpgrade.cancelDelay(stale);
-      // 在途原生计数一并撤掉（tokenizer-native-cancel）：延迟收口只管得到
-      // 「还没过桥」的那些，已起跑的那轮是秒级重活，正是堵返回键的元凶。
-      // 同用 stale——身份必须取自 slot.key 赋值之前。
-      promptTokens.PreciseUpgrade.cancel(stale);
-      if (slot.timer != null) {
-        clearTimeout(slot.timer);
-        slot.timer = null;
-      }
-      slot.key = key;
-      // 换会话即换「有东西可看」判据：新会话还没刷出过标签，冻结不生效。
-      slot.hasLabel = false;
-      slot.sessionId = null;
-      slot.deferred = null;
-      slot.running = null;
-    }
-    const scheduleTrailing = () => {
-      if (slot.timer != null) {
-        clearTimeout(slot.timer);
-      }
-      const timerKey = key;
-      // 首刷错峰窗口已于 token-count-perf-r2 Part D 撤回（1200→300，与常规
-      // 刷新同档，多触发源合并语义不变）。若日后要恢复首刷差异化窗口，必须
-      // 同时回看 PRECISE_UPGRADE_START_DELAY_MS 与取消链路是否还兜得住。
-      const win = CHAT_TOKEN_LABEL_DEBOUNCE_MS;
-      // 与本轮 timer 同生命周期记下会话身份：换会话/卸载时按它收口升级延迟。
-      slot.sessionId = sessionId ?? null;
-      // nm-style: keep-local — 回调承载防抖计时收口与在途复用状态机，内联回 setTimeout 会让调用参数跨行
-      const onDebounceElapsed = () => {
-        slot.timer = null;
-        // 计时期间又切了会话（无新触发清理）：本轮按旧 key 作废。
-        if (slot.key !== timerKey) {
-          return;
-        }
-        const deferred = slot.deferred;
-        slot.deferred = null;
-        const previousRun = slot.running;
-        const run = (previousRun ? previousRun.catch(() => undefined) : Promise.resolve()).then(() => runRefresh());
-        slot.running = run;
-        const settle = () => {
-          if (slot.running === run) {
+    // nm-style: keep-local — 回调承载防抖槽与会话身份闸状态机，内联回 useCallback 会让调用参数跨行
+    const refreshLabelImpl = (): Promise<void> => {
+        const key = `${projectId ?? ''}#${sessionId ?? ''}`;
+        const slot = chatTokenLabelDebounceRef.current;
+        if (slot.key !== key) {
+            // 换会话：旧 key 的计时作废（在途一轮让它自然落定，不再挂新 caller）。
+            //
+            // 顺带收口旧会话挂起的**精确升级延迟计时**（cr2-E-2）：那一轮已经没人
+            // 看得上了，越窗后跑起来正是堵返回键的那只手。cancel 的目标必须是
+            // 「发起那一轮」的会话身份，所以在 slot.key 赋值之前读 slot.sessionId
+            // ——写在赋值之后读到的是新会话，cancel 会打偏。
+            const stale = slot.sessionId;
+            promptTokens.PreciseUpgrade.cancelDelay(stale);
+            // 在途原生计数一并撤掉（tokenizer-native-cancel）：延迟收口只管得到
+            // 「还没过桥」的那些，已起跑的那轮是秒级重活，正是堵返回键的元凶。
+            // 同用 stale——身份必须取自 slot.key 赋值之前。
+            promptTokens.PreciseUpgrade.cancel(stale);
+            if (slot.timer != null) {
+                clearTimeout(slot.timer);
+                slot.timer = null;
+            }
+            slot.key = key;
+            // 换会话即换「有东西可看」判据：新会话还没刷出过标签，冻结不生效。
+            slot.hasLabel = false;
+            slot.sessionId = null;
+            slot.deferred = null;
             slot.running = null;
-          }
+        }
+        const scheduleTrailing = () => {
+            if (slot.timer != null) {
+                clearTimeout(slot.timer);
+            }
+            const timerKey = key;
+            // 首刷错峰窗口已于 token-count-perf-r2 Part D 撤回（1200→300，与常规
+            // 刷新同档，多触发源合并语义不变）。若日后要恢复首刷差异化窗口，必须
+            // 同时回看 PRECISE_UPGRADE_START_DELAY_MS 与取消链路是否还兜得住。
+            const win = CHAT_TOKEN_LABEL_DEBOUNCE_MS;
+            // 与本轮 timer 同生命周期记下会话身份：换会话/卸载时按它收口升级延迟。
+            slot.sessionId = sessionId ?? null;
+            // nm-style: keep-local — 回调承载防抖计时收口与在途复用状态机，内联回 setTimeout 会让调用参数跨行
+            const onDebounceElapsed = () => {
+                slot.timer = null;
+                // 计时期间又切了会话（无新触发清理）：本轮按旧 key 作废。
+                if (slot.key !== timerKey) {
+                    return;
+                }
+                const deferred = slot.deferred;
+                slot.deferred = null;
+                const previousRun = slot.running;
+                const run = (previousRun ? previousRun.catch(() => undefined) : Promise.resolve()).then(() => runRefresh());
+                slot.running = run;
+                const settle = () => {
+                    if (slot.running === run) {
+                        slot.running = null;
+                    }
+                };
+                run.then(settle, settle);
+                // runner 内部已全 try/catch、理论上不 reject；这里仍挂兜底，保证
+                // caller（多为 void 调用）不接 rejection 也不产生 unhandled。
+                run.catch(() => undefined);
+                if (deferred != null) {
+                    deferred.resolve(run);
+                }
+            };
+            slot.timer = setTimeout(onDebounceElapsed, win);
         };
-        run.then(settle, settle);
-        // runner 内部已全 try/catch、理论上不 reject；这里仍挂兜底，保证
-        // caller（多为 void 调用）不接 rejection 也不产生 unhandled。
-        run.catch(() => undefined);
-        if (deferred != null) {
-          deferred.resolve(run);
+        if (slot.running != null) {
+            // 在途复用：并发触发直接挂正在跑的一轮；追赶轮保证新触发最终被计算。
+            scheduleTrailing();
+            return slot.running;
         }
-      };
-      slot.timer = setTimeout(onDebounceElapsed, win);
+        if (slot.deferred == null) {
+            let resolve!: (value: Promise<void>) => void;
+            const promise = new Promise<void>(res => {
+                resolve = res;
+            });
+            slot.deferred = {promise, resolve};
+        }
+        scheduleTrailing();
+        return slot.deferred.promise;
     };
-    if (slot.running != null) {
-      // 在途复用：并发触发直接挂正在跑的一轮；追赶轮保证新触发最终被计算。
-      scheduleTrailing();
-      return slot.running;
-    }
-    if (slot.deferred == null) {
-      let resolve!: (value: Promise<void>) => void;
-      const promise = new Promise<void>(res => {
-        resolve = res;
-      });
-      slot.deferred = {promise, resolve};
-    }
-    scheduleTrailing();
-    return slot.deferred.promise;
-  };
-  const refreshDeps = [projectId, sessionId, runRefresh];
-  const refreshChatTokenLabel = useCallback(refreshLabelImpl, refreshDeps);
+    const refreshDeps = [projectId, sessionId, runRefresh];
+    const refreshChatTokenLabel = useCallback(refreshLabelImpl, refreshDeps);
 
-  // 卸载清理：别让挂起的防抖计时在组件卸载后再触发 setState；同时收口它那一轮
-  // 已挂起的精确升级延迟计时（组件已死，没人消费升级标签，秒级重活纯浪费）。
-  // 保持 [] 依赖 + 经 ref 读：ref 永远是最新一轮的会话身份，天然正确。
-  useEffect(
-    () => () => {
-      const slot = chatTokenLabelDebounceRef.current;
-      if (slot.timer != null) {
-        clearTimeout(slot.timer);
-        slot.timer = null;
-      }
-      promptTokens.PreciseUpgrade.cancelDelay(slot.sessionId);
-      // 在途原生计数一并撤掉（tokenizer-native-cancel）：组件已死，没人消费
-      // 升级标签，已过桥的那轮秒级重活纯浪费。
-      promptTokens.PreciseUpgrade.cancel(slot.sessionId);
-    },
-    [],
-  );
-
-  // refreshChatMeta 的在途复用槽：首屏三处触发（本 hook 的 dep effect、
-  // Provider 的 conversation effect、useFocusEffect）在同一挂载周期内
-  // 重入，同参调用共享在途 promise，只跑一轮查询。
-  // round 是落地的会话身份闸（r4-app-1）：每新起一轮自增，落定前与槽内
-  // 轮次比对——只有仍是槽内最新一轮的读数才许落地。切会话后旧会话在途的
-  // loadChatAgentMeta 落定（含失败）一律丢弃，否则旧会话的 agentName /
-  // modelLabel 会写进新会话（tokenLabel 因显式保留恰好幸免，其余字段不是）。
-  const refreshChatMetaInflightRef = useRef<ChatMetaInflight | null>(null);
-  const refreshChatMetaRoundRef = useRef(0);
-
-  // showToast 经 ref 取用：它随渲染可能换引用（消费方 context mock 每次
-  // 渲染给新函数），若进 refreshChatMeta 依赖会连锁重建 → dep effect 无限
-  // 重跑。ref 保住依赖稳定，调用时取最新引用。
-  const showToastRef = useRef(showToast);
-  useEffect(() => void (showToastRef.current = showToast), [showToast]);
-
-  // nm-style: keep-local — 回调承载 meta 在途槽与轮次闸状态机，内联回 useCallback 会让调用参数跨行
-  const metaRefreshImpl = () => {
-    const key = `${projectId ?? ''}#${sessionId ?? ''}`;
-    const inflight = refreshChatMetaInflightRef.current;
-    if (inflight != null && inflight.key === key) {
-      return inflight.promise;
-    }
-    const round = ++refreshChatMetaRoundRef.current;
-    // 落地权判据：在途槽里还是这一轮（中途没被别的会话/参数的轮次顶掉）。
-    const isCurrentRound = () => refreshChatMetaInflightRef.current?.round === round;
-    const promise = (async () => {
-      // getCurrentModelId 与 loadChatAgentMeta 互不依赖（后者只需
-      // projectId/sessionId），并行发起；两路赋值顺序保持
-      // （先 hasWorkspaceModel 后 agentMeta），失败语义不变。
-      let metaPromise;
-      if (projectId != null && sessionId != null) {
-        metaPromise = ChatAgentMetaService.load(runtime, projectId, sessionId);
-      }
-      // 兜底挂接：getCurrentModelId 先失败提前退出时，在途 meta 查询的
-      // 拒绝不会变成 unhandled rejection（其结果本就不会再被消费）。
-      metaPromise?.catch(() => undefined);
-      const currentModel = await runtime.state.getCurrentModelId();
-      // 读取失败（错误通道迁移四期）：旧通道为 IIFE rejection 被上层
-      // `.catch(() => undefined)` 静默吞掉——同为静默不更新状态。
-      if (!currentModel.ok) {
-        return;
-      }
-      const modelId = currentModel.value;
-      setHasWorkspaceModel(modelId != null && modelId !== '');
-      if (metaPromise == null) {
-        // 无项目或无活动会话时无法解析 session 绑定：保持未加载（锁定）态，
-        // 不用 source:'none' 占位——那会被消费方当成「已删待重选」。
-        // 同样过身份闸：本轮的「无会话」结论不能清掉切换后新会话已落地的 meta。
-        if (isCurrentRound()) {
-          setAgentMeta(undefined);
-        }
-        return;
-      }
-      try {
-        const meta = await metaPromise;
-        // 会话身份闸（r4-app-1）：旧会话在途的 meta 落定不得写进新会话——
-        // 合并写回与链尾标签刷新整段都要「仍是最新一轮」才执行（标签刷新
-        // 一旦放行会把身份闸重新指到旧会话，残留就从 meta 字段漏回来）。
-        if (!isCurrentRound()) {
-          return;
-        }
-        // 非 agent 解析类失败（Result.err，错误通道迁移四期）与未知异常同
-        // 终端：保持未加载（锁定）态并提示错误，绝不冒充「已删待重选」。
-        if (!meta.ok) {
-          setAgentMeta(undefined);
-          showToastRef.current(ToastMessage.toast('智能体信息加载失败', meta.error));
-          return;
-        }
-        setAgentMeta(prev => ({
-          ...prev,
-          ...meta.value,
-          tokenLabel: prev?.tokenLabel ?? '…',
-        }));
-        void refreshChatTokenLabel();
-      } catch (error) {
-        // loadChatAgentMeta 仅归一 agent 解析失败（→none meta）；走到
-        // 这里的是未知异常——保持未加载（锁定）态并提示错误。失败清场
-        // 同样过闸：旧会话的失败既不该清掉新会话的 meta，也不该弹与新
-        // 会话无关的提示。
-        if (!isCurrentRound()) {
-          return;
-        }
-        setAgentMeta(undefined);
-        showToastRef.current(ToastMessage.toast('智能体信息加载失败', error));
-      }
-    })();
-    refreshChatMetaInflightRef.current = {key, round, promise};
-    // 落定后清引用：只清自己这一轮，避免覆盖后继（不同参数）的刷新；
-    // 完成后无 inflight，下次调用（如重新聚焦）正常发起新一轮。
-    const settleInflight = () => {
-      if (refreshChatMetaInflightRef.current?.promise === promise) {
-        refreshChatMetaInflightRef.current = null;
-      }
-    };
-    promise.then(settleInflight, settleInflight);
-    return promise;
-  };
-  const metaRefreshDeps = [runtime, projectId, sessionId, refreshChatTokenLabel];
-  const refreshChatMeta = useCallback(metaRefreshImpl, metaRefreshDeps);
-
-  // nm-style: keep-local — 回调承载项目/会话列表装载状态链，内联回 useCallback 会让调用参数跨行
-  const reloadListsImpl = async (): Promise<Result<void, AppError>> => {
-    const plist = await runtime.projects.list();
-    setProjects(plist);
-    const pid = projectId ?? plist[0]?.id;
-    if (pid) {
-      // projects.get 与 sessions.listByProject 都只依赖 pid、互不依赖，
-      // 并行发起（projects.list 必须先行：pid 取自 plist[0] 兜底）。
-      const nextSessionsPromise = runtime.sessions.listByProject(pid);
-      // 先挂兜底 handler：get 慢于本查询失败时，等待窗口内不会出现
-      // unhandled rejection；真正的失败语义由下方 await 原样承接。
-      nextSessionsPromise.catch(() => undefined);
-      let projectMeta: ChatProject | undefined;
-      const projectResult = await runtime.projects.get(pid);
-      if (projectResult.ok) {
-        projectMeta = projectResult.value;
-      }
-      setCurrentProjectMeta(projectMeta);
-      const nextSessions = await nextSessionsPromise;
-      if (!nextSessions.ok) return Result.err(nextSessions.error);
-      setSessions(nextSessions.value);
-    } else {
-      setCurrentProjectMeta(undefined);
-      setSessions([]);
-    }
-    return Result.ok(undefined);
-  };
-  const reloadLists = useCallback(reloadListsImpl, [runtime, projectId]);
-
-  useEffect(() => {
-    reloadLists().catch(() => undefined);
-  }, [reloadLists]);
-
-  // 详情页改名成功后会广播 session-renamed；无条件 reloadLists（幂等，
-  // 跨项目改名时当前项目列表本就无需变化），聊天页标题/列表随 sessions 刷新。
-  useEffect(() => {
-    const sub = DeviceEventEmitter.addListener('session-renamed', () => {
-      reloadLists().catch(() => undefined);
-    });
-    return () => sub.remove();
-  }, [reloadLists]);
-
-  useEffect(() => {
-    refreshChatMeta().catch(() => undefined);
-  }, [refreshChatMeta]);
-
-  const currentSession = sessions.find(s => s.id === sessionId);
-
-  const backFromConversation = useCallback(() => setSubview('sessions'), []);
-
-  const handleCreateProject = useCallback(
-    async (name: string) => {
-      const created = await runtime.projects.create(name);
-      if (!created.ok) {
-        showToast(ToastMessage.toast('创建失败', created.error));
-        return;
-      }
-      await setCurrentProject(created.value.id);
-      await refreshScope();
-      const lr = await reloadLists();
-      if (!lr.ok) {
-        showToast(ToastMessage.toast('创建失败', lr.error));
-      }
-    },
-    [runtime, setCurrentProject, refreshScope, reloadLists, showToast],
-  );
-
-  const handleRenameProject = useCallback(
-    async (targetProjectId: string, name: string) => {
-      const renamed = await runtime.projects.rename(targetProjectId, name);
-      if (!renamed.ok) {
-        showToast(ToastMessage.toast('重命名失败', renamed.error));
-        return;
-      }
-      const lr = await reloadLists();
-      if (!lr.ok) {
-        showToast(ToastMessage.toast('重命名失败', lr.error));
-      }
-    },
-    [runtime, reloadLists, showToast],
-  );
-
-  const handleCreateSession = useCallback(async () => {
-    if (projectId == null) {
-      showToast('请先创建或选择项目');
-      return;
-    }
-    const list = await runtime.sessions.listByProject(projectId);
-    if (!list.ok) {
-      showToast(ToastMessage.toast('创建失败', list.error));
-      return;
-    }
-    const title = SessionDefaultTitle.next(list.value.map(s => s.title));
-    const created = await runtime.sessions.create(projectId, title);
-    if (!created.ok) {
-      showToast(ToastMessage.toast('创建失败', created.error));
-      return;
-    }
-    const lr = await reloadLists();
-    if (!lr.ok) {
-      showToast(ToastMessage.toast('创建失败', lr.error));
-    }
-  }, [runtime, projectId, reloadLists, showToast]);
-
-  const handleRenameSession = useCallback(
-    async (targetSessionId: string, title: string) => {
-      const renamed = await runtime.sessions.rename(targetSessionId, title);
-      if (!renamed.ok) {
-        showToast(ToastMessage.toast('重命名失败', renamed.error));
-        return;
-      }
-      const lr = await reloadLists();
-      if (!lr.ok) {
-        showToast(ToastMessage.toast('重命名失败', lr.error));
-      }
-    },
-    [runtime, reloadLists, showToast],
-  );
-
-  const openSessionRenamePrompt = useCallback(
-    (targetSessionId: string) => {
-      const session = sessions.find(s => s.id === targetSessionId);
-      setSessionRenamePrompt({
-        sessionId: targetSessionId,
-        initialTitle: session?.title ?? '',
-      });
-    },
-    [sessions],
-  );
-
-  const handleCopySession = useCallback(
-    async (sourceSessionId: string) => {
-      const copy = await runtime.sessions.copy(sourceSessionId);
-      if (!copy.ok) {
-        showToast(ToastMessage.toast('复制失败', copy.error));
-        return;
-      }
-      const lr = await reloadLists();
-      if (!lr.ok) {
-        showToast(ToastMessage.toast('复制失败', lr.error));
-        return;
-      }
-      showToast(`已复制会话：${copy.value.title ?? copy.value.id}`);
-    },
-    [runtime, reloadLists, showToast],
-  );
-
-  // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
-  const handleDeleteSession = useCallback(
-    async (targetSessionId: string) => {
-      const deleted = await runtime.sessions.delete(targetSessionId);
-      if (!deleted.ok) {
-        showToast(ToastMessage.toast('删除失败', deleted.error));
-        return;
-      }
-      // 会话已从库里消失：同步遗忘 manager 里该会话的四张常驻表与活跃 refcount
-      // （纯内存同步方法、不抛错，放 delete 成功之后不影响失败语义）。
-      runtime.sessionStreamUnitManager.forgetSession(targetSessionId);
-      if (projectId != null) {
-        const cacheKey = SessionViewCache.key(projectId, targetSessionId);
-        SessionViewCache.clear(cacheKey);
-      }
-      if (sessionId === targetSessionId) {
-        setSubview('sessions');
-      }
-      await refreshScope();
-      const lr = await reloadLists();
-      if (!lr.ok) {
-        showToast(ToastMessage.toast('删除失败', lr.error));
-        return;
-      }
-      showToast('已删除会话');
-    },
-    [runtime, projectId, sessionId, refreshScope, reloadLists, showToast],
-  );
-
-  const confirmDeleteSession = useCallback(
-    (targetSessionId: string) => {
-      const session = sessions.find(s => s.id === targetSessionId);
-      const label = session?.title?.trim() || '该会话';
-      const msg = `确定删除会话「${label}」？消息与文件将一并删除，且无法恢复。`;
-      Alert.alert('确认删除', msg, [
-        {text: '取消', style: 'cancel'},
-        {
-          text: '删除',
-          style: 'destructive',
-          onPress: () => handleDeleteSession(targetSessionId).catch(() => undefined),
+    // 卸载清理：别让挂起的防抖计时在组件卸载后再触发 setState；同时收口它那一轮
+    // 已挂起的精确升级延迟计时（组件已死，没人消费升级标签，秒级重活纯浪费）。
+    // 保持 [] 依赖 + 经 ref 读：ref 永远是最新一轮的会话身份，天然正确。
+    useEffect(
+        () => () => {
+            const slot = chatTokenLabelDebounceRef.current;
+            if (slot.timer != null) {
+                clearTimeout(slot.timer);
+                slot.timer = null;
+            }
+            promptTokens.PreciseUpgrade.cancelDelay(slot.sessionId);
+            // 在途原生计数一并撤掉（tokenizer-native-cancel）：组件已死，没人消费
+            // 升级标签，已过桥的那轮秒级重活纯浪费。
+            promptTokens.PreciseUpgrade.cancel(slot.sessionId);
         },
-      ]);
-    },
-    [sessions, handleDeleteSession],
-  );
+        [],
+    );
 
-  const deleteSelectedSessions = useCallback(
-    async (selectedIds: ReadonlySet<string>, exitSessionBatch: () => void) => {
-      const ids = [...selectedIds];
-      // 部分成功语义：逐个删除，先删成功的保持已删、不回滚；中途失败即停止并提示剩余未删。
-      for (const id of ids) {
-        const deleted = await runtime.sessions.delete(id);
-        if (!deleted.ok) {
-          showToast(ToastMessage.toast('删除失败', deleted.error));
-          break;
+    // refreshChatMeta 的在途复用槽：首屏三处触发（本 hook 的 dep effect、
+    // Provider 的 conversation effect、useFocusEffect）在同一挂载周期内
+    // 重入，同参调用共享在途 promise，只跑一轮查询。
+    // round 是落地的会话身份闸（r4-app-1）：每新起一轮自增，落定前与槽内
+    // 轮次比对——只有仍是槽内最新一轮的读数才许落地。切会话后旧会话在途的
+    // loadChatAgentMeta 落定（含失败）一律丢弃，否则旧会话的 agentName /
+    // modelLabel 会写进新会话（tokenLabel 因显式保留恰好幸免，其余字段不是）。
+    const refreshChatMetaInflightRef = useRef<ChatMetaInflight | null>(null);
+    const refreshChatMetaRoundRef = useRef(0);
+
+    // showToast 经 ref 取用：它随渲染可能换引用（消费方 context mock 每次
+    // 渲染给新函数），若进 refreshChatMeta 依赖会连锁重建 → dep effect 无限
+    // 重跑。ref 保住依赖稳定，调用时取最新引用。
+    const showToastRef = useRef(showToast);
+    useEffect(() => void (showToastRef.current = showToast), [showToast]);
+
+    // nm-style: keep-local — 回调承载 meta 在途槽与轮次闸状态机，内联回 useCallback 会让调用参数跨行
+    const metaRefreshImpl = () => {
+        const key = `${projectId ?? ''}#${sessionId ?? ''}`;
+        const inflight = refreshChatMetaInflightRef.current;
+        if (inflight != null && inflight.key === key) {
+            return inflight.promise;
         }
-        // 部分成功语义：每个 delete 成功就立刻 forget 一次，不能攒到最后统一做
-        // （中途失败时后面那些根本没删，遗忘它们等于误清活跃会话的状态）。
-        runtime.sessionStreamUnitManager.forgetSession(id);
-        if (projectId != null) {
-          SessionViewCache.clear(SessionViewCache.key(projectId, id));
+        const round = ++refreshChatMetaRoundRef.current;
+        // 落地权判据：在途槽里还是这一轮（中途没被别的会话/参数的轮次顶掉）。
+        const isCurrentRound = () => refreshChatMetaInflightRef.current?.round === round;
+        const promise = (async () => {
+            // getCurrentModelId 与 loadChatAgentMeta 互不依赖（后者只需
+            // projectId/sessionId），并行发起；两路赋值顺序保持
+            // （先 hasWorkspaceModel 后 agentMeta），失败语义不变。
+            let metaPromise;
+            if (projectId != null && sessionId != null) {
+                metaPromise = ChatAgentMetaService.load(runtime, projectId, sessionId);
+            }
+            // 兜底挂接：getCurrentModelId 先失败提前退出时，在途 meta 查询的
+            // 拒绝不会变成 unhandled rejection（其结果本就不会再被消费）。
+            metaPromise?.catch(() => undefined);
+            const currentModel = await runtime.state.getCurrentModelId();
+            // 读取失败（错误通道迁移四期）：旧通道为 IIFE rejection 被上层
+            // `.catch(() => undefined)` 静默吞掉——同为静默不更新状态。
+            if (!currentModel.ok) {
+                return;
+            }
+            const modelId = currentModel.value;
+            setHasWorkspaceModel(modelId != null && modelId !== '');
+            if (metaPromise == null) {
+                // 无项目或无活动会话时无法解析 session 绑定：保持未加载（锁定）态，
+                // 不用 source:'none' 占位——那会被消费方当成「已删待重选」。
+                // 同样过身份闸：本轮的「无会话」结论不能清掉切换后新会话已落地的 meta。
+                if (isCurrentRound()) {
+                    setAgentMeta(undefined);
+                }
+                return;
+            }
+            try {
+                const meta = await metaPromise;
+                // 会话身份闸（r4-app-1）：旧会话在途的 meta 落定不得写进新会话——
+                // 合并写回与链尾标签刷新整段都要「仍是最新一轮」才执行（标签刷新
+                // 一旦放行会把身份闸重新指到旧会话，残留就从 meta 字段漏回来）。
+                if (!isCurrentRound()) {
+                    return;
+                }
+                // 非 agent 解析类失败（Result.err，错误通道迁移四期）与未知异常同
+                // 终端：保持未加载（锁定）态并提示错误，绝不冒充「已删待重选」。
+                if (!meta.ok) {
+                    setAgentMeta(undefined);
+                    showToastRef.current(ToastMessage.toast(coreT({key: "ui.session.agent_info_load_failed"}), meta.error));
+                    return;
+                }
+                setAgentMeta(prev => ({
+                    ...prev,
+                    ...meta.value,
+                    tokenLabel: prev?.tokenLabel ?? '…',
+                }));
+                void refreshChatTokenLabel();
+            } catch (error) {
+                // loadChatAgentMeta 仅归一 agent 解析失败（→none meta）；走到
+                // 这里的是未知异常——保持未加载（锁定）态并提示错误。失败清场
+                // 同样过闸：旧会话的失败既不该清掉新会话的 meta，也不该弹与新
+                // 会话无关的提示。
+                if (!isCurrentRound()) {
+                    return;
+                }
+                setAgentMeta(undefined);
+                showToastRef.current(ToastMessage.toast(coreT({key: "ui.session.agent_info_load_failed"}), error));
+            }
+        })();
+        refreshChatMetaInflightRef.current = {key, round, promise};
+        // 落定后清引用：只清自己这一轮，避免覆盖后继（不同参数）的刷新；
+        // 完成后无 inflight，下次调用（如重新聚焦）正常发起新一轮。
+        const settleInflight = () => {
+            if (refreshChatMetaInflightRef.current?.promise === promise) {
+                refreshChatMetaInflightRef.current = null;
+            }
+        };
+        promise.then(settleInflight, settleInflight);
+        return promise;
+    };
+    const metaRefreshDeps = [runtime, projectId, sessionId, refreshChatTokenLabel];
+    const refreshChatMeta = useCallback(metaRefreshImpl, metaRefreshDeps);
+
+    // nm-style: keep-local — 回调承载项目/会话列表装载状态链，内联回 useCallback 会让调用参数跨行
+    const reloadListsImpl = async (): Promise<Result<void, AppError>> => {
+        const plist = await runtime.projects.list();
+        setProjects(plist);
+        const pid = projectId ?? plist[0]?.id;
+        if (pid) {
+            // projects.get 与 sessions.listByProject 都只依赖 pid、互不依赖，
+            // 并行发起（projects.list 必须先行：pid 取自 plist[0] 兜底）。
+            const nextSessionsPromise = runtime.sessions.listByProject(pid);
+            // 先挂兜底 handler：get 慢于本查询失败时，等待窗口内不会出现
+            // unhandled rejection；真正的失败语义由下方 await 原样承接。
+            nextSessionsPromise.catch(() => undefined);
+            let projectMeta: ChatProject | undefined;
+            const projectResult = await runtime.projects.get(pid);
+            if (projectResult.ok) {
+                projectMeta = projectResult.value;
+            }
+            setCurrentProjectMeta(projectMeta);
+            const nextSessions = await nextSessionsPromise;
+            if (!nextSessions.ok) return Result.err(nextSessions.error);
+            setSessions(nextSessions.value);
+        } else {
+            setCurrentProjectMeta(undefined);
+            setSessions([]);
         }
-      }
-      // 无论删除是否中途失败，都退出批选态，让用户可以重试剩余未删项。
-      const deletedCurrent = sessionId != null && ids.includes(sessionId);
-      exitSessionBatch();
-      if (deletedCurrent) {
-        setSubview('sessions');
-      }
-      await refreshScope();
-      await reloadLists();
-    },
-    [runtime, sessionId, projectId, refreshScope, reloadLists, showToast],
-  );
+        return Result.ok(undefined);
+    };
+    const reloadLists = useCallback(reloadListsImpl, [runtime, projectId]);
 
-  // nm-style: keep-local — 回调承载级联删项目与会话缓存清理状态链，内联回 useCallback 会让调用参数跨行
-  const deleteProjectsImpl = async (ids: string[]) => {
-    // 部分成功语义：逐个删除，先删成功的保持已删、不回滚；中途失败即停止并提示剩余未删。
-    for (const id of ids) {
-      // 必须在 delete 之前取会话清单：项目删除是级联的，删完就再也读不到归属关系。
-      // TODO(AM-1 已知缺口)：`listByProject` 的 SQL 硬编码 `parent_session_id IS NULL`
-      //   ⇒ 只返回顶层会话，子 agent 会话不在结果里，而 manager 恰恰为子会话写过
-      //   settledProjections ⇒ 项目删除后子会话条目仍会残留。
-      //   兜底：manager 两张常驻表已挂 500 LRU（SESSION_STREAM_MAX_MESSAGE_VIEWS），
-      //   残留条目最多存活到被淘汰，不会永久泄漏。
-      //   补法（**不必等 core 大改，这个缺口今天就能收**）：`listByParentSession`
-      //   在 core 里已经存在——仓储 port（domain/chat/repositories/session.port.ts）
-      //   与实现（impl/sqlite-session.repository.ts）都有，BFS 队列展开的成例也现成
-      //   （service/chat/impl/project.service.ts 的 delete、service/vfs/impl/
-      //   physical-vfs.service.ts 两处）。真正缺的只是**服务层没导出**：
-      //   service/chat/session.port.ts 只有 `listByProject`。补一行转发 +
-      //   这里照 project.service 的 BFS 模板把子会话展开出来即可回收本缺口。
-      const doomedSessions = await runtime.sessions.listByProject(id);
-      if (!doomedSessions.ok) {
-        showToast(ToastMessage.toast('删除失败', doomedSessions.error));
-        break;
-      }
-      const deleted = await runtime.projects.delete(id);
-      if (!deleted.ok) {
-        showToast(ToastMessage.toast('删除失败', deleted.error));
-        break;
-      }
-      for (const s of doomedSessions.value) {
-        runtime.sessionStreamUnitManager.forgetSession(s.id);
-      }
-      // 项目删除后按前缀清掉其会话级缓存，避免消息 tail / 滚动快照残留。
-      SessionViewCache.clearByProject(id);
-      ChatTranscriptScrollCache.clearByProject(id);
-    }
-    await refreshScope();
-    await reloadLists();
-  };
-  const projectsDeps = [runtime, refreshScope, reloadLists, showToast];
-  const handleDeleteProjects = useCallback(deleteProjectsImpl, projectsDeps);
+    useEffect(() => {
+        reloadLists().catch(() => undefined);
+    }, [reloadLists]);
 
-  const bumpWorktreeUiToken = useCallback(() => setVfsKey(k => k + 1), []);
-
-  const openFileEditor = useCallback(
-    (path: string, scopeKind: 'project' | 'session') => {
-      if (projectId == null) {
-        return;
-      }
-      if (scopeKind === 'session') {
-        if (sessionId == null) {
-          return;
-        }
-        // 「保存成功后刷新工作区列表」的回调必须在 navigate **之前**写入：
-        // 回调不可序列化，不能进路由 params（见 file-editor-saved-callback）。
-        fileEditorOnSessionVfsSavedSlot.set(bumpWorktreeUiToken);
-        navigation.navigate('FileEditor', {
-          path,
-          scopeKind: 'session',
-          projectId,
-          sessionId,
+    // 详情页改名成功后会广播 session-renamed；无条件 reloadLists（幂等，
+    // 跨项目改名时当前项目列表本就无需变化），聊天页标题/列表随 sessions 刷新。
+    useEffect(() => {
+        const sub = DeviceEventEmitter.addListener('session-renamed', () => {
+            reloadLists().catch(() => undefined);
         });
-      } else {
-        navigation.navigate('FileEditor', {
-          path,
-          scopeKind: 'project',
-          projectId,
-        });
-      }
-    },
-    [navigation, projectId, sessionId, bumpWorktreeUiToken],
-  );
+        return () => sub.remove();
+    }, [reloadLists]);
 
-  const openSessionFilePreview = useCallback(
-    (path: string) => {
-      setConvPanel('workspace');
-      openFileEditor(path, 'session');
-    },
-    [openFileEditor],
-  );
+    useEffect(() => {
+        refreshChatMeta().catch(() => undefined);
+    }, [refreshChatMeta]);
 
-  // 点击 task 工具卡片跳转到子会话只读浏览页。子会话与当前主会话同属一个项目，
-  // 故 projectId 取当前会话的项目，sessionId 用入参（子会话 id）。
-  // 文件只有一个共享工作区（父会话 session VFS），子 agent 在父工作区干活，
-  // 所以把父会话 sessionId 一并传下去，供文件卡片点击时以父 session scope 打开。
-  const openSubagentSession = useCallback(
-    (childSessionId: string) => {
-      if (projectId == null || sessionId == null) {
-        return;
-      }
-      navigation.navigate('SubagentSessionView', {
-        projectId,
-        sessionId: childSessionId,
-        parentSessionId: sessionId,
-      });
-    },
-    [navigation, projectId, sessionId],
-  );
+    const currentSession = sessions.find(s => s.id === sessionId);
 
-  // skill 卡片跳技能详情。write/edit 缺省域解析出的 project 三元组不带
-  // projectId（webview / 卡片无会话上下文），这里按当前会话项目补齐。
-  const openSkillDetail = useCallback(
-    (ref: SkillToolRef) => {
-      const isProject = ref.domain === 'project';
-      const pid = isProject ? ref.projectId ?? projectId : undefined;
-      if (isProject && pid == null) {
-        return;
-      }
-      navigation.navigate('SkillDetail', {
-        domain: ref.domain,
-        name: ref.name,
-        ...(pid != null ? {projectId: pid} : {}),
-      });
-    },
-    [navigation, projectId],
-  );
+    const backFromConversation = useCallback(() => setSubview('sessions'), []);
 
-  // 工具结果阅读（search/curl/grep/glob 等兜底卡片）：复用「预览提示词」的
-  // PromptTurnDetail 阅读页（纯文本铺开）。正文不走路由参数（可达数百
-  // KB），照 useOpenPromptDetail 先例写模块级单例、挂载时读走即清；
-  // turnId 作伪 path 稳定 key。title 兜底在 webview 侧（rows-click 的
-  // row.name || '工具结果'，数据源就近），宿主不再重复兜底。
-  // 带 inputJson（卡片有入参）时阅读页铺「【输入】+【输出】」两段：curl 的
-  // body/headers 这类入参只存在于原始入参里，摘要一行给不出，光看输出没法
-  // 判断「为什么发了这个请求」。正文用原文 pretty JSON，不做二次格式化。
-  const openToolResult = useCallback(
-    (payload: {title: string; content: string; inputJson?: string}) => {
-      const {title, content, inputJson} = payload;
-      const withInput = `【输入】\n${inputJson}\n\n【输出】\n${content}`;
-      const body = inputJson != null && inputJson !== '' ? withInput : content;
-      promptTurnDetailSlot.set({title, body});
-      navigation.navigate('PromptTurnDetail', {
-        title,
-        turnId: `tool-result-${title}`,
-      });
-    },
-    [navigation],
-  );
+    const handleCreateProject = useCallback(
+        async (name: string) => {
+            const created = await runtime.projects.create(name);
+            if (!created.ok) {
+                showToast(ToastMessage.toast(coreT({key: "ui.common.create_failed"}), created.error));
+                return;
+            }
+            await setCurrentProject(created.value.id);
+            await refreshScope();
+            const lr = await reloadLists();
+            if (!lr.ok) {
+                showToast(ToastMessage.toast(coreT({key: "ui.common.create_failed"}), lr.error));
+            }
+        },
+        [runtime, setCurrentProject, refreshScope, reloadLists, showToast],
+    );
 
-  const sessionVfs = useMemo(() => (projectId != null && sessionId != null ? runtime.sessionVfs(projectId, sessionId) : null), [runtime, projectId, sessionId]);
-  const sessionWorktree = useMemo(
-    () =>
-      projectId != null && sessionId != null
-        ? runtime.workplace({
-            kind: 'session',
-            projectId,
-            sessionId,
-          })
-        : null,
-    [runtime, projectId, sessionId],
-  );
-  const projectVfs = useMemo(() => (projectId != null ? runtime.projectVfs(projectId) : null), [runtime, projectId]);
+    const handleRenameProject = useCallback(
+        async (targetProjectId: string, name: string) => {
+            const renamed = await runtime.projects.rename(targetProjectId, name);
+            if (!renamed.ok) {
+                showToast(ToastMessage.toast(coreT({key: "ui.common.rename_failed"}), renamed.error));
+                return;
+            }
+            const lr = await reloadLists();
+            if (!lr.ok) {
+                showToast(ToastMessage.toast(coreT({key: "ui.common.rename_failed"}), lr.error));
+            }
+        },
+        [runtime, reloadLists, showToast],
+    );
 
-  // 聊天 markdown 链接点击（webview 上抛 linkClick）：只做意图执行。
-  // 识别与探测在 chat-link-nav 纯函数内完成（session 先、project 后，仅文件命中）；
-  // http(s) 外跳系统浏览器，外跳失败静默兜底（与原导航守卫语义一致）；
-  // session 打开需 projectId+sessionId 齐全，缺参由 openFileEditor 内部降级 no-op。
-  const openChatLink = useCallback(
-    (href: string) => {
-      void ChatLinkNav.resolveChatLinkIntent(href, {
+    const handleCreateSession = useCallback(async () => {
+        if (projectId == null) {
+            showToast(coreT({key: "ui.chat.select_or_create_project"}));
+            return;
+        }
+        const list = await runtime.sessions.listByProject(projectId);
+        if (!list.ok) {
+            showToast(ToastMessage.toast(coreT({key: "ui.common.create_failed"}), list.error));
+            return;
+        }
+        const title = SessionDefaultTitle.next(list.value.map(s => s.title));
+        const created = await runtime.sessions.create(projectId, title);
+        if (!created.ok) {
+            showToast(ToastMessage.toast(coreT({key: "ui.common.create_failed"}), created.error));
+            return;
+        }
+        const lr = await reloadLists();
+        if (!lr.ok) {
+            showToast(ToastMessage.toast(coreT({key: "ui.common.create_failed"}), lr.error));
+        }
+    }, [runtime, projectId, reloadLists, showToast]);
+
+    const handleRenameSession = useCallback(
+        async (targetSessionId: string, title: string) => {
+            const renamed = await runtime.sessions.rename(targetSessionId, title);
+            if (!renamed.ok) {
+                showToast(ToastMessage.toast(coreT({key: "ui.common.rename_failed"}), renamed.error));
+                return;
+            }
+            const lr = await reloadLists();
+            if (!lr.ok) {
+                showToast(ToastMessage.toast(coreT({key: "ui.common.rename_failed"}), lr.error));
+            }
+        },
+        [runtime, reloadLists, showToast],
+    );
+
+    const openSessionRenamePrompt = useCallback(
+        (targetSessionId: string) => {
+            const session = sessions.find(s => s.id === targetSessionId);
+            setSessionRenamePrompt({
+                sessionId: targetSessionId,
+                initialTitle: session?.title ?? '',
+            });
+        },
+        [sessions],
+    );
+
+    const handleCopySession = useCallback(
+        async (sourceSessionId: string) => {
+            const copy = await runtime.sessions.copy(sourceSessionId);
+            // 中断沿返回值上行（Outcome 通道）：取消/替换静默（控制流不是失败）。
+            if (copy.kind === 'cancelled' || copy.kind === 'replaced') return;
+            if (copy.kind === 'failed') {
+                showToast(ToastMessage.toast(coreT({key: "ui.common.copy_failed"}), copy.error));
+                return;
+            }
+            const lr = await reloadLists();
+            if (!lr.ok) {
+                showToast(ToastMessage.toast(coreT({key: "ui.common.copy_failed"}), lr.error));
+                return;
+            }
+            showToast(coreT({key: "ui.chat.copy_session_done", params: {name: copy.value.title ?? copy.value.id}}));
+        },
+        [runtime, reloadLists, showToast],
+    );
+
+    // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
+    const handleDeleteSession = useCallback(
+        async (targetSessionId: string) => {
+            const deleted = await runtime.sessions.delete(targetSessionId);
+            if (!deleted.ok) {
+                showToast(ToastMessage.toast(coreT({key: "ui.common.delete_failed"}), deleted.error));
+                return;
+            }
+            // 会话已从库里消失：同步遗忘 manager 里该会话的四张常驻表与活跃 refcount
+            // （纯内存同步方法、不抛错，放 delete 成功之后不影响失败语义）。
+            runtime.sessionStreamUnitManager.forgetSession(targetSessionId);
+            if (projectId != null) {
+                const cacheKey = SessionViewCache.key(projectId, targetSessionId);
+                SessionViewCache.clear(cacheKey);
+            }
+            if (sessionId === targetSessionId) {
+                setSubview('sessions');
+            }
+            await refreshScope();
+            const lr = await reloadLists();
+            if (!lr.ok) {
+                showToast(ToastMessage.toast(coreT({key: "ui.common.delete_failed"}), lr.error));
+                return;
+            }
+            showToast(coreT({key: "ui.chat.delete_session_done"}));
+        },
+        [runtime, projectId, sessionId, refreshScope, reloadLists, showToast],
+    );
+
+    const confirmDeleteSession = useCallback(
+        (targetSessionId: string) => {
+            const session = sessions.find(s => s.id === targetSessionId);
+            const label = session?.title?.trim() || coreT({key: "ui.nav.this_session"});
+            const msg = coreT({key: "ui.chat.delete_session_confirm", params: {name: label}});
+            Alert.alert(coreT({key: "ui.common.confirm_delete"}), msg, [
+                {text: coreT({key: "ui.common.cancel"}), style: 'cancel'},
+                {
+                    text: coreT({key: "ui.common.delete"}),
+                    style: 'destructive',
+                    onPress: () => handleDeleteSession(targetSessionId).catch(() => undefined),
+                },
+            ]);
+        },
+        [sessions, handleDeleteSession],
+    );
+
+    const deleteSelectedSessions = useCallback(
+        async (selectedIds: ReadonlySet<string>, exitSessionBatch: () => void) => {
+            const ids = [...selectedIds];
+            // 部分成功语义：逐个删除，先删成功的保持已删、不回滚；中途失败即停止并提示剩余未删。
+            for (const id of ids) {
+                const deleted = await runtime.sessions.delete(id);
+                if (!deleted.ok) {
+                    showToast(ToastMessage.toast(coreT({key: "ui.common.delete_failed"}), deleted.error));
+                    break;
+                }
+                // 部分成功语义：每个 delete 成功就立刻 forget 一次，不能攒到最后统一做
+                // （中途失败时后面那些根本没删，遗忘它们等于误清活跃会话的状态）。
+                runtime.sessionStreamUnitManager.forgetSession(id);
+                if (projectId != null) {
+                    SessionViewCache.clear(SessionViewCache.key(projectId, id));
+                }
+            }
+            // 无论删除是否中途失败，都退出批选态，让用户可以重试剩余未删项。
+            const deletedCurrent = sessionId != null && ids.includes(sessionId);
+            exitSessionBatch();
+            if (deletedCurrent) {
+                setSubview('sessions');
+            }
+            await refreshScope();
+            await reloadLists();
+        },
+        [runtime, sessionId, projectId, refreshScope, reloadLists, showToast],
+    );
+
+    // nm-style: keep-local — 回调承载级联删项目与会话缓存清理状态链，内联回 useCallback 会让调用参数跨行
+    const deleteProjectsImpl = async (ids: string[]) => {
+        // 部分成功语义：逐个删除，先删成功的保持已删、不回滚；中途失败即停止并提示剩余未删。
+        for (const id of ids) {
+            // 必须在 delete 之前取会话清单：项目删除是级联的，删完就再也读不到归属关系。
+            // TODO(AM-1 已知缺口)：`listByProject` 的 SQL 硬编码 `parent_session_id IS NULL`
+            //   ⇒ 只返回顶层会话，子 agent 会话不在结果里，而 manager 恰恰为子会话写过
+            //   settledProjections ⇒ 项目删除后子会话条目仍会残留。
+            //   兜底：manager 两张常驻表已挂 500 LRU（SESSION_STREAM_MAX_MESSAGE_VIEWS），
+            //   残留条目最多存活到被淘汰，不会永久泄漏。
+            //   补法（**不必等 core 大改，这个缺口今天就能收**）：`listByParentSession`
+            //   在 core 里已经存在——仓储 port（domain/chat/repositories/session.port.ts）
+            //   与实现（impl/sqlite-session.repository.ts）都有，BFS 队列展开的成例也现成
+            //   （service/chat/impl/project.service.ts 的 delete、service/vfs/impl/
+            //   physical-vfs.service.ts 两处）。真正缺的只是**服务层没导出**：
+            //   service/chat/session.port.ts 只有 `listByProject`。补一行转发 +
+            //   这里照 project.service 的 BFS 模板把子会话展开出来即可回收本缺口。
+            const doomedSessions = await runtime.sessions.listByProject(id);
+            if (!doomedSessions.ok) {
+                showToast(ToastMessage.toast(coreT({key: "ui.common.delete_failed"}), doomedSessions.error));
+                break;
+            }
+            const deleted = await runtime.projects.delete(id);
+            if (!deleted.ok) {
+                showToast(ToastMessage.toast(coreT({key: "ui.common.delete_failed"}), deleted.error));
+                break;
+            }
+            for (const s of doomedSessions.value) {
+                runtime.sessionStreamUnitManager.forgetSession(s.id);
+            }
+            // 项目删除后按前缀清掉其会话级缓存，避免消息 tail / 滚动快照残留。
+            SessionViewCache.clearByProject(id);
+            ChatTranscriptScrollCache.clearByProject(id);
+        }
+        await refreshScope();
+        await reloadLists();
+    };
+    const projectsDeps = [runtime, refreshScope, reloadLists, showToast];
+    const handleDeleteProjects = useCallback(deleteProjectsImpl, projectsDeps);
+
+    const bumpWorktreeUiToken = useCallback(() => setVfsKey(k => k + 1), []);
+
+    const openFileEditor = useCallback(
+        (path: string, scopeKind: 'project' | 'session') => {
+            if (projectId == null) {
+                return;
+            }
+            if (scopeKind === 'session') {
+                if (sessionId == null) {
+                    return;
+                }
+                // 「保存成功后刷新工作区列表」的回调必须在 navigate **之前**写入：
+                // 回调不可序列化，不能进路由 params（见 file-editor-saved-callback）。
+                fileEditorOnSessionVfsSavedSlot.set(bumpWorktreeUiToken);
+                navigation.navigate('FileEditor', {
+                    path,
+                    scopeKind: 'session',
+                    projectId,
+                    sessionId,
+                });
+            } else {
+                navigation.navigate('FileEditor', {
+                    path,
+                    scopeKind: 'project',
+                    projectId,
+                });
+            }
+        },
+        [navigation, projectId, sessionId, bumpWorktreeUiToken],
+    );
+
+    const openSessionFilePreview = useCallback(
+        (path: string) => {
+            setConvPanel('workspace');
+            openFileEditor(path, 'session');
+        },
+        [openFileEditor],
+    );
+
+    // 点击 task 工具卡片跳转到子会话只读浏览页。子会话与当前主会话同属一个项目，
+    // 故 projectId 取当前会话的项目，sessionId 用入参（子会话 id）。
+    // 文件只有一个共享工作区（父会话 session VFS），子 agent 在父工作区干活，
+    // 所以把父会话 sessionId 一并传下去，供文件卡片点击时以父 session scope 打开。
+    const openSubagentSession = useCallback(
+        (childSessionId: string) => {
+            if (projectId == null || sessionId == null) {
+                return;
+            }
+            navigation.navigate('SubagentSessionView', {
+                projectId,
+                sessionId: childSessionId,
+                parentSessionId: sessionId,
+            });
+        },
+        [navigation, projectId, sessionId],
+    );
+
+    // skill 卡片跳技能详情。write/edit 缺省域解析出的 project 三元组不带
+    // projectId（webview / 卡片无会话上下文），这里按当前会话项目补齐。
+    const openSkillDetail = useCallback(
+        (ref: SkillToolRef) => {
+            const isProject = ref.domain === 'project';
+            const pid = isProject ? ref.projectId ?? projectId : undefined;
+            if (isProject && pid == null) {
+                return;
+            }
+            navigation.navigate('SkillDetail', {
+                domain: ref.domain,
+                name: ref.name,
+                ...(pid != null ? {projectId: pid} : {}),
+            });
+        },
+        [navigation, projectId],
+    );
+
+    // 工具结果阅读（search/curl/grep/glob 等兜底卡片）：复用「预览提示词」的
+    // PromptTurnDetail 阅读页（纯文本铺开）。正文不走路由参数（可达数百
+    // KB），照 useOpenPromptDetail 先例写模块级单例、挂载时读走即清；
+    // turnId 作伪 path 稳定 key。title 兜底在 webview 侧（rows-click 的
+    // row.name || '工具结果'，数据源就近），宿主不再重复兜底。
+    // 带 inputJson（卡片有入参）时阅读页铺「【输入】+【输出】」两段：curl 的
+    // body/headers 这类入参只存在于原始入参里，摘要一行给不出，光看输出没法
+    // 判断「为什么发了这个请求」。正文用原文 pretty JSON，不做二次格式化。
+    const openToolResult = useCallback(
+        (payload: {title: string; content: string; inputJson?: string}) => {
+            const {title, content, inputJson} = payload;
+            const withInput = `${coreT({key: "ui.chat.io_input_label"})}\n${inputJson}\n\n${coreT({key: "ui.chat.io_output_label"})}\n${content}`;
+            const body = inputJson != null && inputJson !== '' ? withInput : content;
+            promptTurnDetailSlot.set({title, body});
+            navigation.navigate('PromptTurnDetail', {
+                title,
+                turnId: `tool-result-${title}`,
+            });
+        },
+        [navigation],
+    );
+
+    const sessionVfs = useMemo(() => (projectId != null && sessionId != null ? runtime.sessionVfs(projectId, sessionId) : null), [runtime, projectId, sessionId]);
+    const sessionWorktree = useMemo(
+        () =>
+            projectId != null && sessionId != null
+                ? runtime.workplace({
+                        kind: 'session',
+                        projectId,
+                        sessionId,
+                    })
+                : null,
+        [runtime, projectId, sessionId],
+    );
+    const projectVfs = useMemo(() => (projectId != null ? runtime.projectVfs(projectId) : null), [runtime, projectId]);
+
+    // 聊天 markdown 链接点击（webview 上抛 linkClick）：只做意图执行。
+    // 识别与探测在 chat-link-nav 纯函数内完成（session 先、project 后，仅文件命中）；
+    // http(s) 外跳系统浏览器，外跳失败静默兜底（与原导航守卫语义一致）；
+    // session 打开需 projectId+sessionId 齐全，缺参由 openFileEditor 内部降级 no-op。
+    const openChatLink = useCallback(
+        (href: string) => {
+            void ChatLinkNav.resolveChatLinkIntent(href, {
+                sessionVfs,
+                projectVfs,
+            }).then(intent => {
+                if (intent.kind === 'external') {
+                    void Linking.openURL(intent.url).catch(() => undefined);
+                    return;
+                }
+                if (intent.kind === 'file') {
+                    openFileEditor(intent.path, intent.scope);
+                    return;
+                }
+                if (intent.kind === 'not-found') {
+                    // 路径型链接双域探测未命中：用户拍板弹提示，不再静默无动作
+                    AppToast.show(coreT(ChatLinkResolver.notFoundMessage(intent.path)));
+                }
+            });
+        },
+        [sessionVfs, projectVfs, openFileEditor],
+    );
+    const projectWorktree = useMemo(() => (projectId != null ? runtime.workplace({kind: 'project', projectId}) : null), [runtime, projectId]);
+
+    return {
+        agentMeta,
+        hasWorkspaceModel,
+        refreshChatMeta,
+        refreshChatTokenLabel,
+        projects,
+        sessions,
+        currentProject,
+        currentSession,
+        sessionListPanel: panel,
+        setSessionListPanel: setPanel,
+        chatSubview,
+        setChatSubview: setSubview,
+        conversationPanel: convPanel,
+        setConversationPanel: setConvPanel,
+        projectDrawerOpen,
+        setProjectDrawerOpen,
+        sessionDrawerOpen,
+        setSessionDrawerOpen,
+        vfsRefreshKey,
+        bumpWorktreeUiToken,
+        menuSessionId,
+        setMenuSessionId,
+        sessionRenamePrompt,
+        setSessionRenamePrompt,
+        reloadLists,
+        backFromConversation,
+        handleCreateProject,
+        handleRenameProject,
+        handleCreateSession,
+        handleRenameSession,
+        openSessionRenamePrompt,
+        handleCopySession,
+        handleDeleteSession,
+        confirmDeleteSession,
+        deleteSelectedSessions,
+        handleDeleteProjects,
+        openFileEditor,
+        openSessionFilePreview,
+        openChatLink,
+        openSubagentSession,
+        openSkillDetail,
+        openToolResult,
         sessionVfs,
+        sessionWorktree,
         projectVfs,
-      }).then(intent => {
-        if (intent.kind === 'external') {
-          void Linking.openURL(intent.url).catch(() => undefined);
-          return;
-        }
-        if (intent.kind === 'file') {
-          openFileEditor(intent.path, intent.scope);
-          return;
-        }
-        if (intent.kind === 'not-found') {
-          // 路径型链接双域探测未命中：用户拍板弹提示，不再静默无动作
-          AppToast.show(coreT(chatLinkResolver.notFoundMessage(intent.path)));
-        }
-      });
-    },
-    [sessionVfs, projectVfs, openFileEditor],
-  );
-  const projectWorktree = useMemo(() => (projectId != null ? runtime.workplace({kind: 'project', projectId}) : null), [runtime, projectId]);
-
-  return {
-    agentMeta,
-    hasWorkspaceModel,
-    refreshChatMeta,
-    refreshChatTokenLabel,
-    projects,
-    sessions,
-    currentProject,
-    currentSession,
-    sessionListPanel: panel,
-    setSessionListPanel: setPanel,
-    chatSubview,
-    setChatSubview: setSubview,
-    conversationPanel: convPanel,
-    setConversationPanel: setConvPanel,
-    projectDrawerOpen,
-    setProjectDrawerOpen,
-    sessionDrawerOpen,
-    setSessionDrawerOpen,
-    vfsRefreshKey,
-    bumpWorktreeUiToken,
-    menuSessionId,
-    setMenuSessionId,
-    sessionRenamePrompt,
-    setSessionRenamePrompt,
-    reloadLists,
-    backFromConversation,
-    handleCreateProject,
-    handleRenameProject,
-    handleCreateSession,
-    handleRenameSession,
-    openSessionRenamePrompt,
-    handleCopySession,
-    handleDeleteSession,
-    confirmDeleteSession,
-    deleteSelectedSessions,
-    handleDeleteProjects,
-    openFileEditor,
-    openSessionFilePreview,
-    openChatLink,
-    openSubagentSession,
-    openSkillDetail,
-    openToolResult,
-    sessionVfs,
-    sessionWorktree,
-    projectVfs,
-    projectWorktree,
-  };
+        projectWorktree,
+    };
 }

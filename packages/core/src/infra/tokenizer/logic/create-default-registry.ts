@@ -12,46 +12,46 @@ import type { TokenizerOverride } from "./resolve-tokenizer-family.js";
 
 /** Registry construction options. */
 interface CreateDefaultTokenCounterRegistryDeps {
-  /** Optional override hook for tokenizer drivers/tests; product runtimes do not inject. */
-  readonly getTokenizerOverride?: () => Promise<TokenizerOverride>;
-  /** When set, resolves vendor model id from saved model UUID. */
-  readonly savedModels?: Pick<SavedModelRepository, "findById">;
+    /** Optional override hook for tokenizer drivers/tests; product runtimes do not inject. */
+    readonly getTokenizerOverride?: () => Promise<TokenizerOverride>;
+    /** When set, resolves vendor model id from saved model UUID. */
+    readonly savedModels?: Pick<SavedModelRepository, "findById">;
 }
 
 // nm-style note: 私有实现类原名 DefaultTokenCounterRegistry 与 namespace 撞名，按「heuristic-only」语义改名。
 class HeuristicOnlyTokenCounterRegistry implements TokenCounterRegistry {
-  readonly heuristic: TokenCounter = new HeuristicTokenCounter();
-  readonly getTokenizerOverride: (() => Promise<TokenizerOverride>) | undefined;
-  private readonly savedModels:
-    | Pick<SavedModelRepository, "findById">
-    | undefined;
+    readonly heuristic: TokenCounter = new HeuristicTokenCounter();
+    readonly getTokenizerOverride: (() => Promise<TokenizerOverride>) | undefined;
+    private readonly savedModels:
+        | Pick<SavedModelRepository, "findById">
+        | undefined;
 
-  constructor(deps: CreateDefaultTokenCounterRegistryDeps) {
-    this.getTokenizerOverride = deps.getTokenizerOverride;
-    this.savedModels = deps.savedModels;
-  }
+    constructor(deps: CreateDefaultTokenCounterRegistryDeps) {
+        this.getTokenizerOverride = deps.getTokenizerOverride;
+        this.savedModels = deps.savedModels;
+    }
 
-  /**
+    /**
    * nm-style: keep-public — TokenCounterRegistry 端口实现，调用方按接口多态调用，不能内联到单一调用点。
    */
-  async forSavedModel(savedModelId: string, _options?: ForVendorModelOptions): Promise<TokenCounter> {
-    if (this.savedModels != null) {
-      const saved = await this.savedModels.findById(savedModelId.trim());
-      if (saved.ok && saved.value != null) {
-        return this.forVendorModel(saved.value.vendorModelId, _options);
-      }
+    async forSavedModel(savedModelId: string, _options?: ForVendorModelOptions): Promise<TokenCounter> {
+        if (this.savedModels != null) {
+            const saved = await this.savedModels.findById(savedModelId.trim());
+            if (saved.ok && saved.value != null) {
+                return this.forVendorModel(saved.value.vendorModelId, _options);
+            }
+        }
+        return this.heuristic;
     }
-    return this.heuristic;
-  }
 
-  forVendorModel(_vendorModelId: string, _options?: ForVendorModelOptions): TokenCounter {
-    return this.heuristic;
-  }
+    forVendorModel(_vendorModelId: string, _options?: ForVendorModelOptions): TokenCounter {
+        return this.heuristic;
+    }
 }
 
 export const DefaultTokenCounterRegistry = {
-  /** Creates a heuristic-only registry. */
-  create(deps: CreateDefaultTokenCounterRegistryDeps = {}): TokenCounterRegistry {
-    return new HeuristicOnlyTokenCounterRegistry(deps);
-  },
+    /** Creates a heuristic-only registry. */
+    create(deps: CreateDefaultTokenCounterRegistryDeps = {}): TokenCounterRegistry {
+        return new HeuristicOnlyTokenCounterRegistry(deps);
+    },
 } as const;

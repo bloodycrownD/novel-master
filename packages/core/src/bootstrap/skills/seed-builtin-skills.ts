@@ -20,6 +20,9 @@
  * @module bootstrap/skills/seed-builtin-skills
  */
 
+import { SqlTemplateParser } from "@/infra/sql-template/index.js";
+import { TdbcTemplate } from "@/infra/tdbc/logic/template-helper.js";
+import { KkvSql } from "@/infra/sql-template/generated/kkv.mapper.generated.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SkillsServiceFactory } from "@/service/skills/create-skills-service.js";
 import { AppErrorOps, type AppError } from "@/errors/app-error.js";
@@ -147,7 +150,7 @@ const AGENT_CONFIG_LEDGER_KEY = "agent-config";
  * 内置技能 seed 操作族。
  */
 export const BuiltinSkills = {
-  /**
+    /**
    * 版本化种入内置技能（bootstrap 事务之后的公共路径，快/慢分支共用）。
    * 版本落后即无条件重种，不比对现存内容。
    *
@@ -164,31 +167,32 @@ export const BuiltinSkills = {
    *
    * nm-style: keep-public — 唯一生产调用点在 novel-master-bootstrap.ts，测试直接引用 seed 行为。
    */
-  async seed(conn: TdbcConnection): Promise<Result<void, AppError>> {
-    // 台账快路径：已应用当前版本 → 本次启动无事可做（稳态单次 kkv 读）。
-    const ledgerRows = await conn.query("SELECT value FROM kkv_entry WHERE module = ? AND key = ?", [SEEDS_MODULE, AGENT_CONFIG_LEDGER_KEY]);
-    const appliedVersion = ledgerRows.length === 0 ? null : Number.parseInt(String(ledgerRows[0]!.value), 10);
-    if (appliedVersion != null && appliedVersion >= AGENT_CONFIG_SEED_VERSION) {
-      return Result.ok(undefined);
-    }
-    const service = SkillsServiceFactory.create(conn);
-    // 错误通道迁移二期：readSkillFile 已改 Result 通道——Err 不再抛出，
-    // 存在性判定改为按 `!ok` 收窄（非 NOT_FOUND 的失败按 Result 原样返回）。
-    const existing = await service.readSkillFile("global", "agent-config");
-    let exists = true;
-    if (!existing.ok) {
-      if (!AppErrorOps.is(existing.error, "SKILL_NOT_FOUND")) {
-        return Result.err(existing.error);
-      }
-      exists = false;
-    }
-    // 版本落后：无条件重种当前文案（存在性只决定是否需要 seed 特权豁免
-    // D2② 的新建拦截——首种时目录必不存在；重种走整文件覆盖）。
-    const written = await service.writeSkillFile("global", "agent-config", undefined, AGENT_CONFIG_SKILL_MD, undefined, exists ? undefined : { builtinSeed: true });
-    if (!written.ok) {
-      return Result.err(written.error);
-    }
-    await conn.execute("INSERT OR REPLACE INTO kkv_entry (module, key, value) VALUES (?, ?, ?)", [SEEDS_MODULE, AGENT_CONFIG_LEDGER_KEY, String(AGENT_CONFIG_SEED_VERSION)]);
-    return Result.ok(undefined);
-  },
+    async seed(conn: TdbcConnection): Promise<Result<void, AppError>> {
+        // 台账快路径：已应用当前版本 → 本次启动无事可做（稳态单次 kkv 读）。
+        const parser = new SqlTemplateParser();
+        const ledgerRows = await TdbcTemplate.query<{ value: string }>(conn, parser, KkvSql.getValueByKey, { module: SEEDS_MODULE, key: AGENT_CONFIG_LEDGER_KEY });
+        const appliedVersion = ledgerRows.length === 0 ? null : Number.parseInt(String(ledgerRows[0]!.value), 10);
+        if (appliedVersion != null && appliedVersion >= AGENT_CONFIG_SEED_VERSION) {
+            return Result.ok(undefined);
+        }
+        const service = SkillsServiceFactory.create(conn);
+        // 错误通道迁移二期：readSkillFile 已改 Result 通道——Err 不再抛出，
+        // 存在性判定改为按 `!ok` 收窄（非 NOT_FOUND 的失败按 Result 原样返回）。
+        const existing = await service.readSkillFile("global", "agent-config");
+        let exists = true;
+        if (!existing.ok) {
+            if (!AppErrorOps.is(existing.error, "SKILL_NOT_FOUND")) {
+                return Result.err(existing.error);
+            }
+            exists = false;
+        }
+        // 版本落后：无条件重种当前文案（存在性只决定是否需要 seed 特权豁免
+        // D2② 的新建拦截——首种时目录必不存在；重种走整文件覆盖）。
+        const written = await service.writeSkillFile({ domain: "global", name: "agent-config", content: AGENT_CONFIG_SKILL_MD, builtinSeed: !exists });
+        if (!written.ok) {
+            return Result.err(written.error);
+        }
+        await TdbcTemplate.execute(conn, parser, KkvSql.upsert, { module: SEEDS_MODULE, key: AGENT_CONFIG_LEDGER_KEY, value: String(AGENT_CONFIG_SEED_VERSION) });
+        return Result.ok(undefined);
+    },
 } as const;

@@ -7,7 +7,7 @@ import {Result} from '@novel-master/core/errors';
 import {UpdateCheckHost} from '@/components/update/UpdateCheckHost';
 
 const isSnoozedActual = jest.requireActual<
-  typeof import('@/storage/update-prefs')
+    typeof import('@/storage/update-prefs')
 >('../src/storage/update-prefs').UpdatePrefs.isSnoozed;
 
 const mockCheckForUpdates = jest.fn();
@@ -20,332 +20,332 @@ const mockWriteDismissedVersion = jest.fn();
 const mockShowToast = jest.fn();
 
 let modalProps: {
-  visible?: boolean;
-  kind?: string;
-  onClose?: () => void;
-  onSnoozeToday?: () => void | Promise<void>;
+    visible?: boolean;
+    kind?: string;
+    onClose?: () => void;
+    onSnoozeToday?: () => void | Promise<void>;
 } | null = null;
 
 jest.mock('@/runtime/novel-master-context', () => ({
-  useNovelMaster: () => ({
-    status: 'ready',
-    // auto-check 走 AppUiPrefIo.readBoolPref(appUi, key, true)：未写值回退默认开。
-    appUi: {get: jest.fn(async () => ({ok: true, value: undefined})), set: jest.fn()},
-  }),
+    useNovelMaster: () => ({
+        status: 'ready',
+        // auto-check 走 AppUiPrefIo.readBoolPref(appUi, key, true)：未写值回退默认开。
+        appUi: {get: jest.fn(async () => ({ok: true, value: undefined})), set: jest.fn()},
+    }),
 }));
 
 jest.mock('@/components/chrome/ToastHost', () => ({
-  useToast: () => ({showToast: mockShowToast}),
+    useToast: () => ({showToast: mockShowToast}),
 }));
 
 jest.mock('@/storage/update-prefs', () => {
-  const legacy = {
-  isSnoozed: jest.requireActual('@/storage/update-prefs').UpdatePrefs.isSnoozed,
-  readSnoozeUntil: (...args: unknown[]) => mockReadSnoozeUntil(...args),
-  writeSnoozeUntil: (...args: unknown[]) => mockWriteSnoozeUntil(...args),
-  persistUpdateCheckResult: (...args: unknown[]) =>
-    mockPersistUpdateCheckResult(...args),
-  persistFailedUpdateCheck: (...args: unknown[]) =>
-    mockPersistFailedUpdateCheck(...args),
-  readDismissedVersion: (...args: unknown[]) =>
-    mockReadDismissedVersion(...args),
-  writeDismissedVersion: (...args: unknown[]) =>
-    mockWriteDismissedVersion(...args),
+    const legacy = {
+    isSnoozed: jest.requireActual('@/storage/update-prefs').UpdatePrefs.isSnoozed,
+    readSnoozeUntil: (...args: unknown[]) => mockReadSnoozeUntil(...args),
+    writeSnoozeUntil: (...args: unknown[]) => mockWriteSnoozeUntil(...args),
+    persistUpdateCheckResult: (...args: unknown[]) =>
+        mockPersistUpdateCheckResult(...args),
+    persistFailedUpdateCheck: (...args: unknown[]) =>
+        mockPersistFailedUpdateCheck(...args),
+    readDismissedVersion: (...args: unknown[]) =>
+        mockReadDismissedVersion(...args),
+    writeDismissedVersion: (...args: unknown[]) =>
+        mockWriteDismissedVersion(...args),
 };
-  return {...legacy, UpdatePrefs: {isSnoozed: legacy.isSnoozed, readSnoozeUntil: legacy.readSnoozeUntil, writeSnoozeUntil: legacy.writeSnoozeUntil, persistFailedUpdateCheck: legacy.persistFailedUpdateCheck, persistUpdateCheckResult: legacy.persistUpdateCheckResult, readDismissedVersion: legacy.readDismissedVersion, writeDismissedVersion: legacy.writeDismissedVersion}};
+    return {...legacy, UpdatePrefs: {isSnoozed: legacy.isSnoozed, readSnoozeUntil: legacy.readSnoozeUntil, writeSnoozeUntil: legacy.writeSnoozeUntil, persistFailedUpdateCheck: legacy.persistFailedUpdateCheck, persistUpdateCheckResult: legacy.persistUpdateCheckResult, readDismissedVersion: legacy.readDismissedVersion, writeDismissedVersion: legacy.writeDismissedVersion}};
 });
 
 jest.mock('@/update-check/check-for-updates', () => {
-  const legacy = {
-  checkForUpdates: (...args: unknown[]) => mockCheckForUpdates(...args),
+    const legacy = {
+    checkForUpdates: (...args: unknown[]) => mockCheckForUpdates(...args),
 };
-  return {...legacy, CheckForUpdates: {check: legacy.checkForUpdates}};
+    return {...legacy, CheckForUpdates: {check: legacy.checkForUpdates}};
 });
 
 jest.mock('@/components/update/UpdateCheckResultModal', () => ({
-  UpdateCheckResultModal: (props: typeof modalProps & object) => {
-    modalProps = props;
-    return null;
-  },
+    UpdateCheckResultModal: (props: typeof modalProps & object) => {
+        modalProps = props;
+        return null;
+    },
 }));
 
 jest.mock('react-native', () => ({
-  Alert: {alert: jest.fn()},
-  Linking: {openURL: jest.fn()},
+    Alert: {alert: jest.fn()},
+    Linking: {openURL: jest.fn()},
 }));
 
 function TestHost() {
-  return <UpdateCheckHost />;
+    return <UpdateCheckHost />;
 }
 
 async function flushAutoCheck(): Promise<void> {
-  await act(async () => {
-    jest.advanceTimersByTime(2000);
-    await Promise.resolve();
-    await Promise.resolve();
-  });
+    await act(async () => {
+        jest.advanceTimersByTime(2000);
+        await Promise.resolve();
+        await Promise.resolve();
+    });
 }
 
 describe('useAutoUpdateCheck', () => {
-  beforeEach(() => {
-    jest.useFakeTimers();
-    modalProps = null;
-    mockCheckForUpdates.mockClear();
-    mockReadSnoozeUntil.mockClear();
-    mockWriteSnoozeUntil.mockClear();
-    mockPersistUpdateCheckResult.mockClear();
-    mockPersistFailedUpdateCheck.mockClear();
-    mockReadDismissedVersion.mockClear();
-    mockWriteDismissedVersion.mockClear();
-    mockReadSnoozeUntil.mockResolvedValue({ok: true, value: undefined});
-    mockReadDismissedVersion.mockResolvedValue({ok: true, value: undefined});
-    mockPersistUpdateCheckResult.mockResolvedValue(undefined);
-    mockPersistFailedUpdateCheck.mockResolvedValue(undefined);
-    mockWriteSnoozeUntil.mockResolvedValue(undefined);
-    // checkForUpdates 已知失败走 Result（错误通道迁移六期），mock 同步包一层。
-    mockCheckForUpdates.mockResolvedValue(
-      Result.ok({
-        status: 'up-to-date',
-        remoteVersion: '1.0.0',
-      }),
-    );
-    mockShowToast.mockClear();
-  });
-
-  afterEach(() => {
-    jest.useRealTimers();
-  });
-
-  it('shows result modal when up-to-date and not snoozed', async () => {
-    act(() => {
-      TestRenderer.create(<TestHost />);
-    });
-    await flushAutoCheck();
-    expect(mockCheckForUpdates).toHaveBeenCalledTimes(1);
-    expect(modalProps?.visible).toBe(true);
-    expect(modalProps?.kind).toBe('up-to-date');
-    expect(mockShowToast).not.toHaveBeenCalled();
-  });
-
-  it('does not show modal while snooze is active but still checks', async () => {
-    const future = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-    mockReadSnoozeUntil.mockResolvedValue({ok: true, value: future});
-
-    act(() => {
-      TestRenderer.create(<TestHost />);
-    });
-    await flushAutoCheck();
-
-    expect(mockCheckForUpdates).toHaveBeenCalled();
-    expect(mockPersistUpdateCheckResult).toHaveBeenCalled();
-    expect(modalProps?.visible).toBe(false);
-  });
-
-  it('shows modal again on next mount after close without snooze', async () => {
-    let renderer: TestRenderer.ReactTestRenderer;
-    act(() => {
-      renderer = TestRenderer.create(<TestHost />);
-    });
-    await flushAutoCheck();
-    expect(modalProps?.visible).toBe(true);
-
-    await act(async () => {
-      modalProps?.onClose?.();
-    });
-    expect(modalProps?.visible).toBe(false);
-
-    act(() => {
-      renderer!.unmount();
-      TestRenderer.create(<TestHost />);
-    });
-    await flushAutoCheck();
-    expect(mockCheckForUpdates).toHaveBeenCalled();
-    expect(modalProps?.visible).toBe(true);
-  });
-
-  it('writes snooze and hides modal when user taps snooze', async () => {
-    act(() => {
-      TestRenderer.create(<TestHost />);
-    });
-    await flushAutoCheck();
-    expect(modalProps?.visible).toBe(true);
-
-    await act(async () => {
-      await modalProps?.onSnoozeToday?.();
+    beforeEach(() => {
+        jest.useFakeTimers();
+        modalProps = null;
+        mockCheckForUpdates.mockClear();
+        mockReadSnoozeUntil.mockClear();
+        mockWriteSnoozeUntil.mockClear();
+        mockPersistUpdateCheckResult.mockClear();
+        mockPersistFailedUpdateCheck.mockClear();
+        mockReadDismissedVersion.mockClear();
+        mockWriteDismissedVersion.mockClear();
+        mockReadSnoozeUntil.mockResolvedValue({ok: true, value: undefined});
+        mockReadDismissedVersion.mockResolvedValue({ok: true, value: undefined});
+        mockPersistUpdateCheckResult.mockResolvedValue(undefined);
+        mockPersistFailedUpdateCheck.mockResolvedValue(undefined);
+        mockWriteSnoozeUntil.mockResolvedValue(undefined);
+        // checkForUpdates 已知失败走 Result（错误通道迁移六期），mock 同步包一层。
+        mockCheckForUpdates.mockResolvedValue(
+            Result.ok({
+                status: 'up-to-date',
+                remoteVersion: '1.0.0',
+            }),
+        );
+        mockShowToast.mockClear();
     });
 
-    expect(mockWriteSnoozeUntil).toHaveBeenCalledTimes(1);
-    expect(modalProps?.visible).toBe(false);
-  });
-
-  it('shows error modal when check fails and not snoozed', async () => {
-    mockCheckForUpdates.mockRejectedValue(new Error('network'));
-
-    act(() => {
-      TestRenderer.create(<TestHost />);
-    });
-    await flushAutoCheck();
-
-    expect(mockPersistFailedUpdateCheck).toHaveBeenCalledTimes(1);
-    expect(modalProps?.visible).toBe(true);
-    expect(modalProps?.kind).toBe('error');
-  });
-
-  it('update-available keeps toast flow without result modal', async () => {
-    mockCheckForUpdates.mockResolvedValue(
-      Result.ok({
-        status: 'update-available',
-        remoteVersion: '9.9.9',
-        releaseUrl: 'https://example.com',
-        releaseNotesExcerpt: '',
-      }),
-    );
-
-    act(() => {
-      TestRenderer.create(<TestHost />);
-    });
-    await flushAutoCheck();
-
-    expect(modalProps?.visible).toBe(false);
-    expect(mockShowToast).toHaveBeenCalledWith(
-      '发现新版本 9.9.9',
-      expect.objectContaining({actionLabel: '查看'}),
-    );
-  });
-
-  it('update-available still shows toast while snooze is active', async () => {
-    const future = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-    mockReadSnoozeUntil.mockResolvedValue({ok: true, value: future});
-    mockCheckForUpdates.mockResolvedValue(
-      Result.ok({
-        status: 'update-available',
-        remoteVersion: '9.9.9',
-        releaseUrl: 'https://example.com',
-        releaseNotesExcerpt: '',
-      }),
-    );
-
-    act(() => {
-      TestRenderer.create(<TestHost />);
-    });
-    await flushAutoCheck();
-
-    expect(mockCheckForUpdates).toHaveBeenCalled();
-    expect(mockPersistUpdateCheckResult).toHaveBeenCalled();
-    expect(modalProps?.visible).toBe(false);
-    expect(mockShowToast).toHaveBeenCalledWith(
-      '发现新版本 9.9.9',
-      expect.objectContaining({actionLabel: '查看'}),
-    );
-  });
-
-  it('B-5: 偏好读失败（Result.err）被兑住，走失败持久化与错误弹窗', async () => {
-    // 错误通道迁移四期：auto-check 未写值回退默认开（readBoolPref，继续检查）；
-    // 读 snooze 失败（Result.err）未知静音状态，按「读偏好失败」终端收口（fail 路径）。
-    mockReadSnoozeUntil.mockResolvedValue({ok: false, error: new Error('pref boom')});
-
-    act(() => {
-      TestRenderer.create(<TestHost />);
-    });
-    await flushAutoCheck();
-
-    expect(mockPersistFailedUpdateCheck).toHaveBeenCalledTimes(1);
-    expect(modalProps?.visible).toBe(true);
-    expect(modalProps?.kind).toBe('error');
-  });
-
-  it('B-5: readSnoozeUntil reject 同样被兑住', async () => {
-    mockReadSnoozeUntil.mockRejectedValue(new Error('snooze boom'));
-
-    act(() => {
-      TestRenderer.create(<TestHost />);
-    });
-    await flushAutoCheck();
-
-    expect(mockPersistFailedUpdateCheck).toHaveBeenCalledTimes(1);
-    expect(modalProps?.visible).toBe(true);
-    expect(modalProps?.kind).toBe('error');
-  });
-
-  it('B-5: persistFailedUpdateCheck 自身 reject 不冒泡（显式 catch）', async () => {
-    mockCheckForUpdates.mockRejectedValue(new Error('network'));
-    mockPersistFailedUpdateCheck.mockRejectedValue(new Error('disk'));
-
-    act(() => {
-      TestRenderer.create(<TestHost />);
-    });
-    await flushAutoCheck();
-    // 存储同源故障时错误弹窗仍要出现，且不产生 unhandled rejection
-    expect(modalProps?.visible).toBe(true);
-    expect(modalProps?.kind).toBe('error');
-  });
-
-  it('B-5: snooze 写入失败 toast 且弹窗保持打开', async () => {
-    act(() => {
-      TestRenderer.create(<TestHost />);
-    });
-    await flushAutoCheck();
-    expect(modalProps?.visible).toBe(true);
-
-    mockWriteSnoozeUntil.mockRejectedValueOnce(new Error('write fail'));
-    await act(async () => {
-      await modalProps?.onSnoozeToday?.();
+    afterEach(() => {
+        jest.useRealTimers();
     });
 
-    expect(mockShowToast).toHaveBeenCalledWith('设置失败：write fail');
-    expect(modalProps?.visible).toBe(true);
-  });
-
-  it('B-5: 前往下载外跳失败 toast（对齐 AboutScreen openLink）', async () => {
-    mockCheckForUpdates.mockResolvedValue(
-      Result.ok({
-        status: 'update-available',
-        remoteVersion: '9.9.9',
-        releaseUrl: 'https://example.com',
-        releaseNotesExcerpt: '',
-      }),
-    );
-
-    act(() => {
-      TestRenderer.create(<TestHost />);
-    });
-    await flushAutoCheck();
-
-    // toast 的「查看」打开 Alert，再点「前往下载」触发 Linking.openURL
-    const {Alert, Linking} = require('react-native');
-    Alert.alert.mockClear();
-    const toastOptions = mockShowToast.mock.calls[0]?.[1];
-    expect(toastOptions?.onAction).toBeInstanceOf(Function);
-    act(() => {
-      toastOptions.onAction();
+    it('shows result modal when up-to-date and not snoozed', async () => {
+        act(() => {
+            TestRenderer.create(<TestHost />);
+        });
+        await flushAutoCheck();
+        expect(mockCheckForUpdates).toHaveBeenCalledTimes(1);
+        expect(modalProps?.visible).toBe(true);
+        expect(modalProps?.kind).toBe('up-to-date');
+        expect(mockShowToast).not.toHaveBeenCalled();
     });
 
-    const buttons = Alert.alert.mock.calls[0]?.[2] as Array<{
-      text: string;
-      onPress?: () => void;
-    }>;
-    const download = buttons?.find(b => b.text === '前往下载');
-    expect(download?.onPress).toBeInstanceOf(Function);
+    it('does not show modal while snooze is active but still checks', async () => {
+        const future = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+        mockReadSnoozeUntil.mockResolvedValue({ok: true, value: future});
 
-    Linking.openURL.mockRejectedValueOnce(new Error('no browser'));
-    await act(async () => {
-      download.onPress?.();
-      await Promise.resolve();
+        act(() => {
+            TestRenderer.create(<TestHost />);
+        });
+        await flushAutoCheck();
+
+        expect(mockCheckForUpdates).toHaveBeenCalled();
+        expect(mockPersistUpdateCheckResult).toHaveBeenCalled();
+        expect(modalProps?.visible).toBe(false);
     });
 
-    expect(Linking.openURL).toHaveBeenCalledWith('https://example.com');
-    expect(mockShowToast).toHaveBeenCalledWith('无法打开链接：no browser');
-  });
+    it('shows modal again on next mount after close without snooze', async () => {
+        let renderer: TestRenderer.ReactTestRenderer;
+        act(() => {
+            renderer = TestRenderer.create(<TestHost />);
+        });
+        await flushAutoCheck();
+        expect(modalProps?.visible).toBe(true);
+
+        await act(async () => {
+            modalProps?.onClose?.();
+        });
+        expect(modalProps?.visible).toBe(false);
+
+        act(() => {
+            renderer!.unmount();
+            TestRenderer.create(<TestHost />);
+        });
+        await flushAutoCheck();
+        expect(mockCheckForUpdates).toHaveBeenCalled();
+        expect(modalProps?.visible).toBe(true);
+    });
+
+    it('writes snooze and hides modal when user taps snooze', async () => {
+        act(() => {
+            TestRenderer.create(<TestHost />);
+        });
+        await flushAutoCheck();
+        expect(modalProps?.visible).toBe(true);
+
+        await act(async () => {
+            await modalProps?.onSnoozeToday?.();
+        });
+
+        expect(mockWriteSnoozeUntil).toHaveBeenCalledTimes(1);
+        expect(modalProps?.visible).toBe(false);
+    });
+
+    it('shows error modal when check fails and not snoozed', async () => {
+        mockCheckForUpdates.mockRejectedValue(new Error('network'));
+
+        act(() => {
+            TestRenderer.create(<TestHost />);
+        });
+        await flushAutoCheck();
+
+        expect(mockPersistFailedUpdateCheck).toHaveBeenCalledTimes(1);
+        expect(modalProps?.visible).toBe(true);
+        expect(modalProps?.kind).toBe('error');
+    });
+
+    it('update-available keeps toast flow without result modal', async () => {
+        mockCheckForUpdates.mockResolvedValue(
+            Result.ok({
+                status: 'update-available',
+                remoteVersion: '9.9.9',
+                releaseUrl: 'https://example.com',
+                releaseNotesExcerpt: '',
+            }),
+        );
+
+        act(() => {
+            TestRenderer.create(<TestHost />);
+        });
+        await flushAutoCheck();
+
+        expect(modalProps?.visible).toBe(false);
+        expect(mockShowToast).toHaveBeenCalledWith(
+            '发现新版本 9.9.9',
+            expect.objectContaining({actionLabel: '查看'}),
+        );
+    });
+
+    it('update-available still shows toast while snooze is active', async () => {
+        const future = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+        mockReadSnoozeUntil.mockResolvedValue({ok: true, value: future});
+        mockCheckForUpdates.mockResolvedValue(
+            Result.ok({
+                status: 'update-available',
+                remoteVersion: '9.9.9',
+                releaseUrl: 'https://example.com',
+                releaseNotesExcerpt: '',
+            }),
+        );
+
+        act(() => {
+            TestRenderer.create(<TestHost />);
+        });
+        await flushAutoCheck();
+
+        expect(mockCheckForUpdates).toHaveBeenCalled();
+        expect(mockPersistUpdateCheckResult).toHaveBeenCalled();
+        expect(modalProps?.visible).toBe(false);
+        expect(mockShowToast).toHaveBeenCalledWith(
+            '发现新版本 9.9.9',
+            expect.objectContaining({actionLabel: '查看'}),
+        );
+    });
+
+    it('B-5: 偏好读失败（Result.err）被兑住，走失败持久化与错误弹窗', async () => {
+        // 错误通道迁移四期：auto-check 未写值回退默认开（readBoolPref，继续检查）；
+        // 读 snooze 失败（Result.err）未知静音状态，按「读偏好失败」终端收口（fail 路径）。
+        mockReadSnoozeUntil.mockResolvedValue({ok: false, error: new Error('pref boom')});
+
+        act(() => {
+            TestRenderer.create(<TestHost />);
+        });
+        await flushAutoCheck();
+
+        expect(mockPersistFailedUpdateCheck).toHaveBeenCalledTimes(1);
+        expect(modalProps?.visible).toBe(true);
+        expect(modalProps?.kind).toBe('error');
+    });
+
+    it('B-5: readSnoozeUntil reject 同样被兑住', async () => {
+        mockReadSnoozeUntil.mockRejectedValue(new Error('snooze boom'));
+
+        act(() => {
+            TestRenderer.create(<TestHost />);
+        });
+        await flushAutoCheck();
+
+        expect(mockPersistFailedUpdateCheck).toHaveBeenCalledTimes(1);
+        expect(modalProps?.visible).toBe(true);
+        expect(modalProps?.kind).toBe('error');
+    });
+
+    it('B-5: persistFailedUpdateCheck 自身 reject 不冒泡（显式 catch）', async () => {
+        mockCheckForUpdates.mockRejectedValue(new Error('network'));
+        mockPersistFailedUpdateCheck.mockRejectedValue(new Error('disk'));
+
+        act(() => {
+            TestRenderer.create(<TestHost />);
+        });
+        await flushAutoCheck();
+        // 存储同源故障时错误弹窗仍要出现，且不产生 unhandled rejection
+        expect(modalProps?.visible).toBe(true);
+        expect(modalProps?.kind).toBe('error');
+    });
+
+    it('B-5: snooze 写入失败 toast 且弹窗保持打开', async () => {
+        act(() => {
+            TestRenderer.create(<TestHost />);
+        });
+        await flushAutoCheck();
+        expect(modalProps?.visible).toBe(true);
+
+        mockWriteSnoozeUntil.mockRejectedValueOnce(new Error('write fail'));
+        await act(async () => {
+            await modalProps?.onSnoozeToday?.();
+        });
+
+        expect(mockShowToast).toHaveBeenCalledWith('设置失败：write fail');
+        expect(modalProps?.visible).toBe(true);
+    });
+
+    it('B-5: 前往下载外跳失败 toast（对齐 AboutScreen openLink）', async () => {
+        mockCheckForUpdates.mockResolvedValue(
+            Result.ok({
+                status: 'update-available',
+                remoteVersion: '9.9.9',
+                releaseUrl: 'https://example.com',
+                releaseNotesExcerpt: '',
+            }),
+        );
+
+        act(() => {
+            TestRenderer.create(<TestHost />);
+        });
+        await flushAutoCheck();
+
+        // toast 的「查看」打开 Alert，再点「前往下载」触发 Linking.openURL
+        const {Alert, Linking} = require('react-native');
+        Alert.alert.mockClear();
+        const toastOptions = mockShowToast.mock.calls[0]?.[1];
+        expect(toastOptions?.onAction).toBeInstanceOf(Function);
+        act(() => {
+            toastOptions.onAction();
+        });
+
+        const buttons = Alert.alert.mock.calls[0]?.[2] as Array<{
+            text: string;
+            onPress?: () => void;
+        }>;
+        const download = buttons?.find(b => b.text === '前往下载');
+        expect(download?.onPress).toBeInstanceOf(Function);
+
+        Linking.openURL.mockRejectedValueOnce(new Error('no browser'));
+        await act(async () => {
+            download.onPress?.();
+            await Promise.resolve();
+        });
+
+        expect(Linking.openURL).toHaveBeenCalledWith('https://example.com');
+        expect(mockShowToast).toHaveBeenCalledWith('无法打开链接：no browser');
+    });
 });
 
 describe('isSnoozed', () => {
-  it('returns true for future snoozeUntil', () => {
-    const future = new Date(Date.now() + 60_000).toISOString();
-    expect(isSnoozedActual(future)).toBe(true);
-  });
+    it('returns true for future snoozeUntil', () => {
+        const future = new Date(Date.now() + 60_000).toISOString();
+        expect(isSnoozedActual(future)).toBe(true);
+    });
 
-  it('returns false for past snoozeUntil', () => {
-    const past = new Date(Date.now() - 60_000).toISOString();
-    expect(isSnoozedActual(past)).toBe(false);
-  });
+    it('returns false for past snoozeUntil', () => {
+        const past = new Date(Date.now() - 60_000).toISOString();
+        expect(isSnoozedActual(past)).toBe(false);
+    });
 });

@@ -19,11 +19,11 @@ export const VFS_ZIP_MAX_ENTRY_PATH_LEN = 512;
 
 /** 解析期闸门口径（可选参数，缺省取上面三个常量）。 */
 export interface VfsZipLimits {
-  readonly maxUncompressedBytes: number;
-  readonly maxEntryCount: number;
+    readonly maxUncompressedBytes: number;
+    readonly maxEntryCount: number;
 }
 
 export const DEFAULT_VFS_ZIP_LIMITS: VfsZipLimits = {
-  maxUncompressedBytes: VFS_ZIP_MAX_UNCOMPRESSED_BYTES,
-  maxEntryCount: VFS_ZIP_MAX_ENTRY_COUNT,
+    maxUncompressedBytes: VFS_ZIP_MAX_UNCOMPRESSED_BYTES,
+    maxEntryCount: VFS_ZIP_MAX_ENTRY_COUNT,
 };

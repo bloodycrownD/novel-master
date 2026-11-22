@@ -17,7 +17,7 @@ const log = LogFactory.create("vfs.clear-session-prompt-caches");
 
 /** session 导入后的提示词缓存对齐集合（清两域 + 失效 token/工具计数缓存）。 */
 export const SessionPromptCaches = {
-  /**
+    /**
    * 清空该 session 的 `rule_snapshot` + `file_cache` 两域，并失效 prompt token cache。
    *
    * 顺序与置位 / 压缩（run-compaction / message-transcript-effects）的三件套一致，
@@ -27,19 +27,19 @@ export const SessionPromptCaches = {
    * 错乱，裸 await 上抛是刻意的（压缩自 2026-10-05 起同样吞错 warn——见
    * run-compaction 头注释，压缩侧的清域也是 best-effort）。
    */
-  async clear(sessionId: string, sessionKkv: SessionKkvService): Promise<void> {
-    try {
-      await sessionKkv.clearDomain(sessionId, SESSION_KKV_DOMAIN_RULE_SNAPSHOT);
-      await sessionKkv.clearDomain(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE);
-      // API prompt 占用双删（进程内热层 + prompt_tokens 域行）：导入后提示词
-      // 全变，落库的旧占用若残留会在重启后被读回、按 api 口径参与阈值判定。
-      await SessionApiPromptTokenEntry.invalidate(sessionKkv, sessionId);
-      // 工具调用数缓存一并失效（导入可能带入含 tool_use 的消息，best-effort）。
-      // 写哨兵空串而非 delete（cr-fix-spec-r2 s3/B-1：读口回填前按原值复核，
-      // 哨兵与该协议配套）。
-      await sessionKkv.set(sessionId, SESSION_KKV_DOMAIN_USAGE_STATS, USAGE_STATS_TOOL_USE_COUNT_KEY, "");
-    } catch (error) {
-      log.warn(`best-effort 清空提示词缓存失败（session=${sessionId}）`, { error });
-    }
-  },
+    async clear(sessionId: string, sessionKkv: SessionKkvService): Promise<void> {
+        try {
+            await sessionKkv.clearDomain(sessionId, SESSION_KKV_DOMAIN_RULE_SNAPSHOT);
+            await sessionKkv.clearDomain(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE);
+            // API prompt 占用双删（进程内热层 + prompt_tokens 域行）：导入后提示词
+            // 全变，落库的旧占用若残留会在重启后被读回、按 api 口径参与阈值判定。
+            await SessionApiPromptTokenEntry.invalidate(sessionKkv, sessionId);
+            // 工具调用数缓存一并失效（导入可能带入含 tool_use 的消息，best-effort）。
+            // 写哨兵空串而非 delete（cr-fix-spec-r2 s3/B-1：读口回填前按原值复核，
+            // 哨兵与该协议配套）。
+            await sessionKkv.set(sessionId, SESSION_KKV_DOMAIN_USAGE_STATS, USAGE_STATS_TOOL_USE_COUNT_KEY, "");
+        } catch (error) {
+            log.warn(`best-effort 清空提示词缓存失败（session=${sessionId}）`, { error });
+        }
+    },
 } as const;

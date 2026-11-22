@@ -20,233 +20,233 @@ const EXPORT_PATH = "/tmp/test-export.nmbackup";
 const IMPORT_PATH = "/tmp/test-import.nmbackup";
 
 type StoredObject = {
-  body: Uint8Array;
-  etag: string;
+    body: Uint8Array;
+    etag: string;
 };
 
 function encodeStatus(status: CloudSyncStatus): Uint8Array {
-  return new TextEncoder().encode(JSON.stringify(status));
+    return new TextEncoder().encode(JSON.stringify(status));
 }
 
 function createStorage(initial?: {
-  status?: CloudSyncStatus;
-  statusEtag?: string;
-  snapshots?: Record<string, Uint8Array>;
+    status?: CloudSyncStatus;
+    statusEtag?: string;
+    snapshots?: Record<string, Uint8Array>;
 }) {
-  let currentStatus: CloudSyncStatus = initial?.status ?? {
-    schemaVersion: 1,
-    rev: 0,
-    lock: null,
-  };
-  let currentEtag = initial?.statusEtag ?? "etag-0";
-  const statusWrites: CloudSyncStatus[] = [];
-  const snapshots = new Map<string, StoredObject>();
-  for (const [key, body] of Object.entries(initial?.snapshots ?? {})) {
-    snapshots.set(key, { body, etag: `snap-${key}` });
-  }
-  let etagCounter = 1;
+    let currentStatus: CloudSyncStatus = initial?.status ?? {
+        schemaVersion: 1,
+        rev: 0,
+        lock: null,
+    };
+    let currentEtag = initial?.statusEtag ?? "etag-0";
+    const statusWrites: CloudSyncStatus[] = [];
+    const snapshots = new Map<string, StoredObject>();
+    for (const [key, body] of Object.entries(initial?.snapshots ?? {})) {
+        snapshots.set(key, { body, etag: `snap-${key}` });
+    }
+    let etagCounter = 1;
 
-  const storage: ObjectStoragePort & {
-    getStatusWrites: () => CloudSyncStatus[];
-    getSnapshots: () => Map<string, StoredObject>;
-  } = {
-    getStatusWrites: () => statusWrites,
-    getSnapshots: () => snapshots,
-    async head(key: string) {
-      if (key === CloudSyncPaths.statusKey(PREFIX)) {
-        return {
-          exists: true,
-          etag: currentEtag,
-          bytes: encodeStatus(currentStatus).length,
-        };
-      }
-      const snap = snapshots.get(key);
-      return { exists: snap != null, etag: snap?.etag, bytes: snap?.body.length };
-    },
-    async get(key: string) {
-      if (key === CloudSyncPaths.statusKey(PREFIX)) {
-        return { body: encodeStatus(currentStatus), etag: currentEtag };
-      }
-      const snap = snapshots.get(key);
-      if (snap == null) {
-        throw new Error(`missing object: ${key}`);
-      }
-      return { body: snap.body, etag: snap.etag };
-    },
-    async put(key, body, options) {
-      if (key === CloudSyncPaths.statusKey(PREFIX)) {
-        if (options?.ifMatch != null && options.ifMatch !== currentEtag) {
-          return Result.err(new AppError("CLOUD_SYNC_LOCK_CONTENTION", {detail: "etag 不匹配"}));
-        }
-        const parsed = JSON.parse(new TextDecoder().decode(body)) as CloudSyncStatus;
-        currentStatus = parsed;
-        statusWrites.push(structuredClone(parsed));
-        etagCounter += 1;
-        currentEtag = `etag-${etagCounter}`;
-        return Result.ok({ etag: currentEtag });
-      }
-      const newEtag = `snap-etag-${snapshots.size + 1}`;
-      snapshots.set(key, { body, etag: newEtag });
-      return Result.ok({ etag: newEtag });
-    },
+    const storage: ObjectStoragePort & {
+        getStatusWrites: () => CloudSyncStatus[];
+        getSnapshots: () => Map<string, StoredObject>;
+    } = {
+        getStatusWrites: () => statusWrites,
+        getSnapshots: () => snapshots,
+        async head(key: string) {
+            if (key === CloudSyncPaths.statusKey(PREFIX)) {
+                return {
+                    exists: true,
+                    etag: currentEtag,
+                    bytes: encodeStatus(currentStatus).length,
+                };
+            }
+            const snap = snapshots.get(key);
+            return { exists: snap != null, etag: snap?.etag, bytes: snap?.body.length };
+        },
+        async get(key: string) {
+            if (key === CloudSyncPaths.statusKey(PREFIX)) {
+                return { body: encodeStatus(currentStatus), etag: currentEtag };
+            }
+            const snap = snapshots.get(key);
+            if (snap == null) {
+                throw new Error(`missing object: ${key}`);
+            }
+            return { body: snap.body, etag: snap.etag };
+        },
+        async put(key, body, options) {
+            if (key === CloudSyncPaths.statusKey(PREFIX)) {
+                if (options?.ifMatch != null && options.ifMatch !== currentEtag) {
+                    return Result.err(new AppError("CLOUD_SYNC_LOCK_CONTENTION", {detail: "etag 不匹配"}));
+                }
+                const parsed = JSON.parse(new TextDecoder().decode(body)) as CloudSyncStatus;
+                currentStatus = parsed;
+                statusWrites.push(structuredClone(parsed));
+                etagCounter += 1;
+                currentEtag = `etag-${etagCounter}`;
+                return Result.ok({ etag: currentEtag });
+            }
+            const newEtag = `snap-etag-${snapshots.size + 1}`;
+            snapshots.set(key, { body, etag: newEtag });
+            return Result.ok({ etag: newEtag });
+        },
 
-    async putFile(key, filePath) {
-      const body = new Uint8Array(await readFile(filePath));
-      return storage.put(key, body);
-    },
+        async putFile(key, filePath) {
+            const body = new Uint8Array(await readFile(filePath));
+            return storage.put(key, body);
+        },
 
-    async getToPath(key, destPath) {
-      const { body, etag } = await storage.get(key);
-      const { writeFile } = await import("node:fs/promises");
-      await writeFile(destPath, body);
-      return Result.ok({ etag });
-    },
-  };
+        async getToPath(key, destPath) {
+            const { body, etag } = await storage.get(key);
+            const { writeFile } = await import("node:fs/promises");
+            await writeFile(destPath, body);
+            return Result.ok({ etag });
+        },
+    };
 
-  return storage;
+    return storage;
 }
 
 function createMockDbSync(overrides?: Partial<DbSyncPort>): DbSyncPort & {
-  imported: Uint8Array[];
-  importedPaths: string[];
+    imported: Uint8Array[];
+    importedPaths: string[];
 } {
-  const imported: Uint8Array[] = [];
-  const importedPaths: string[] = [];
-  return {
-    imported,
-    importedPaths,
-    isAgentActive: () => false,
-    async exportSnapshotToPath(_destPath: string) {},
-    // 显式回报「已换代」：databaseReplaced 落 true，pull 的换代信号这条测试才不假绿。
-    async importSnapshot(bytes: Uint8Array) {
-      imported.push(bytes);
-      return Result.ok({ databaseReplaced: true });
-    },
-    async importSnapshotFromPath(path: string) {
-      importedPaths.push(path);
-      return Result.ok({ databaseReplaced: true });
-    },
-    ...overrides,
-  };
+    const imported: Uint8Array[] = [];
+    const importedPaths: string[] = [];
+    return {
+        imported,
+        importedPaths,
+        isAgentActive: () => false,
+        async exportSnapshotToPath(_destPath: string) {},
+        // 显式回报「已换代」：databaseReplaced 落 true，pull 的换代信号这条测试才不假绿。
+        async importSnapshot(bytes: Uint8Array) {
+            imported.push(bytes);
+            return Result.ok({ databaseReplaced: true });
+        },
+        async importSnapshotFromPath(path: string) {
+            importedPaths.push(path);
+            return Result.ok({ databaseReplaced: true });
+        },
+        ...overrides,
+    };
 }
 
 function createCoordinator(
-  storage: ObjectStoragePort,
-  dbSync: DbSyncPort,
-  options?: {
-    pushMutex?: PushAgentMutex;
-    pushAcquireTimeoutMs?: number;
-  },
-): CloudSyncCoordinator {
-  const snapshotData = new Uint8Array([1, 2, 3, 4]);
-  return new CloudSyncCoordinator({
-    storage,
-    dbSync,
-    pathPrefix: PREFIX,
-    deviceId: DEVICE_ID,
-    exportTempPath: EXPORT_PATH,
-    computeSha256Hex: (bytes) => {
-      if (bytes === snapshotData || bytes.length === snapshotData.length) {
-        return "abc123";
-      }
-      return "deadbeef";
+    storage: ObjectStoragePort,
+    dbSync: DbSyncPort,
+    options?: {
+        pushMutex?: PushAgentMutex;
+        pushAcquireTimeoutMs?: number;
     },
-    readSnapshotBytes: async () => snapshotData,
-    getSnapshotBytes: async () => snapshotData.length,
-    // 显式传入新 mutex，避免模块默认单例污染其他测试
-    pushMutex: options?.pushMutex ?? new PushAgentMutex(),
-    pushAcquireTimeoutMs: options?.pushAcquireTimeoutMs,
-  });
+): CloudSyncCoordinator {
+    const snapshotData = new Uint8Array([1, 2, 3, 4]);
+    return new CloudSyncCoordinator({
+        storage,
+        dbSync,
+        pathPrefix: PREFIX,
+        deviceId: DEVICE_ID,
+        exportTempPath: EXPORT_PATH,
+        computeSha256Hex: (bytes) => {
+            if (bytes === snapshotData || bytes.length === snapshotData.length) {
+                return "abc123";
+            }
+            return "deadbeef";
+        },
+        readSnapshotBytes: async () => snapshotData,
+        getSnapshotBytes: async () => snapshotData.length,
+        // 显式传入新 mutex，避免模块默认单例污染其他测试
+        pushMutex: options?.pushMutex ?? new PushAgentMutex(),
+        pushAcquireTimeoutMs: options?.pushAcquireTimeoutMs,
+    });
 }
 
 describe("CloudSyncCoordinator.pull", () => {
-  it("CS-P1: remote.rev=2, local=1 拉取成功并导入", async () => {
-    const snapKey = CloudSyncPaths.snapshotKey(PREFIX, 2);
-    const snapBytes = new Uint8Array([10, 20, 30]);
-    const storage = createStorage({
-      status: {
-        schemaVersion: 1,
-        rev: 2,
-        snapshotKey: snapKey,
-        snapshotSha256: "deadbeef",
-        snapshotBytes: snapBytes.length,
-        lock: null,
-      },
-      snapshots: { [snapKey]: snapBytes },
-    });
-    const dbSync = createMockDbSync();
-    const coordinator = new CloudSyncCoordinator({
-      storage,
-      dbSync,
-      pathPrefix: PREFIX,
-      deviceId: DEVICE_ID,
-      exportTempPath: EXPORT_PATH,
-      computeSha256Hex: () => "deadbeef",
-      readSnapshotBytes: async () => new Uint8Array(),
-      getSnapshotBytes: async () => 0,
-    });
+    it("CS-P1: remote.rev=2, local=1 拉取成功并导入", async () => {
+        const snapKey = CloudSyncPaths.snapshotKey(PREFIX, 2);
+        const snapBytes = new Uint8Array([10, 20, 30]);
+        const storage = createStorage({
+            status: {
+                schemaVersion: 1,
+                rev: 2,
+                snapshotKey: snapKey,
+                snapshotSha256: "deadbeef",
+                snapshotBytes: snapBytes.length,
+                lock: null,
+            },
+            snapshots: { [snapKey]: snapBytes },
+        });
+        const dbSync = createMockDbSync();
+        const coordinator = new CloudSyncCoordinator({
+            storage,
+            dbSync,
+            pathPrefix: PREFIX,
+            deviceId: DEVICE_ID,
+            exportTempPath: EXPORT_PATH,
+            computeSha256Hex: () => "deadbeef",
+            readSnapshotBytes: async () => new Uint8Array(),
+            getSnapshotBytes: async () => 0,
+        });
 
-    const result = unwrap(await coordinator.pull({ lastSyncedRev: 1 }));
-    assert.equal(result.rev, 2);
-    assert.equal(result.databaseReplaced, true);
-    assert.equal(dbSync.imported.length, 1);
-    assert.deepEqual(dbSync.imported[0], snapBytes);
-    assert.equal(dbSync.importedPaths.length, 0);
-  });
-
-  it("CS-P1b: 文件路径 Pull 走 getToPath + importSnapshotFromPath", async () => {
-    const snapKey = CloudSyncPaths.snapshotKey(PREFIX, 2);
-    const snapBytes = new Uint8Array([10, 20, 30]);
-    const storage = createStorage({
-      status: {
-        schemaVersion: 1,
-        rev: 2,
-        snapshotKey: snapKey,
-        snapshotSha256: "deadbeef",
-        snapshotBytes: snapBytes.length,
-        lock: null,
-      },
-      snapshots: { [snapKey]: snapBytes },
-    });
-    const dbSync = createMockDbSync();
-    const importPath = join(tmpdir(), `nm-coord-pull-${Date.now()}.nmbackup`);
-    const coordinator = new CloudSyncCoordinator({
-      storage,
-      dbSync,
-      pathPrefix: PREFIX,
-      deviceId: DEVICE_ID,
-      exportTempPath: EXPORT_PATH,
-      importTempPath: importPath,
-      computeSha256Hex: () => "unused",
-      hashSnapshotFile: async () => "deadbeef",
-      readSnapshotBytes: async () => new Uint8Array(),
-      getSnapshotBytes: async () => 0,
+        const result = unwrap(await coordinator.pull({ lastSyncedRev: 1 }));
+        assert.equal(result.rev, 2);
+        assert.equal(result.databaseReplaced, true);
+        assert.equal(dbSync.imported.length, 1);
+        assert.deepEqual(dbSync.imported[0], snapBytes);
+        assert.equal(dbSync.importedPaths.length, 0);
     });
 
-    const result = unwrap(await coordinator.pull({ lastSyncedRev: 1 }));
-    assert.equal(result.rev, 2);
-    assert.equal(result.databaseReplaced, true);
-    assert.equal(dbSync.imported.length, 0);
-    assert.equal(dbSync.importedPaths.length, 1);
-    assert.equal(dbSync.importedPaths[0], importPath);
-    const onDisk = await readFile(importPath);
-    assert.deepEqual(new Uint8Array(onDisk), snapBytes);
-  });
+    it("CS-P1b: 文件路径 Pull 走 getToPath + importSnapshotFromPath", async () => {
+        const snapKey = CloudSyncPaths.snapshotKey(PREFIX, 2);
+        const snapBytes = new Uint8Array([10, 20, 30]);
+        const storage = createStorage({
+            status: {
+                schemaVersion: 1,
+                rev: 2,
+                snapshotKey: snapKey,
+                snapshotSha256: "deadbeef",
+                snapshotBytes: snapBytes.length,
+                lock: null,
+            },
+            snapshots: { [snapKey]: snapBytes },
+        });
+        const dbSync = createMockDbSync();
+        const importPath = join(tmpdir(), `nm-coord-pull-${Date.now()}.nmbackup`);
+        const coordinator = new CloudSyncCoordinator({
+            storage,
+            dbSync,
+            pathPrefix: PREFIX,
+            deviceId: DEVICE_ID,
+            exportTempPath: EXPORT_PATH,
+            importTempPath: importPath,
+            computeSha256Hex: () => "unused",
+            hashSnapshotFile: async () => "deadbeef",
+            readSnapshotBytes: async () => new Uint8Array(),
+            getSnapshotBytes: async () => 0,
+        });
 
-  it("CS-P2: remote.rev=1, local=1 返回 ALREADY_UP_TO_DATE", async () => {
-    const storage = createStorage({
-      status: { schemaVersion: 1, rev: 1, lock: null },
+        const result = unwrap(await coordinator.pull({ lastSyncedRev: 1 }));
+        assert.equal(result.rev, 2);
+        assert.equal(result.databaseReplaced, true);
+        assert.equal(dbSync.imported.length, 0);
+        assert.equal(dbSync.importedPaths.length, 1);
+        assert.equal(dbSync.importedPaths[0], importPath);
+        const onDisk = await readFile(importPath);
+        assert.deepEqual(new Uint8Array(onDisk), snapBytes);
     });
-    const coordinator = createCoordinator(storage, createMockDbSync());
 
-    await rejectsErr(
-      () => coordinator.pull({ lastSyncedRev: 1 }),
-      (error: unknown) => {
-        assert.ok(AppErrorOps.is(error, "CLOUD_SYNC_ALREADY_UP_TO_DATE"));
-        return true;
-      },
-    );
-  });
+    it("CS-P2: remote.rev=1, local=1 返回 ALREADY_UP_TO_DATE", async () => {
+        const storage = createStorage({
+            status: { schemaVersion: 1, rev: 1, lock: null },
+        });
+        const coordinator = createCoordinator(storage, createMockDbSync());
+
+        await rejectsErr(
+            () => coordinator.pull({ lastSyncedRev: 1 }),
+            (error: unknown) => {
+                assert.ok(AppErrorOps.is(error, "CLOUD_SYNC_ALREADY_UP_TO_DATE"));
+                return true;
+            },
+        );
+    });
 });
 
 // S-CS-03：pull 的 agent 复检与进程内互斥。
@@ -254,330 +254,330 @@ describe("CloudSyncCoordinator.pull", () => {
 // 整库覆盖（在途写入丢失），且 pull ↔ push 在 mobile 交错时会把本机刚拉回来的
 // 内容用旧快照盖回云端。
 describe("CloudSyncCoordinator.pull 守卫 (S-CS-03)", () => {
-  function remoteAtRev2(snapBytes: Uint8Array) {
-    const snapKey = CloudSyncPaths.snapshotKey(PREFIX, 2);
-    return {
-      snapKey,
-      storage: createStorage({
-        status: {
-          schemaVersion: 1,
-          rev: 2,
-          snapshotKey: snapKey,
-          snapshotSha256: "deadbeef",
-          snapshotBytes: snapBytes.length,
-          lock: null,
-        },
-        snapshots: { [snapKey]: snapBytes },
-      }),
-    };
-  }
+    function remoteAtRev2(snapBytes: Uint8Array) {
+        const snapKey = CloudSyncPaths.snapshotKey(PREFIX, 2);
+        return {
+            snapKey,
+            storage: createStorage({
+                status: {
+                    schemaVersion: 1,
+                    rev: 2,
+                    snapshotKey: snapKey,
+                    snapshotSha256: "deadbeef",
+                    snapshotBytes: snapBytes.length,
+                    lock: null,
+                },
+                snapshots: { [snapKey]: snapBytes },
+            }),
+        };
+    }
 
-  it("pull 入口 agent 活跃时抛 AGENT_ACTIVE 且不调用 import", async () => {
-    const { storage } = remoteAtRev2(new Uint8Array([10, 20, 30]));
-    const dbSync = createMockDbSync({ isAgentActive: () => true });
-    const coordinator = createCoordinator(storage, dbSync);
+    it("pull 入口 agent 活跃时抛 AGENT_ACTIVE 且不调用 import", async () => {
+        const { storage } = remoteAtRev2(new Uint8Array([10, 20, 30]));
+        const dbSync = createMockDbSync({ isAgentActive: () => true });
+        const coordinator = createCoordinator(storage, dbSync);
 
-    await rejectsErr(
-      () => coordinator.pull({ lastSyncedRev: 1 }),
-      (error: unknown) => {
-        assert.ok(AppErrorOps.is(error, "CLOUD_SYNC_AGENT_ACTIVE"));
-        return true;
-      },
-    );
-    assert.equal(dbSync.imported.length, 0, "拒绝时绝不能触碰活动库文件");
-    assert.equal(dbSync.importedPaths.length, 0);
-  });
-
-  it("import 之前复检到 agent 活跃时抛 AGENT_ACTIVE", async () => {
-    // 钩子挂在 hashSnapshotFile 上：它在 getToPath 之后、importSnapshotFromPath
-    // 之前——正是「下载已完成、覆盖还没开始」那个窗口。
-    const { storage } = remoteAtRev2(new Uint8Array([10, 20, 30]));
-    let agentActive = false;
-    const dbSync = createMockDbSync({ isAgentActive: () => agentActive });
-    const importPath = join(tmpdir(), `nm-coord-guard-${Date.now()}.nmbackup`);
-    const coordinator = new CloudSyncCoordinator({
-      storage,
-      dbSync,
-      pathPrefix: PREFIX,
-      deviceId: DEVICE_ID,
-      exportTempPath: EXPORT_PATH,
-      importTempPath: importPath,
-      computeSha256Hex: () => "unused",
-      hashSnapshotFile: async () => {
-        agentActive = true;
-        return "deadbeef";
-      },
-      readSnapshotBytes: async () => new Uint8Array(),
-      getSnapshotBytes: async () => 0,
-      pushMutex: new PushAgentMutex(),
+        await rejectsErr(
+            () => coordinator.pull({ lastSyncedRev: 1 }),
+            (error: unknown) => {
+                assert.ok(AppErrorOps.is(error, "CLOUD_SYNC_AGENT_ACTIVE"));
+                return true;
+            },
+        );
+        assert.equal(dbSync.imported.length, 0, "拒绝时绝不能触碰活动库文件");
+        assert.equal(dbSync.importedPaths.length, 0);
     });
 
-    await rejectsErr(
-      () => coordinator.pull({ lastSyncedRev: 1 }),
-      (error: unknown) => {
-        assert.ok(AppErrorOps.is(error, "CLOUD_SYNC_AGENT_ACTIVE"));
-        return true;
-      },
-    );
-    assert.equal(dbSync.importedPaths.length, 0, "二次复检必须发生在覆盖之前");
-  });
+    it("import 之前复检到 agent 活跃时抛 AGENT_ACTIVE", async () => {
+        // 钩子挂在 hashSnapshotFile 上：它在 getToPath 之后、importSnapshotFromPath
+        // 之前——正是「下载已完成、覆盖还没开始」那个窗口。
+        const { storage } = remoteAtRev2(new Uint8Array([10, 20, 30]));
+        let agentActive = false;
+        const dbSync = createMockDbSync({ isAgentActive: () => agentActive });
+        const importPath = join(tmpdir(), `nm-coord-guard-${Date.now()}.nmbackup`);
+        const coordinator = new CloudSyncCoordinator({
+            storage,
+            dbSync,
+            pathPrefix: PREFIX,
+            deviceId: DEVICE_ID,
+            exportTempPath: EXPORT_PATH,
+            importTempPath: importPath,
+            computeSha256Hex: () => "unused",
+            hashSnapshotFile: async () => {
+                agentActive = true;
+                return "deadbeef";
+            },
+            readSnapshotBytes: async () => new Uint8Array(),
+            getSnapshotBytes: async () => 0,
+            pushMutex: new PushAgentMutex(),
+        });
 
-  it("pull 持锁期间并发 push 排队（exportSnapshotToPath 在 pull 之后）", async () => {
-    const snapBytes = new Uint8Array([10, 20, 30]);
-    const { storage } = remoteAtRev2(snapBytes);
-    const mutex = new PushAgentMutex();
-    let releaseDownload: () => void = () => {};
-    const downloadGate = new Promise<void>(resolve => {
-      releaseDownload = resolve;
-    });
-    // 包装 getToPath：让 pull 卡在「下载快照」这一步，全程持锁。
-    const gatedStorage: ObjectStoragePort = {
-      ...storage,
-      async getToPath(key, destPath) {
-        await downloadGate;
-        return storage.getToPath!(key, destPath);
-      },
-    };
-
-    let pushExported = false;
-    const dbSync = createMockDbSync({
-      async exportSnapshotToPath() {
-        pushExported = true;
-      },
-    });
-    const importPath = join(tmpdir(), `nm-coord-mutex-${Date.now()}.nmbackup`);
-    const exportPath = join(tmpdir(), `nm-coord-mutex-exp-${Date.now()}.nmbackup`);
-    await writeFile(exportPath, new Uint8Array([1, 2, 3, 4]));
-    const coordinator = new CloudSyncCoordinator({
-      storage: gatedStorage,
-      dbSync,
-      pathPrefix: PREFIX,
-      deviceId: DEVICE_ID,
-      exportTempPath: exportPath,
-      importTempPath: importPath,
-      computeSha256Hex: () => "unused",
-      hashSnapshotFile: async () => "deadbeef",
-      readSnapshotBytes: async () => new Uint8Array([1, 2, 3, 4]),
-      getSnapshotBytes: async () => 4,
-      pushMutex: mutex,
+        await rejectsErr(
+            () => coordinator.pull({ lastSyncedRev: 1 }),
+            (error: unknown) => {
+                assert.ok(AppErrorOps.is(error, "CLOUD_SYNC_AGENT_ACTIVE"));
+                return true;
+            },
+        );
+        assert.equal(dbSync.importedPaths.length, 0, "二次复检必须发生在覆盖之前");
     });
 
-    const pullPromise = coordinator.pull({ lastSyncedRev: 1 });
-    await new Promise(r => setTimeout(r, 10));
-    assert.equal(mutex.isHeld(), true, "pull 应持锁");
+    it("pull 持锁期间并发 push 排队（exportSnapshotToPath 在 pull 之后）", async () => {
+        const snapBytes = new Uint8Array([10, 20, 30]);
+        const { storage } = remoteAtRev2(snapBytes);
+        const mutex = new PushAgentMutex();
+        let releaseDownload: () => void = () => {};
+        const downloadGate = new Promise<void>(resolve => {
+            releaseDownload = resolve;
+        });
+        // 包装 getToPath：让 pull 卡在「下载快照」这一步，全程持锁。
+        const gatedStorage: ObjectStoragePort = {
+            ...storage,
+            async getToPath(key, destPath) {
+                await downloadGate;
+                return storage.getToPath!(key, destPath);
+            },
+        };
 
-    const pushPromise = coordinator
-      .push({ lastSyncedRev: 2 })
-      .then(r => r)
-      .catch(() => undefined);
-    await new Promise(r => setTimeout(r, 20));
-    assert.equal(pushExported, false, "pull 持锁期间 push 不得开始导出");
-    assert.equal(mutex.waiterCount(), 1, "push 应在锁上排队");
+        let pushExported = false;
+        const dbSync = createMockDbSync({
+            async exportSnapshotToPath() {
+                pushExported = true;
+            },
+        });
+        const importPath = join(tmpdir(), `nm-coord-mutex-${Date.now()}.nmbackup`);
+        const exportPath = join(tmpdir(), `nm-coord-mutex-exp-${Date.now()}.nmbackup`);
+        await writeFile(exportPath, new Uint8Array([1, 2, 3, 4]));
+        const coordinator = new CloudSyncCoordinator({
+            storage: gatedStorage,
+            dbSync,
+            pathPrefix: PREFIX,
+            deviceId: DEVICE_ID,
+            exportTempPath: exportPath,
+            importTempPath: importPath,
+            computeSha256Hex: () => "unused",
+            hashSnapshotFile: async () => "deadbeef",
+            readSnapshotBytes: async () => new Uint8Array([1, 2, 3, 4]),
+            getSnapshotBytes: async () => 4,
+            pushMutex: mutex,
+        });
 
-    releaseDownload();
-    const pullResult = unwrap(await pullPromise);
-    assert.equal(pullResult.rev, 2);
-    assert.equal(mutex.isHeld(), true, "pull 放锁后 push 拿到锁");
-    await pushPromise;
-    assert.equal(pushExported, true);
-    assert.equal(mutex.isHeld(), false);
-  });
+        const pullPromise = coordinator.pull({ lastSyncedRev: 1 });
+        await new Promise(r => setTimeout(r, 10));
+        assert.equal(mutex.isHeld(), true, "pull 应持锁");
 
-  it("ALREADY_UP_TO_DATE 时不抢锁不查 agent", async () => {
-    const storage = createStorage({
-      status: { schemaVersion: 1, rev: 1, lock: null },
+        const pushPromise = coordinator
+            .push({ lastSyncedRev: 2 })
+            .then(r => r)
+            .catch(() => undefined);
+        await new Promise(r => setTimeout(r, 20));
+        assert.equal(pushExported, false, "pull 持锁期间 push 不得开始导出");
+        assert.equal(mutex.waiterCount(), 1, "push 应在锁上排队");
+
+        releaseDownload();
+        const pullResult = unwrap(await pullPromise);
+        assert.equal(pullResult.rev, 2);
+        assert.equal(mutex.isHeld(), true, "pull 放锁后 push 拿到锁");
+        await pushPromise;
+        assert.equal(pushExported, true);
+        assert.equal(mutex.isHeld(), false);
     });
-    const mutex = new PushAgentMutex();
-    let agentChecked = false;
-    const dbSync = createMockDbSync({
-      isAgentActive: () => {
-        agentChecked = true;
-        return true;
-      },
-    });
-    const coordinator = createCoordinator(storage, dbSync, { pushMutex: mutex });
 
-    await rejectsErr(
-      () => coordinator.pull({ lastSyncedRev: 1 }),
-      (error: unknown) => {
-        // 一次「什么都不会发生」的 no-op pull 不该因为 agent 在跑而被拒。
-        assert.ok(AppErrorOps.is(error, "CLOUD_SYNC_ALREADY_UP_TO_DATE"));
-        return true;
-      },
-    );
-    assert.equal(agentChecked, false, "早返回之前不得查 agent");
-    assert.equal(mutex.isHeld(), false, "早返回之前不得抢锁");
-    assert.equal(mutex.waiterCount(), 0);
-  });
+    it("ALREADY_UP_TO_DATE 时不抢锁不查 agent", async () => {
+        const storage = createStorage({
+            status: { schemaVersion: 1, rev: 1, lock: null },
+        });
+        const mutex = new PushAgentMutex();
+        let agentChecked = false;
+        const dbSync = createMockDbSync({
+            isAgentActive: () => {
+                agentChecked = true;
+                return true;
+            },
+        });
+        const coordinator = createCoordinator(storage, dbSync, { pushMutex: mutex });
+
+        await rejectsErr(
+            () => coordinator.pull({ lastSyncedRev: 1 }),
+            (error: unknown) => {
+                // 一次「什么都不会发生」的 no-op pull 不该因为 agent 在跑而被拒。
+                assert.ok(AppErrorOps.is(error, "CLOUD_SYNC_ALREADY_UP_TO_DATE"));
+                return true;
+            },
+        );
+        assert.equal(agentChecked, false, "早返回之前不得查 agent");
+        assert.equal(mutex.isHeld(), false, "早返回之前不得抢锁");
+        assert.equal(mutex.waiterCount(), 0);
+    });
 });
 
 describe("CloudSyncCoordinator.push", () => {
-  it("CS-P3: remote.rev=2, local=1 抛出 NEED_PULL_FIRST", async () => {
-    const storage = createStorage({
-      status: { schemaVersion: 1, rev: 2, lock: null },
-    });
-    const coordinator = createCoordinator(storage, createMockDbSync());
+    it("CS-P3: remote.rev=2, local=1 抛出 NEED_PULL_FIRST", async () => {
+        const storage = createStorage({
+            status: { schemaVersion: 1, rev: 2, lock: null },
+        });
+        const coordinator = createCoordinator(storage, createMockDbSync());
 
-    await rejectsErr(
-      () => coordinator.push({ lastSyncedRev: 1 }),
-      (error: unknown) => {
-        assert.ok(AppErrorOps.is(error, "CLOUD_SYNC_NEED_PULL_FIRST"));
-        return true;
-      },
-    );
-  });
-
-  it("CS-P4: 他人有效锁时抛出 LOCK_HELD_BY_OTHER", async () => {
-    const future = new Date(Date.now() + 900_000).toISOString();
-    const storage = createStorage({
-      status: {
-        schemaVersion: 1,
-        rev: 1,
-        lock: {
-          holderDeviceId: "other-device",
-          acquiredAt: new Date().toISOString(),
-          expiresAt: future,
-        },
-      },
-    });
-    const coordinator = createCoordinator(storage, createMockDbSync());
-
-    await rejectsErr(
-      () => coordinator.push({ lastSyncedRev: 1 }),
-      (error: unknown) => {
-        assert.ok(AppErrorOps.is(error, "CLOUD_SYNC_LOCK_HELD_BY_OTHER"));
-        return true;
-      },
-    );
-  });
-
-  it("CS-P5: Push 成功时 final status lock 为 null 且 rev 递增", async () => {
-    const storage = createStorage({
-      status: { schemaVersion: 1, rev: 1, lock: null },
-    });
-    const coordinator = createCoordinator(storage, createMockDbSync());
-
-    const result = unwrap(await coordinator.push({ lastSyncedRev: 1 }));
-    assert.equal(result.rev, 2);
-
-    const writes = storage.getStatusWrites();
-    const finalWrite = writes[writes.length - 1];
-    assert.equal(finalWrite.rev, 2);
-    assert.equal(finalWrite.lock, null);
-    assert.equal(finalWrite.snapshotKey, CloudSyncPaths.snapshotKey(PREFIX, 2));
-    assert.equal(finalWrite.snapshotSha256, "abc123");
-  });
-
-  it("CS-P5b: 文件路径 Push 走 hashSnapshotFile + putFile", async () => {
-    const storage = createStorage({
-      status: { schemaVersion: 1, rev: 1, lock: null },
-    });
-    const exportPath = join(tmpdir(), `nm-coord-push-${Date.now()}.nmbackup`);
-    const snapBytes = new Uint8Array([1, 2, 3, 4]);
-    await writeFile(exportPath, snapBytes);
-
-    const dbSync = createMockDbSync({
-      async exportSnapshotToPath(destPath: string) {
-        await writeFile(destPath, snapBytes);
-      },
+        await rejectsErr(
+            () => coordinator.push({ lastSyncedRev: 1 }),
+            (error: unknown) => {
+                assert.ok(AppErrorOps.is(error, "CLOUD_SYNC_NEED_PULL_FIRST"));
+                return true;
+            },
+        );
     });
 
-    const coordinator = new CloudSyncCoordinator({
-      storage,
-      dbSync,
-      pathPrefix: PREFIX,
-      deviceId: DEVICE_ID,
-      exportTempPath: exportPath,
-      computeSha256Hex: () => "unused",
-      hashSnapshotFile: async () => "abc123",
-      readSnapshotBytes: async () => {
-        throw new Error("不应走 bytes 读路径");
-      },
-      getSnapshotBytes: async () => snapBytes.length,
+    it("CS-P4: 他人有效锁时抛出 LOCK_HELD_BY_OTHER", async () => {
+        const future = new Date(Date.now() + 900_000).toISOString();
+        const storage = createStorage({
+            status: {
+                schemaVersion: 1,
+                rev: 1,
+                lock: {
+                    holderDeviceId: "other-device",
+                    acquiredAt: new Date().toISOString(),
+                    expiresAt: future,
+                },
+            },
+        });
+        const coordinator = createCoordinator(storage, createMockDbSync());
+
+        await rejectsErr(
+            () => coordinator.push({ lastSyncedRev: 1 }),
+            (error: unknown) => {
+                assert.ok(AppErrorOps.is(error, "CLOUD_SYNC_LOCK_HELD_BY_OTHER"));
+                return true;
+            },
+        );
     });
 
-    const result = unwrap(await coordinator.push({ lastSyncedRev: 1 }));
-    assert.equal(result.rev, 2);
+    it("CS-P5: Push 成功时 final status lock 为 null 且 rev 递增", async () => {
+        const storage = createStorage({
+            status: { schemaVersion: 1, rev: 1, lock: null },
+        });
+        const coordinator = createCoordinator(storage, createMockDbSync());
 
-    const snapKey = CloudSyncPaths.snapshotKey(PREFIX, 2);
-    const stored = storage.getSnapshots().get(snapKey);
-    assert.ok(stored != null);
-    assert.deepEqual(stored.body, snapBytes);
-  });
+        const result = unwrap(await coordinator.push({ lastSyncedRev: 1 }));
+        assert.equal(result.rev, 2);
 
-  it("CS-P6: Push 上传失败时 finally 尝试清锁", async () => {
-    let currentStatus: CloudSyncStatus = {
-      schemaVersion: 1,
-      rev: 1,
-      lock: null,
-    };
-    let currentEtag = "etag-0";
-    const statusWrites: CloudSyncStatus[] = [];
-    let etagCounter = 1;
-
-    const storage: ObjectStoragePort & { getStatusWrites: () => CloudSyncStatus[] } = {
-      getStatusWrites: () => statusWrites,
-      async head(key: string) {
-        if (key === CloudSyncPaths.statusKey(PREFIX)) {
-          return { exists: true, etag: currentEtag };
-        }
-        return { exists: false };
-      },
-      async get(key: string) {
-        if (key === CloudSyncPaths.statusKey(PREFIX)) {
-          return { body: encodeStatus(currentStatus), etag: currentEtag };
-        }
-        throw new Error("not found");
-      },
-      async put(key, body, options) {
-        if (key === CloudSyncPaths.statusKey(PREFIX)) {
-          if (options?.ifMatch != null && options.ifMatch !== currentEtag) {
-            return Result.err(new AppError("CLOUD_SYNC_LOCK_CONTENTION", {detail: "etag 不匹配"}));
-          }
-          const parsed = JSON.parse(new TextDecoder().decode(body)) as CloudSyncStatus;
-          currentStatus = parsed;
-          statusWrites.push(structuredClone(parsed));
-          etagCounter += 1;
-          currentEtag = `etag-${etagCounter}`;
-          return Result.ok({ etag: currentEtag });
-        }
-        throw new Error("snapshot upload failed");
-      },
-    };
-
-    const coordinator = createCoordinator(storage, createMockDbSync());
-
-    // 未知异常（基础设施故障）仍走 throw 通道：rejectsErr 接不了 reject，保持 assert.rejects
-    await assert.rejects(
-      () => coordinator.push({ lastSyncedRev: 1 }),
-      (error: unknown) => {
-        assert.ok(error instanceof Error);
-        assert.match(String(error), /snapshot upload failed/);
-        return true;
-      },
-    );
-
-    const lockAcquire = statusWrites.find((s) => s.lock?.holderDeviceId === DEVICE_ID);
-    assert.ok(lockAcquire != null, "应已抢锁");
-
-    const clearAttempt = statusWrites.find(
-      (s, i) => i > 0 && s.lock === null && s.rev === 1,
-    );
-    assert.ok(clearAttempt != null, "finally 应尝试清锁");
-  });
-
-  it("forceOverwriteRemote 跳过 rev 检查", async () => {
-    const storage = createStorage({
-      status: { schemaVersion: 1, rev: 5, lock: null },
+        const writes = storage.getStatusWrites();
+        const finalWrite = writes[writes.length - 1];
+        assert.equal(finalWrite.rev, 2);
+        assert.equal(finalWrite.lock, null);
+        assert.equal(finalWrite.snapshotKey, CloudSyncPaths.snapshotKey(PREFIX, 2));
+        assert.equal(finalWrite.snapshotSha256, "abc123");
     });
-    const coordinator = createCoordinator(storage, createMockDbSync());
 
-    const result = unwrap(await coordinator.push({
-      lastSyncedRev: 1,
-      forceOverwriteRemote: true,
-    }));
-    assert.equal(result.rev, 6);
-  });
+    it("CS-P5b: 文件路径 Push 走 hashSnapshotFile + putFile", async () => {
+        const storage = createStorage({
+            status: { schemaVersion: 1, rev: 1, lock: null },
+        });
+        const exportPath = join(tmpdir(), `nm-coord-push-${Date.now()}.nmbackup`);
+        const snapBytes = new Uint8Array([1, 2, 3, 4]);
+        await writeFile(exportPath, snapBytes);
+
+        const dbSync = createMockDbSync({
+            async exportSnapshotToPath(destPath: string) {
+                await writeFile(destPath, snapBytes);
+            },
+        });
+
+        const coordinator = new CloudSyncCoordinator({
+            storage,
+            dbSync,
+            pathPrefix: PREFIX,
+            deviceId: DEVICE_ID,
+            exportTempPath: exportPath,
+            computeSha256Hex: () => "unused",
+            hashSnapshotFile: async () => "abc123",
+            readSnapshotBytes: async () => {
+                throw new Error("不应走 bytes 读路径");
+            },
+            getSnapshotBytes: async () => snapBytes.length,
+        });
+
+        const result = unwrap(await coordinator.push({ lastSyncedRev: 1 }));
+        assert.equal(result.rev, 2);
+
+        const snapKey = CloudSyncPaths.snapshotKey(PREFIX, 2);
+        const stored = storage.getSnapshots().get(snapKey);
+        assert.ok(stored != null);
+        assert.deepEqual(stored.body, snapBytes);
+    });
+
+    it("CS-P6: Push 上传失败时 finally 尝试清锁", async () => {
+        let currentStatus: CloudSyncStatus = {
+            schemaVersion: 1,
+            rev: 1,
+            lock: null,
+        };
+        let currentEtag = "etag-0";
+        const statusWrites: CloudSyncStatus[] = [];
+        let etagCounter = 1;
+
+        const storage: ObjectStoragePort & { getStatusWrites: () => CloudSyncStatus[] } = {
+            getStatusWrites: () => statusWrites,
+            async head(key: string) {
+                if (key === CloudSyncPaths.statusKey(PREFIX)) {
+                    return { exists: true, etag: currentEtag };
+                }
+                return { exists: false };
+            },
+            async get(key: string) {
+                if (key === CloudSyncPaths.statusKey(PREFIX)) {
+                    return { body: encodeStatus(currentStatus), etag: currentEtag };
+                }
+                throw new Error("not found");
+            },
+            async put(key, body, options) {
+                if (key === CloudSyncPaths.statusKey(PREFIX)) {
+                    if (options?.ifMatch != null && options.ifMatch !== currentEtag) {
+                        return Result.err(new AppError("CLOUD_SYNC_LOCK_CONTENTION", {detail: "etag 不匹配"}));
+                    }
+                    const parsed = JSON.parse(new TextDecoder().decode(body)) as CloudSyncStatus;
+                    currentStatus = parsed;
+                    statusWrites.push(structuredClone(parsed));
+                    etagCounter += 1;
+                    currentEtag = `etag-${etagCounter}`;
+                    return Result.ok({ etag: currentEtag });
+                }
+                throw new Error("snapshot upload failed");
+            },
+        };
+
+        const coordinator = createCoordinator(storage, createMockDbSync());
+
+        // 未知异常（基础设施故障）仍走 throw 通道：rejectsErr 接不了 reject，保持 assert.rejects
+        await assert.rejects(
+            () => coordinator.push({ lastSyncedRev: 1 }),
+            (error: unknown) => {
+                assert.ok(error instanceof Error);
+                assert.match(String(error), /snapshot upload failed/);
+                return true;
+            },
+        );
+
+        const lockAcquire = statusWrites.find((s) => s.lock?.holderDeviceId === DEVICE_ID);
+        assert.ok(lockAcquire != null, "应已抢锁");
+
+        const clearAttempt = statusWrites.find(
+            (s, i) => i > 0 && s.lock === null && s.rev === 1,
+        );
+        assert.ok(clearAttempt != null, "finally 应尝试清锁");
+    });
+
+    it("forceOverwriteRemote 跳过 rev 检查", async () => {
+        const storage = createStorage({
+            status: { schemaVersion: 1, rev: 5, lock: null },
+        });
+        const coordinator = createCoordinator(storage, createMockDbSync());
+
+        const result = unwrap(await coordinator.push({
+            lastSyncedRev: 1,
+            forceOverwriteRemote: true,
+        }));
+        assert.equal(result.rev, 6);
+    });
 });
 
 // S-CS-09：push 收尾的条件写失败分支。
@@ -585,11 +585,11 @@ describe("CloudSyncCoordinator.push", () => {
 // 是最初 remote.rev+1 的常量、lock 是 null ⇒ 远端 rev 被写回更小的值 +
 // 第三方租约被抹，两端都把自己记成成功（跨设备静默数据错位）。
 describe("S-CS-09 final status 重读判定", () => {
-  /**
+    /**
    * 模拟设备 B 的**无条件**写：`storage.put` 不传 ifMatch 就是无 If-Match 写，
    * 正是另一台设备在锁过期后做的事。测试基座零改动。
    */
-  /**
+    /**
    * 模拟「另一台设备把远端 status 改成了这样」。
    *
    * ⚠️ **必须 await**（CR cloudsync P2-5）：原先写的是
@@ -602,330 +602,330 @@ describe("S-CS-09 final status 重读判定", () => {
    *
    * 钩子（`exportSnapshotToPath`）本身是 async，await 得起。
    */
-  async function simulateOtherDevice(
-    storage: ReturnType<typeof createStorage>,
-    status: CloudSyncStatus,
-  ): Promise<void> {
-    await storage.put(CloudSyncPaths.statusKey(PREFIX), encodeStatus(status));
-  }
+    async function simulateOtherDevice(
+        storage: ReturnType<typeof createStorage>,
+        status: CloudSyncStatus,
+    ): Promise<void> {
+        await storage.put(CloudSyncPaths.statusKey(PREFIX), encodeStatus(status));
+    }
 
-  it("远端 rev 已被他人推进时不覆盖并抛 NEED_PULL_FIRST", async () => {
-    // 初始 status 绝不能带他人有效租约：那样 runPush 在 canAcquireLock 就提前
-    // 抛 LOCK_HELD_BY_OTHER，永远进不了重读分支 ⇒ 修前修后皆绿（恒绿无牙断言）。
-    const storage = createStorage({
-      status: { schemaVersion: 1, rev: 2, lock: null },
-    });
-    const dbSync = createMockDbSync({
-      async exportSnapshotToPath() {
-        // 设备 B 在我们上传期间把 rev 推到了 3。
-        await simulateOtherDevice(storage, {
-          schemaVersion: 1,
-          rev: 3,
-          lock: null,
+    it("远端 rev 已被他人推进时不覆盖并抛 NEED_PULL_FIRST", async () => {
+        // 初始 status 绝不能带他人有效租约：那样 runPush 在 canAcquireLock 就提前
+        // 抛 LOCK_HELD_BY_OTHER，永远进不了重读分支 ⇒ 修前修后皆绿（恒绿无牙断言）。
+        const storage = createStorage({
+            status: { schemaVersion: 1, rev: 2, lock: null },
         });
-      },
-    });
-    const coordinator = createCoordinator(storage, dbSync);
+        const dbSync = createMockDbSync({
+            async exportSnapshotToPath() {
+                // 设备 B 在我们上传期间把 rev 推到了 3。
+                await simulateOtherDevice(storage, {
+                    schemaVersion: 1,
+                    rev: 3,
+                    lock: null,
+                });
+            },
+        });
+        const coordinator = createCoordinator(storage, dbSync);
 
-    await rejectsErr(
-      () => coordinator.push({ lastSyncedRev: 2 }),
-      (error: unknown) => {
-        assert.ok(AppErrorOps.is(error, "CLOUD_SYNC_NEED_PULL_FIRST"));
-        return true;
-      },
-    );
+        await rejectsErr(
+            () => coordinator.push({ lastSyncedRev: 2 }),
+            (error: unknown) => {
+                assert.ok(AppErrorOps.is(error, "CLOUD_SYNC_NEED_PULL_FIRST"));
+                return true;
+            },
+        );
 
-    const writes = storage.getStatusWrites();
-    assert.ok(writes.length > 0);
-    // 没有写出回退的 rev（我们的 nextRev 是 3，但那条写不能存在——
+        const writes = storage.getStatusWrites();
+        assert.ok(writes.length > 0);
+        // 没有写出回退的 rev（我们的 nextRev 是 3，但那条写不能存在——
 //    它只能是 rev>=3 的设备 B 的写）。
-    assert.equal(
-      writes.some(w => w.rev === 3 && w.lock === null && w.snapshotKey != null),
-      false,
-      "不得把自己的 final status 写出去",
-    );
-    assert.ok(
-      (writes[writes.length - 1]?.rev ?? 0) >= 3,
-      "最后一条 status 写不得是回退的 rev",
-    );
-  });
-
-  it("远端有他人有效租约时抛 LOCK_HELD_BY_OTHER 且不清他人租约", async () => {
-    const storage = createStorage({
-      status: { schemaVersion: 1, rev: 2, lock: null },
+        assert.equal(
+            writes.some(w => w.rev === 3 && w.lock === null && w.snapshotKey != null),
+            false,
+            "不得把自己的 final status 写出去",
+        );
+        assert.ok(
+            (writes[writes.length - 1]?.rev ?? 0) >= 3,
+            "最后一条 status 写不得是回退的 rev",
+        );
     });
-    const dbSync = createMockDbSync({
-      async exportSnapshotToPath() {
-        await simulateOtherDevice(storage, {
-          schemaVersion: 1,
-          rev: 2,
-          lock: CloudSyncLease.build("other-device", 900),
+
+    it("远端有他人有效租约时抛 LOCK_HELD_BY_OTHER 且不清他人租约", async () => {
+        const storage = createStorage({
+            status: { schemaVersion: 1, rev: 2, lock: null },
         });
-      },
-    });
-    const coordinator = createCoordinator(storage, dbSync);
-
-    await rejectsErr(
-      () => coordinator.push({ lastSyncedRev: 2 }),
-      (error: unknown) => {
-        assert.ok(AppErrorOps.is(error, "CLOUD_SYNC_LOCK_HELD_BY_OTHER"));
-        return true;
-      },
-    );
-
-    // 回滚面：抛错走 finally 的 tryClearLock，但它有三重守卫
-    // （lock==null / 租约过期 / holderDeviceId !== 本机），不得误清他人租约。
-    const writes = storage.getStatusWrites();
-    const last = writes[writes.length - 1]!;
-    assert.equal(
-      last.lock?.holderDeviceId,
-      "other-device",
-      "第三方的有效租约必须仍在",
-    );
-  });
-
-  it("远端租约已过期但 rev 未推进时仍成功提交 final status（反向断言）", async () => {
-    // 没有这条，把守卫写成「一律拒绝」的错修法也会全绿。
-    const storage = createStorage({
-      status: { schemaVersion: 1, rev: 2, lock: null },
-    });
-    const dbSync = createMockDbSync({
-      async exportSnapshotToPath() {
-        // 过期租约 ⇒ canAcquireLock 为 true；rev 未推进 ⇒ latest.rev(2) < nextRev(3)。
-        await simulateOtherDevice(storage, {
-          schemaVersion: 1,
-          rev: 2,
-          lock: CloudSyncLease.build("other-device", -900),
+        const dbSync = createMockDbSync({
+            async exportSnapshotToPath() {
+                await simulateOtherDevice(storage, {
+                    schemaVersion: 1,
+                    rev: 2,
+                    lock: CloudSyncLease.build("other-device", 900),
+                });
+            },
         });
-      },
+        const coordinator = createCoordinator(storage, dbSync);
+
+        await rejectsErr(
+            () => coordinator.push({ lastSyncedRev: 2 }),
+            (error: unknown) => {
+                assert.ok(AppErrorOps.is(error, "CLOUD_SYNC_LOCK_HELD_BY_OTHER"));
+                return true;
+            },
+        );
+
+        // 回滚面：抛错走 finally 的 tryClearLock，但它有三重守卫
+        // （lock==null / 租约过期 / holderDeviceId !== 本机），不得误清他人租约。
+        const writes = storage.getStatusWrites();
+        const last = writes[writes.length - 1]!;
+        assert.equal(
+            last.lock?.holderDeviceId,
+            "other-device",
+            "第三方的有效租约必须仍在",
+        );
     });
-    const coordinator = createCoordinator(storage, dbSync);
 
-    const result = unwrap(await coordinator.push({ lastSyncedRev: 2 }));
-    assert.equal(result.rev, 3);
+    it("远端租约已过期但 rev 未推进时仍成功提交 final status（反向断言）", async () => {
+        // 没有这条，把守卫写成「一律拒绝」的错修法也会全绿。
+        const storage = createStorage({
+            status: { schemaVersion: 1, rev: 2, lock: null },
+        });
+        const dbSync = createMockDbSync({
+            async exportSnapshotToPath() {
+                // 过期租约 ⇒ canAcquireLock 为 true；rev 未推进 ⇒ latest.rev(2) < nextRev(3)。
+                await simulateOtherDevice(storage, {
+                    schemaVersion: 1,
+                    rev: 2,
+                    lock: CloudSyncLease.build("other-device", -900),
+                });
+            },
+        });
+        const coordinator = createCoordinator(storage, dbSync);
 
-    const writes = storage.getStatusWrites();
-    const last = writes[writes.length - 1]!;
-    assert.equal(last.rev, 3);
-    assert.equal(last.lock, null);
-  });
+        const result = unwrap(await coordinator.push({ lastSyncedRev: 2 }));
+        assert.equal(result.rev, 3);
+
+        const writes = storage.getStatusWrites();
+        const last = writes[writes.length - 1]!;
+        assert.equal(last.rev, 3);
+        assert.equal(last.lock, null);
+    });
 });
 
 // T-SC10：进程内 push/agent 互斥锁（A-21）
 describe("CloudSyncCoordinator.push 互斥锁 (A-21)", () => {
-  it("T-SC10a: push 进行中启动 agent → agent 启动排队（互斥锁被 push 持有）", async () => {
-    const storage = createStorage({
-      status: { schemaVersion: 1, rev: 1, lock: null },
-    });
-    const mutex = new PushAgentMutex();
-    // 用 gate 让 push 在上传途中暂停，模拟“push 持锁期间 agent 启动”
-    let releasePush: () => void = () => {};
-    const pushGate = new Promise<void>((resolve) => {
-      releasePush = resolve;
-    });
-    const dbSync = createMockDbSync({
-      async exportSnapshotToPath() {
-        await pushGate; // 等待测试显式放行
-      },
-    });
-    const coordinator = createCoordinator(storage, dbSync, { pushMutex: mutex });
+    it("T-SC10a: push 进行中启动 agent → agent 启动排队（互斥锁被 push 持有）", async () => {
+        const storage = createStorage({
+            status: { schemaVersion: 1, rev: 1, lock: null },
+        });
+        const mutex = new PushAgentMutex();
+        // 用 gate 让 push 在上传途中暂停，模拟“push 持锁期间 agent 启动”
+        let releasePush: () => void = () => {};
+        const pushGate = new Promise<void>((resolve) => {
+            releasePush = resolve;
+        });
+        const dbSync = createMockDbSync({
+            async exportSnapshotToPath() {
+                await pushGate; // 等待测试显式放行
+            },
+        });
+        const coordinator = createCoordinator(storage, dbSync, { pushMutex: mutex });
 
-    const pushPromise = coordinator.push({ lastSyncedRev: 1 });
-    // 让 push 有机会拿到锁并进入 export
-    await new Promise((r) => setTimeout(r, 10));
-    assert.equal(mutex.isHeld(), true, "push 应持锁");
-    assert.equal(mutex.waiterCount(), 0);
+        const pushPromise = coordinator.push({ lastSyncedRev: 1 });
+        // 让 push 有机会拿到锁并进入 export
+        await new Promise((r) => setTimeout(r, 10));
+        assert.equal(mutex.isHeld(), true, "push 应持锁");
+        assert.equal(mutex.waiterCount(), 0);
 
-    // 模拟 agent 启动入口抢锁：应排队
-    const agentAcquire = mutex.acquire({ timeoutMs: 5000 });
-    await new Promise((r) => setTimeout(r, 10));
-    assert.equal(mutex.waiterCount(), 1, "agent 启动应排队等待");
+        // 模拟 agent 启动入口抢锁：应排队
+        const agentAcquire = mutex.acquire({ timeoutMs: 5000 });
+        await new Promise((r) => setTimeout(r, 10));
+        assert.equal(mutex.waiterCount(), 1, "agent 启动应排队等待");
 
-    // push 放行 → push 完成 → 锁释放 → agent 拿到锁
-    releasePush();
-    const result = unwrap(await pushPromise);
-    assert.equal(result.rev, 2);
-    const agentHandle = await agentAcquire;
-    assert.equal(mutex.isHeld(), true, "agent 应拿到锁");
-    mutex.release(agentHandle);
-    assert.equal(mutex.isHeld(), false);
-  });
-
-  it("T-SC10b: agent 运行中触发 push → push 排队（互斥锁被 agent 持有）", async () => {
-    const storage = createStorage({
-      status: { schemaVersion: 1, rev: 1, lock: null },
-    });
-    const mutex = new PushAgentMutex();
-    // 模拟 agent 启动入口先抢到锁
-    const agentHandle = await mutex.acquire({ timeoutMs: 1000 });
-    assert.equal(mutex.isHeld(), true);
-
-    const coordinator = createCoordinator(storage, createMockDbSync(), {
-      pushMutex: mutex,
-      pushAcquireTimeoutMs: 5000,
+        // push 放行 → push 完成 → 锁释放 → agent 拿到锁
+        releasePush();
+        const result = unwrap(await pushPromise);
+        assert.equal(result.rev, 2);
+        const agentHandle = await agentAcquire;
+        assert.equal(mutex.isHeld(), true, "agent 应拿到锁");
+        mutex.release(agentHandle);
+        assert.equal(mutex.isHeld(), false);
     });
 
-    let pushResolved = false;
-    const pushPromise = coordinator
-      .push({ lastSyncedRev: 1 })
-      .then((r) => {
-        pushResolved = true;
-        return r;
-      });
-    await new Promise((r) => setTimeout(r, 20));
-    assert.equal(pushResolved, false, "push 应排队等待");
-    assert.equal(mutex.waiterCount(), 1);
+    it("T-SC10b: agent 运行中触发 push → push 排队（互斥锁被 agent 持有）", async () => {
+        const storage = createStorage({
+            status: { schemaVersion: 1, rev: 1, lock: null },
+        });
+        const mutex = new PushAgentMutex();
+        // 模拟 agent 启动入口先抢到锁
+        const agentHandle = await mutex.acquire({ timeoutMs: 1000 });
+        assert.equal(mutex.isHeld(), true);
 
-    // agent 结束释放锁 → push 拿到锁继续
-    mutex.release(agentHandle);
-    const result = unwrap(await pushPromise);
-    assert.equal(result.rev, 2);
-    assert.equal(mutex.isHeld(), false, "push 完成后锁应释放");
-  });
+        const coordinator = createCoordinator(storage, createMockDbSync(), {
+            pushMutex: mutex,
+            pushAcquireTimeoutMs: 5000,
+        });
 
-  it("T-SC10c: push 等锁超时 → 降级拒绝（PUSH_MUTEX_TIMEOUT）", async () => {
-    const storage = createStorage({
-      status: { schemaVersion: 1, rev: 1, lock: null },
+        let pushResolved = false;
+        const pushPromise = coordinator
+            .push({ lastSyncedRev: 1 })
+            .then((r) => {
+                pushResolved = true;
+                return r;
+            });
+        await new Promise((r) => setTimeout(r, 20));
+        assert.equal(pushResolved, false, "push 应排队等待");
+        assert.equal(mutex.waiterCount(), 1);
+
+        // agent 结束释放锁 → push 拿到锁继续
+        mutex.release(agentHandle);
+        const result = unwrap(await pushPromise);
+        assert.equal(result.rev, 2);
+        assert.equal(mutex.isHeld(), false, "push 完成后锁应释放");
     });
-    const mutex = new PushAgentMutex();
-    // 锁已被 agent 占着
-    const agentHandle = await mutex.acquire({ timeoutMs: 1000 });
 
-    const coordinator = createCoordinator(storage, createMockDbSync(), {
-      pushMutex: mutex,
-      pushAcquireTimeoutMs: 30, // 极短超时，快速触发降级
+    it("T-SC10c: push 等锁超时 → 降级拒绝（PUSH_MUTEX_TIMEOUT）", async () => {
+        const storage = createStorage({
+            status: { schemaVersion: 1, rev: 1, lock: null },
+        });
+        const mutex = new PushAgentMutex();
+        // 锁已被 agent 占着
+        const agentHandle = await mutex.acquire({ timeoutMs: 1000 });
+
+        const coordinator = createCoordinator(storage, createMockDbSync(), {
+            pushMutex: mutex,
+            pushAcquireTimeoutMs: 30, // 极短超时，快速触发降级
+        });
+
+        await rejectsErr(
+            () => coordinator.push({ lastSyncedRev: 1 }),
+            (error: unknown) => {
+                assert.ok(AppErrorOps.is(error, "CLOUD_SYNC_PUSH_MUTEX_TIMEOUT"));
+                return true;
+            },
+        );
+        assert.equal(mutex.waiterCount(), 0, "超时后应从等待队列移除");
+        // 锁仍由 agent 持有，不受 push 超时影响
+        assert.equal(mutex.isHeld(), true);
+        mutex.release(agentHandle);
     });
 
-    await rejectsErr(
-      () => coordinator.push({ lastSyncedRev: 1 }),
-      (error: unknown) => {
-        assert.ok(AppErrorOps.is(error, "CLOUD_SYNC_PUSH_MUTEX_TIMEOUT"));
-        return true;
-      },
-    );
-    assert.equal(mutex.waiterCount(), 0, "超时后应从等待队列移除");
-    // 锁仍由 agent 持有，不受 push 超时影响
-    assert.equal(mutex.isHeld(), true);
-    mutex.release(agentHandle);
-  });
+    it("T-SC10d: 并发 push 请求 → 互斥（第二个 push 等第一个完成）", async () => {
+        const storage = createStorage({
+            status: { schemaVersion: 1, rev: 1, lock: null },
+        });
+        const mutex = new PushAgentMutex();
+        let releaseFirst: () => void = () => {};
+        const firstGate = new Promise<void>((resolve) => {
+            releaseFirst = resolve;
+        });
+        let firstEntered = false;
+        let secondStarted = false;
+        const dbSync = createMockDbSync({
+            async exportSnapshotToPath(destPath: string) {
+                if (!firstEntered) {
+                    firstEntered = true;
+                    await firstGate;
+                } else {
+                    secondStarted = true;
+                }
+            },
+        });
+        const coordinator = createCoordinator(storage, dbSync, { pushMutex: mutex });
 
-  it("T-SC10d: 并发 push 请求 → 互斥（第二个 push 等第一个完成）", async () => {
-    const storage = createStorage({
-      status: { schemaVersion: 1, rev: 1, lock: null },
+        const first = coordinator.push({ lastSyncedRev: 1 });
+        await new Promise((r) => setTimeout(r, 10));
+        assert.equal(mutex.isHeld(), true, "第一个 push 持锁");
+
+        // 第二个 push 并发进来：应排队（不会进入 export）
+        const second = coordinator
+            .push({ lastSyncedRev: 1, forceOverwriteRemote: true })
+            .then((r) => {
+                assert.equal(secondStarted, true, "第二个 push 在第一个释放后才进入 export");
+                return r;
+            });
+        await new Promise((r) => setTimeout(r, 10));
+        assert.equal(secondStarted, false, "第二个 push 不应提前进入 export");
+        assert.equal(mutex.waiterCount(), 1);
+
+        releaseFirst();
+        const firstResult = unwrap(await first);
+        assert.equal(firstResult.rev, 2);
+        // 第二个 push 用 forceOverwriteRemote 跳过 rev 检查（第一个已完成把 remote 推到 rev=2）
+        const secondResult = unwrap(await second);
+        assert.equal(secondResult.rev, 3, "第二个 push 接着第一个的 rev 递增");
+        assert.equal(mutex.isHeld(), false, "两个 push 都完成后锁应释放");
     });
-    const mutex = new PushAgentMutex();
-    let releaseFirst: () => void = () => {};
-    const firstGate = new Promise<void>((resolve) => {
-      releaseFirst = resolve;
+
+    it("T-SC10e: 续租点检测到 agent 抢跑 → 拒绝并清云端锁", async () => {
+        // 这个用例覆盖 apps runtime 未接入互斥锁的兼容场景：
+        // agent 不走 mutex 直接启动，靠续租点的 isAgentActive 复检兜底拒绝
+        const storage = createStorage({
+            status: { schemaVersion: 1, rev: 1, lock: null },
+        });
+        let agentActive = false;
+        const dbSync = createMockDbSync({
+            isAgentActive: () => agentActive,
+            async exportSnapshotToPath() {
+                // push 导出期间 agent 抢跑
+                agentActive = true;
+            },
+        });
+        const coordinator = createCoordinator(storage, dbSync);
+
+        await rejectsErr(
+            () => coordinator.push({ lastSyncedRev: 1 }),
+            (error: unknown) => {
+                assert.ok(AppErrorOps.is(error, "CLOUD_SYNC_AGENT_ACTIVE"));
+                return true;
+            },
+        );
+
+        // 续租点拒绝后，云端锁应被 finally 清掉
+        const writes = storage.getStatusWrites();
+        const lockAcquired = writes.find((s) => s.lock?.holderDeviceId === DEVICE_ID);
+        assert.ok(lockAcquired != null, "应已抢云端锁");
+        const clearAttempt = writes.find(
+            (s, i) => i > 0 && s.lock === null && s.rev === 1,
+        );
+        assert.ok(clearAttempt != null, "拒绝后应尝试清云端锁");
     });
-    let firstEntered = false;
-    let secondStarted = false;
-    const dbSync = createMockDbSync({
-      async exportSnapshotToPath(destPath: string) {
-        if (!firstEntered) {
-          firstEntered = true;
-          await firstGate;
-        } else {
-          secondStarted = true;
-        }
-      },
-    });
-    const coordinator = createCoordinator(storage, dbSync, { pushMutex: mutex });
-
-    const first = coordinator.push({ lastSyncedRev: 1 });
-    await new Promise((r) => setTimeout(r, 10));
-    assert.equal(mutex.isHeld(), true, "第一个 push 持锁");
-
-    // 第二个 push 并发进来：应排队（不会进入 export）
-    const second = coordinator
-      .push({ lastSyncedRev: 1, forceOverwriteRemote: true })
-      .then((r) => {
-        assert.equal(secondStarted, true, "第二个 push 在第一个释放后才进入 export");
-        return r;
-      });
-    await new Promise((r) => setTimeout(r, 10));
-    assert.equal(secondStarted, false, "第二个 push 不应提前进入 export");
-    assert.equal(mutex.waiterCount(), 1);
-
-    releaseFirst();
-    const firstResult = unwrap(await first);
-    assert.equal(firstResult.rev, 2);
-    // 第二个 push 用 forceOverwriteRemote 跳过 rev 检查（第一个已完成把 remote 推到 rev=2）
-    const secondResult = unwrap(await second);
-    assert.equal(secondResult.rev, 3, "第二个 push 接着第一个的 rev 递增");
-    assert.equal(mutex.isHeld(), false, "两个 push 都完成后锁应释放");
-  });
-
-  it("T-SC10e: 续租点检测到 agent 抢跑 → 拒绝并清云端锁", async () => {
-    // 这个用例覆盖 apps runtime 未接入互斥锁的兼容场景：
-    // agent 不走 mutex 直接启动，靠续租点的 isAgentActive 复检兜底拒绝
-    const storage = createStorage({
-      status: { schemaVersion: 1, rev: 1, lock: null },
-    });
-    let agentActive = false;
-    const dbSync = createMockDbSync({
-      isAgentActive: () => agentActive,
-      async exportSnapshotToPath() {
-        // push 导出期间 agent 抢跑
-        agentActive = true;
-      },
-    });
-    const coordinator = createCoordinator(storage, dbSync);
-
-    await rejectsErr(
-      () => coordinator.push({ lastSyncedRev: 1 }),
-      (error: unknown) => {
-        assert.ok(AppErrorOps.is(error, "CLOUD_SYNC_AGENT_ACTIVE"));
-        return true;
-      },
-    );
-
-    // 续租点拒绝后，云端锁应被 finally 清掉
-    const writes = storage.getStatusWrites();
-    const lockAcquired = writes.find((s) => s.lock?.holderDeviceId === DEVICE_ID);
-    assert.ok(lockAcquired != null, "应已抢云端锁");
-    const clearAttempt = writes.find(
-      (s, i) => i > 0 && s.lock === null && s.rev === 1,
-    );
-    assert.ok(clearAttempt != null, "拒绝后应尝试清云端锁");
-  });
 });
 
 describe("PushAgentMutex 单元", () => {
-  it("acquire/release 基本互斥", async () => {
-    const m = new PushAgentMutex();
-    const h1 = await m.acquire({ timeoutMs: 1000 });
-    assert.equal(m.isHeld(), true);
-    const h2Promise = m.acquire({ timeoutMs: 1000 });
-    await new Promise((r) => setTimeout(r, 10));
-    assert.equal(m.waiterCount(), 1);
-    m.release(h1);
-    const h2 = await h2Promise;
-    assert.equal(m.isHeld(), true);
-    m.release(h2);
-    assert.equal(m.isHeld(), false);
-  });
+    it("acquire/release 基本互斥", async () => {
+        const m = new PushAgentMutex();
+        const h1 = await m.acquire({ timeoutMs: 1000 });
+        assert.equal(m.isHeld(), true);
+        const h2Promise = m.acquire({ timeoutMs: 1000 });
+        await new Promise((r) => setTimeout(r, 10));
+        assert.equal(m.waiterCount(), 1);
+        m.release(h1);
+        const h2 = await h2Promise;
+        assert.equal(m.isHeld(), true);
+        m.release(h2);
+        assert.equal(m.isHeld(), false);
+    });
 
-  it("非持锁者 release 安全忽略", async () => {
-    const m = new PushAgentMutex();
-    const h1 = await m.acquire({ timeoutMs: 1000 });
-    const fakeHandle = { id: 99999, acquiredAt: 0 };
-    m.release(fakeHandle); // 不应影响持锁
-    assert.equal(m.isHeld(), true);
-    m.release(h1);
-    assert.equal(m.isHeld(), false);
-  });
+    it("非持锁者 release 安全忽略", async () => {
+        const m = new PushAgentMutex();
+        const h1 = await m.acquire({ timeoutMs: 1000 });
+        const fakeHandle = { id: 99999, acquiredAt: 0 };
+        m.release(fakeHandle); // 不应影响持锁
+        assert.equal(m.isHeld(), true);
+        m.release(h1);
+        assert.equal(m.isHeld(), false);
+    });
 
-  it("超时 reject AGENT_BUSY AppError", async () => {
-    const m = new PushAgentMutex();
-    await m.acquire({ timeoutMs: 1000 });
-    // 平台强制通道：mutex 超时走 reject（raceWithAbort 同族），保持 assert.rejects
-    await assert.rejects(
-      () => m.acquire({ timeoutMs: 20 }),
-      (error: unknown) => {
-        assert.ok(AppErrorOps.is(error, "AGENT_BUSY"));
-        return true;
-      },
-    );
-  });
+    it("超时 reject AGENT_BUSY AppError", async () => {
+        const m = new PushAgentMutex();
+        await m.acquire({ timeoutMs: 1000 });
+        // 平台强制通道：mutex 超时走 reject（raceWithAbort 同族），保持 assert.rejects
+        await assert.rejects(
+            () => m.acquire({ timeoutMs: 20 }),
+            (error: unknown) => {
+                assert.ok(AppErrorOps.is(error, "AGENT_BUSY"));
+                return true;
+            },
+        );
+    });
 });

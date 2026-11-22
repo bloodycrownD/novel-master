@@ -7,7 +7,7 @@
  * 故本文件必须保持 core-free，不能改成薄再导出。改这里时同步 `Text.escapeHtml`。
  */
 export namespace Html {
-  export function escape(text: string): string {
-    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    export function escape(text: string): string {
+        return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 }

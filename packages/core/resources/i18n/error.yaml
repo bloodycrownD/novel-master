@@ -1,0 +1,319 @@
+# error 段文案（i18n 按域拆分：文件名 = 顶层段；localeRule 书写规范见 docs/Iterations/i18n-normalization/spec.md §2.6）
+
+# —— zh-CN ——
+zh-CN:
+  # —— agent：定义校验 / 注册表 / 运行前置（validate-agent-definition、agent-definition.schema、agent-registry、agent-run-shared、run-agent-turn）——
+  agent:
+    invalid_schema:
+      name_required: definition.name 必填且为非空字符串（写在 definition 顶层；工具参数 name 仅用于定位，不能替代）
+      description_type: definition.description 如填写必须为字符串
+      prompts_shape: definition.prompts 必填且含 persist / dynamic 块数组（结构对齐 get 的输出，不是以块名为键的对象映射）
+      field_invalid: definition 字段不合法：{detail}
+      workplace_nonempty_string: prompts.workplace 如开启则须为非空字符串
+      custom_attach_nonempty_string: prompts.customAttach 如填写则须为非空字符串
+      skills_prefix_nonempty_string: prompts.skillsPrefix 如填写则须为非空字符串
+      builtin_name_reserved: '"{name}" 是内置智能体名称，不可使用'
+      builtin_not_deletable: '内置 agent "{name}" 不可删除'
+    duplicate_name: Agent 名称已存在
+    not_configured: 未配置 Agent。请先在「agent管理」中导入或创建 Agent。
+    not_found: Agent 不存在：{agent_id}
+    model_not_set: 未选择模型。请为 Agent 设置专属模型，或在会话上设置 modelId。
+    referenced_not_found: 会话引用的 Agent 不存在：{agent_id}（{detail}）
+    message_empty: 消息不能为空
+    subagent_model_missing: 子代理未指定模型，且父 agent 也无可用 savedModelId。
+    grandchild_model_missing: 孙代理未指定模型，且子 agent 也无可用 savedModelId。
+    child_session_busy: 子会话 {child_session_id} 已有另一个子代理在运行，不能并发续用同一个子会话；去掉 sessionId 新开一个子会话即可。
+  # —— chat：zod schema 与会话创建 ——
+  chat:
+    attachment_path_blank: 附件路径不能为空串或纯空白
+    annotate_render_range_pair_required: renderStart 与 renderEnd 须成对出现
+    annotate_render_range_order: 须满足 renderStart < renderEnd（半开区间 [start, end)）
+    annotate_offset_pair_required: startOffset 与 endOffset 须成对出现
+    annotate_offset_order: 须满足 startOffset < endOffset（半开区间 [start, end)）
+    composer_token_range_order: tokenRange 需满足 start < end（零长度区间拒收）
+    attachment_skill_name_required: skillAttach 附件必须携带非空 skillName
+    attachment_name_display_tag_forbidden: "name 禁止为 action:path 展示 tag（须 name=path）"
+    attachment_name_storage_mismatch: 有 action 时 name 须等于 MessageAttachmentSchema.storageName(path)（期望 {expected}）
+    project_agent_definition_required: mode 为 custom 时 definition 必填
+    session_create_agent_missing: 新建会话失败：workspace 未配置 Agent，且 registry 为空
+    not_found: 会话数据不存在：{kind} {id}
+  # —— cloud_sync：方向入子段（agent_active / push_mutex_timeout），NEED_PULL_FIRST 两个原因分立 ——
+  cloud_sync:
+    already_up_to_date: 本地已是最新，无需拉取
+    snapshot_missing: 云端快照缺失
+    download_checksum_mismatch: 下载快照校验失败
+    agent_active:
+      pull: Agent 运行中，请稍后再拉取
+      push: Agent 运行中，请稍后再推送
+    push_mutex_timeout:
+      pull: 拉取繁忙，等待互斥锁超时，请稍后再试
+      push: 推送繁忙，等待互斥锁超时，请稍后再试
+    need_pull_first:
+      remote_ahead: 云端有更新，请先拉取
+      advanced_by_other: 云端已被其他设备推进，请先拉取
+    lock_held_by_other: 另一台设备正在同步，请稍后再推送
+    lock_contention: 同步冲突，请重试
+    not_configured: 请先配置云存储
+    invalid_status:
+      unparseable: 云端状态文件无法解析
+      schema_invalid: 云端状态文件格式无效
+  # —— db_backup：provider 三表快照校验 14 条原因（抛错点带 key；{row_index} 定位脏数据行）——
+  db_backup:
+    provider_row_id_missing: llm_provider 第 {row_index} 行缺少非空 id
+    provider_row_protocol_invalid: llm_provider 第 {row_index} 行 protocol 非法：{protocol}
+    provider_row_base_url_empty: llm_provider 第 {row_index} 行 base_url 为空（id={id}）
+    provider_row_display_name_empty: llm_provider 第 {row_index} 行 display_name 为空（id={id}）
+    provider_row_is_builtin_not_number: llm_provider 第 {row_index} 行 is_builtin 不是数字（id={id}）
+    provider_row_timestamp_invalid: llm_provider 第 {row_index} 行时间戳缺失或非数字（id={id}）
+    saved_model_row_provider_id_empty: llm_saved_model 第 {row_index} 行 provider_id 为空
+    saved_model_row_vendor_model_id_empty: llm_saved_model 第 {row_index} 行 vendor_model_id 为空（provider_id={provider_id}）
+    saved_model_row_settings_json_missing: llm_saved_model 第 {row_index} 行 settings_json 缺失（provider_id={provider_id}）
+    dangling_saved_model: llm_saved_model 第 {row_index} 行 provider_id={provider_id} 在快照内找不到对应 llm_provider
+    secret_row_ref_missing: sksp_secrets 第 {row_index} 行缺少非空 ref
+    secret_row_ciphertext_missing: sksp_secrets 第 {row_index} 行 ciphertext 缺失（ref={ref}）
+    secret_row_algo_empty: sksp_secrets 第 {row_index} 行 algo 为空（ref={ref}）
+    secret_row_version_not_number: sksp_secrets 第 {row_index} 行 version 不是数字（ref={ref}）
+    # —— db_sync：库已换代但收尾失败（DB_SYNC_REPLACE_INCOMPLETE，不回滚、须重建 runtime）——
+    replace_incomplete: 数据库已导入，但本机服务商配置恢复失败：{reason}{recovery_hint}
+  # —— infra：启动基线与 IPC 取消边界（INFRA_BASELINE_TOO_OLD，bootstrap 域不在词表，按 code 归 infra；IPC_ABORTED / IPC_INVALID_ABORT_TARGET 是 123 段控制流码，按域归 infra）——
+  infra:
+    baseline_too_old: 检测到当前数据库低于本版本最低支持版本（{minimum_version}）。请先升级到{minimum_version}，再升级到本版本。
+    decode_invalid_schema: 配置数据不符合 schema：{detail}
+    encode_not_supported: 此数据格式不支持写入：{detail}
+    aborted: 操作已取消
+    rollback_degraded: 跨资源写在回滚阶段再次失败（原始原因：{cause_text}；回滚失败步骤：{steps}）
+    invalid_abort_target: 无法识别的取消目标
+  # —— prompt：布局校验（PROMPT_INVALID_LAYOUT）与动态宏校验（PROMPT_INVALID_MACRO）；{block} 是块名「N」片段，{hint} 是嵌套 descriptor ——
+  prompt:
+    invalid_layout:
+      workplace_nonempty_string: prompts.workplace 如开启则须为非空字符串
+      workplace_type: prompts.workplace 须为 boolean 或非空字符串
+      region_map_not_array: prompts.{region} 须为对象映射，不能是数组
+      region_map_required: prompts.{region} 须为对象映射
+      system_nonempty_string: prompts.system 如填写则须为非空字符串
+      block_name_required: 块名称须为非空字符串
+      block_not_object: "{block}须为对象"
+      persist_worktree_removed: "{block}：请改用常驻工作区（prompts.workplace）开关"
+      persist_block_text_only: "{block}：持久区须为 text 类型"
+      when_removed: "{block}：不再支持 when 字段，请删除"
+      persist_system_role: "{block}：持久区文本块不得使用 system 角色，请改用 prompts.system"
+      persist_role: "{block}：持久区文本块的 role 须为 user 或 assistant"
+      text_content_required: "{block}：文本块须为字符串 content"
+      dynamic_block_text_only: "{block}：动态区块须为 text 类型"
+      dynamic_system_role: "{block}：动态区文本块不得使用 system 角色"
+      dynamic_role: "{block}：动态区文本块的 role 须为 user 或 assistant"
+      persist_needs_blocks: 启用持久区时至少需要一个文本块
+      persist_last_role: 启用持久区时最后一个块须为助手角色
+      dynamic_needs_two_blocks: 启用动态区时至少需要两个块
+      dynamic_first_role: 启用动态区时第一个块须为助手角色
+      dynamic_last_role: 启用动态区时最后一个块须为用户角色
+      duplicate_block_name: "prompts.{region}：重复的块名「{name}」"
+    invalid_macro:
+      scan_failed: "{block}：{detail}"
+      worktree_removed: 请改用 prompts.workplace 常驻工作区开关，不要使用 {{.worktree}}
+      filetree_alias: 请使用 {{$filetree}} 替代 {{.filetree}}
+      dot_removed: "{block}：动态区不允许 {{.{macro}}}；{hint}"
+      dot_unsupported: "{block}：动态区不支持点号宏（{{.{path}}}）"
+      unknown: "{block}：未知的动态宏 {{${key}}}；允许：$time、$week_cn、$filetree"
+      persist_forbidden: "{block}：持久区文本块不得包含宏（{{...}}）"
+    macro_expand_failed: dynamic 宏展开失败：{detail}
+    invalid_yaml: 提示词 YAML 不合法
+    invalid_block: 提示词块不合法
+    unknown_field: 提示词含未知字段
+    unsupported_syntax: 提示词使用了不支持的语法
+  # —— provider ——
+  provider:
+    display_name_required: displayName 不能为空
+    saved_model_in_use: 无法删除服务商：其下模型「{model_name}」仍被引用（{blocking_refs}）
+    not_found: 服务商不存在：{provider_id}
+    conflict: 服务商操作冲突
+    builtin_provider: 内置服务商不可修改
+    http_error: 服务商请求失败
+    api_key_not_set: 请先在服务商设置中配置 API Key
+    model_not_saved: 请先从远程拉取并保存模型
+    unsupported_content: 服务商返回了不支持的内容
+    unsupported: 当前服务商不支持该操作
+    malformed_sse: 服务商流式响应格式异常
+    invalid_tool_arguments: 服务商工具入参不合法
+    migration_orphan_pointer: 迁移后存在悬空引用
+    invalid_model_name: 模型名称不合法
+    models_in_flight: 正在拉取模型列表，请稍后重试
+  # —— session_fs：回滚/恢复（restore_revision_missing 由 restore-path 与 revive-deleted-entry 复用）——
+  session_fs:
+    rollback_message_not_found: 消息不存在：{message_id}
+    rollback_message_session_mismatch: 消息不属于当前会话：{message_id}
+    rollback_no_checkpoint: 该消息无回滚点
+    restore_revision_missing: 恢复所需 revision 缺失：{logical_path} v{revision_version}
+    rollback_undo_send_empty_target:
+      rewind: rewind 缺少可用的 baseline 快照，拒绝清空会话工作区
+      undo_send: undo_send 缺少可用的 baseline 快照，拒绝清空会话工作区
+    rollback_revision_backfill_required: 回滚所需 revision 缺失，需确认使用最新内容修复：{missing_logical_paths}
+    rollback_conflict: 回滚期间会话消息发生了变化（预期 {expected_message_count} 条，实际 {actual_message_count} 条），请重试
+    rollback_tail_drift: 回滚期间待截断的消息集合发生变化（预期 {expected_message_count} 条，实际 {actual_message_count} 条），已拒绝截断以免误删新消息，请重试
+    vfs_restore_failed: 工作区无法恢复：{detail}
+    invalid_rollback_options: skipVfsReconcile 与 revisionHeadBackfill 不能同时指定
+  # —— skill：名称/路径/域/front matter（reason 入子段；hint_* 作 {hint} 嵌套 descriptor）——
+  skill:
+    missing_domain: 写入技能 {skill_name} 须显式指定 domain（global / project）
+    missing_project_id: project 域操作须提供 projectId（技能 {skill_name}）
+    not_found: 技能不存在：{skill_name}
+    not_found_in_domain: 技能 {name} 在 {domain} 域不存在（文件 {path}）；{hint}
+    not_found_in_domain_hint:
+      create: '如需在该域新建，请显式传 domain:"{domain}"。'
+      other_domain: '该技能存在于 {other_domain} 域；如需修改它，请显式传 domain:"{other_domain}"。'
+      neither_domain: '{other_domain} 域也没有该技能；如需在 {domain} 域新建，请显式传 domain:"{domain}"。'
+      probe_failed: 未能确认 {other_domain} 域是否存在该技能（缺 projectId 无法探测该域）。
+    builtin_not_deletable: 内置技能不支持删除：{skill_name}
+    builtin_name_reserved: 「{skill_name}」为内置技能保留名，不能用于新建；内置技能本身可在管理页编辑
+    builtin_rename_forbidden: 内置技能不支持重命名：{skill_name}
+    already_exists: 已存在同名技能：{skill_name}
+    invalid_name:
+      empty: 技能名不能为空
+      skill_md_reserved: SKILL.md 是保留名，不能用作技能名
+      leading_dot: 技能名不能以 . 开头
+      whitespace: 技能名不能包含空白字符
+      slash: 技能名不能包含 /
+      unsupported_chars: 技能名包含不支持的字符
+    invalid_path:
+      empty: 技能文件路径不能为空
+      dotdot: 技能文件路径不得包含 ..
+      escape: 技能文件路径必须位于技能目录内
+    entry_file_missing: 缺少 SKILL.md 入口文件
+    front_matter_missing: "缺少 front matter（需以 --- 包裹并含 name 与 description）"
+    front_matter_unparsable: front matter 不可解析：{message}
+    front_matter_field_invalid: front matter 字段不合法：{message}
+  # —— smart_sort_rule：YAML 导入错误（common/error.ts，{reason} 为嵌套错误文本）——
+  smart_sort_rule:
+    import_yaml_invalid: 智能排序规则 YAML 无效：{reason}
+  # —— tool：搜索配置 ——
+  tool:
+    search_api_key_required: API key 不能为空
+    search_searxng_base_url_invalid: 实例地址无效：仅支持 http/https
+    search_engine_order_invalid: "引擎顺序必须是已知引擎 id 的序列（不重复、不接受未知 id），收到: {order}"
+    search_template_invalid: 搜索模板无效：{reason}
+    search_secret_detected: "检测到明文密钥（{field}），请改用 {{apiKey}} 占位符后保存"
+    search_engine_not_found: "未找到搜索引擎：{engine}"
+    search_test_failed: 引擎测试失败：{reason}
+    search_curl_parse_failed: curl 命令解析失败：{reason}
+    not_found: 工具未注册：{tool_name}
+    failed: 工具执行失败：{tool_name}
+    forbidden: 工具路径不在允许范围：{tool_name} -> {path}
+    cancelled: 工具执行已取消：{tool_name}
+  # —— usage：统计入参校验（{field} 是入参标签原文，如 dayLocalDate / range.fromDay）——
+  usage:
+    invalid_day_format: "{field} 须为 YYYY-MM-DD 格式，收到：{value}"
+    invalid_day: "{field} 不是有效日期：{value}"
+    daily_buckets_range_required: getDailyBuckets 必须提供 range（日桶序列需要界）
+    invalid_page_limit: 流水分页 limit 须为 1–200，收到：{value}
+    invalid_page_offset: 流水分页 offset 须为有限数值，收到：{value}
+    session_id_required: getSessionUsageDetail 须提供 sessionId，收到：{value}
+    from_after_to: "fromDay 不能晚于 toDay：{from_day} > {to_day}"
+  # —— vfs：用户文案表 / 名称校验 / 角色卡 / zip / 批量导入（VFS_ZIP_*、VFS_CHARACTER_CARD_* 归并 vfs 域）——
+  vfs:
+    not_found: 文件不存在或已被删除。
+    replace_not_found: 文件内容已变更，无法应用本次修改。请刷新文件后重新编辑。
+    already_exists: 名称不能重复
+    operation_failed: 操作失败：{detail}
+    invalid_name:
+      dotdot: 文件名不能为 . 或 ..
+      blank: 文件名不能为空或纯空白
+      control_chars: 文件名不能包含换行或控制字符
+      edge_spaces: 文件名不能以空格开头或结尾
+    template_prefix_forbidden: 逻辑路径以 `/` 为根，请勿使用 `/template/` 前缀
+    zip_root_prefix_suspected: ZIP 似以目标目录名「{base}」作根前缀，请使用相对该目录的内容，系统不会自动剥离
+    zip_not_confirmed: 导入 zip 需要显式确认（CLI --yes 或客户端确认对话框）
+    zip_external_not_supported: 暂不支持导入外部目录，请提供 zip 压缩包
+    character_card_unrecognized: 无法识别为角色卡
+    character_card_unsupported_spec: "不支持的角色卡规格: {spec}"
+    character_card_too_large:
+      single_file: '角色卡过大：文件 "{logical}" 内容 {size_bytes} 字节，超过单文件上限 {limit_bytes} 字节，已拒绝导入'
+      total_content: 角色卡过大：全部文件内容合计 {total_bytes} 字节，超过总量上限 {limit_bytes} 字节，已拒绝导入
+      file_count: 角色卡过大：共 {count} 个文件，超过条目数上限 {limit}，已拒绝导入
+      input: 角色卡文件过大：{size_bytes} 字节，超过输入上限 {limit_bytes} 字节（约 48MB），已拒绝导入
+    # 父 key 本身是叶子，子段只能用带点引号的同级 key 表达（YAML 同一路径不能既是标量又是映射）。
+    import_failed: 导入失败：{detail}
+    "import_failed.with_progress": （已提交 {committed} 片 / 失败在第 {failed_shard} 片）
+    batch_ingest_partial: "{reason}（已提交 {committed} 片，失败在第 {failed_shard} 片）"
+    single_file_too_large: "文件过大：{size_bytes} 字节，超过导入上限 {max_bytes} 字节（约 32MB），已拒绝导入"
+    single_file_read_failed: 无法读取所选文件：{reason}
+    single_file_not_found: 所选文件不存在：{path}
+    single_file_export_target_invalid: 导出目标不是单个文件：{logical_path}
+
+# —— en-US ——
+en-US:
+  vfs:
+    not_found: File does not exist or has been deleted.
+    zip_not_confirmed: Zip import requires explicit confirmation (CLI --yes or the client confirm dialog).
+    zip_external_not_supported: External directory ingest is not supported; provide a zip archive.
+    # 父 key 本身是叶子，子段只能用带点引号的同级 key 表达（YAML 同一路径不能既是标量又是映射）。
+    import_failed: "Import failed: {detail}"
+    "import_failed.with_progress": "(committed {committed} shards / failed on shard {failed_shard})"
+    single_file_too_large: "File too large: {size_bytes} bytes exceeds the import limit of {max_bytes} bytes (~32MB); import rejected."
+    single_file_read_failed: "Unable to read the selected file: {reason}"
+    single_file_not_found: "Selected file does not exist: {path}"
+    single_file_export_target_invalid: "Export target is not a single file: {logical_path}"
+  chat:
+    not_found: "{kind} not found: {id}"
+  infra:
+    decode_invalid_schema: "Config data does not match its schema: {detail}"
+    encode_not_supported: "Encoding is not supported for this format: {detail}"
+    aborted: Operation cancelled.
+    rollback_degraded: "Coordinated write failed during rollback (original cause: {cause_text}; failed rollback steps: {steps})."
+    invalid_abort_target: Unrecognized abort target.
+  prompt:
+    invalid_yaml: Invalid prompt YAML.
+    invalid_block: Invalid prompt block.
+    unknown_field: Unknown prompt field.
+    unsupported_syntax: Unsupported prompt syntax.
+  provider:
+    not_found: "Provider not found: {provider_id}"
+    conflict: Provider conflict.
+    builtin_provider: Builtin provider is protected.
+    http_error: Provider request failed.
+    api_key_not_set: Set your API key in the provider settings first.
+    model_not_saved: Fetch and save the model first.
+    unsupported_content: Unsupported provider content.
+    unsupported: Provider operation unsupported.
+    malformed_sse: Malformed provider SSE stream.
+    invalid_tool_arguments: Invalid provider tool arguments.
+    migration_orphan_pointer: Migration left an orphan pointer.
+    invalid_model_name: Invalid provider model name.
+    models_in_flight: Model list fetch is already in progress; try again later.
+  session_fs:
+    rollback_message_not_found: "Message not found: {message_id}"
+    rollback_no_checkpoint: No rollback checkpoint for this message.
+  skill:
+    missing_domain: "Writing to skill {skill_name} requires an explicit domain (global / project)."
+    missing_project_id: "Project-domain operations require projectId (skill {skill_name})."
+    not_found: "Skill not found: {skill_name}"
+    builtin_not_deletable: "Builtin skills cannot be deleted: {skill_name}"
+    builtin_name_reserved: "«{skill_name}» is reserved for builtin skills; edit the builtin skill itself in the management page instead."
+    builtin_rename_forbidden: "Builtin skills cannot be renamed: {skill_name}"
+    already_exists: "A skill with the same name already exists: {skill_name}"
+  tool:
+    not_found: "Tool not registered: {tool_name}"
+    failed: "Tool failed: {tool_name}"
+    forbidden: "Tool path outside allowed scope: {tool_name} -> {path}"
+    cancelled: "Tool execution cancelled: {tool_name}"
+  cloud_sync:
+    push_mutex_timeout:
+      push: Push is busy waiting for the sync mutex lock; please try again later.
+      pull: Pull is busy waiting for the sync mutex lock; please try again later.
+  # —— db_backup：provider 三表快照校验 14 条原因（占位符与 zh-CN 逐条对齐）——
+  db_backup:
+    provider_row_id_missing: llm_provider row {row_index} is missing a non-empty id
+    provider_row_protocol_invalid: "llm_provider row {row_index} has an invalid protocol: {protocol}"
+    provider_row_base_url_empty: llm_provider row {row_index} has an empty base_url (id={id})
+    provider_row_display_name_empty: llm_provider row {row_index} has an empty display_name (id={id})
+    provider_row_is_builtin_not_number: llm_provider row {row_index} has a non-numeric is_builtin (id={id})
+    provider_row_timestamp_invalid: llm_provider row {row_index} has a missing or non-numeric timestamp (id={id})
+    saved_model_row_provider_id_empty: llm_saved_model row {row_index} is missing a non-empty provider_id
+    saved_model_row_vendor_model_id_empty: llm_saved_model row {row_index} is missing a non-empty vendor_model_id (provider_id={provider_id})
+    saved_model_row_settings_json_missing: llm_saved_model row {row_index} is missing settings_json (provider_id={provider_id})
+    dangling_saved_model: llm_saved_model row {row_index} references provider_id={provider_id}, which is not present in the snapshot llm_provider table
+    secret_row_ref_missing: sksp_secrets row {row_index} is missing a non-empty ref
+    secret_row_ciphertext_missing: sksp_secrets row {row_index} is missing ciphertext (ref={ref})
+    secret_row_algo_empty: sksp_secrets row {row_index} has an empty algo (ref={ref})
+    secret_row_version_not_number: sksp_secrets row {row_index} has a non-numeric version (ref={ref})
+    # -- db_sync: database replaced but tail-end restore failed (DB_SYNC_REPLACE_INCOMPLETE; no rollback, runtime rebuild required) --
+    replace_incomplete: "Database imported, but restoring local provider config failed: {reason}{recovery_hint}"

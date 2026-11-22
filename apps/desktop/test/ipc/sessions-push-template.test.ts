@@ -18,83 +18,83 @@ import { IPC_CHANNELS } from "../../shared/ipc-types.js";
 
 register(new URL("./sessions-push-runtime-hook.mjs", import.meta.url));
 const { Sessions } = await import(
-  "../../src/main/ipc/handlers/sessions.js"
+    "../../src/main/ipc/handlers/sessions.js"
 );
 const { WorkspaceMutatedForwarder } =
-  await import("../../src/main/ipc/forward-workspace-mutated.js");
+    await import("../../src/main/ipc/forward-workspace-mutated.js");
 
 /** fake webContents：捕获 send 的 channel + payload。 */
 const sentMessages: { channel: string; payload: unknown }[] = [];
 const fakeWebContents = {
-  send: (channel: string, payload: unknown) => {
-    sentMessages.push({ channel, payload });
-  },
+    send: (channel: string, payload: unknown) => {
+        sentMessages.push({ channel, payload });
+    },
 };
 
 WorkspaceMutatedForwarder.setTarget(() => fakeWebContents);
 after(() => {
-  WorkspaceMutatedForwarder.setTarget(() => undefined);
+    WorkspaceMutatedForwarder.setTarget(() => undefined);
 });
 
 // pushTemplate 同走 Result（handler 侧 `!ok` 即 throw），桩返回 ok wire。
 const pushTemplate = mock.fn(async () => ({
-  ok: true as const,
-  value: undefined,
+    ok: true as const,
+    value: undefined,
 }));
 // 错误通道迁移二期后 sessions.get 走 Result（handler 侧 `!ok` 即 throw）。
 const getSession = mock.fn(async (id: string) => ({
-  ok: true as const,
-  value: {
-    id,
-    projectId: "p-1",
-    title: null,
-    parentSessionId: null,
-    createdAtMs: 0,
-    updatedAtMs: 0,
-  },
+    ok: true as const,
+    value: {
+        id,
+        projectId: "p-1",
+        title: null,
+        parentSessionId: null,
+        createdAtMs: 0,
+        updatedAtMs: 0,
+    },
 }));
 
 beforeEach(() => {
-  pushTemplate.mock.resetCalls();
-  getSession.mock.resetCalls();
-  sentMessages.length = 0;
+    pushTemplate.mock.resetCalls();
+    getSession.mock.resetCalls();
+    sentMessages.length = 0;
 });
 
 describe("handleSessionsPushTemplate（T-WP6）", () => {
-  it("成功：调 pushTemplate 并以 IPC 面板语义 notify 项目工作区", async () => {
-    globalThis.__sessionsPushTestRuntime = {
-      sessions: { pushSessionTemplate: pushTemplate, get: getSession },
-    };
+    it("成功：调 pushTemplate 并以 IPC 面板语义 notify 项目工作区", async () => {
+        globalThis.__sessionsPushTestRuntime = {
+            sessions: { pushSessionTemplate: pushTemplate, get: getSession },
+        };
 
-    const result = await Sessions.pushTemplate({ sessionId: "s-1" });
+        const result = await Sessions.pushTemplate({ sessionId: "s-1" });
 
-    assert.equal(result.ok, true);
-    assert.equal(pushTemplate.mock.callCount(), 1);
-    assert.deepEqual(pushTemplate.mock.calls[0]?.arguments, ["s-1"]);
-    // projectId 经会话查询取得（不改 Request 形状）
-    assert.equal(getSession.mock.callCount(), 1);
-    // notify payload：workspaceScope 'session' = 项目工作区面板（IPC 面板语义）
-    assert.equal(sentMessages.length, 1);
-    assert.equal(sentMessages[0]?.channel, IPC_CHANNELS.WORKSPACE_MUTATED);
-    assert.deepEqual(sentMessages[0]?.payload, {
-      workspaceScope: "session",
-      projectId: "p-1",
+        assert.equal(result.ok, true);
+        assert.equal(pushTemplate.mock.callCount(), 1);
+        assert.deepEqual(pushTemplate.mock.calls[0]?.arguments, ["s-1"]);
+        // projectId 经会话查询取得（不改 Request 形状）
+        assert.equal(getSession.mock.callCount(), 1);
+        // notify payload：workspaceScope 'session' = 项目工作区面板（IPC 面板语义）
+        assert.equal(sentMessages.length, 1);
+        assert.equal(sentMessages[0]?.channel, IPC_CHANNELS.WORKSPACE_MUTATED);
+        assert.deepEqual(sentMessages[0]?.payload, {
+            workspaceScope: "session",
+            projectId: "p-1",
+        });
     });
-  });
 
-  it("失败：pushTemplate 抛错返回 error 且不 notify", async () => {
-    pushTemplate.mock.mockImplementation(async () => {
-      throw new Error("push failed");
+    it("失败：pushTemplate 抛错返回 error 且不 notify", async () => {
+        pushTemplate.mock.mockImplementation(async () => {
+            throw new Error("push failed");
+        });
+        globalThis.__sessionsPushTestRuntime = {
+            sessions: { pushSessionTemplate: pushTemplate, get: getSession },
+        };
+
+        const result = await Sessions.pushTemplate({ sessionId: "s-1" });
+
+        assert.equal(result.ok, false);
+        // 失败不 notify：send 零次
+        assert.equal(sentMessages.length, 0);
+        pushTemplate.mock.mockImplementation(async () => {});
     });
-    globalThis.__sessionsPushTestRuntime = {
-      sessions: { pushSessionTemplate: pushTemplate, get: getSession },
-    };
-
-    const result = await Sessions.pushTemplate({ sessionId: "s-1" });
-
-    assert.equal(result.ok, false);
-    // 失败不 notify：send 零次
-    assert.equal(sentMessages.length, 0);
-    pushTemplate.mock.mockImplementation(async () => {});
-  });
 });

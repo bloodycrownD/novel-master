@@ -10,7 +10,7 @@ import type { AgentDefinition } from "@novel-master/core/agent";
 export type AgentSettingsTab = "primary" | "subagent";
 
 export const AgentModeTab = {
-  /**
+    /**
    * 判断定义的 mode 是否应显示在指定 tab。
    *
    * 口径与运行侧过滤保持一致（字面等价）：
@@ -21,10 +21,10 @@ export const AgentModeTab = {
    *
    * 双端 UI 的 picker 过滤统一消费本函数，不各自内联判断。
    */
-  agentModeMatchesTab: (mode: AgentDefinition["mode"] | undefined, tab: AgentSettingsTab): boolean => {
-    const normalized = mode ?? "all";
-    return tab === "primary"
-      ? normalized !== "subagent"
-      : normalized !== "primary";
-  },
+    agentModeMatchesTab: (mode: AgentDefinition["mode"] | undefined, tab: AgentSettingsTab): boolean => {
+        const normalized = mode ?? "all";
+        return tab === "primary"
+            ? normalized !== "subagent"
+            : normalized !== "primary";
+    },
 } as const;

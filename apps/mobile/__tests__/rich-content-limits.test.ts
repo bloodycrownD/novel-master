@@ -8,28 +8,28 @@
 import {RICH_CONTENT_MAX_CHARS, RICH_DOCUMENT_WEBVIEW_MAX_CHARS, RichContentLimits} from '@/components/rich-content/rich-content-limits';
 
 describe('rich-content-limits', () => {
-  it('RN 兜底引擎 12k：临界值不超、+1 超限', () => {
-    expect(RichContentLimits.isOverLimit('a'.repeat(RICH_CONTENT_MAX_CHARS))).toBe(
-      false,
-    );
-    expect(RichContentLimits.isOverLimit('a'.repeat(RICH_CONTENT_MAX_CHARS + 1))).toBe(
-      true,
-    );
-  });
+    it('RN 兜底引擎 12k：临界值不超、+1 超限', () => {
+        expect(RichContentLimits.isOverLimit('a'.repeat(RICH_CONTENT_MAX_CHARS))).toBe(
+            false,
+        );
+        expect(RichContentLimits.isOverLimit('a'.repeat(RICH_CONTENT_MAX_CHARS + 1))).toBe(
+            true,
+        );
+    });
 
-  it('WebView 引擎 20 万字：临界值不超、+1 超限', () => {
-    expect(
-      RichContentLimits.isWebViewDocumentOverLimit('a'.repeat(RICH_DOCUMENT_WEBVIEW_MAX_CHARS)),
-    ).toBe(false);
-    expect(
-      RichContentLimits.isWebViewDocumentOverLimit('a'.repeat(RICH_DOCUMENT_WEBVIEW_MAX_CHARS + 1)),
-    ).toBe(true);
-  });
+    it('WebView 引擎 20 万字：临界值不超、+1 超限', () => {
+        expect(
+            RichContentLimits.isWebViewDocumentOverLimit('a'.repeat(RICH_DOCUMENT_WEBVIEW_MAX_CHARS)),
+        ).toBe(false);
+        expect(
+            RichContentLimits.isWebViewDocumentOverLimit('a'.repeat(RICH_DOCUMENT_WEBVIEW_MAX_CHARS + 1)),
+        ).toBe(true);
+    });
 
-  it('两三万字正文对 WebView 不超限（用户场景回归锚点）', () => {
-    const novel30k = '章'.repeat(30_000);
-    expect(RichContentLimits.isWebViewDocumentOverLimit(novel30k)).toBe(false);
-    // 同一正文对 RN 兜底引擎仍走原文回退——两道护栏各司其职
-    expect(RichContentLimits.isOverLimit(novel30k)).toBe(true);
-  });
+    it('两三万字正文对 WebView 不超限（用户场景回归锚点）', () => {
+        const novel30k = '章'.repeat(30_000);
+        expect(RichContentLimits.isWebViewDocumentOverLimit(novel30k)).toBe(false);
+        // 同一正文对 RN 兜底引擎仍走原文回退——两道护栏各司其职
+        expect(RichContentLimits.isOverLimit(novel30k)).toBe(true);
+    });
 });

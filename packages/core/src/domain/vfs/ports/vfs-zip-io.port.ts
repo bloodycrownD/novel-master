@@ -10,13 +10,13 @@ import type { Result } from "@/errors/either.js";
 
 /** 子树 ZIP 路径选项；缺省 `directoryPath` ≡ `/`（整域）。 */
 export type ZipPathOptions = {
-  readonly directoryPath?: string;
+    readonly directoryPath?: string;
 };
 
 /** Options for domain-scoped ZIP import (full replace of target subtree). */
 export interface VfsZipImportOptions {
-  /** Must be true before any database writes (CLI `--yes` / mobile confirm). */
-  readonly confirmed: boolean;
+    /** Must be true before any database writes (CLI `--yes` / mobile confirm). */
+    readonly confirmed: boolean;
 }
 
 /**
@@ -26,10 +26,10 @@ export interface VfsZipImportOptions {
  * confirmed 门闸与导入事务链仍按边界抛出（VFS_IMPORT_FAILED 等）。
  */
 export interface VfsZipIoService {
-  export(scope: VfsScope, options?: ZipPathOptions): Promise<Result<Uint8Array, AppError>>;
-  import(
-    scope: VfsScope,
-    zipBytes: Uint8Array,
-    options: VfsZipImportOptions & ZipPathOptions
-  ): Promise<Result<void, AppError>>;
+    export(scope: VfsScope, options?: ZipPathOptions): Promise<Result<Uint8Array, AppError>>;
+    import(
+        scope: VfsScope,
+        zipBytes: Uint8Array,
+        options: VfsZipImportOptions & ZipPathOptions
+    ): Promise<Result<void, AppError>>;
 }

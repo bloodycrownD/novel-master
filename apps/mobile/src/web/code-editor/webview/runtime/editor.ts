@@ -13,9 +13,15 @@ import {editorSyntaxHighlighting, editorTheme} from './theme';
 import {post} from './post';
 import {ClampIndex} from '@web/shared/clamp-index';
 
-let view: EditorView | null = null;
-let currentPath = '';
-let suppressChange = false;
+/** 编辑器运行时状态（模块内 holder，对象管理；webview 单实例）。 */
+const editorRuntime = {
+    /** CM6 EditorView 实例（null = 未挂载）。 */
+    cm: null as EditorView | null,
+    /** 当前打开的文件路径。 */
+    path: '',
+    /** IME 组合期抑制 change 上行（组合中不镜像半成品）。 */
+    suppress: false,
+};
 
 /**
  * change 上行的 rAF 合帧（长按连删卡顿修，transcript-converge 后续轮）：
@@ -34,219 +40,225 @@ let suppressChange = false;
  * 另有两条作废路径：setDocument（丢弃挂起快照）与 destroy（作废）。
  * 上述四条语义由 `__tests__/code-editor-webview-runtime.test.ts` 钉住。
  */
-let changePendingThisFrame = false;
-let changeRafId = 0;
+/** change 上行的 rAF 合帧状态（模块内 holder，对象管理；语义见上）。 */
+const changeFrame = {
+    pending: false,
+    raf: 0,
+};
 
 const languageCompartment = new Compartment();
 /** composer-token 胶囊扩展按 path 启停（与语言同拍 reconfigure）。 */
 const tokenCompartment = new Compartment();
 
-let unbindCaretReveal: (() => void) | null = null;
+/** caret 随视口 reveal 的解绑钩子槽（模块内 holder，对象管理）。 */
+const caretSlot = {
+    unbind: null as (() => void) | null,
+};
 
 /** 外部受控选区（程序化写入一次落位；坐标为 plain 文本偏移）。 */
 type EditorSelectionRange = {
-  readonly start: number;
-  readonly end: number;
+    readonly start: number;
+    readonly end: number;
 };
 
 export namespace CodeEditor {
-  function flushPendingChange(): void {
-    if (!changePendingThisFrame) {
-      return;
-    }
-    changePendingThisFrame = false;
-    if (changeRafId !== 0) {
-      cancelAnimationFrame(changeRafId);
-      changeRafId = 0;
-    }
-    if (view == null) {
-      return;
-    }
-    post('change', {text: view.state.doc.toString()});
-  }
-
-  function scheduleChangePost(): void {
-    changePendingThisFrame = true;
-    if (changeRafId !== 0) {
-      return;
-    }
-    changeRafId = requestAnimationFrame(() => {
-      changeRafId = 0;
-      flushPendingChange();
-    });
-  }
-
-  function buildExtensions(path: string): Extension[] {
-    return [
-      editorTheme,
-      editorSyntaxHighlighting,
-      EditorView.lineWrapping,
-      drawSelection(),
-      history(),
-      languageCompartment.of(LanguageForPath.extension(path)),
-      tokenCompartment.of(ComposerTokens.enabled(path) ? composerTokenHighlight : []),
-      keymap.of([...defaultKeymap, ...historyKeymap]),
-      EditorView.updateListener.of(update => {
-        // 选区上报（typeahead 的活跃查询判定在 RN 侧，需要光标位置）。
-        // 程序化 setSelection 的回声也走这里：宿主侧同值去重，无回环风险。
-        // 仅 composer 伪路径上报（capsule/B-1）：胶囊扩展本就只挂该路径，选区上报
-        // 与它同源同门。文件编辑不消费 selectionChange（无 onSelectionChange 消费方），
-        // 无条件上报等于每步打字都白跨一次桥。
-        if (update.selectionSet && ComposerTokens.enabled(currentPath)) {
-          const sel = update.state.selection.main;
-          post('selectionChange', {start: sel.from, end: sel.to});
+    function flushPendingChange(): void {
+        if (!changeFrame.pending) {
+            return;
         }
-        if (suppressChange || !update.docChanged) return;
-        // 合帧上行（见 scheduleChangePost 注释）：同帧多次按键合并为一条全文快照。
-        scheduleChangePost();
-      }),
-      EditorView.domEventHandlers({
-        focus: () => {
-          post('focus', {});
-          requestAnimationFrame(() => {
-            scrollCaretIntoView();
-          });
-          return false;
-        },
-        blur: () => {
-          // 失焦即收口：挂起的合帧同步发出，RN 侧镜像不欠账。
-          flushPendingChange();
-          post('blur', {});
-          return false;
-        },
-      }),
-    ];
-  }
-
-  function scrollCaretIntoView(): void {
-    if (!view?.hasFocus) return;
-    view.dispatch({
-      effects: EditorView.scrollIntoView(view.state.selection.main.head, {
-        y: 'nearest',
-      }),
-    });
-  }
-
-  /** 只负责键盘/尺寸变化后滚光标；底部避让交给 RN 侧抬升/KAV，避免双重垫高。 */
-  function bindCaretRevealOnResize(): () => void {
-    const apply = () => {
-      requestAnimationFrame(() => {
-        scrollCaretIntoView();
-      });
-    };
-    apply();
-    window.addEventListener('resize', apply);
-    const vv = window.visualViewport;
-    if (vv != null) {
-      vv.addEventListener('resize', apply);
-      vv.addEventListener('scroll', apply);
-    }
-    return () => {
-      window.removeEventListener('resize', apply);
-      if (vv != null) {
-        vv.removeEventListener('resize', apply);
-        vv.removeEventListener('scroll', apply);
-      }
-    };
-  }
-
-  /** 转成 CM 选区 spec；无选区期望时返回 undefined（事务里等价于不设）。 */
-  function selectionSpec(text: string, selection?: EditorSelectionRange): {anchor: number; head: number} | undefined {
-    if (selection == null) {
-      return undefined;
-    }
-    return {
-      anchor: ClampIndex.clamp(selection.start, text.length),
-      head: ClampIndex.clamp(selection.end, text.length),
-    };
-  }
-
-  /** path 变化时的两仓重配（语言 + 胶囊扩展）；无变化返回 undefined。 */
-  function reconfigureEffects(path: string) {
-    return [languageCompartment.reconfigure(LanguageForPath.extension(path)), tokenCompartment.reconfigure(ComposerTokens.enabled(path) ? composerTokenHighlight : [])];
-  }
-
-  export function mount(parent: HTMLElement, text: string, path: string, selection?: EditorSelectionRange): void {
-    if (view) {
-      destroy();
-    }
-    currentPath = path;
-    view = new EditorView({
-      state: EditorState.create({
-        doc: text,
-        extensions: buildExtensions(path),
-        // 缺省选区按路径分流（capsule/B-3）：composer 伪路径默认落文末——全屏进屏
-        // 不点编辑器直接按 @/$ 时，token 要插在草稿末尾而不是整篇开头（RN 侧
-        // cursor 初值同步落文末，见 PromptEditorScreen）。
-        // 文件编辑保持现状（不传 selection → CM 落 0），「文件编辑也落文末」待拍板。
-        selection: selectionSpec(text, selection) ?? (ComposerTokens.enabled(path) ? {anchor: text.length} : undefined),
-      }),
-      parent,
-    });
-    unbindCaretReveal = bindCaretRevealOnResize();
-  }
-
-  export function destroy(): void {
-    // 挂起的合帧作废：view 即将销毁，旧快照发出去只会污染 RN 镜像。
-    changePendingThisFrame = false;
-    if (changeRafId !== 0) {
-      cancelAnimationFrame(changeRafId);
-      changeRafId = 0;
-    }
-    if (unbindCaretReveal != null) {
-      unbindCaretReveal();
-      unbindCaretReveal = null;
-    }
-    if (view) {
-      view.destroy();
-      view = null;
-    }
-    currentPath = '';
-  }
-
-  export function setDocument(text: string, path: string, selection?: EditorSelectionRange): void {
-    if (!view) return;
-
-    // 外部替换前丢掉挂起的上行快照：它描述的是被替换前的旧文档，
-    // 若放行会在替换后迟到、经 RN 镜像回环把旧内容吃回来。
-    changePendingThisFrame = false;
-    if (changeRafId !== 0) {
-      cancelAnimationFrame(changeRafId);
-      changeRafId = 0;
+        changeFrame.pending = false;
+        if (changeFrame.raf !== 0) {
+            cancelAnimationFrame(changeFrame.raf);
+            changeFrame.raf = 0;
+        }
+        if (editorRuntime.cm == null) {
+            return;
+        }
+        post('change', {text: editorRuntime.cm.state.doc.toString()});
     }
 
-    const current = view.state.doc.toString();
-    const pathChanged = currentPath !== path;
-    currentPath = path;
-
-    if (current === text && !pathChanged && selection == null) {
-      return;
+    function scheduleChangePost(): void {
+        changeFrame.pending = true;
+        if (changeFrame.raf !== 0) {
+            return;
+        }
+        changeFrame.raf = requestAnimationFrame(() => {
+            changeFrame.raf = 0;
+            flushPendingChange();
+        });
     }
 
-    if (current === text) {
-      if (pathChanged) {
-        view.dispatch({effects: reconfigureEffects(path)});
-      }
-      const sel = selectionSpec(text, selection);
-      if (sel != null) {
-        view.dispatch({selection: sel});
-      }
-      return;
+    function buildExtensions(path: string): Extension[] {
+        return [
+            editorTheme,
+            editorSyntaxHighlighting,
+            EditorView.lineWrapping,
+            drawSelection(),
+            history(),
+            languageCompartment.of(LanguageForPath.extension(path)),
+            tokenCompartment.of(ComposerTokens.enabled(path) ? composerTokenHighlight : []),
+            keymap.of([...defaultKeymap, ...historyKeymap]),
+            EditorView.updateListener.of(update => {
+                // 选区上报（typeahead 的活跃查询判定在 RN 侧，需要光标位置）。
+                // 程序化 setSelection 的回声也走这里：宿主侧同值去重，无回环风险。
+                // 仅 composer 伪路径上报（capsule/B-1）：胶囊扩展本就只挂该路径，选区上报
+                // 与它同源同门。文件编辑不消费 selectionChange（无 onSelectionChange 消费方），
+                // 无条件上报等于每步打字都白跨一次桥。
+                if (update.selectionSet && ComposerTokens.enabled(editorRuntime.path)) {
+                    const sel = update.state.selection.main;
+                    post('selectionChange', {start: sel.from, end: sel.to});
+                }
+                if (editorRuntime.suppress || !update.docChanged) return;
+                // 合帧上行（见 scheduleChangePost 注释）：同帧多次按键合并为一条全文快照。
+                scheduleChangePost();
+            }),
+            EditorView.domEventHandlers({
+                focus: () => {
+                    post('focus', {});
+                    requestAnimationFrame(() => {
+                        scrollCaretIntoView();
+                    });
+                    return false;
+                },
+                blur: () => {
+                    // 失焦即收口：挂起的合帧同步发出，RN 侧镜像不欠账。
+                    flushPendingChange();
+                    post('blur', {});
+                    return false;
+                },
+            }),
+        ];
     }
 
-    suppressChange = true;
-    try {
-      view.dispatch({
-        changes: {from: 0, to: current.length, insert: text},
-        selection: selectionSpec(text, selection),
-        effects: pathChanged ? reconfigureEffects(path) : undefined,
-      });
-    } finally {
-      suppressChange = false;
+    function scrollCaretIntoView(): void {
+        if (!editorRuntime.cm?.hasFocus) return;
+        editorRuntime.cm.dispatch({
+            effects: EditorView.scrollIntoView(editorRuntime.cm.state.selection.main.head, {
+                y: 'nearest',
+            }),
+        });
     }
-  }
 
-  export function blur(): void {
-    view?.contentDOM.blur();
-  }
+    /** 只负责键盘/尺寸变化后滚光标；底部避让交给 RN 侧抬升/KAV，避免双重垫高。 */
+    function bindCaretRevealOnResize(): () => void {
+        const apply = () => {
+            requestAnimationFrame(() => {
+                scrollCaretIntoView();
+            });
+        };
+        apply();
+        window.addEventListener('resize', apply);
+        const vv = window.visualViewport;
+        if (vv != null) {
+            vv.addEventListener('resize', apply);
+            vv.addEventListener('scroll', apply);
+        }
+        return () => {
+            window.removeEventListener('resize', apply);
+            if (vv != null) {
+                vv.removeEventListener('resize', apply);
+                vv.removeEventListener('scroll', apply);
+            }
+        };
+    }
+
+    /** 转成 CM 选区 spec；无选区期望时返回 undefined（事务里等价于不设）。 */
+    function selectionSpec(text: string, selection?: EditorSelectionRange): {anchor: number; head: number} | undefined {
+        if (selection == null) {
+            return undefined;
+        }
+        return {
+            anchor: ClampIndex.clamp(selection.start, text.length),
+            head: ClampIndex.clamp(selection.end, text.length),
+        };
+    }
+
+    /** path 变化时的两仓重配（语言 + 胶囊扩展）；无变化返回 undefined。 */
+    function reconfigureEffects(path: string) {
+        return [languageCompartment.reconfigure(LanguageForPath.extension(path)), tokenCompartment.reconfigure(ComposerTokens.enabled(path) ? composerTokenHighlight : [])];
+    }
+
+    export function mount(parent: HTMLElement, text: string, path: string, selection?: EditorSelectionRange): void {
+        if (editorRuntime.cm) {
+            destroy();
+        }
+        editorRuntime.path = path;
+        editorRuntime.cm = new EditorView({
+            state: EditorState.create({
+                doc: text,
+                extensions: buildExtensions(path),
+                // 缺省选区按路径分流（capsule/B-3）：composer 伪路径默认落文末——全屏进屏
+                // 不点编辑器直接按 @/$ 时，token 要插在草稿末尾而不是整篇开头（RN 侧
+                // cursor 初值同步落文末，见 PromptEditorScreen）。
+                // 文件编辑保持现状（不传 selection → CM 落 0），「文件编辑也落文末」待拍板。
+                selection: selectionSpec(text, selection) ?? (ComposerTokens.enabled(path) ? {anchor: text.length} : undefined),
+            }),
+            parent,
+        });
+        caretSlot.unbind = bindCaretRevealOnResize();
+    }
+
+    export function destroy(): void {
+        // 挂起的合帧作废：editorRuntime.cm 即将销毁，旧快照发出去只会污染 RN 镜像。
+        changeFrame.pending = false;
+        if (changeFrame.raf !== 0) {
+            cancelAnimationFrame(changeFrame.raf);
+            changeFrame.raf = 0;
+        }
+        if (caretSlot.unbind != null) {
+            caretSlot.unbind();
+            caretSlot.unbind = null;
+        }
+        if (editorRuntime.cm) {
+            editorRuntime.cm.destroy();
+            editorRuntime.cm = null;
+        }
+        editorRuntime.path = '';
+    }
+
+    export function setDocument(text: string, path: string, selection?: EditorSelectionRange): void {
+        if (!editorRuntime.cm) return;
+
+        // 外部替换前丢掉挂起的上行快照：它描述的是被替换前的旧文档，
+        // 若放行会在替换后迟到、经 RN 镜像回环把旧内容吃回来。
+        changeFrame.pending = false;
+        if (changeFrame.raf !== 0) {
+            cancelAnimationFrame(changeFrame.raf);
+            changeFrame.raf = 0;
+        }
+
+        const current = editorRuntime.cm.state.doc.toString();
+        const pathChanged = editorRuntime.path !== path;
+        editorRuntime.path = path;
+
+        if (current === text && !pathChanged && selection == null) {
+            return;
+        }
+
+        if (current === text) {
+            if (pathChanged) {
+                editorRuntime.cm.dispatch({effects: reconfigureEffects(path)});
+            }
+            const sel = selectionSpec(text, selection);
+            if (sel != null) {
+                editorRuntime.cm.dispatch({selection: sel});
+            }
+            return;
+        }
+
+        editorRuntime.suppress = true;
+        try {
+            editorRuntime.cm.dispatch({
+                changes: {from: 0, to: current.length, insert: text},
+                selection: selectionSpec(text, selection),
+                effects: pathChanged ? reconfigureEffects(path) : undefined,
+            });
+        } finally {
+            editorRuntime.suppress = false;
+        }
+    }
+
+    export function blur(): void {
+        editorRuntime.cm?.contentDOM.blur();
+    }
 }

@@ -10,12 +10,12 @@ import { Result } from "@/errors/either.js";
 import type { SessionAgentConfig } from "./session-agent-config.js";
 
 const sessionAgentConfigDocumentSchema = z.object({
-  agentId: z.string().min(1),
-  modelId: z.string().min(1).optional(),
+    agentId: z.string().min(1),
+    modelId: z.string().min(1).optional(),
 }).strict();
 
 /** 列内 JSON → {@link SessionAgentConfig}；含 `toWire` 用于持久化。 */
 export const sessionAgentConfigSchema = Object.assign(sessionAgentConfigDocumentSchema, {
-  toWire: (config: SessionAgentConfig): Result<Record<string, unknown>, AppError> =>
-    Result.ok({ agentId: config.agentId, ...(config.modelId != null ? { modelId: config.modelId } : {}) }),
+    toWire: (config: SessionAgentConfig): Result<Record<string, unknown>, AppError> =>
+        Result.ok({ agentId: config.agentId, ...(config.modelId != null ? { modelId: config.modelId } : {}) }),
 });

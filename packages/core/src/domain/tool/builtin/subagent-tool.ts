@@ -30,7 +30,7 @@ import { assert } from "@/common/assert.js";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { TextBlock } from "@/domain/chat/model/content-block.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
-import { attachmentScanner } from "@/domain/chat/logic/attachment/attachment-scanner.js";
+import { AttachmentScanner } from "@/domain/chat/logic/attachment/attachment-scanner.js";
 import { AppError, AppErrorOps } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { Tool } from "../model/tool.js";
@@ -46,26 +46,26 @@ export const TASK_SESSION_RESUME_MAX_MESSAGES = 300;
 
 /** `task` 工具输入。 */
 export interface TaskToolInput {
-  /** 3-5 词任务描述，用于子 session title。 */
-  readonly description: string;
-  /** 给子 agent 的任务正文。 */
-  readonly prompt: string;
-  /** 目标 subagent 的 name（非 UUID id）；指向 registry 中 `mode !== "primary"` 的 agent。 */
-  readonly subagentName: string;
-  /**
+    /** 3-5 词任务描述，用于子 session title。 */
+    readonly description: string;
+    /** 给子 agent 的任务正文。 */
+    readonly prompt: string;
+    /** 目标 subagent 的 name（非 UUID id）；指向 registry 中 `mode !== "primary"` 的 agent。 */
+    readonly subagentName: string;
+    /**
    * 续用已有子会话 id（非空则不新建，直接往该子会话追加 user 消息并继续跑）。
    *
    * 留空（缺省 / 空串 / 纯空白）= 新建子会话。归属校验为**直接父**口径：
    * 目标子会话的 `parentSessionId` 必须等于当前父会话，否则拒绝。
    */
-  readonly sessionId?: string;
-  /**
+    readonly sessionId?: string;
+    /**
    * 显式交付给子代理的文件路径列表（与主会话附件同链路挂 `<action name="userAttach">`）。
    *
    * 全量挂载：子会话 prepare 链（`prepareUserMessagesForPrompt`，core 单源）按
    * `ATTACH_PROMPT_CHAR_BUDGET` 计量，超限项自动降级为 filename 档引导文案。
    */
-  readonly fileAttachment?: readonly string[];
+    readonly fileAttachment?: readonly string[];
 }
 
 /**
@@ -77,12 +77,12 @@ export interface TaskToolInput {
  * tool_result 标成 `ok: false`，主 agent 才能区分「用户停止」和「工具崩溃」。
  */
 export interface TaskToolOutput {
-  readonly text: string;
-  readonly subagentSessionId: string;
-  /** 子 agent 被用户中断时为 true（对应 stopReason=cancelled）。 */
-  readonly stopped?: boolean;
-  /** 中断原因文案（目前固定为 {@link SUBAGENT_STOP_REASON_USER}）。 */
-  readonly failureReason?: string;
+    readonly text: string;
+    readonly subagentSessionId: string;
+    /** 子 agent 被用户中断时为 true（对应 stopReason=cancelled）。 */
+    readonly stopped?: boolean;
+    /** 中断原因文案（目前固定为 {@link SUBAGENT_STOP_REASON_USER}）。 */
+    readonly failureReason?: string;
 }
 
 /**
@@ -97,7 +97,7 @@ const SUBAGENT_MAX_DEPTH = 2;
 
 /** 三态续用错误统一引导：去掉 sessionId 新开。 */
 function resumeGuide(): string {
-  return "去掉 sessionId 重新调用即可新开一个子会话。";
+    return "去掉 sessionId 重新调用即可新开一个子会话。";
 }
 
 /**
@@ -108,11 +108,11 @@ function resumeGuide(): string {
  * run() 内查找目标 def 时再叠加 `mode !== "primary"` 过滤，防主 agent 被当子 agent 调。
  */
 export const subagentTool: Tool<TaskToolInput, TaskToolOutput, BuiltinToolContext> = {
-  name: "task",
-  description: (ctx) => {
-    const callable = ctx.subagent?.callableAgents ?? [];
-    const callableList = callable.length === 0 ? "（暂无）" : callable.map((a) => (a.description != null && a.description.trim().length > 0 ? `${a.name}：${a.description.trim()}` : a.name)).join("\n");
-    return `派生一个子代理执行子任务，等它跑完后回流结果。适用于把复杂或独立子任务（如查大纲设定、生成角色档案）委派给专门的 agent，避免在主对话中累积过多上下文。
+    name: "task",
+    description: (ctx) => {
+        const callable = ctx.subagent?.callableAgents ?? [];
+        const callableList = callable.length === 0 ? "（暂无）" : callable.map((a) => (a.description != null && a.description.trim().length > 0 ? `${a.name}：${a.description.trim()}` : a.name)).join("\n");
+        return `派生一个子代理执行子任务，等它跑完后回流结果。适用于把复杂或独立子任务（如查大纲设定、生成角色档案）委派给专门的 agent，避免在主对话中累积过多上下文。
 
 入参：
 - subagentName：目标子代理 name（你可以调用的 subagent 如下：
@@ -131,170 +131,170 @@ ${callableList}
 并行：本工具非突变工具，单条 assistant 消息里可同时发起多个 task tool_use，会并发执行各自独立子会话（但同一个 sessionId 不能被并发续用）。
 
 注意：子代理只能访问当前会话工作区文件（与父会话同一 VFS 视图）；它不会看到主对话的历史，仅看到你在 prompt 中提供的上下文与所附文件。`;
-  },
-  inputSchema: z.object({
-    description: z.string().min(1).describe("3-5 词任务描述（用作子会话标题）"),
-    prompt: z.string().min(1).describe("任务正文，写清要子代理完成什么"),
-    subagentName: z.string().min(1).describe("目标子代理 name（非 id），需为 mode 非 primary 的 agent"),
-    sessionId: z.string().optional().describe("续用已有子会话 id（上次回流的 subagentSessionId）；留空则新开。仅限当前会话派生的子会话，且不可并发续用同一个"),
-    fileAttachment: z.array(z.string().min(1)).optional().describe("要交付给子代理的文件路径列表（正文全文随附件送达）；超出体积预算的部分只给文件名与分段读取引导"),
-  }),
-  outputSchema: z.object({
-    text: z.string().describe("子代理末条回复正文；被中断且未输出文本时为占位文案"),
-    subagentSessionId: z.string().describe("子会话 id（UI 跳转用）"),
-    stopped: z.boolean().optional().describe("true 表示子代理被用户中断，text 可能是半成品"),
-    failureReason: z.string().optional().describe("中断原因（如「用户停止」），仅在 stopped=true 时出现"),
-  }),
-  async run(input, ctx) {
-    const subagent = ctx.subagent;
-    if (subagent == null) {
-      return Result.err(new AppError("TOOL_FAILED", { toolName: "task", detail: "task 工具未装配 subagent 上下文（当前 agent 不允许派生子代理）" }));
-    }
-    // 双保险：depth >= 2 时拒绝（孙 agent 的 registry 本应已 deny task，见 AgentTools.resolveRegistry）。
-    if (subagent.depth >= SUBAGENT_MAX_DEPTH) {
-      return Result.err(new AppError("TOOL_FAILED", { toolName: "task", detail: `已达子代理递归上限（depth=${subagent.depth}），不允许再派生` }));
-    }
+    },
+    inputSchema: z.object({
+        description: z.string().min(1).describe("3-5 词任务描述（用作子会话标题）"),
+        prompt: z.string().min(1).describe("任务正文，写清要子代理完成什么"),
+        subagentName: z.string().min(1).describe("目标子代理 name（非 id），需为 mode 非 primary 的 agent"),
+        sessionId: z.string().optional().describe("续用已有子会话 id（上次回流的 subagentSessionId）；留空则新开。仅限当前会话派生的子会话，且不可并发续用同一个"),
+        fileAttachment: z.array(z.string().min(1)).optional().describe("要交付给子代理的文件路径列表（正文全文随附件送达）；超出体积预算的部分只给文件名与分段读取引导"),
+    }),
+    outputSchema: z.object({
+        text: z.string().describe("子代理末条回复正文；被中断且未输出文本时为占位文案"),
+        subagentSessionId: z.string().describe("子会话 id（UI 跳转用）"),
+        stopped: z.boolean().optional().describe("true 表示子代理被用户中断，text 可能是半成品"),
+        failureReason: z.string().optional().describe("中断原因（如「用户停止」），仅在 stopped=true 时出现"),
+    }),
+    async run(input, ctx) {
+        const subagent = ctx.subagent;
+        if (subagent == null) {
+            return Result.err(new AppError("TOOL_FAILED", { toolName: "task", detail: "task 工具未装配 subagent 上下文（当前 agent 不允许派生子代理）" }));
+        }
+        // 双保险：depth >= 2 时拒绝（孙 agent 的 registry 本应已 deny task，见 AgentTools.resolveRegistry）。
+        if (subagent.depth >= SUBAGENT_MAX_DEPTH) {
+            return Result.err(new AppError("TOOL_FAILED", { toolName: "task", detail: `已达子代理递归上限（depth=${subagent.depth}），不允许再派生` }));
+        }
 
-    const defs = await subagent.agentRegistry.list();
-    // 毒行 decode 失败（五期门⑦沿 Result 到达）原样上递给工具边界。
-    if (!defs.ok) return Result.err(defs.error);
-    // mode !== "primary" 过滤：主 agent（mode=primary）不能被当子 agent 调，防自递归。
-    const def = defs.value.find((d) => d.name === input.subagentName && d.mode !== "primary");
-    if (def == null) {
-      const callableNames = defs.value.filter((d) => d.mode !== "primary").map((d) => d.name);
-      return Result.err(new AppError("TOOL_FAILED", { toolName: "task", detail: `未找到名为 "${input.subagentName}" 的子代理；可选：${callableNames.join(", ") || "（暂无）"}` }));
-    }
+        const defs = await subagent.agentRegistry.list();
+        // 毒行 decode 失败（五期门⑦沿 Result 到达）原样上递给工具边界。
+        if (!defs.ok) return Result.err(defs.error);
+        // mode !== "primary" 过滤：主 agent（mode=primary）不能被当子 agent 调，防自递归。
+        const def = defs.value.find((d) => d.name === input.subagentName && d.mode !== "primary");
+        if (def == null) {
+            const callableNames = defs.value.filter((d) => d.mode !== "primary").map((d) => d.name);
+            return Result.err(new AppError("TOOL_FAILED", { toolName: "task", detail: `未找到名为 "${input.subagentName}" 的子代理；可选：${callableNames.join(", ") || "（暂无）"}` }));
+        }
 
-    // 子 session title（P2-12）：description 非空优先，否则 prompt.slice(0, 40)。
-    // 统一 trim，与 mobile 侧 pendingSubagentSessions 的 title 匹配逻辑保持一致。
-    const trimmedDesc = input.description.trim();
-    const title = trimmedDesc.length > 0 ? trimmedDesc : input.prompt.trim().slice(0, 40);
+        // 子 session title（P2-12）：description 非空优先，否则 prompt.slice(0, 40)。
+        // 统一 trim，与 mobile 侧 pendingSubagentSessions 的 title 匹配逻辑保持一致。
+        const trimmedDesc = input.description.trim();
+        const title = trimmedDesc.length > 0 ? trimmedDesc : input.prompt.trim().slice(0, 40);
 
-    // fileAttachment：只物化（attachmentsFromPaths 内部已按规范化 seen key 去重），
-    // **全量挂载**——体积预算与降级收敛到 prepare 链（core 单源），子会话每 step
-    // 跑同一个 prepareUserMessagesForPrompt，超限项自动降级为 filename 档引导文案。
-    //
-    // **整段必须排在下面 createChildSession 之前**：空串元素是 fileAttachment 唯一的
-    // 硬错误，留在建会话之后抛的话，子会话已经落库且零消息——模型拿不到
-    // subagentSessionId，无法清理这个孤儿子会话，重试还会再堆一个。
-    let attachments: MessageAttachment[] | undefined;
-    const filePaths = input.fileAttachment;
-    if (filePaths != null && filePaths.length > 0) {
-      const materialized = attachmentScanner.fromPaths(filePaths);
-      if (!materialized.ok) return Result.err(new AppError("TOOL_FAILED", { toolName: "task", detail: `fileAttachment 路径非法：${materialized.error.message}` }));
-      attachments = materialized.value;
-    }
+        // fileAttachment：只物化（attachmentsFromPaths 内部已按规范化 seen key 去重），
+        // **全量挂载**——体积预算与降级收敛到 prepare 链（core 单源），子会话每 step
+        // 跑同一个 prepareUserMessagesForPrompt，超限项自动降级为 filename 档引导文案。
+        //
+        // **整段必须排在下面 createChildSession 之前**：空串元素是 fileAttachment 唯一的
+        // 硬错误，留在建会话之后抛的话，子会话已经落库且零消息——模型拿不到
+        // subagentSessionId，无法清理这个孤儿子会话，重试还会再堆一个。
+        let attachments: MessageAttachment[] | undefined;
+        const filePaths = input.fileAttachment;
+        if (filePaths != null && filePaths.length > 0) {
+            const materialized = AttachmentScanner.fromPaths(filePaths);
+            if (!materialized.ok) return Result.err(new AppError("TOOL_FAILED", { toolName: "task", detail: `fileAttachment 路径非法：${materialized.error.message}` }));
+            attachments = materialized.value;
+        }
 
-    // 续用 vs 新建（spec G4）：sessionId 非空（trim 后）走四态校验后续用同一子会话，
-    // 不新建；留空/纯空白一律新开（模型显式传空串等价于不传）。
-    // 四态校验顺序刻意如此——先判存在性（get 返回 err 即不存在），再判归属（直接父口径），
-    // 再判活跃，最后判历史条数软闸。存在性只吞 NOT_FOUND（子会话真被删了）；DB 抖动等
-    // 其它故障原样上抛——伪装成「找不到子会话」会让模型误以为 sessionId 失效而新建重复会话。
-    const requestedSessionId = input.sessionId?.trim() ?? "";
-    let childSessionId: string;
-    if (requestedSessionId.length > 0) {
-      const sessionResult = await subagent.sessions.get(requestedSessionId);
-      if (!sessionResult.ok) {
-        if (!AppErrorOps.is(sessionResult.error, "CHAT_NOT_FOUND")) return Result.err(sessionResult.error);
-        return Result.err(new AppError("TOOL_FAILED", { toolName: "task", detail: `找不到子会话 "${requestedSessionId}"（可能已被删除）。${resumeGuide()}` }));
-      }
-      // 归属：直接父口径。跨 project 的会话同样因父 id 不同被拒（一条判定覆盖两种）。
-      if (sessionResult.value.parentSessionId !== subagent.parentSessionId) {
-        return Result.err(new AppError("TOOL_FAILED", { toolName: "task", detail: `子会话 "${requestedSessionId}" 不是当前会话派生的子会话，不能跨会话续用。${resumeGuide()}` }));
-      }
-      // 活跃中：软闸（给模型可读引导）。真正的硬互斥在 runChildAgent 的 tryRegister claim。
-      if (subagent.isSessionRunActive(requestedSessionId)) {
-        return Result.err(new AppError("TOOL_FAILED", { toolName: "task", detail: `子会话 "${requestedSessionId}" 正在运行中，不能同时续用。${resumeGuide()}` }));
-      }
-      // 历史软闸：子会话永不压缩，消息数线性增长，超限引导新开（spec D7）。
-      const existingRead = await subagent.messages.listBySession(requestedSessionId);
-      if (existingRead.kind === "failed") return Result.err(existingRead.error);
-      // 未注入 hooks，中断分支恒不可达；命中说明 MessageService 读口契约被破坏。
-      assert(existingRead.kind === "completed", "task 续用历史读取未注入 hooks，不应产生中断");
-      const existing = existingRead.value;
-      if (existing.length > TASK_SESSION_RESUME_MAX_MESSAGES) {
-        return Result.err(new AppError("TOOL_FAILED", { toolName: "task", detail: `子会话 "${requestedSessionId}" 已有 ${existing.length} 条消息（上限 ${TASK_SESSION_RESUME_MAX_MESSAGES}），续用会持续拉长历史。${resumeGuide()}` }));
-      }
-      childSessionId = requestedSessionId;
-    } else {
-      const created = await subagent.createChildSession(title);
-      if (!created.ok) return Result.err(created.error);
-      childSessionId = created.value;
-    }
+        // 续用 vs 新建（spec G4）：sessionId 非空（trim 后）走四态校验后续用同一子会话，
+        // 不新建；留空/纯空白一律新开（模型显式传空串等价于不传）。
+        // 四态校验顺序刻意如此——先判存在性（get 返回 err 即不存在），再判归属（直接父口径），
+        // 再判活跃，最后判历史条数软闸。存在性只吞 NOT_FOUND（子会话真被删了）；DB 抖动等
+        // 其它故障原样上抛——伪装成「找不到子会话」会让模型误以为 sessionId 失效而新建重复会话。
+        const requestedSessionId = input.sessionId?.trim() ?? "";
+        let childSessionId: string;
+        if (requestedSessionId.length > 0) {
+            const sessionResult = await subagent.sessions.get(requestedSessionId);
+            if (!sessionResult.ok) {
+                if (!AppErrorOps.is(sessionResult.error, "CHAT_NOT_FOUND")) return Result.err(sessionResult.error);
+                return Result.err(new AppError("TOOL_FAILED", { toolName: "task", detail: `找不到子会话 "${requestedSessionId}"（可能已被删除）。${resumeGuide()}` }));
+            }
+            // 归属：直接父口径。跨 project 的会话同样因父 id 不同被拒（一条判定覆盖两种）。
+            if (sessionResult.value.parentSessionId !== subagent.parentSessionId) {
+                return Result.err(new AppError("TOOL_FAILED", { toolName: "task", detail: `子会话 "${requestedSessionId}" 不是当前会话派生的子会话，不能跨会话续用。${resumeGuide()}` }));
+            }
+            // 活跃中：软闸（给模型可读引导）。真正的硬互斥在 runChildAgent 的 tryRegister claim。
+            if (subagent.isSessionRunActive(requestedSessionId)) {
+                return Result.err(new AppError("TOOL_FAILED", { toolName: "task", detail: `子会话 "${requestedSessionId}" 正在运行中，不能同时续用。${resumeGuide()}` }));
+            }
+            // 历史软闸：子会话永不压缩，消息数线性增长，超限引导新开（spec D7）。
+            const existingRead = await subagent.messages.listBySession(requestedSessionId);
+            if (existingRead.kind === "failed") return Result.err(existingRead.error);
+            // 未注入 hooks，中断分支恒不可达；命中说明 MessageService 读口契约被破坏。
+            assert(existingRead.kind === "completed", "task 续用历史读取未注入 hooks，不应产生中断");
+            const existing = existingRead.value;
+            if (existing.length > TASK_SESSION_RESUME_MAX_MESSAGES) {
+                return Result.err(new AppError("TOOL_FAILED", { toolName: "task", detail: `子会话 "${requestedSessionId}" 已有 ${existing.length} 条消息（上限 ${TASK_SESSION_RESUME_MAX_MESSAGES}），续用会持续拉长历史。${resumeGuide()}` }));
+            }
+            childSessionId = requestedSessionId;
+        } else {
+            const created = await subagent.createChildSession(title);
+            if (!created.ok) return Result.err(created.error);
+            childSessionId = created.value;
+        }
 
-    const resolvedModel = subagent.resolveChildModelId(def);
-    if (!resolvedModel.ok) return Result.err(resolvedModel.error);
-    const { savedModelId, workspaceModelId } = resolvedModel.value;
+        const resolvedModel = subagent.resolveChildModelId(def);
+        if (!resolvedModel.ok) return Result.err(resolvedModel.error);
+        const { savedModelId, workspaceModelId } = resolvedModel.value;
 
-    const runInput = {
-      savedModelId,
-      workspaceModelId,
-      signal: subagent.parentSignal,
-      maxSteps: def.runtime?.maxSteps,
-      prompt: input.prompt,
-      ...(attachments != null ? { attachments } : {}),
-    };
-    const runOutcome = await subagent.runChildAgent(def, childSessionId, runInput);
-    if (!runOutcome.ok) return Result.err(runOutcome.error);
-    const result = runOutcome.value;
+        const runInput = {
+            savedModelId,
+            workspaceModelId,
+            signal: subagent.parentSignal,
+            maxSteps: def.runtime?.maxSteps,
+            prompt: input.prompt,
+            ...(attachments != null ? { attachments } : {}),
+        };
+        const runOutcome = await subagent.runChildAgent(def, childSessionId, runInput);
+        if (!runOutcome.ok) return Result.err(runOutcome.error);
+        const result = runOutcome.value;
 
-    // AgentRunResult 不带文本，必须自己取末条 assistant text。
-    // tail+role 过滤读口（limit 只数 assistant 行）：旧形态 listBySession 读整条
-    // 子会话（21 列 + 逐行 parse），maxSteps 大的子代理跑几百步后每次 task 调用
-    // 都重付这笔全量读。
-    // ⚠️ 不能用 listBySessionTail(sid, 1)：末条 assistant 之后常压着若干条
-    // tool_result 的 user 消息，会把配额吃掉。
-    // limit=8 的依据：一次 assistant 回合里「无 text block 的 assistant」只出现在
-    // 「该 step 只发 tool_use、没发正文」的情形，而相邻两个这样的 step 之间必夹
-    // 一条 tool_result 的 user 消息（role 过滤后不占配额）⇒ 8 给了约 4 倍余量。
-    // 已知差异：子代理连续 8 个 step 只发 tool_use 且更早处有正文时，改后取不到
-    // 文本（走 [子代理未完成任务: …] 兜底），已由 subagent-tool-tail-read.test.ts
-    // 的 T-SUB-TAIL3 钉成期望。
-    const childMessagesRead = await subagent.messages.listBySessionTailOfRole(childSessionId, { role: "assistant", limit: 8 });
-    if (childMessagesRead.kind === "failed") return Result.err(childMessagesRead.error);
-    // 未注入 hooks，中断分支恒不可达；命中说明 MessageService 读口契约被破坏。
-    assert(childMessagesRead.kind === "completed", "task 尾读未注入 hooks，不应产生中断");
-    const childMessages = childMessagesRead.value;
-    let lastText: string | undefined;
-    for (let i = childMessages.length - 1; i >= 0; i--) {
-      const msg = childMessages[i]!;
-      if (msg.role !== "assistant") continue;
-      const textBlocks = msg.content.blocks.filter((b): b is TextBlock => b.type === "text");
-      if (textBlocks.length === 0) continue;
-      const joined = textBlocks.map((b) => b.text).join("");
-      if (joined.length > 0) {
-        lastText = joined;
-        break;
-      }
-    }
+        // AgentRunResult 不带文本，必须自己取末条 assistant text。
+        // tail+role 过滤读口（limit 只数 assistant 行）：旧形态 listBySession 读整条
+        // 子会话（21 列 + 逐行 parse），maxSteps 大的子代理跑几百步后每次 task 调用
+        // 都重付这笔全量读。
+        // ⚠️ 不能用 listBySessionTail(sid, 1)：末条 assistant 之后常压着若干条
+        // tool_result 的 user 消息，会把配额吃掉。
+        // limit=8 的依据：一次 assistant 回合里「无 text block 的 assistant」只出现在
+        // 「该 step 只发 tool_use、没发正文」的情形，而相邻两个这样的 step 之间必夹
+        // 一条 tool_result 的 user 消息（role 过滤后不占配额）⇒ 8 给了约 4 倍余量。
+        // 已知差异：子代理连续 8 个 step 只发 tool_use 且更早处有正文时，改后取不到
+        // 文本（走 [子代理未完成任务: …] 兜底），已由 subagent-tool-tail-read.test.ts
+        // 的 T-SUB-TAIL3 钉成期望。
+        const childMessagesRead = await subagent.messages.listBySessionTailOfRole(childSessionId, { role: "assistant", limit: 8 });
+        if (childMessagesRead.kind === "failed") return Result.err(childMessagesRead.error);
+        // 未注入 hooks，中断分支恒不可达；命中说明 MessageService 读口契约被破坏。
+        assert(childMessagesRead.kind === "completed", "task 尾读未注入 hooks，不应产生中断");
+        const childMessages = childMessagesRead.value;
+        let lastText: string | undefined;
+        for (let i = childMessages.length - 1; i >= 0; i--) {
+            const msg = childMessages[i]!;
+            if (msg.role !== "assistant") continue;
+            const textBlocks = msg.content.blocks.filter((b): b is TextBlock => b.type === "text");
+            if (textBlocks.length === 0) continue;
+            const joined = textBlocks.map((b) => b.text).join("");
+            if (joined.length > 0) {
+                lastText = joined;
+                break;
+            }
+        }
 
-    // 中断回流（phase-1-abort-reflow）：cancelled 单独走「用户停止」分支，
-    // 不再套 [子代理未完成任务] 文案——主 agent 要能区分「用户主动停」和「工具崩了」。
-    // text 取值边界：cancelled 时 lastText 可能为空（LLM 还没吐字），固定占位文案，
-    // 不能用空串吞掉回流，否则主 agent 会收到一个内容为空的 tool_result。
-    //
-    // 回流内容以结构化 JSON 给主 agent（task 工具输出本就是给 AI 看的）——
-    // ToolOutput.formatForLlm 对 task 输出走 JSON.stringify，主 agent 从 content 里
-    // 能同时拿到 stopped / failureReason / text / subagentSessionId。
-    if (result.stopReason === "cancelled") {
-      return Result.ok({
-        text: lastText ?? "[用户停止，无已生成文本]",
-        subagentSessionId: childSessionId,
-        stopped: true,
-        failureReason: SUBAGENT_STOP_REASON_USER,
-      });
-    }
+        // 中断回流（phase-1-abort-reflow）：cancelled 单独走「用户停止」分支，
+        // 不再套 [子代理未完成任务] 文案——主 agent 要能区分「用户主动停」和「工具崩了」。
+        // text 取值边界：cancelled 时 lastText 可能为空（LLM 还没吐字），固定占位文案，
+        // 不能用空串吞掉回流，否则主 agent 会收到一个内容为空的 tool_result。
+        //
+        // 回流内容以结构化 JSON 给主 agent（task 工具输出本就是给 AI 看的）——
+        // ToolOutput.formatForLlm 对 task 输出走 JSON.stringify，主 agent 从 content 里
+        // 能同时拿到 stopped / failureReason / text / subagentSessionId。
+        if (result.stopReason === "cancelled") {
+            return Result.ok({
+                text: lastText ?? "[用户停止，无已生成文本]",
+                subagentSessionId: childSessionId,
+                stopped: true,
+                failureReason: SUBAGENT_STOP_REASON_USER,
+            });
+        }
 
-    let text: string;
-    if (result.stopReason === "completed" && lastText != null) {
-      text = lastText;
-    } else {
-      // P1-7 fallback：可读失败原因，仍带上 subagentSessionId 供 UI 跳转看半成品。
-      text = `[子代理未完成任务: stopReason=${result.stopReason}]`;
-    }
+        let text: string;
+        if (result.stopReason === "completed" && lastText != null) {
+            text = lastText;
+        } else {
+            // P1-7 fallback：可读失败原因，仍带上 subagentSessionId 供 UI 跳转看半成品。
+            text = `[子代理未完成任务: stopReason=${result.stopReason}]`;
+        }
 
-    return Result.ok({ text, subagentSessionId: childSessionId });
-  },
+        return Result.ok({ text, subagentSessionId: childSessionId });
+    },
 };
 
 // 静态导出 AgentDefinition 类型，方便 caller 类型推导顺手。

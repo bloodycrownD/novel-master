@@ -17,15 +17,15 @@ const linuxStrategy = SkspNodeFactory.createAesGcmStrategy({ algo: ALGO, masterK
 
 /** Secret Service-backed secret store using an open TDBC connection. */
 export class LinuxSqliteSecretStore extends BaseSqliteSecretStore {
-  constructor(conn: TdbcConnection) {
-    super(conn, linuxStrategy);
-  }
+    constructor(conn: TdbcConnection) {
+        super(conn, linuxStrategy);
+    }
 }
 
 // nm-style 注记：namespace 按内容主体起名（撞同文件 export class LinuxSqliteSecretStore，取平台主体 LinuxSecretStore）。
 /** Creates a Linux SQLite secret store. */
 export namespace LinuxSecretStore {
-  export function create(conn: TdbcConnection): SecretStore {
-    return new LinuxSqliteSecretStore(conn);
-  }
+    export function create(conn: TdbcConnection): SecretStore {
+        return new LinuxSqliteSecretStore(conn);
+    }
 }

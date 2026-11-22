@@ -5,14 +5,14 @@ import { useEffect, useState } from "react";
 import { ipcAgentActivityGet, onAgentActivity } from "@/ipc/client";
 
 export function useDesktopAgentActive(): boolean {
-  const [agentActive, setAgentActive] = useState(false);
+    const [agentActive, setAgentActive] = useState(false);
 
-  useEffect(() => {
-    void ipcAgentActivityGet()
-      .then((payload) => setAgentActive(payload.active))
-      .catch(() => undefined);
-    return onAgentActivity((payload) => setAgentActive(payload.active));
-  }, []);
+    useEffect(() => {
+        void ipcAgentActivityGet()
+            .then((payload) => setAgentActive(payload.active))
+            .catch(() => undefined);
+        return onAgentActivity((payload) => setAgentActive(payload.active));
+    }, []);
 
-  return agentActive;
+    return agentActive;
 }

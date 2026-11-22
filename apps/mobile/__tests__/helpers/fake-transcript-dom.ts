@@ -12,50 +12,50 @@
  */
 
 export type FakeClassList = {
-  add(name: string): void;
-  remove(name: string): void;
-  contains(name: string): boolean;
+    add(name: string): void;
+    remove(name: string): void;
+    contains(name: string): boolean;
 };
 
 export type FakeElement = {
-  tagName: string;
-  id: string;
-  className: string;
-  classList: FakeClassList;
-  parentNode: FakeElement | null;
-  children: FakeElement[];
-  /** body 写入计数：innerHTML/textContent 赋值、insertAdjacentHTML、appendChild 各 +1。 */
-  writeCount: number;
-  offsetTop: number;
-  offsetHeight: number;
-  scrollTop: number;
-  scrollHeight: number;
-  clientHeight: number;
-  setAttribute(name: string, value: string): void;
-  getAttribute(name: string): string | null;
-  appendChild(child: FakeElement): FakeElement;
-  insertAdjacentHTML(position: string, html: string): void;
-  readonly firstChild: FakeElement | null;
-  innerHTML: string;
-  textContent: string;
-  querySelector(selector: string): FakeElement | null;
-  querySelectorAll(selector: string): FakeElement[];
+    tagName: string;
+    id: string;
+    className: string;
+    classList: FakeClassList;
+    parentNode: FakeElement | null;
+    children: FakeElement[];
+    /** body 写入计数：innerHTML/textContent 赋值、insertAdjacentHTML、appendChild 各 +1。 */
+    writeCount: number;
+    offsetTop: number;
+    offsetHeight: number;
+    scrollTop: number;
+    scrollHeight: number;
+    clientHeight: number;
+    setAttribute(name: string, value: string): void;
+    getAttribute(name: string): string | null;
+    appendChild(child: FakeElement): FakeElement;
+    insertAdjacentHTML(position: string, html: string): void;
+    readonly firstChild: FakeElement | null;
+    innerHTML: string;
+    textContent: string;
+    querySelector(selector: string): FakeElement | null;
+    querySelectorAll(selector: string): FakeElement[];
 };
 
 function decodeEntities(html: string): string {
-  return html
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&amp;/g, '&');
+    return html
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&amp;/g, '&');
 }
 
 function escapeText(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
 }
 
 /** 解析单段选择器：`.class` / `[attr]` / `[attr="value"]` / `#id` / `tag`。 */

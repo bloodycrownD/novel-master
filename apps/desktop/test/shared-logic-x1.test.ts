@@ -30,17 +30,17 @@ const CORE_SPECIFIER = "@novel-master/core";
 
 /** 递归列出 .ts / .tsx 源文件（排序，保证报错信息稳定）。 */
 function listSourceFiles(dir: string): string[] {
-  const out: string[] = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...listSourceFiles(full));
-    else if (entry.isFile() && /\.tsx?$/.test(entry.name)) out.push(full);
-  }
-  return out.sort();
+    const out: string[] = [];
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) out.push(...listSourceFiles(full));
+        else if (entry.isFile() && /\.tsx?$/.test(entry.name)) out.push(full);
+    }
+    return out.sort();
 }
 
 function rel(absolute: string): string {
-  return path.relative(desktopRoot, absolute).split(path.sep).join("/");
+    return path.relative(desktopRoot, absolute).split(path.sep).join("/");
 }
 
 /**
@@ -59,12 +59,12 @@ function rel(absolute: string): string {
  * 本仓 renderer 侧没有这种写法，且真出现了会表现为**误报**（假红），不是漏报。
  */
 function stripNonCode(source: string): string {
-  return source
-    .replace(/(["'`])(?:\\.|(?!\1)[\s\S])*?\1/g, (raw) =>
+    return source
+        .replace(/(["'`])(?:\\.|(?!\1)[\s\S])*?\1/g, (raw) =>
       /^@novel-master\/core(?:[/'"]|$)/.test(raw.slice(1, -1)) ? raw : '""',
-    )
-    .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+        )
+        .replace(/\/\*[\s\S]*?\*\//g, " ")
+        .replace(/\/\/[^\n]*/g, " ");
 }
 
 /**
@@ -73,21 +73,21 @@ function stripNonCode(source: string): string {
  * renderer 的依赖面，漏掉它等于给 `import type { X } from "@novel-master/core/..."` 开了后门。
  */
 function parseBindingNames(clause: string): string[] {
-  return clause
-    .split(",")
-    .map((raw) => raw.trim())
-    .filter((raw) => raw.length > 0)
-    .map((raw) => raw.replace(/^type\s+/, ""))
-    .map((raw) => raw.split(/\s+as\s+/).pop()?.trim() ?? raw)
-    .filter((raw): raw is string => raw.length > 0);
+    return clause
+        .split(",")
+        .map((raw) => raw.trim())
+        .filter((raw) => raw.length > 0)
+        .map((raw) => raw.replace(/^type\s+/, ""))
+        .map((raw) => raw.split(/\s+as\s+/).pop()?.trim() ?? raw)
+        .filter((raw): raw is string => raw.length > 0);
 }
 
 /** 一条指向 core 的语句：谁、哪个子路径、绑定了哪些本地名。 */
 type CoreBinding = {
-  readonly file: string;
-  readonly kind: "import" | "export";
-  readonly module: string;
-  readonly names: readonly string[];
+    readonly file: string;
+    readonly kind: "import" | "export";
+    readonly module: string;
+    readonly names: readonly string[];
 };
 
 /**
@@ -102,118 +102,118 @@ type CoreBinding = {
  *    `export interface X { … }` 这类声明行会被 3 挡在门外。
  */
 const CORE_STATEMENT =
-  /^[ \t]*(?:import|export)\b((?:(?!\bfrom\b)(?!\n[ \t]*\n)(?!\n[ \t]*(?:import|export|interface|declare|function|class|const|let|var)\b)[\s\S])*?)\bfrom\s*["'](@novel-master\/core[^"']*)["']/gm;
+    /^[ \t]*(?:import|export)\b((?:(?!\bfrom\b)(?!\n[ \t]*\n)(?!\n[ \t]*(?:import|export|interface|declare|function|class|const|let|var)\b)[\s\S])*?)\bfrom\s*["'](@novel-master\/core[^"']*)["']/gm;
 
 /** 抽出该文件里所有指向 core 的静态 import / 再导出。 */
 function collectCoreStatements(file: string, code: string): CoreBinding[] {
-  const found: CoreBinding[] = [];
-  for (const match of code.matchAll(CORE_STATEMENT)) {
-    const clause = (match[1] ?? "").trim();
-    const braces = /\{([\s\S]*?)\}/.exec(clause);
-    const names = braces ? parseBindingNames(braces[1] ?? "") : [];
-    // `import * as ns from` / `import Def from`（无花括号）也记一笔，别让 default/namespace 溜过去。
-    const bare = clause.replace(/\{[\s\S]*?\}/g, "").replace(/^\s*type\s+/, "").trim();
-    if (bare.length > 0) names.push(...parseBindingNames(bare));
-    found.push({
-      file: rel(file),
-      kind: match[0].trimStart().startsWith("import") ? "import" : "export",
-      module: match[2] ?? CORE_SPECIFIER,
-      names,
-    });
-  }
-  return found;
+    const found: CoreBinding[] = [];
+    for (const match of code.matchAll(CORE_STATEMENT)) {
+        const clause = (match[1] ?? "").trim();
+        const braces = /\{([\s\S]*?)\}/.exec(clause);
+        const names = braces ? parseBindingNames(braces[1] ?? "") : [];
+        // `import * as ns from` / `import Def from`（无花括号）也记一笔，别让 default/namespace 溜过去。
+        const bare = clause.replace(/\{[\s\S]*?\}/g, "").replace(/^\s*type\s+/, "").trim();
+        if (bare.length > 0) names.push(...parseBindingNames(bare));
+        found.push({
+            file: rel(file),
+            kind: match[0].trimStart().startsWith("import") ? "import" : "export",
+            module: match[2] ?? CORE_SPECIFIER,
+            names,
+        });
+    }
+    return found;
 }
 
 function readCode(absolute: string): string {
-  return stripNonCode(readFileSync(absolute, "utf8"));
+    return stripNonCode(readFileSync(absolute, "utf8"));
 }
 
 describe("X1 结构快照：renderer 侧零直连 core（wave-e X1.5）", () => {
-  it("renderer/** 源码里不出现任何 @novel-master/core 引用", () => {
-    // 判据①的牙齿：把 renderer 某个 import 改回 `@novel-master/core/xxx` ⇒ 本用例红。
-    // 判据②不涉及进程级状态；判据③本条只挂一套期望。
-    const files = listSourceFiles(rendererRoot);
-    assert.ok(files.length > 0, `renderer 扫描面为空（${rel(rendererRoot)}）—— 断言会空转，先修扫描面`);
-    const offenders = files
-      .map((file) => ({ file, code: readCode(file) }))
-      .filter(({ code }) => code.includes(CORE_SPECIFIER))
-      .map(({ file }) => rel(file));
-    assert.deepEqual(
-      offenders,
-      [],
-      `renderer 直连了 ${CORE_SPECIFIER}（${offenders.length} 个文件）：core 入口一律经 shared/logic 再导出。` +
-        `\n改法：把该符号加进 apps/desktop/shared/logic/*.ts 的具名薄再导出，renderer 改从 shared/logic 取。`,
-    );
-  });
+    it("renderer/** 源码里不出现任何 @novel-master/core 引用", () => {
+        // 判据①的牙齿：把 renderer 某个 import 改回 `@novel-master/core/xxx` ⇒ 本用例红。
+        // 判据②不涉及进程级状态；判据③本条只挂一套期望。
+        const files = listSourceFiles(rendererRoot);
+        assert.ok(files.length > 0, `renderer 扫描面为空（${rel(rendererRoot)}）—— 断言会空转，先修扫描面`);
+        const offenders = files
+            .map((file) => ({ file, code: readCode(file) }))
+            .filter(({ code }) => code.includes(CORE_SPECIFIER))
+            .map(({ file }) => rel(file));
+        assert.deepEqual(
+            offenders,
+            [],
+            `renderer 直连了 ${CORE_SPECIFIER}（${offenders.length} 个文件）：core 入口一律经 shared/logic 再导出。` +
+                `\n改法：把该符号加进 apps/desktop/shared/logic/*.ts 的具名薄再导出，renderer 改从 shared/logic 取。`,
+        );
+    });
 
-  it("renderer/** 的 core import 绑定集合为空（具名 / default / namespace 全算）", () => {
-    // 上一条是「字样级」，本条是「绑定级」：万一有人用拼接等方式绕开字面量，
-    // 绑定集合仍按语句结构判定。两层各管一段，不重复。
-    const bindings = listSourceFiles(rendererRoot).flatMap((file) =>
-      collectCoreStatements(file, readCode(file)),
-    );
-    assert.deepEqual(
-      bindings,
-      [],
-      `renderer 存在指向 core 的语句：` +
-        JSON.stringify(bindings.map((b) => `${b.file} ${b.kind} ${b.module} [${b.names.join(", ")}]`)),
-    );
-  });
+    it("renderer/** 的 core import 绑定集合为空（具名 / default / namespace 全算）", () => {
+        // 上一条是「字样级」，本条是「绑定级」：万一有人用拼接等方式绕开字面量，
+        // 绑定集合仍按语句结构判定。两层各管一段，不重复。
+        const bindings = listSourceFiles(rendererRoot).flatMap((file) =>
+            collectCoreStatements(file, readCode(file)),
+        );
+        assert.deepEqual(
+            bindings,
+            [],
+            `renderer 存在指向 core 的语句：` +
+                JSON.stringify(bindings.map((b) => `${b.file} ${b.kind} ${b.module} [${b.names.join(", ")}]`)),
+        );
+    });
 
-  it("shared/logic 再导出面非空（对账不许空转）", () => {
-    // 防「恒真」的那条：shared 侧一旦被清空，上面两条会变成「空 ⊆ 空」永远绿。
-    // 参考量（2026-10-01 本仓实跑，非门禁阈值）：33 条指向 core 的语句 / 217 个绑定符号。
-    // 这里只断言「非空」而不写死数字——转发面本就该只增不减，写死反而会在有人合法
-    // 合并再导出时误报；真被掏空时这条会红。
-    const files = listSourceFiles(sharedLogicRoot);
-    assert.ok(files.length > 0, `shared/logic 扫描面为空（${rel(sharedLogicRoot)}）`);
-    const bindings = files.flatMap((file) => collectCoreStatements(file, readCode(file)));
-    assert.ok(
-      bindings.length > 0,
-      "shared/logic 里一个 core 再导出都没有了 —— X1 的转发层被掏空，对账失去意义。",
-    );
-    // i18n 迁移（spec G4.1/G4.2）后 shared/logic 不再只是再导出层：它同时是
-    // renderer 侧唯一的 core-descriptor→string 翻译边界——下面这些文件必须
-    // import core 的 descriptor 工厂/选项表，再包一层返回 string。其余文件仍
-    // 只允许 `export … from`。
-    const TRANSLATION_BOUNDARY = new Set([
-      "shared/logic/core-i18n.ts",
-      "shared/logic/format.ts",
-      "shared/logic/provider.ts",
-      "shared/logic/skills.ts",
-      "shared/logic/stored-config-validity.ts",
-      "shared/logic/vfs.ts",
-      "shared/logic/workplace.ts",
-    ]);
-    assert.ok(
-      bindings.every(
-        (b) => b.kind === "export" || TRANSLATION_BOUNDARY.has(b.file),
-      ),
-      "shared/logic 里出现了指向 core 的 import（仅 descriptor→string 翻译边界文件允许）。",
-    );
-  });
+    it("shared/logic 再导出面非空（对账不许空转）", () => {
+        // 防「恒真」的那条：shared 侧一旦被清空，上面两条会变成「空 ⊆ 空」永远绿。
+        // 参考量（2026-10-01 本仓实跑，非门禁阈值）：33 条指向 core 的语句 / 217 个绑定符号。
+        // 这里只断言「非空」而不写死数字——转发面本就该只增不减，写死反而会在有人合法
+        // 合并再导出时误报；真被掏空时这条会红。
+        const files = listSourceFiles(sharedLogicRoot);
+        assert.ok(files.length > 0, `shared/logic 扫描面为空（${rel(sharedLogicRoot)}）`);
+        const bindings = files.flatMap((file) => collectCoreStatements(file, readCode(file)));
+        assert.ok(
+            bindings.length > 0,
+            "shared/logic 里一个 core 再导出都没有了 —— X1 的转发层被掏空，对账失去意义。",
+        );
+        // i18n 迁移（spec G4.1/G4.2）后 shared/logic 不再只是再导出层：它同时是
+        // renderer 侧唯一的 core-descriptor→string 翻译边界——下面这些文件必须
+        // import core 的 descriptor 工厂/选项表，再包一层返回 string。其余文件仍
+        // 只允许 `export … from`。
+        const TRANSLATION_BOUNDARY = new Set([
+            "shared/logic/core-i18n.ts",
+            "shared/logic/format.ts",
+            "shared/logic/provider.ts",
+            "shared/logic/skills.ts",
+            "shared/logic/stored-config-validity.ts",
+            "shared/logic/vfs.ts",
+            "shared/logic/workplace.ts",
+        ]);
+        assert.ok(
+            bindings.every(
+                (b) => b.kind === "export" || TRANSLATION_BOUNDARY.has(b.file),
+            ),
+            "shared/logic 里出现了指向 core 的 import（仅 descriptor→string 翻译边界文件允许）。",
+        );
+    });
 
-  it("集合对账：renderer 的 core 绑定集合 ⊆ shared/logic 的再导出集合", () => {
-    // spec X1.5 的原话口径。当前 renderer 侧为空 ⇒ 这是条恒真式的前置约束，
-    // 它的价值在于：**一旦有人绕过 shared/logic 直连 core，上一条红之外，
-    // 这条会直接点名「该符号在 shared/logic 里没有对应转发」**，给出改法而不只是禁令。
-    const exported = new Set<string>();
-    for (const file of listSourceFiles(sharedLogicRoot)) {
-      for (const binding of collectCoreStatements(file, readCode(file))) {
-        for (const name of binding.names) exported.add(`${binding.module}#${name}`);
-      }
-    }
-    const rendererBindings = listSourceFiles(rendererRoot).flatMap((file) =>
-      collectCoreStatements(file, readCode(file)),
-    );
-    const unforwarded = rendererBindings
-      .filter((b) => b.names.length > 0)
-      .flatMap((b) => b.names.map((name) => `${b.module}#${name}`))
-      .filter((key) => !exported.has(key));
-    assert.deepEqual(
-      unforwarded,
-      [],
-      `这些 core 符号在 shared/logic 里没有对应转发：${unforwarded.join(", ")}`,
-    );
-  });
+    it("集合对账：renderer 的 core 绑定集合 ⊆ shared/logic 的再导出集合", () => {
+        // spec X1.5 的原话口径。当前 renderer 侧为空 ⇒ 这是条恒真式的前置约束，
+        // 它的价值在于：**一旦有人绕过 shared/logic 直连 core，上一条红之外，
+        // 这条会直接点名「该符号在 shared/logic 里没有对应转发」**，给出改法而不只是禁令。
+        const exported = new Set<string>();
+        for (const file of listSourceFiles(sharedLogicRoot)) {
+            for (const binding of collectCoreStatements(file, readCode(file))) {
+                for (const name of binding.names) exported.add(`${binding.module}#${name}`);
+            }
+        }
+        const rendererBindings = listSourceFiles(rendererRoot).flatMap((file) =>
+            collectCoreStatements(file, readCode(file)),
+        );
+        const unforwarded = rendererBindings
+            .filter((b) => b.names.length > 0)
+            .flatMap((b) => b.names.map((name) => `${b.module}#${name}`))
+            .filter((key) => !exported.has(key));
+        assert.deepEqual(
+            unforwarded,
+            [],
+            `这些 core 符号在 shared/logic 里没有对应转发：${unforwarded.join(", ")}`,
+        );
+    });
 });

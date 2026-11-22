@@ -17,26 +17,26 @@ import { RunScope } from "../run-scope.js";
 export type DbMaintenanceRunRequest = { readonly runId?: string };
 
 export namespace DbMaintenance {
-  export async function handleDbStats(): Promise<IpcResult<DbStatsResult>> {
-    try {
-      const stats = await DbMaintenanceService.getStats();
-      // 装配的已知失败沿 Result 到达（错误通道迁移七期），就地转码。
-      if (!stats.ok) return { ok: false, error: FormatIpcError.format(stats.error) };
-      return { ok: true, data: stats.value };
-    } catch (err) {
-      return { ok: false, error: FormatIpcError.format(err) };
+    export async function handleDbStats(): Promise<IpcResult<DbStatsResult>> {
+        try {
+            const stats = await DbMaintenanceService.getStats();
+            // 装配的已知失败沿 Result 到达（错误通道迁移七期），就地转码。
+            if (!stats.ok) return { ok: false, error: FormatIpcError.format(stats.error) };
+            return { ok: true, data: stats.value };
+        } catch (err) {
+            return { ok: false, error: FormatIpcError.format(err) };
+        }
     }
-  }
 
-  /**
+    /**
    * 维护段：入口检查点由 `DbMaintenanceService.run` 在**三重互斥守卫之后**执行
    * （策略表），之后进入不可中断窗口（VACUUM / checkpoint 同步段无法中途让出）。
    * 命中的中断由 service 直接返回 `Outcome`，本层原样交给 `runAbortable` 边界转码。
    */
-  export async function handle(req?: DbMaintenanceRunRequest): Promise<IpcResult<DbMaintenanceResult>> {
-    const built = await DesktopRuntimeSingleton.get();
-    if (!built.ok) return IpcResults.err(FormatIpcError.format(built.error));
-    const rt = built.value;
-    return RunScope.abortable({ registry: rt.abortRegistry, key: RunScope.key(ABORT_KEY.dbMaintenance, req?.runId) }, (scope: AbortScope) => DbMaintenanceService.run({ checkpoint: () => scope.checkpoint() }));
-  }
+    export async function handle(req?: DbMaintenanceRunRequest): Promise<IpcResult<DbMaintenanceResult>> {
+        const built = await DesktopRuntimeSingleton.get();
+        if (!built.ok) return IpcResults.err(FormatIpcError.format(built.error));
+        const rt = built.value;
+        return RunScope.abortable({ registry: rt.abortRegistry, key: RunScope.key(ABORT_KEY.dbMaintenance, req?.runId) }, (scope: AbortScope) => DbMaintenanceService.run({ checkpoint: () => scope.checkpoint() }));
+    }
 }

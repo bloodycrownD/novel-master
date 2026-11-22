@@ -9,13 +9,13 @@
 
 /** 保存云同步配置的输入（含明文 SK，仅写入时短暂存在内存）。 */
 export interface CloudSyncConfigInput {
-  endpoint: string;
-  bucket: string;
-  region: string;
-  pathPrefix: string;
-  accessKeyId: string;
-  /** 留空表示保留已存密钥（由各端 store 的校验策略决定是否允许）。 */
-  secretAccessKey?: string;
-  forcePathStyle: boolean;
-  deviceLabel?: string;
+    endpoint: string;
+    bucket: string;
+    region: string;
+    pathPrefix: string;
+    accessKeyId: string;
+    /** 留空表示保留已存密钥（由各端 store 的校验策略决定是否允许）。 */
+    secretAccessKey?: string;
+    forcePathStyle: boolean;
+    deviceLabel?: string;
 }

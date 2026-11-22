@@ -14,68 +14,68 @@ import { agentActivity } from "../src/main/runtime/agent-activity.js";
 
 // 必须在动态 import agent.ts 之前注册 hook，否则真实模块已加载、mock 不生效。
 register(
-  new URL("./agent-run-early-exit-mock-hook.mjs", import.meta.url),
-  import.meta.url,
+    new URL("./agent-run-early-exit-mock-hook.mjs", import.meta.url),
+    import.meta.url,
 );
 
 const { Agent } = await import("../src/main/ipc/handlers/agent.js");
 
 /** 等待 fire-and-forget 的 runAgentTurn 走完 catch+finally 的微任务队列。 */
 async function waitForBackgroundFinally(): Promise<void> {
-  for (let i = 0; i < 4; i++) {
-    await new Promise<void>((resolve) => setImmediate(resolve));
-  }
+    for (let i = 0; i < 4; i++) {
+        await new Promise<void>((resolve) => setImmediate(resolve));
+    }
 }
 
 describe("C-orch-1 handleAgentRun 早退兜底", () => {
-  afterEach(() => {
-    while (agentActivity.isActive()) {
-      agentActivity.decrement();
-    }
-  });
-
-  it("RUN_STARTED 之前 reject 时 refcount 回落到 0，再次 run 不被 AGENT_BUSY 挡，map 无泄漏", async () => {
-    const before = Agent.__testRunTrackingState();
-
-    const first = await Agent.run({
-      projectId: "p1",
-      sessionId: "s-early-exit",
-      userContent: "hi",
+    afterEach(() => {
+        while (agentActivity.isActive()) {
+            agentActivity.decrement();
+        }
     });
-    assert.equal(first.ok, true, "首次 run 应放行");
-    await waitForBackgroundFinally();
 
-    // ① refcount 必须 0；修复前这里永久为 true（C-orch-1 P0 bug）。
-    assert.equal(
-      agentActivity.isActive(),
-      false,
-      "早退兜底必须递减 refcount（C-orch-1）",
-    );
+    it("RUN_STARTED 之前 reject 时 refcount 回落到 0，再次 run 不被 AGENT_BUSY 挡，map 无泄漏", async () => {
+        const before = Agent.__testRunTrackingState();
 
-    // ② 再次调用不应被 AGENT_BUSY 门禁挡掉。
-    const second = await Agent.run({
-      projectId: "p1",
-      sessionId: "s-early-exit",
-      userContent: "again",
+        const first = await Agent.run({
+            projectId: "p1",
+            sessionId: "s-early-exit",
+            userContent: "hi",
+        });
+        assert.equal(first.ok, true, "首次 run 应放行");
+        await waitForBackgroundFinally();
+
+        // ① refcount 必须 0；修复前这里永久为 true（C-orch-1 P0 bug）。
+        assert.equal(
+            agentActivity.isActive(),
+            false,
+            "早退兜底必须递减 refcount（C-orch-1）",
+        );
+
+        // ② 再次调用不应被 AGENT_BUSY 门禁挡掉。
+        const second = await Agent.run({
+            projectId: "p1",
+            sessionId: "s-early-exit",
+            userContent: "again",
+        });
+        assert.equal(second.ok, true, "再次 run 不应返回 AGENT_BUSY");
+        if (!second.ok) {
+            assert.notEqual(second.error.code, "AGENT_BUSY");
+        }
+        await waitForBackgroundFinally();
+
+        // ③ 早退分支必须清掉 activeRuns，map 大小回到测试前水位。
+        const after = Agent.__testRunTrackingState();
+        assert.equal(
+            after.activeRunsCount,
+            before.activeRunsCount,
+            "activeRuns 不应泄漏 entry",
+        );
+        assert.equal(
+            after.sessionRunIdsCount,
+            before.sessionRunIdsCount,
+            "sessionRunIds 不应残留",
+        );
+        assert.equal(agentActivity.isActive(), false, "两次早退后 refcount 仍归零");
     });
-    assert.equal(second.ok, true, "再次 run 不应返回 AGENT_BUSY");
-    if (!second.ok) {
-      assert.notEqual(second.error.code, "AGENT_BUSY");
-    }
-    await waitForBackgroundFinally();
-
-    // ③ 早退分支必须清掉 activeRuns，map 大小回到测试前水位。
-    const after = Agent.__testRunTrackingState();
-    assert.equal(
-      after.activeRunsCount,
-      before.activeRunsCount,
-      "activeRuns 不应泄漏 entry",
-    );
-    assert.equal(
-      after.sessionRunIdsCount,
-      before.sessionRunIdsCount,
-      "sessionRunIds 不应残留",
-    );
-    assert.equal(agentActivity.isActive(), false, "两次早退后 refcount 仍归零");
-  });
 });

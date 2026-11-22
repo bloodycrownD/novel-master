@@ -10,91 +10,91 @@ import { XMLParser } from "fast-xml-parser";
 import { Xml } from "@/common/xml.js";
 
 type ParsedUserVfsActionElement = {
-  readonly name: string;
-  readonly attrs: Readonly<Record<string, string>>;
-  readonly params: Record<string, unknown>;
+    readonly name: string;
+    readonly attrs: Readonly<Record<string, string>>;
+    readonly params: Record<string, unknown>;
 };
 
 const actionParser = new XMLParser({
-  ignoreAttributes: false,
-  attributeNamePrefix: "",
-  trimValues: false,
-  parseTagValue: false,
-  parseAttributeValue: false,
-  processEntities: false,
-  preserveOrder: true,
-  stopNodes: ["*.action"],
+    ignoreAttributes: false,
+    attributeNamePrefix: "",
+    trimValues: false,
+    parseTagValue: false,
+    parseAttributeValue: false,
+    processEntities: false,
+    preserveOrder: true,
+    stopNodes: ["*.action"],
 });
 
 export const UserVfsActionXml = {
-  /** 通用 action XML：`<action name="…">{json}</action>`。 */
-  build(name: string, params: Record<string, unknown>): string {
-    const body = Xml.escapeText(JSON.stringify(params, null, 2));
-    return `<action name="${Xml.escapeAttr(name)}">\n${body}\n</action>`;
-  },
+    /** 通用 action XML：`<action name="…">{json}</action>`。 */
+    build(name: string, params: Record<string, unknown>): string {
+        const body = Xml.escapeText(JSON.stringify(params, null, 2));
+        return `<action name="${Xml.escapeAttr(name)}">\n${body}\n</action>`;
+    },
 
-  /** 解析文本中全部 action；非法 XML 或非法 JSON 按空参数处理。 */
-  parseFromText(text: string): readonly ParsedUserVfsActionElement[] {
-    if (!text.includes("<action")) {
-      return [];
-    }
-    let document: unknown;
-    try {
-      document = actionParser.parse(`<root>${text}</root>`);
-    } catch {
-      return [];
-    }
-    const parsed: ParsedUserVfsActionElement[] = [];
-    UserVfsActionXml.walk(document, parsed);
-    return parsed;
-  },
+    /** 解析文本中全部 action；非法 XML 或非法 JSON 按空参数处理。 */
+    parseFromText(text: string): readonly ParsedUserVfsActionElement[] {
+        if (!text.includes("<action")) {
+            return [];
+        }
+        let document: unknown;
+        try {
+            document = actionParser.parse(`<root>${text}</root>`);
+        } catch {
+            return [];
+        }
+        const parsed: ParsedUserVfsActionElement[] = [];
+        UserVfsActionXml.walk(document, parsed);
+        return parsed;
+    },
 
-  /** nm-style: keep-local — XML 树遍历与 action 节点提取是 codec 的单一解析阶段。 */
-  walk(nodes: unknown, parsed: ParsedUserVfsActionElement[]): void {
-    if (!Array.isArray(nodes)) {
-      return;
-    }
-    for (const node of nodes) {
-      if (node == null || typeof node !== "object" || Array.isArray(node)) {
-        continue;
-      }
-      const record = node as Record<string, unknown>;
-      const children = record.action;
-      if (Array.isArray(children)) {
-        const attrs: Record<string, string> = {};
-        const rawAttrs = record[":@"];
-        if (rawAttrs != null && typeof rawAttrs === "object" && !Array.isArray(rawAttrs)) {
-          for (const [key, value] of Object.entries(rawAttrs)) {
-            if (typeof value === "string") {
-              attrs[key] = Xml.unescapeText(value);
+    /** nm-style: keep-local — XML 树遍历与 action 节点提取是 codec 的单一解析阶段。 */
+    walk(nodes: unknown, parsed: ParsedUserVfsActionElement[]): void {
+        if (!Array.isArray(nodes)) {
+            return;
+        }
+        for (const node of nodes) {
+            if (node == null || typeof node !== "object" || Array.isArray(node)) {
+                continue;
             }
-          }
-        }
-        const name = attrs.name ?? "";
-        if (name !== "") {
-          const body = children.find((child) => child != null && typeof child === "object" && typeof (child as Record<string, unknown>)["#text"] === "string");
-          const rawBody = body == null ? "" : String((body as Record<string, unknown>)["#text"]);
-          const raw = Xml.unescapeText(rawBody).trim();
-          let params: Record<string, unknown> = {};
-          if (raw !== "") {
-            try {
-              const value: unknown = JSON.parse(raw);
-              if (value != null && typeof value === "object" && !Array.isArray(value)) {
-                params = value as Record<string, unknown>;
-              }
-            } catch {
-              // 非法 JSON 按空参数处理
+            const record = node as Record<string, unknown>;
+            const children = record.action;
+            if (Array.isArray(children)) {
+                const attrs: Record<string, string> = {};
+                const rawAttrs = record[":@"];
+                if (rawAttrs != null && typeof rawAttrs === "object" && !Array.isArray(rawAttrs)) {
+                    for (const [key, value] of Object.entries(rawAttrs)) {
+                        if (typeof value === "string") {
+                            attrs[key] = Xml.unescapeText(value);
+                        }
+                    }
+                }
+                const name = attrs.name ?? "";
+                if (name !== "") {
+                    const body = children.find((child) => child != null && typeof child === "object" && typeof (child as Record<string, unknown>)["#text"] === "string");
+                    const rawBody = body == null ? "" : String((body as Record<string, unknown>)["#text"]);
+                    const raw = Xml.unescapeText(rawBody).trim();
+                    let params: Record<string, unknown> = {};
+                    if (raw !== "") {
+                        try {
+                            const value: unknown = JSON.parse(raw);
+                            if (value != null && typeof value === "object" && !Array.isArray(value)) {
+                                params = value as Record<string, unknown>;
+                            }
+                        } catch {
+                            // 非法 JSON 按空参数处理
+                        }
+                    }
+                    parsed.push({ name, attrs, params });
+                }
+                continue;
             }
-          }
-          parsed.push({ name, attrs, params });
+            for (const value of Object.values(record)) {
+                if (Array.isArray(value)) {
+                    UserVfsActionXml.walk(value, parsed);
+                }
+            }
         }
-        continue;
-      }
-      for (const value of Object.values(record)) {
-        if (Array.isArray(value)) {
-          UserVfsActionXml.walk(value, parsed);
-        }
-      }
-    }
-  },
+    },
 } as const;

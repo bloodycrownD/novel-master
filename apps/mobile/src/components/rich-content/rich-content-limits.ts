@@ -9,13 +9,13 @@ export const RICH_CONTENT_MAX_CHARS = 12_000;
 export const RICH_DOCUMENT_WEBVIEW_MAX_CHARS = 200_000;
 
 export namespace RichContentLimits {
-  /** Skip RenderHTML when body is too large (FlatList performance guard). */
-  export function isOverLimit(content: string): boolean {
-    return content.length > RICH_CONTENT_MAX_CHARS;
-  }
+    /** Skip RenderHTML when body is too large (FlatList performance guard). */
+    export function isOverLimit(content: string): boolean {
+        return content.length > RICH_CONTENT_MAX_CHARS;
+    }
 
-  /** WebView 文档预览的 over-limit 判定（见 {@link RICH_DOCUMENT_WEBVIEW_MAX_CHARS}）。 */
-  export function isWebViewDocumentOverLimit(content: string): boolean {
-    return content.length > RICH_DOCUMENT_WEBVIEW_MAX_CHARS;
-  }
+    /** WebView 文档预览的 over-limit 判定（见 {@link RICH_DOCUMENT_WEBVIEW_MAX_CHARS}）。 */
+    export function isWebViewDocumentOverLimit(content: string): boolean {
+        return content.length > RICH_DOCUMENT_WEBVIEW_MAX_CHARS;
+    }
 }

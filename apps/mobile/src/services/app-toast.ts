@@ -5,14 +5,17 @@
  */
 type AppToastSink = (message: string) => void;
 
-let sink: AppToastSink | null = null;
+/** toast 实现槽（模块内 holder，对象管理；null = ToastHost 未挂载，静默丢弃）。 */
+const toastSlot = {
+    sink: null as AppToastSink | null,
+};
 
 export namespace AppToast {
-  export function registerSink(next: AppToastSink | null): void {
-    sink = next;
-  }
+    export function registerSink(next: AppToastSink | null): void {
+        toastSlot.sink = next;
+    }
 
-  export function show(message: string): void {
-    sink?.(message);
-  }
+    export function show(message: string): void {
+        toastSlot.sink?.(message);
+    }
 }

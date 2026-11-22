@@ -22,9 +22,9 @@
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {Linking, Pressable, StyleSheet, Text, View} from 'react-native';
 import {
-  useNavigation,
-  useRoute,
-  type RouteProp,
+    useNavigation,
+    useRoute,
+    type RouteProp,
 } from '@react-navigation/native';
 import type {ChatMessageData} from '@novel-master/core/chat';
 import {ABORT_KEY} from '@novel-master/core/abort';
@@ -32,7 +32,7 @@ import type {SkillToolRef} from '@novel-master/core/chat';
 import {ChatStreamMetricsBarLive, SettledMetrics} from '../../components/chat/ChatStreamMetricsBarLive';
 import {ChatConversationWebView} from '../../components/chat/ChatConversationWebView';
 import {AppToast} from '@/services/app-toast';
-import {chatLinkResolver} from '@novel-master/core/chat';
+import {ChatLinkResolver} from '@novel-master/core/chat';
 import type {ChatConversationWebViewHandle} from '../../components/chat/ChatConversationWebView';
 import {promptTurnDetailSlot} from '../../components/prompt/prompt-turn-callback';
 import {useToast} from '../../components/chrome/ToastHost';
@@ -56,375 +56,376 @@ type ScreenRoute = RouteProp<RootStackParamList, 'SubagentSessionView'>;
 const SUBAGENT_HANDLE_ID = 'subagent-transcript';
 
 export function SubagentSessionScreen() {
-  const {tokens} = useTheme();
-  const {showToast} = useToast();
-  const runtime = useRuntime();
-  const {appUi} = useNovelMaster();
-  const navigation = useNavigation();
-  const route = useRoute<ScreenRoute>();
-  const {sessionId, projectId, parentSessionId} = route.params;
-  const manager = runtime.sessionStreamUnitManager;
+    const {tokens} = useTheme();
+    const {showToast} = useToast();
+    const runtime = useRuntime();
+    const {appUi} = useNovelMaster();
+    const navigation = useNavigation();
+    const route = useRoute<ScreenRoute>();
+    const {sessionId, projectId, parentSessionId} = route.params;
+    const manager = runtime.sessionStreamUnitManager;
 
-  const [messages, setMessages] = useState<readonly ChatMessageData[]>([]);
-  const [initialLoading, setInitialLoading] = useState(true);
-  const [richTextEnabled, setRichTextEnabled] = useState(false);
-  const transcriptWebRef = useRef<ChatConversationWebViewHandle>(null);
+    const [messages, setMessages] = useState<readonly ChatMessageData[]>([]);
+    const [initialLoading, setInitialLoading] = useState(true);
+    const [richTextEnabled, setRichTextEnabled] = useState(false);
+    const transcriptWebRef = useRef<ChatConversationWebViewHandle>(null);
 
-  // ===== 单元投影订阅（与 ChatTabProvider 同构：subscribe + sync） =====
-  const [unitView, setUnitView] = useState<SessionStreamUnitView | null>(() =>
-    sessionId != null ? manager.snapshot(sessionId) : null,
-  );
-  useEffect(() => {
-    const sync = () =>
-      setUnitView(sessionId != null ? manager.snapshot(sessionId) : null);
-    sync();
-    return manager.subscribe(sync);
-  }, [manager, sessionId]);
+    // ===== 单元投影订阅（与 ChatTabProvider 同构：subscribe + sync） =====
+    const [unitView, setUnitView] = useState<SessionStreamUnitView | null>(() =>
+        sessionId != null ? manager.snapshot(sessionId) : null,
+    );
+    useEffect(() => {
+        const sync = () =>
+            setUnitView(sessionId != null ? manager.snapshot(sessionId) : null);
+        sync();
+        return manager.subscribe(sync);
+    }, [manager, sessionId]);
 
-  // 消息面：有单元（消费型/interrupted/宽限中的 settled）走单元管线水合，
-  // 无单元本地回源（run 早已结束且单元出表的兜底）。
-  const hasUnit = unitView != null;
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      if (sessionId == null) {
-        return [];
-      }
-      if (manager.snapshot(sessionId) != null) {
-        try {
-          // force：宽限期内的 settled 单元可能还挂着首轮缓存，复用场景（第二轮 run）
-          // 必须回源，否则进屏先看到旧内容
-          const read = await manager.loadSessionTailMessages(sessionId, {force: true});
-          if (!read.ok) {
-            showToast(ToastMessage.toast('加载子会话失败', read.error));
-            return [];
-          }
-          return read.value ?? [];
-        } catch (error) {
-          showToast(ToastMessage.toast('加载子会话失败', error));
-          return [];
-        }
-      }
-      try {
-        const read = await runtime.messages.listBySession(sessionId);
-        if (read.kind === 'failed') throw read.error;
-        // 未注入 hooks：中断分支不可达；真出现时按「本次不采纳」保留空面。
-        if (read.kind !== 'completed') return [];
-        return read.value;
-      } catch (error) {
-        showToast(ToastMessage.toast('加载子会话失败', error));
-        return [];
-      }
-    })()
-      .then(list => {
-        if (!cancelled) {
-          setMessages(list);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setInitialLoading(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount/会话变化时水合一次；后续刷新由投影自驱
-  }, [sessionId, hasUnit]);
+    // 消息面：有单元（消费型/interrupted/宽限中的 settled）走单元管线水合，
+    // 无单元本地回源（run 早已结束且单元出表的兜底）。
+    const hasUnit = unitView != null;
+    useEffect(() => {
+        let cancelled = false;
+        void (async () => {
+            if (sessionId == null) {
+                return [];
+            }
+            if (manager.snapshot(sessionId) != null) {
+                try {
+                    // force：宽限期内的 settled 单元可能还挂着首轮缓存，复用场景（第二轮 run）
+                    // 必须回源，否则进屏先看到旧内容
+                    const read = await manager.loadSessionTailMessages(sessionId, {force: true});
+                    if (!read.ok) {
+                        showToast(ToastMessage.toast(coreT({key: "ui.session.subsession_load_failed"}), read.error));
+                        return [];
+                    }
+                    return read.value ?? [];
+                } catch (error) {
+                    showToast(ToastMessage.toast(coreT({key: "ui.session.subsession_load_failed"}), error));
+                    return [];
+                }
+            }
+            try {
+                const read = await runtime.messages.listBySession(sessionId);
+                // nm-throw: keep — UI 回调解包边界：失败位转 throw 交本地 catch toast（React 回调，调用方改不动）
+                if (read.kind === 'failed') throw read.error;
+                // 未注入 hooks：中断分支不可达；真出现时按「本次不采纳」保留空面。
+                if (read.kind !== 'completed') return [];
+                return read.value;
+            } catch (error) {
+                showToast(ToastMessage.toast(coreT({key: "ui.session.subsession_load_failed"}), error));
+                return [];
+            }
+        })()
+            .then(list => {
+                if (!cancelled) {
+                    setMessages(list);
+                }
+            })
+            .finally(() => {
+                if (!cancelled) {
+                    setInitialLoading(false);
+                }
+            });
+        return () => {
+            cancelled = true;
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- mount/会话变化时水合一次；后续刷新由投影自驱
+    }, [sessionId, hasUnit]);
 
-  // 继承主会话的富文本偏好
-  useEffect(() => {
-    if (appUi == null) {
-      return;
-    }
-    const prefRead = AppUiPrefIo.readBoolPref(appUi, APP_UI_KEY_CHAT_RICH_TEXT, false);
-    prefRead.then(setRichTextEnabled).catch(() => undefined);
-  }, [appUi]);
-
-  // ===== webview 句柄 attach（ready 后挂进单元——注入/流式推送的落点） =====
-  const [webviewReadyEpoch, setWebviewReadyEpoch] = useState(0);
-  const onWebviewReady = useCallback(() => {
-    setWebviewReadyEpoch(epoch => epoch + 1);
-  }, []);
-
-  useEffect(() => {
-    if (sessionId == null || webviewReadyEpoch === 0) {
-      return;
-    }
-    const web = transcriptWebRef.current;
-    if (web == null) {
-      return;
-    }
-    const sid = sessionId;
-    // 单元载荷/控制消息 → webview handle 适配（与主屏同一份哑引擎契约，
-    // 映射细节见 services/session-stream-webview-adapter）。
-    const handle = SessionStreamWebviewAdapter.create(SUBAGENT_HANDLE_ID, web);
-    manager.attachWebview(sid, handle);
-    return () => {
-      manager.detachWebview(sid, handle.handleId);
-    };
-  }, [manager, sessionId, webviewReadyEpoch, hasUnit]);
-
-  // 嵌套子会话（孙会话）也共享同一个根父工作区，因此透传同一个 parentSessionId，
-  // 而不是当前子会话的 id。
-  const onOpenSubagentSession = useCallback(
-    (childSessionId: string) => {
-      navigation.navigate('SubagentSessionView', {
-        projectId,
-        sessionId: childSessionId,
-        parentSessionId,
-      });
-    },
-    [navigation, projectId, parentSessionId],
-  );
-
-  // 文件引入卡片点击：导航到文件编辑器。文件在共享的父会话工作区，
-  // 所以 session scope 用 parentSessionId（而非当前子会话 id），
-  // 否则 FileEditor 按子 session VFS 查不到文件会报「文件不存在或已删除」。
-  const onOpenToolFile = useCallback(
-    (path: string) => {
-      // 子会话屏没有工作区列表（state 只有 messages / unitView 等），
-      // 显式写 no-op：保存后的刷新对象是主会话的工作区，由主会话侧重进时补齐。
-      // 刻意不为该屏新建列表 state（那是产品级口径，不在本条范围）。
-      fileEditorOnSessionVfsSavedSlot.set(() => {});
-      navigation.navigate('FileEditor', {
-        path,
-        scopeKind: 'session',
-        projectId,
-        sessionId: parentSessionId,
-      });
-    },
-    [navigation, projectId, parentSessionId],
-  );
-
-  // markdown 链接点击：识别与探测在 chat-link-nav 纯函数完成，这里只执行意图。
-  // 子会话共享父会话工作区，故 session 探测/打开均用 parentSessionId（与
-  // onOpenToolFile 同口径）；http(s) 外跳，失败静默兜底。
-  const onLinkClick = useCallback(
-    (href: string) => {
-      const sessionVfs = runtime.sessionVfs(projectId, parentSessionId);
-      const projectVfs = runtime.projectVfs(projectId);
-      void ChatLinkNav.resolveChatLinkIntent(href, {sessionVfs, projectVfs}).then(
-        intent => {
-          if (intent.kind === 'external') {
-            void Linking.openURL(intent.url).catch(() => undefined);
+    // 继承主会话的富文本偏好
+    useEffect(() => {
+        if (appUi == null) {
             return;
-          }
-          if (intent.kind === 'not-found') {
-            // 路径型链接双域探测未命中：用户拍板弹提示，不再静默无动作
-            AppToast.show(coreT(chatLinkResolver.notFoundMessage(intent.path)));
+        }
+        const prefRead = AppUiPrefIo.readBoolPref(appUi, APP_UI_KEY_CHAT_RICH_TEXT, false);
+        prefRead.then(setRichTextEnabled).catch(() => undefined);
+    }, [appUi]);
+
+    // ===== webview 句柄 attach（ready 后挂进单元——注入/流式推送的落点） =====
+    const [webviewReadyEpoch, setWebviewReadyEpoch] = useState(0);
+    const onWebviewReady = useCallback(() => {
+        setWebviewReadyEpoch(epoch => epoch + 1);
+    }, []);
+
+    useEffect(() => {
+        if (sessionId == null || webviewReadyEpoch === 0) {
             return;
-          }
-          if (intent.kind === 'file') {
-            if (intent.scope === 'session') {
-              // 同 onOpenToolFile：子会话屏无工作区列表，回调写 no-op。
-              fileEditorOnSessionVfsSavedSlot.set(() => {});
-              navigation.navigate('FileEditor', {
-                path: intent.path,
+        }
+        const web = transcriptWebRef.current;
+        if (web == null) {
+            return;
+        }
+        const sid = sessionId;
+        // 单元载荷/控制消息 → webview handle 适配（与主屏同一份哑引擎契约，
+        // 映射细节见 services/session-stream-webview-adapter）。
+        const handle = SessionStreamWebviewAdapter.create(SUBAGENT_HANDLE_ID, web);
+        manager.attachWebview(sid, handle);
+        return () => {
+            manager.detachWebview(sid, handle.handleId);
+        };
+    }, [manager, sessionId, webviewReadyEpoch, hasUnit]);
+
+    // 嵌套子会话（孙会话）也共享同一个根父工作区，因此透传同一个 parentSessionId，
+    // 而不是当前子会话的 id。
+    const onOpenSubagentSession = useCallback(
+        (childSessionId: string) => {
+            navigation.navigate('SubagentSessionView', {
+                projectId,
+                sessionId: childSessionId,
+                parentSessionId,
+            });
+        },
+        [navigation, projectId, parentSessionId],
+    );
+
+    // 文件引入卡片点击：导航到文件编辑器。文件在共享的父会话工作区，
+    // 所以 session scope 用 parentSessionId（而非当前子会话 id），
+    // 否则 FileEditor 按子 session VFS 查不到文件会报「文件不存在或已删除」。
+    const onOpenToolFile = useCallback(
+        (path: string) => {
+            // 子会话屏没有工作区列表（state 只有 messages / unitView 等），
+            // 显式写 no-op：保存后的刷新对象是主会话的工作区，由主会话侧重进时补齐。
+            // 刻意不为该屏新建列表 state（那是产品级口径，不在本条范围）。
+            fileEditorOnSessionVfsSavedSlot.set(() => {});
+            navigation.navigate('FileEditor', {
+                path,
                 scopeKind: 'session',
                 projectId,
                 sessionId: parentSessionId,
-              });
-            } else {
-              navigation.navigate('FileEditor', {
-                path: intent.path,
-                scopeKind: 'project',
-                projectId,
-              });
-            }
-          }
+            });
         },
-      );
-    },
-    [runtime, navigation, projectId, parentSessionId],
-  );
-
-  // 技能卡片跳详情：与主会话 useChatTabScope 的 openSkillDetail 同实现。
-  // write/edit 缺省域解析出的三元组不带 projectId（webview 侧无会话上下文），
-  // 这里按当前子会话所属项目补齐——补不出来（无项目）则不跳，避免进错项目。
-  const openSkillDetail = useCallback(
-    (ref: SkillToolRef) => {
-      const isProject = ref.domain === 'project';
-      const target = isProject ? ref.projectId ?? projectId : undefined;
-      if (isProject && target == null) {
-        return;
-      }
-      navigation.navigate('SkillDetail', {
-        domain: ref.domain,
-        name: ref.name,
-        ...(target != null ? {projectId: target} : {}),
-      });
-    },
-    [navigation, projectId],
-  );
-
-  // 工具结果阅读（search/curl/grep/glob 等无专属跳转的卡片）：同样复用
-  // PromptTurnDetail 阅读页。正文不走路由参数（可达数百 KB），照主会话
-  // useOpenPromptDetail 先例写模块级单例、挂载时读走即清；turnId 作伪 path
-  // 稳定 key。有 inputJson（卡片带入参）时铺「【输入】+【输出】」两段。
-  // useCallback：ChatConversationWebView 的 memo 比较器不比 handler prop，
-  // 稳定引用是它唯一的兜底（每次渲染新建函数会让整个 webview 重挂）。
-  const openToolResult = useCallback(
-    (payload: {title: string; content: string; inputJson?: string}) => {
-      const {title, content, inputJson} = payload;
-      const bodyWithInput = `【输入】\n${inputJson}\n\n【输出】\n${content}`;
-      const body = inputJson ? bodyWithInput : content;
-      promptTurnDetailSlot.set({title, body});
-      navigation.navigate('PromptTurnDetail', {
-        title,
-        turnId: `tool-result-${title}`,
-      });
-    },
-    [navigation],
-  );
-
-  const sessionKey = useMemo(
-    () => `${projectId}:${sessionId}`,
-    [projectId, sessionId],
-  );
-
-  const flags = useMemo(() => ({richText: richTextEnabled}), [richTextEnabled]);
-
-  const onStop = useCallback(() => {
-    if (sessionId == null) {
-      return;
-    }
-    // 与主会话停止入口一致：经 manager.stop(ABORT_KEY.agent(...)) →
-    // abortRegistry.abort 触发 core 层中断；后续 FINISHED 照常走事件路径收尾
-    //（投影回落、按钮消失）。
-    manager.stop(ABORT_KEY.agent(sessionId));
-  }, [manager, sessionId]);
-
-  if (initialLoading) {
-    return (
-      <View style={[styles.root, {backgroundColor: tokens.background}]}>
-        <View style={styles.center}>
-          <Text style={{color: tokens.textSecondary}}>加载中…</Text>
-        </View>
-      </View>
+        [navigation, projectId, parentSessionId],
     );
-  }
 
-  const status = unitView?.status;
-  const agentRunning = status === 'starting' || status === 'running';
-  // 消费型单元复用（同一子会话第二轮 run）会先出现「新单元 + 空消息面」的
-  // 一拍（tail 还在路上）；空数组不是 nullish，直接采用会向宿主发一帧空
-  // 转录（判 shrunk → 清屏 + 回滚滚动）。非空才采用单元投影，否则回落本地
-  // 消息面（与 manager readMessagesSnapshot 的 idle 回落同语义，P2-5）。
-  const unitMessages = unitView == null ? [] : unitView.messages;
-  const displayMessages = unitMessages.length > 0 ? unitMessages : messages;
-  // 单元刚建立时 streamRowIds 是空 Map（不是 null），`??` 会遮住 manager
-  // idle 里上一轮交接的映射；非空优先（P1-3），避免已接管行回退 DB id。
-  const unitRowIds = unitView?.streamRowIds;
-  let viewRowIds: ReadonlyMap<string, string> | undefined;
-  if (sessionId != null) {
-    viewRowIds = manager.readMessagesSnapshot(sessionId)?.streamRowIds;
-  }
-  const hasUnitRowIds = unitRowIds != null && unitRowIds.size > 0;
-  const fallbackRowIds = viewRowIds ?? EMPTY_STREAM_ROW_IDS;
-  const streamRowIds = hasUnitRowIds ? unitRowIds : fallbackRowIds;
-  // 中断态只有一处标识（cr-fix-spec mobile-metrics/C-4）：指标条已能显示
-  // 中断现场（终态快照带可显示指标 → 条上「已中断」徽标）时不重复渲染
-  // 屏级横幅；指标条不可见（起点与指标皆无）才由横幅兜底可感知性。
-  const interrupted = status === 'interrupted';
-  const hasMetrics = unitView != null && SettledMetrics.hasVisible(unitView);
-  const showInterrupted = interrupted && sessionId != null && !hasMetrics;
+    // markdown 链接点击：识别与探测在 chat-link-nav 纯函数完成，这里只执行意图。
+    // 子会话共享父会话工作区，故 session 探测/打开均用 parentSessionId（与
+    // onOpenToolFile 同口径）；http(s) 外跳，失败静默兜底。
+    const onLinkClick = useCallback(
+        (href: string) => {
+            const sessionVfs = runtime.sessionVfs(projectId, parentSessionId);
+            const projectVfs = runtime.projectVfs(projectId);
+            void ChatLinkNav.resolveChatLinkIntent(href, {sessionVfs, projectVfs}).then(
+                intent => {
+                    if (intent.kind === 'external') {
+                        void Linking.openURL(intent.url).catch(() => undefined);
+                        return;
+                    }
+                    if (intent.kind === 'not-found') {
+                        // 路径型链接双域探测未命中：用户拍板弹提示，不再静默无动作
+                        AppToast.show(coreT(ChatLinkResolver.notFoundMessage(intent.path)));
+                        return;
+                    }
+                    if (intent.kind === 'file') {
+                        if (intent.scope === 'session') {
+                            // 同 onOpenToolFile：子会话屏无工作区列表，回调写 no-op。
+                            fileEditorOnSessionVfsSavedSlot.set(() => {});
+                            navigation.navigate('FileEditor', {
+                                path: intent.path,
+                                scopeKind: 'session',
+                                projectId,
+                                sessionId: parentSessionId,
+                            });
+                        } else {
+                            navigation.navigate('FileEditor', {
+                                path: intent.path,
+                                scopeKind: 'project',
+                                projectId,
+                            });
+                        }
+                    }
+                },
+            );
+        },
+        [runtime, navigation, projectId, parentSessionId],
+    );
 
-  return (
-    <View style={[styles.root, {backgroundColor: tokens.background}]}>
-      {showInterrupted ? (
-        // 中断现场的正面标识（Step 7，与主屏指标条同语义）：轻量文本行，
-        // 复用既有视觉 token，不动 webview 协议。
-        <View style={[styles.interruptedBanner, {borderColor: tokens.danger}]}>
-          <Text style={[styles.interruptedText, {color: tokens.danger}]}>
-            已中断
-          </Text>
-        </View>
-      ) : null}
-      {/* 指标条与主会话同构（stream-metrics-tokens）：子会话 run 由 manager 的
+    // 技能卡片跳详情：与主会话 useChatTabScope 的 openSkillDetail 同实现。
+    // write/edit 缺省域解析出的三元组不带 projectId（webview 侧无会话上下文），
+    // 这里按当前子会话所属项目补齐——补不出来（无项目）则不跳，避免进错项目。
+    const openSkillDetail = useCallback(
+        (ref: SkillToolRef) => {
+            const isProject = ref.domain === 'project';
+            const target = isProject ? ref.projectId ?? projectId : undefined;
+            if (isProject && target == null) {
+                return;
+            }
+            navigation.navigate('SkillDetail', {
+                domain: ref.domain,
+                name: ref.name,
+                ...(target != null ? {projectId: target} : {}),
+            });
+        },
+        [navigation, projectId],
+    );
+
+    // 工具结果阅读（search/curl/grep/glob 等无专属跳转的卡片）：同样复用
+    // PromptTurnDetail 阅读页。正文不走路由参数（可达数百 KB），照主会话
+    // useOpenPromptDetail 先例写模块级单例、挂载时读走即清；turnId 作伪 path
+    // 稳定 key。有 inputJson（卡片带入参）时铺「【输入】+【输出】」两段。
+    // useCallback：ChatConversationWebView 的 memo 比较器不比 handler prop，
+    // 稳定引用是它唯一的兜底（每次渲染新建函数会让整个 webview 重挂）。
+    const openToolResult = useCallback(
+        (payload: {title: string; content: string; inputJson?: string}) => {
+            const {title, content, inputJson} = payload;
+            const bodyWithInput = `${coreT({key: "ui.chat.io_input_label"})}\n${inputJson}\n\n${coreT({key: "ui.chat.io_output_label"})}\n${content}`;
+            const body = inputJson ? bodyWithInput : content;
+            promptTurnDetailSlot.set({title, body});
+            navigation.navigate('PromptTurnDetail', {
+                title,
+                turnId: `tool-result-${title}`,
+            });
+        },
+        [navigation],
+    );
+
+    const sessionKey = useMemo(
+        () => `${projectId}:${sessionId}`,
+        [projectId, sessionId],
+    );
+
+    const flags = useMemo(() => ({richText: richTextEnabled}), [richTextEnabled]);
+
+    const onStop = useCallback(() => {
+        if (sessionId == null) {
+            return;
+        }
+        // 与主会话停止入口一致：经 manager.stop(ABORT_KEY.agent(...)) →
+        // abortRegistry.abort 触发 core 层中断；后续 FINISHED 照常走事件路径收尾
+        //（投影回落、按钮消失）。
+        manager.stop(ABORT_KEY.agent(sessionId));
+    }, [manager, sessionId]);
+
+    if (initialLoading) {
+        return (
+            <View style={[styles.root, {backgroundColor: tokens.background}]}>
+                <View style={styles.center}>
+                    <Text style={{color: tokens.textSecondary}}>{coreT({key: "ui.common.loading"})}</Text>
+                </View>
+            </View>
+        );
+    }
+
+    const status = unitView?.status;
+    const agentRunning = status === 'starting' || status === 'running';
+    // 消费型单元复用（同一子会话第二轮 run）会先出现「新单元 + 空消息面」的
+    // 一拍（tail 还在路上）；空数组不是 nullish，直接采用会向宿主发一帧空
+    // 转录（判 shrunk → 清屏 + 回滚滚动）。非空才采用单元投影，否则回落本地
+    // 消息面（与 manager readMessagesSnapshot 的 idle 回落同语义，P2-5）。
+    const unitMessages = unitView == null ? [] : unitView.messages;
+    const displayMessages = unitMessages.length > 0 ? unitMessages : messages;
+    // 单元刚建立时 streamRowIds 是空 Map（不是 null），`??` 会遮住 manager
+    // idle 里上一轮交接的映射；非空优先（P1-3），避免已接管行回退 DB id。
+    const unitRowIds = unitView?.streamRowIds;
+    let viewRowIds: ReadonlyMap<string, string> | undefined;
+    if (sessionId != null) {
+        viewRowIds = manager.readMessagesSnapshot(sessionId)?.streamRowIds;
+    }
+    const hasUnitRowIds = unitRowIds != null && unitRowIds.size > 0;
+    const fallbackRowIds = viewRowIds ?? EMPTY_STREAM_ROW_IDS;
+    const streamRowIds = hasUnitRowIds ? unitRowIds : fallbackRowIds;
+    // 中断态只有一处标识（cr-fix-spec mobile-metrics/C-4）：指标条已能显示
+    // 中断现场（终态快照带可显示指标 → 条上「已中断」徽标）时不重复渲染
+    // 屏级横幅；指标条不可见（起点与指标皆无）才由横幅兜底可感知性。
+    const interrupted = status === 'interrupted';
+    const hasMetrics = unitView != null && SettledMetrics.hasVisible(unitView);
+    const showInterrupted = interrupted && sessionId != null && !hasMetrics;
+
+    return (
+        <View style={[styles.root, {backgroundColor: tokens.background}]}>
+            {showInterrupted ? (
+                // 中断现场的正面标识（Step 7，与主屏指标条同语义）：轻量文本行，
+                // 复用既有视觉 token，不动 webview 协议。
+                <View style={[styles.interruptedBanner, {borderColor: tokens.danger}]}>
+                    <Text style={[styles.interruptedText, {color: tokens.danger}]}>
+                        {coreT({key: "ui.transcript.tool_status.interrupted"})}
+                    </Text>
+                </View>
+            ) : null}
+            {/* 指标条与主会话同构（stream-metrics-tokens）：子会话 run 由 manager 的
           消费型单元承接，数据源同为「单元快照 / settled 投影」双源，故直接复用
           主会话那套组件——活跃期显示实时速率，终态显示收尾冻结的末值速率。
           metric-detail-sheet：点击弹用量详情 sheet（数据按子会话自身 sessionId
           统计）；子会话屏无 meta chip，上下文占用行不传读数（出「—」）。 */}
-      <ChatStreamMetricsBarLive
-        agentRunning={agentRunning}
-        sessionId={sessionId}
-      />
-      {displayMessages.length === 0 && !agentRunning ? (
-        <View style={styles.center}>
-          <Text style={{color: tokens.textSecondary}}>子会话暂无消息</Text>
+            <ChatStreamMetricsBarLive
+                agentRunning={agentRunning}
+                sessionId={sessionId}
+            />
+            {displayMessages.length === 0 && !agentRunning ? (
+                <View style={styles.center}>
+                    <Text style={{color: tokens.textSecondary}}>{coreT({key: "ui.chat.subagent_empty"})}</Text>
+                </View>
+            ) : (
+                <ChatConversationWebView
+                    ref={transcriptWebRef}
+                    transcriptOnly
+                    sessionKey={sessionKey}
+                    messages={displayMessages}
+                    streamingRows={TranscriptStreamProjection.buildStreamingRows(unitView)}
+                    streamRowIds={streamRowIds}
+                    // 孙任务 pending 卡的 title→child 映射：不传则子会话屏内的新建孙任务卡执行中不可点
+                    pendingSubagentSessions={unitView?.pendingChildrenByTitle}
+                    flags={flags}
+                    agentRunning={agentRunning}
+                    uiRunning={agentRunning}
+                    defaultScrollToBottom={false}
+                    onReady={onWebviewReady}
+                    onOpenToolFile={onOpenToolFile}
+                    onLinkClick={onLinkClick}
+                    onOpenSubagentSession={onOpenSubagentSession}
+                    onOpenSkillDetail={openSkillDetail}
+                    onOpenToolResult={openToolResult}
+                />
+            )}
+            {agentRunning ? (
+                <Pressable
+                    onPress={onStop}
+                    accessibilityLabel={coreT({key: "ui.chat.stop_subagent"})}
+                    style={[
+                        styles.stopBtn,
+                        {backgroundColor: tokens.danger, borderColor: tokens.border},
+                    ]}
+                >
+                    <Text style={styles.stopBtnText}>{coreT({key: "ui.common.stop"})}</Text>
+                </Pressable>
+            ) : null}
         </View>
-      ) : (
-        <ChatConversationWebView
-          ref={transcriptWebRef}
-          transcriptOnly
-          sessionKey={sessionKey}
-          messages={displayMessages}
-          streamingRows={TranscriptStreamProjection.buildStreamingRows(unitView)}
-          streamRowIds={streamRowIds}
-          // 孙任务 pending 卡的 title→child 映射：不传则子会话屏内的新建孙任务卡执行中不可点
-          pendingSubagentSessions={unitView?.pendingChildrenByTitle}
-          flags={flags}
-          agentRunning={agentRunning}
-          uiRunning={agentRunning}
-          defaultScrollToBottom={false}
-          onReady={onWebviewReady}
-          onOpenToolFile={onOpenToolFile}
-          onLinkClick={onLinkClick}
-          onOpenSubagentSession={onOpenSubagentSession}
-          onOpenSkillDetail={openSkillDetail}
-          onOpenToolResult={openToolResult}
-        />
-      )}
-      {agentRunning ? (
-        <Pressable
-          onPress={onStop}
-          accessibilityLabel="停止子会话"
-          style={[
-            styles.stopBtn,
-            {backgroundColor: tokens.danger, borderColor: tokens.border},
-          ]}
-        >
-          <Text style={styles.stopBtnText}>停止</Text>
-        </Pressable>
-      ) : null}
-    </View>
-  );
+    );
 }
 
 const styles = StyleSheet.create({
-  root: {flex: 1},
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  interruptedBanner: {
-    alignSelf: 'center',
-    marginTop: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  interruptedText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  stopBtn: {
-    position: 'absolute',
-    right: 16,
-    bottom: 24,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 999,
-    borderWidth: 1,
-    elevation: 4,
-  },
-  stopBtnText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
+    root: {flex: 1},
+    center: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 24,
+    },
+    interruptedBanner: {
+        alignSelf: 'center',
+        marginTop: 8,
+        paddingHorizontal: 12,
+        paddingVertical: 4,
+        borderRadius: 8,
+        borderWidth: 1,
+    },
+    interruptedText: {
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    stopBtn: {
+        position: 'absolute',
+        right: 16,
+        bottom: 24,
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        borderRadius: 999,
+        borderWidth: 1,
+        elevation: 4,
+    },
+    stopBtnText: {
+        color: '#fff',
+        fontSize: 14,
+        fontWeight: '600',
+    },
 });

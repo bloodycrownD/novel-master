@@ -9,97 +9,99 @@ import {MERMAID_VIEWER_DOUBLE_TAP_SCALE, MERMAID_VIEWER_MAX_SCALE, MERMAID_VIEWE
 import {readWebViewDistFile} from './helpers/read-webview-dist';
 
 const webSrc = (rel: string) =>
-  readFileSync(join(__dirname, '../src/web', rel), 'utf8');
+    readFileSync(join(__dirname, '../src/web', rel), 'utf8');
 
 const rnSrc = (rel: string) =>
-  readFileSync(join(__dirname, '../src', rel), 'utf8');
+    readFileSync(join(__dirname, '../src', rel), 'utf8');
 
 describe('mermaid 全屏查看器共享模块源码契约 (T-MF1)', () => {
-  it('runtime 含委托/克隆/post 双向通知，不含失败态匹配', () => {
-    const runtime = webSrc('shared/mermaid-fullscreen/mermaid-fullscreen.ts');
-    // document 级 click 事件委托：整树重建不丢监听
-    expect(runtime).toContain("closest('.mermaid-block__chart')");
-    // 克隆不移动：原图 DOM 零改动
-    expect(runtime).toContain('cloneNode(true)');
-    expect(runtime).toContain("querySelector('svg')");
-    // 对称消息模式：开/关都通知 RN
-    expect(runtime).toContain("'mermaidViewerOpened'");
-    expect(runtime).toContain("'mermaidViewerClosed'");
-    // 失败态（源码回退）不匹配选择器，天然不可进全屏
-    expect(runtime).not.toContain('.mermaid-failed');
-    expect(runtime).toContain("classList.add('mermaid-viewer-open')");
-  });
+    it('runtime 含委托/克隆/post 双向通知，不含失败态匹配', () => {
+        const runtime = webSrc('shared/mermaid-fullscreen/mermaid-fullscreen.ts');
+        // document 级 click 事件委托：整树重建不丢监听
+        expect(runtime).toContain("closest('.mermaid-block__chart')");
+        // 克隆不移动：原图 DOM 零改动
+        expect(runtime).toContain('cloneNode(true)');
+        expect(runtime).toContain("querySelector('svg')");
+        // 对称消息模式：开/关都通知 RN
+        expect(runtime).toContain("'mermaidViewerOpened'");
+        expect(runtime).toContain("'mermaidViewerClosed'");
+        // 失败态（源码回退）不匹配选择器，天然不可进全屏
+        expect(runtime).not.toContain('.mermaid-failed');
+        expect(runtime).toContain("classList.add('mermaid-viewer-open')");
+    });
 
-  it('attach 幂等守卫 + open 前成对校验 viewerSlot/_post（防叠加监听/白屏开门）', () => {
-    const runtime = webSrc('shared/mermaid-fullscreen/mermaid-fullscreen.ts');
-    // 重复 attach 只更新 post，不叠加 document 监听器
-    expect(runtime).toMatch(/if \(_delegationAttached\)/);
-    // 开门前成对校验：渲染器缺失白屏、post 缺失无法通知 RN 关闭
-    expect(runtime).toMatch(/if \(!viewerSlot\.has\(\) \|\| !_post\)/);
-  });
+    it('attach 幂等守卫 + open 前成对校验 viewerSlot/_post（防叠加监听/白屏开门）', () => {
+        const runtime = webSrc('shared/mermaid-fullscreen/mermaid-fullscreen.ts');
+        // 重复 attach 只更新 post，不叠加 document 监听器
+        // （守卫被 R3/R2 收编进 viewerRuntime 对象槽——正则对齐新形态，断言意图不变）
+        expect(runtime).toMatch(/if \(viewerRuntime\.delegationAttached\)/);
+        // 开门前成对校验：渲染器缺失白屏、post 缺失无法通知 RN 关闭
+        // （_post 被 R2 收编进 viewerRuntime 对象槽——正则对齐新形态，断言意图不变）
+        expect(runtime).toMatch(/if \(!viewerSlot\.has\(\) \|\| !viewerRuntime\.post\)/);
+    });
 
-  it('样式常量：主题变量 + z-index 对齐 menu 量级 + 禁滚动', () => {
-    const styles = webSrc(
-      'shared/mermaid-fullscreen/mermaid-fullscreen-styles.ts',
-    );
-    expect(styles).toContain('MERMAID_FULLSCREEN_CSS');
-    expect(styles).toContain('var(--bg');
-    expect(styles).toContain('var(--surface');
-    expect(styles).toContain('var(--text');
-    expect(styles).toMatch(/9998/);
-    expect(styles).toContain('.mermaid-fullscreen-backdrop');
-    expect(styles).toContain('body.mermaid-viewer-open');
-  });
+    it('样式常量：主题变量 + z-index 对齐 menu 量级 + 禁滚动', () => {
+        const styles = webSrc(
+            'shared/mermaid-fullscreen/mermaid-fullscreen-styles.ts',
+        );
+        expect(styles).toContain('MERMAID_FULLSCREEN_CSS');
+        expect(styles).toContain('var(--bg');
+        expect(styles).toContain('var(--surface');
+        expect(styles).toContain('var(--text');
+        expect(styles).toMatch(/9998/);
+        expect(styles).toContain('.mermaid-fullscreen-backdrop');
+        expect(styles).toContain('body.mermaid-viewer-open');
+    });
 });
 
 describe('mermaid 全屏查看器两管线接线 (T-MF3)', () => {
-  it('两 index.html 含 portal 宿主；chat 侧挂接由 runtime 工厂承担；两 bridge 含 closeMermaidViewer 分支', () => {
-    // rich-document：#overlay-portal 与 #doc 平级；chat：独立入口 index.html 的
-    // #mermaid-viewer-portal 与 #menu-portal 平级（composer-native-2026-10
-    // Step 6 合成包退役后，chat 侧壳为 chat-transcript 独立入口）。
-    expect(webSrc('rich-document/index.html')).toContain('id="overlay-portal"');
-    expect(webSrc('chat-transcript/index.html')).toContain(
-      'id="mermaid-viewer-portal"',
-    );
+    it('两 index.html 含 portal 宿主；chat 侧挂接由 runtime 工厂承担；两 bridge 含 closeMermaidViewer 分支', () => {
+        // rich-document：#overlay-portal 与 #doc 平级；chat：独立入口 index.html 的
+        // #mermaid-viewer-portal 与 #menu-portal 平级（composer-native-2026-10
+        // Step 6 合成包退役后，chat 侧壳为 chat-transcript 独立入口）。
+        expect(webSrc('rich-document/index.html')).toContain('id="overlay-portal"');
+        expect(webSrc('chat-transcript/index.html')).toContain(
+            'id="mermaid-viewer-portal"',
+        );
 
-    // 两管线：portal 挂接 + 事件委托（模块刈处，不进渲染链路；web/C-orch-5）。
-    // rich-document 挂在自己的 main.ts；chat 侧的挂接真源是 runtime 工厂
-    // （合成包 main.ts 只调 `createTranscriptRuntime`，不再直接出现这两个名字——
-    // 照旧形态断言字面量会变成永远为真的空断言）。
-    const richMain = webSrc('rich-document/webview/main.ts');
-    expect(richMain).toContain('MermaidFullscreen.mountPortal(');
-    expect(richMain).toContain('MermaidFullscreen.attachDelegation(');
-    const factory = webSrc('chat-transcript/webview/runtime/factory.ts');
-    expect(factory).toContain('MermaidFullscreen.mountPortal(');
-    expect(factory).toContain('MermaidFullscreen.attachDelegation(');
+        // 两管线：portal 挂接 + 事件委托（模块刈处，不进渲染链路；web/C-orch-5）。
+        // rich-document 挂在自己的 main.ts；chat 侧的挂接真源是 runtime 工厂
+        // （合成包 main.ts 只调 `createTranscriptRuntime`，不再直接出现这两个名字——
+        // 照旧形态断言字面量会变成永远为真的空断言）。
+        const richMain = webSrc('rich-document/webview/main.ts');
+        expect(richMain).toContain('MermaidFullscreen.mountPortal(');
+        expect(richMain).toContain('MermaidFullscreen.attachDelegation(');
+        const factory = webSrc('chat-transcript/webview/runtime/factory.ts');
+        expect(factory).toContain('MermaidFullscreen.mountPortal(');
+        expect(factory).toContain('MermaidFullscreen.attachDelegation(');
 
-    // 挂接块单源：MermaidFullscreen.mountPortal 内含 Overlay 渲染与卸载
-    const mount = webSrc('shared/mermaid-fullscreen/mermaid-fullscreen.ts');
-    expect(mount).toContain('mountPortal: (portalId: string): void => {');
-    expect(mount).toContain('MermaidViewerOverlay');
+        // 挂接块单源：MermaidFullscreen.mountPortal 内含 Overlay 渲染与卸载
+        const mount = webSrc('shared/mermaid-fullscreen/mermaid-fullscreen.ts');
+        expect(mount).toContain('mountPortal: (portalId: string): void => {');
+        expect(mount).toContain('MermaidViewerOverlay');
 
-    // 两 bridge：closeMermaidViewer 分支（关覆盖层 + post closed）
-    expect(webSrc('rich-document/webview/runtime/bridge.ts')).toContain(
-      "msg.type === 'closeMermaidViewer'",
-    );
-    expect(webSrc('chat-transcript/webview/runtime/bridge.ts')).toContain(
-      "case 'closeMermaidViewer':",
-    );
-  });
+        // 两 bridge：closeMermaidViewer 分支（关覆盖层 + post closed）
+        expect(webSrc('rich-document/webview/runtime/bridge.ts')).toContain(
+            "msg.type === 'closeMermaidViewer'",
+        );
+        expect(webSrc('chat-transcript/webview/runtime/bridge.ts')).toContain(
+            "case 'closeMermaidViewer':",
+        );
+    });
 
-  it('rich-document main 挂接不进 setDocument 视图刷新链路（T-MV1 顺序不变）', () => {
-    const main = webSrc('rich-document/webview/main.ts');
-    // T-MV1 钉住的顺序仍成立
-    expect(main).toMatch(
-      /Mermaid\.render\(docRoot\)[\s\S]*Annotate\.refreshAfterDocument/,
-    );
-    // 全屏挂接在 documentViewSlot.register 回调之外（模块刈处一行调用）。
-    // 断言意图 = 「`documentViewSlot.register(...)` 的闭合大括号之后才是
-    // Annotate.bindUi / MermaidFullscreen.mountPortal」——即挂接不在回调体内。
-    // 换行用 `[\s\S]+` 而不是字面 `\n\n`：仓库里两种换行都有（git 检出在
-    // Windows 上是 CRLF，Linux CI 上是 LF），字面量断言会随平台红。
-    expect(main).toMatch(/\}\);[\s\S]+Annotate\.bindUi[\s\S]*MermaidFullscreen\.mountPortal/);
-  });
+    it('rich-document main 挂接不进 setDocument 视图刷新链路（T-MV1 顺序不变）', () => {
+        const main = webSrc('rich-document/webview/main.ts');
+        // T-MV1 钉住的顺序仍成立
+        expect(main).toMatch(
+            /Mermaid\.render\(docRoot\)[\s\S]*Annotate\.refreshAfterDocument/,
+        );
+        // 全屏挂接在 documentViewSlot.register 回调之外（模块刈处一行调用）。
+        // 断言意图 = 「`documentViewSlot.register(...)` 的闭合大括号之后才是
+        // Annotate.bindUi / MermaidFullscreen.mountPortal」——即挂接不在回调体内。
+        // 换行用 `[\s\S]+` 而不是字面 `\n\n`：仓库里两种换行都有（git 检出在
+        // Windows 上是 CRLF，Linux CI 上是 LF），字面量断言会随平台红。
+        expect(main).toMatch(/\}\);[\s\S]+Annotate\.bindUi[\s\S]*MermaidFullscreen\.mountPortal/);
+    });
 });
 
 /**
@@ -122,102 +124,102 @@ describe('mermaid 全屏查看器两管线接线 (T-MF3)', () => {
  * `chat-transcript-entry.test.ts` 承担。
  */
 describe('chat-transcript runtime 工厂装配链（Step 1 工厂化 / Step 8 补强）', () => {
-  it('工厂体内装配动作齐全，mermaid 两挂接真被调用', () => {
-    const factory = webSrc('chat-transcript/webview/runtime/factory.ts');
-    for (const symbol of [
-      'contextMenuViewSlot.register(',
-      'rowsViewSlot.register(',
-      'RowWindow.measure',
-      'MermaidFullscreen.mountPortal(',
-      'MermaidFullscreen.attachDelegation(',
-      'BootTranscript.start(',
-    ]) {
-      expect(factory).toContain(symbol);
-    }
-    // 挂接目标 portal 仍是包内那个（与合成包 index.html 的
-    // #mermaid-viewer-portal 对应）
-    expect(factory).toContain("'mermaid-viewer-portal'");
-    // boot 收尾：两个可选参数按位透传（bindChannel / emitReady）
-    expect(factory).toContain('BootTranscript.start({bindChannel, emitReady})');
-  });
+    it('工厂体内装配动作齐全，mermaid 两挂接真被调用', () => {
+        const factory = webSrc('chat-transcript/webview/runtime/factory.ts');
+        for (const symbol of [
+            'contextMenuViewSlot.register(',
+            'rowsViewSlot.register(',
+            'RowWindow.measure',
+            'MermaidFullscreen.mountPortal(',
+            'MermaidFullscreen.attachDelegation(',
+            'BootTranscript.start(',
+        ]) {
+            expect(factory).toContain(symbol);
+        }
+        // 挂接目标 portal 仍是包内那个（与合成包 index.html 的
+        // #mermaid-viewer-portal 对应）
+        expect(factory).toContain("'mermaid-viewer-portal'");
+        // boot 收尾：两个可选参数按位透传（bindChannel / emitReady）
+        expect(factory).toContain('BootTranscript.start({bindChannel, emitReady})');
+    });
 });
 
 describe('mermaid 全屏查看器 RN 返回键契约 (T-MF4)', () => {
-  it('ChatConversationWebView 两消息上浮；hook 拦截位在 menu 前；RichDocumentWebView 自注册 BackHandler', () => {
-    // chat：两消息照 menuOpened→onWebMenuOpenChange 先例上浮。
-    // transcript-converge 后 chat 侧宿主是统一组件 ChatConversationWebView。
-    const chatWeb = rnSrc('components/chat/ChatConversationWebView.tsx');
-    // handleUpstream 已从 if 链改成 switch：两条 mermaid 消息走
-    // case + handleMermaidVisibility(true/false)，上浮回调不变。
-    expect(chatWeb).toContain("case 'mermaidViewerOpened':");
-    expect(chatWeb).toContain("case 'mermaidViewerClosed':");
-    expect(chatWeb).toContain('onWebMermaidViewerOpenChange?.(true)');
-    expect(chatWeb).toContain('onWebMermaidViewerOpenChange?.(false)');
-    // 返回键关闭下发通道（照 menuCloseSignal 先例）
-    expect(chatWeb).toContain("type: 'closeMermaidViewer'");
+    it('ChatConversationWebView 两消息上浮；hook 拦截位在 menu 前；RichDocumentWebView 自注册 BackHandler', () => {
+        // chat：两消息照 menuOpened→onWebMenuOpenChange 先例上浮。
+        // transcript-converge 后 chat 侧宿主是统一组件 ChatConversationWebView。
+        const chatWeb = rnSrc('components/chat/ChatConversationWebView.tsx');
+        // handleUpstream 已从 if 链改成 switch：两条 mermaid 消息走
+        // case + handleMermaidVisibility(true/false)，上浮回调不变。
+        expect(chatWeb).toContain("case 'mermaidViewerOpened':");
+        expect(chatWeb).toContain("case 'mermaidViewerClosed':");
+        expect(chatWeb).toContain('onWebMermaidViewerOpenChange?.(true)');
+        expect(chatWeb).toContain('onWebMermaidViewerOpenChange?.(false)');
+        // 返回键关闭下发通道（照 menuCloseSignal 先例）
+        expect(chatWeb).toContain("type: 'closeMermaidViewer'");
 
-    // hook：拦截位存在且排在 menu 拦截之前（盖在一切会话 surface 之上）
-    const hook = rnSrc('hooks/useAndroidChatBackHandler.ts');
-    expect(hook).toContain('mermaidViewerOpen');
-    expect(hook).toContain('closeMermaidViewer');
-    const mermaidIdx = hook.indexOf('if (mermaidViewerOpen)');
-    const menuIdx = hook.indexOf('if (messageMenuOpen)');
-    expect(mermaidIdx).toBeGreaterThan(-1);
-    expect(menuIdx).toBeGreaterThan(-1);
-    expect(mermaidIdx).toBeLessThan(menuIdx);
+        // hook：拦截位存在且排在 menu 拦截之前（盖在一切会话 surface 之上）
+        const hook = rnSrc('hooks/useAndroidChatBackHandler.ts');
+        expect(hook).toContain('mermaidViewerOpen');
+        expect(hook).toContain('closeMermaidViewer');
+        const mermaidIdx = hook.indexOf('if (mermaidViewerOpen)');
+        const menuIdx = hook.indexOf('if (messageMenuOpen)');
+        expect(mermaidIdx).toBeGreaterThan(-1);
+        expect(menuIdx).toBeGreaterThan(-1);
+        expect(mermaidIdx).toBeLessThan(menuIdx);
 
-    // rich-document：组件内自注册（Android only、随 focus、判 isFocused 防吞上层返回）
-    const richWeb = rnSrc('components/vfs/RichDocumentWebView.tsx');
-    expect(richWeb).toContain('BackHandler.addEventListener');
-    expect(richWeb).toContain("Platform.OS !== 'android'");
-    expect(richWeb).toContain('navigation.isFocused()');
-    expect(richWeb).toContain("type: 'closeMermaidViewer'");
-    expect(richWeb).toContain("message.type === 'mermaidViewerOpened'");
-    expect(richWeb).toContain("message.type === 'mermaidViewerClosed'");
-  });
+        // rich-document：组件内自注册（Android only、随 focus、判 isFocused 防吞上层返回）
+        const richWeb = rnSrc('components/vfs/RichDocumentWebView.tsx');
+        expect(richWeb).toContain('BackHandler.addEventListener');
+        expect(richWeb).toContain("Platform.OS !== 'android'");
+        expect(richWeb).toContain('navigation.isFocused()');
+        expect(richWeb).toContain("type: 'closeMermaidViewer'");
+        expect(richWeb).toContain("message.type === 'mermaidViewerOpened'");
+        expect(richWeb).toContain("message.type === 'mermaidViewerClosed'");
+    });
 
-  it('chat 链路把 mermaid viewer 开关态接到 useAndroidChatBackHandler（照 menu 同款模式）', () => {
-    // Provider：拦截态 + 下发信号 + 关闭回调（照 webMenuOpen/webMenuCloseSignal 先例）
-    const provider = rnSrc('screens/tabs/chat-tab/ChatTabProvider.tsx');
-    expect(provider).toContain('mermaidViewerOpen');
-    expect(provider).toContain('mermaidViewerCloseSignal');
-    expect(provider).toContain('closeMermaidViewer');
+    it('chat 链路把 mermaid viewer 开关态接到 useAndroidChatBackHandler（照 menu 同款模式）', () => {
+        // Provider：拦截态 + 下发信号 + 关闭回调（照 webMenuOpen/webMenuCloseSignal 先例）
+        const provider = rnSrc('screens/tabs/chat-tab/ChatTabProvider.tsx');
+        expect(provider).toContain('mermaidViewerOpen');
+        expect(provider).toContain('mermaidViewerCloseSignal');
+        expect(provider).toContain('closeMermaidViewer');
 
-    // ConversationPanel：两 props 从 context 下传到 ChatTranscriptWebView
-    const panel = rnSrc('screens/tabs/chat-tab/ChatConversationPanel.tsx');
-    expect(panel).toContain(
-      'mermaidViewerCloseSignal={mermaidViewerCloseSignal}',
-    );
-    expect(panel).toContain(
-      'onWebMermaidViewerOpenChange={ctx.setMermaidViewerOpen}',
-    );
+        // ConversationPanel：两 props 从 context 下传到 ChatTranscriptWebView
+        const panel = rnSrc('screens/tabs/chat-tab/ChatConversationPanel.tsx');
+        expect(panel).toContain(
+            'mermaidViewerCloseSignal={mermaidViewerCloseSignal}',
+        );
+        expect(panel).toContain(
+            'onWebMermaidViewerOpenChange={ctx.setMermaidViewerOpen}',
+        );
 
-    // NavigationProvider：closeMermaidViewer 转发（照 closeMessageMenu 先例）
-    const navProvider = rnSrc(
-      'screens/tabs/chat-tab/ChatTabNavigationProvider.tsx',
-    );
-    expect(navProvider).toContain('closeMermaidViewer: ctx.closeMermaidViewer');
+        // NavigationProvider：closeMermaidViewer 转发（照 closeMessageMenu 先例）
+        const navProvider = rnSrc(
+            'screens/tabs/chat-tab/ChatTabNavigationProvider.tsx',
+        );
+        expect(navProvider).toContain('closeMermaidViewer: ctx.closeMermaidViewer');
 
-    // Screen：back state 拦截位 + 关闭动作接线
-    const screen = rnSrc('screens/tabs/ChatTabScreen.tsx');
-    expect(screen).toContain('mermaidViewerOpen: ctx.mermaidViewerOpen');
-    expect(screen).toContain(
-      'closeMermaidViewer: nav.actions.closeMermaidViewer',
-    );
-  });
+        // Screen：back state 拦截位 + 关闭动作接线
+        const screen = rnSrc('screens/tabs/ChatTabScreen.tsx');
+        expect(screen).toContain('mermaidViewerOpen: ctx.mermaidViewerOpen');
+        expect(screen).toContain(
+            'closeMermaidViewer: nav.actions.closeMermaidViewer',
+        );
+    });
 });
 
 describe('mermaid 全屏查看器 dist 产物契约 (T-MF5)', () => {
-  it('两包 app.js 含全屏模块标识；app.css 含 .mermaid-fullscreen 样式；index.html 含 portal', () => {
-    // chat 侧读 chat-transcript：composer-native-2026-10 Step 6 合成包退役，
-    // 转录 dist 唯一落地面回到独立包（chat-transcript）。
-    for (const pkg of ['chat-transcript', 'rich-document'] as const) {
-      const appJs = readWebViewDistFile(pkg, 'app.js');
-      expect(appJs).toContain('mermaidViewerOpened');
-      expect(appJs).toContain('mermaidViewerClosed');
-      expect(appJs).toContain('closeMermaidViewer');
-      // 引号风格容忍（prettier singleQuote 后 dist 产物为单引号），只锁选择器语义
-      expect(appJs).toMatch(/closest\(['"]\.mermaid-block__chart['"]\)/);
+    it('两包 app.js 含全屏模块标识；app.css 含 .mermaid-fullscreen 样式；index.html 含 portal', () => {
+        // chat 侧读 chat-transcript：composer-native-2026-10 Step 6 合成包退役，
+        // 转录 dist 唯一落地面回到独立包（chat-transcript）。
+        for (const pkg of ['chat-transcript', 'rich-document'] as const) {
+            const appJs = readWebViewDistFile(pkg, 'app.js');
+            expect(appJs).toContain('mermaidViewerOpened');
+            expect(appJs).toContain('mermaidViewerClosed');
+            expect(appJs).toContain('closeMermaidViewer');
+            // 引号风格容忍（prettier singleQuote 后 dist 产物为单引号），只锁选择器语义
+            expect(appJs).toMatch(/closest\(['"]\.mermaid-block__chart['"]\)/);
       // minify 把 `cloneNode(true)` 压成 `cloneNode(!0)`；两种构建形态都锁。
       expect(appJs).toMatch(/cloneNode\(\s*(?:true|!0)\s*\)/);
 

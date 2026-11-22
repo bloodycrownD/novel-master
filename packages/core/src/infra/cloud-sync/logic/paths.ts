@@ -13,16 +13,16 @@ import { Path } from "@/common/path.js";
  * 远端对象键名生成。
  */
 export const CloudSyncPaths = {
-  /** 生成 status.json 对象键 */
-  statusKey(prefix: string): string {
-    return `${Path.ensureTrailingSlash(prefix)}status.json`;
-  },
+    /** 生成 status.json 对象键 */
+    statusKey(prefix: string): string {
+        return `${Path.ensureTrailingSlash(prefix)}status.json`;
+    },
 
-  /**
+    /**
    * 生成快照对象键：`{prefix}snapshots/rev-{6位零填充}.nmbackup`
    */
-  snapshotKey(prefix: string, rev: number): string {
-    const revPart = String(rev).padStart(6, "0");
-    return `${Path.ensureTrailingSlash(prefix)}snapshots/rev-${revPart}.nmbackup`;
-  },
+    snapshotKey(prefix: string, rev: number): string {
+        const revPart = String(rev).padStart(6, "0");
+        return `${Path.ensureTrailingSlash(prefix)}snapshots/rev-${revPart}.nmbackup`;
+    },
 } as const;

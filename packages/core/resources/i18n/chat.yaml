@@ -1,0 +1,29 @@
+# chat 段文案（i18n 按域拆分：文件名 = 顶层段；localeRule 书写规范见 docs/Iterations/i18n-normalization/spec.md §2.6）
+
+# —— zh-CN ——
+zh-CN:
+  rollback.confirm.backfill: "快照丢失，将使用最新内容修复。\n\n丢失快照的文件：\n{files}\n\n{tail}"
+  rollback.confirm.backfill.file: · {path}
+  rollback.confirm.backfill.file.empty: · （未知文件）
+  rollback.confirm.backfill.tail.rewind: 其余文件将正常回滚至锚点。
+  rollback.confirm.backfill.tail.undo_send: 其余文件将正常回滚至发送前状态。
+  rollback.confirm.degraded.rewind: 可仅删除此消息之后的对话，工作区文件将保持现状。
+  rollback.confirm.degraded.undo_send: 可仅删除此消息及之后的对话，工作区文件将保持现状。
+  rollback.confirm.primary.rewind: 将删除此消息之后的对话，并撤销相关文件修改。是否继续？
+  rollback.confirm.primary.undo_send: 将删除此消息及之后的对话，并撤销相关文件修改。是否继续？
+
+# —— settings：locales JSON 并轨（i18n 双轨收敛；段内扁平点分键）——
+
+# —— en-US ——
+en-US:
+  rollback.confirm.backfill: "Snapshots are missing and will be repaired with the latest content.\n\nFiles with missing snapshots:\n{files}\n\n{tail}"
+  rollback.confirm.backfill.file: · {path}
+  rollback.confirm.backfill.file.empty: · (unknown file)
+  rollback.confirm.backfill.tail.rewind: Other files will be rolled back to the anchor.
+  rollback.confirm.backfill.tail.undo_send: Other files will be rolled back to their state before sending.
+  rollback.confirm.degraded.rewind: This will only delete all messages after this one; workspace files will remain unchanged.
+  rollback.confirm.degraded.undo_send: This will only delete this message and all later messages; workspace files will remain unchanged.
+  rollback.confirm.primary.rewind: This will delete all messages after this one, and revert related file changes. Continue?
+  rollback.confirm.primary.undo_send: This will delete this message and all later messages, and revert related file changes. Continue?
+
+# —— settings：locales JSON 并轨（i18n 双轨收敛；段内扁平点分键）——

@@ -1,284 +1,285 @@
 import type { ReactNode } from "react";
+import { coreT } from "@shared/logic/core-i18n";
 import { API_KEY_STATUS_LABELS } from "@shared/config-forms/ui-labels";
 import { Switch } from "@/components/ui/Switch";
 import { BatchCheckbox } from "@/components/batch/BatchCheckbox";
 
 export function SettingsPanel({ children }: { children: ReactNode }) {
-  return <div className="settings-panel">{children}</div>;
+    return <div className="settings-panel">{children}</div>;
 }
 
 export function SettingsSection({
-  title,
-  desc,
-  children,
+    title,
+    desc,
+    children,
 }: {
-  title: string;
-  desc?: string;
-  children: ReactNode;
+    title: string;
+    desc?: string;
+    children: ReactNode;
 }) {
-  return (
-    <section className="settings-section">
-      <h3 className="settings-section__title">{title}</h3>
-      {desc ? <p className="settings-section__desc">{desc}</p> : null}
-      {children}
-    </section>
-  );
+    return (
+        <section className="settings-section">
+            <h3 className="settings-section__title">{title}</h3>
+            {desc ? <p className="settings-section__desc">{desc}</p> : null}
+            {children}
+        </section>
+    );
 }
 
 export function SettingsRows({ children }: { children: ReactNode }) {
-  return <div className="settings-rows">{children}</div>;
+    return <div className="settings-rows">{children}</div>;
 }
 
 export function SettingsRow({
-  label,
-  value,
-  onClick,
+    label,
+    value,
+    onClick,
 }: {
-  label: string;
-  value: string;
-  onClick?: () => void;
+    label: string;
+    value: string;
+    onClick?: () => void;
 }) {
-  return (
-    <button type="button" className="settings-row" onClick={onClick}>
-      <span className="settings-row__label">{label}</span>
-      <span className="settings-row__value">{value}</span>
-      <span className="settings-row__chevron" aria-hidden="true">
-        ›
-      </span>
-    </button>
-  );
+    return (
+        <button type="button" className="settings-row" onClick={onClick}>
+            <span className="settings-row__label">{label}</span>
+            <span className="settings-row__value">{value}</span>
+            <span className="settings-row__chevron" aria-hidden="true">
+                ›
+            </span>
+        </button>
+    );
 }
 
 export function SettingsSwitchRow({
-  label,
-  desc,
-  checked,
-  onChange,
+    label,
+    desc,
+    checked,
+    onChange,
 }: {
-  label: string;
-  /** 可选：标签下方的一句说明（小字灰色），双端与 mobile subtitle 同口径 */
-  desc?: string;
-  checked: boolean;
-  onChange: (next: boolean) => void;
+    label: string;
+    /** 可选：标签下方的一句说明（小字灰色），双端与 mobile subtitle 同口径 */
+    desc?: string;
+    checked: boolean;
+    onChange: (next: boolean) => void;
 }) {
-  return (
-    <div className="settings-row settings-row--switch">
-      <span className="settings-row__label">
-        {label}
-        {desc ? <span className="settings-row__desc">{desc}</span> : null}
-      </span>
-      <Switch checked={checked} onChange={onChange} aria-label={label} />
-    </div>
-  );
+    return (
+        <div className="settings-row settings-row--switch">
+            <span className="settings-row__label">
+                {label}
+                {desc ? <span className="settings-row__desc">{desc}</span> : null}
+            </span>
+            <Switch checked={checked} onChange={onChange} aria-label={label} />
+        </div>
+    );
 }
 
 export function SettingsListSection({
-  header,
-  children,
-  empty,
+    header,
+    children,
+    empty,
 }: {
-  header?: ReactNode;
-  children: ReactNode;
-  empty?: ReactNode;
+    header?: ReactNode;
+    children: ReactNode;
+    empty?: ReactNode;
 }) {
-  return (
-    <section className="settings-section settings-section--list">
-      {header ? <div className="settings-toolbar">{header}</div> : null}
-      <div className="settings-list">
-        {empty}
-        {children}
-      </div>
-    </section>
-  );
+    return (
+        <section className="settings-section settings-section--list">
+            {header ? <div className="settings-toolbar">{header}</div> : null}
+            <div className="settings-list">
+                {empty}
+                {children}
+            </div>
+        </section>
+    );
 }
 
 export function ApiKeyStatusTag({ status }: { status: string }) {
-  const connected = status === "set";
-  return (
-    <span
-      className={`settings-tag ${
+    const connected = status === "set";
+    return (
+        <span
+            className={`settings-tag ${
         connected ? "settings-tag--ok" : "settings-tag--muted"
       }`}
-    >
-      {connected ? API_KEY_STATUS_LABELS.set : API_KEY_STATUS_LABELS.notSet}
-    </span>
-  );
+        >
+            {connected ? API_KEY_STATUS_LABELS.set : API_KEY_STATUS_LABELS.notSet}
+        </span>
+    );
 }
 
 /** 内置引擎徽标：duckduckgo 无 set/not set 二态（恒可用），主题色胶囊
  * 标「内置」，与 ApiKeyStatusTag 同形状（双端同构口径）。 */
 export function BuiltinEngineTag() {
-  return <span className="settings-tag settings-tag--primary">内置</span>;
+    return <span className="settings-tag settings-tag--primary">{coreT({key: "ui.common.builtin"})}</span>;
 }
 
 export function SettingsListItem({
-  title,
-  desc,
-  meta,
-  onClick,
-  onMenu,
-  batchMode = false,
-  selected = false,
-  onToggleSelect,
+    title,
+    desc,
+    meta,
+    onClick,
+    onMenu,
+    batchMode = false,
+    selected = false,
+    onToggleSelect,
 }: {
-  title: string;
-  /** 可选：标题下方短副标题（如计费/部署形态），与 mobile 行副标题同口径。 */
-  desc?: string;
-  meta?: React.ReactNode;
-  onClick?: () => void;
-  onMenu?: (event: React.MouseEvent<HTMLButtonElement>) => void;
-  batchMode?: boolean;
-  selected?: boolean;
-  onToggleSelect?: () => void;
+    title: string;
+    /** 可选：标题下方短副标题（如计费/部署形态），与 mobile 行副标题同口径。 */
+    desc?: string;
+    meta?: React.ReactNode;
+    onClick?: () => void;
+    onMenu?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+    batchMode?: boolean;
+    selected?: boolean;
+    onToggleSelect?: () => void;
 }) {
-  const itemButton = (
-    <button
-      type="button"
-      className={`settings-list-item${selected ? " is-selected" : ""}`}
-      onClick={() => {
-        if (batchMode) {
-          onToggleSelect?.();
-          return;
-        }
-        onClick?.();
-      }}
-    >
-      {batchMode ? (
-        <BatchCheckbox checked={selected} onToggle={() => onToggleSelect?.()} />
-      ) : null}
-      <span className="settings-list-item__label">
-        {title}
-        {desc ? <span className="settings-row__desc">{desc}</span> : null}
-      </span>
-      {meta ? <span className="settings-list-item__meta">{meta}</span> : null}
-      {!batchMode ? (
-        <span className="settings-list-item__chevron" aria-hidden="true">
-          ›
-        </span>
-      ) : null}
-    </button>
-  );
+    const itemButton = (
+        <button
+            type="button"
+            className={`settings-list-item${selected ? " is-selected" : ""}`}
+            onClick={() => {
+                if (batchMode) {
+                    onToggleSelect?.();
+                    return;
+                }
+                onClick?.();
+            }}
+        >
+            {batchMode ? (
+                <BatchCheckbox checked={selected} onToggle={() => onToggleSelect?.()} />
+            ) : null}
+            <span className="settings-list-item__label">
+                {title}
+                {desc ? <span className="settings-row__desc">{desc}</span> : null}
+            </span>
+            {meta ? <span className="settings-list-item__meta">{meta}</span> : null}
+            {!batchMode ? (
+                <span className="settings-list-item__chevron" aria-hidden="true">
+                    ›
+                </span>
+            ) : null}
+        </button>
+    );
 
-  if (!onMenu || batchMode) {
-    return itemButton;
-  }
+    if (!onMenu || batchMode) {
+        return itemButton;
+    }
 
-  return (
-    <div className="settings-list-item-row">
-      {itemButton}
-      <button
-        type="button"
-        className="settings-list-item__menu-btn"
-        aria-label="更多"
-        onClick={(e) => {
-          e.stopPropagation();
-          onMenu(e);
-        }}
-      >
-        ⋮
-      </button>
-    </div>
-  );
+    return (
+        <div className="settings-list-item-row">
+            {itemButton}
+            <button
+                type="button"
+                className="settings-list-item__menu-btn"
+                aria-label={coreT({key: "ui.common.more"})}
+                onClick={(e) => {
+                    e.stopPropagation();
+                    onMenu(e);
+                }}
+            >
+                ⋮
+            </button>
+        </div>
+    );
 }
 
 export function SettingsFormSection({
-  title,
-  desc,
-  toolbar,
-  children,
-  footer,
+    title,
+    desc,
+    toolbar,
+    children,
+    footer,
 }: {
-  title: string;
-  desc?: ReactNode;
-  toolbar?: ReactNode;
-  children: ReactNode;
-  footer?: ReactNode;
+    title: string;
+    desc?: ReactNode;
+    toolbar?: ReactNode;
+    children: ReactNode;
+    footer?: ReactNode;
 }) {
-  return (
-    <section className="settings-section settings-section--form">
-      <div className="settings-form-header">
-        <h3 className="settings-section__title">{title}</h3>
-        {toolbar ? (
-          <div className="settings-form-toolbar">{toolbar}</div>
-        ) : null}
-      </div>
-      {desc ? (
-        typeof desc === "string" ? (
-          <p className="settings-section__desc">{desc}</p>
-        ) : (
-          <div className="settings-section__desc settings-section__desc--inline">
-            {desc}
-          </div>
-        )
-      ) : null}
-      <div className="settings-fields">{children}</div>
-      {footer ? <div className="settings-section__footer">{footer}</div> : null}
-    </section>
-  );
+    return (
+        <section className="settings-section settings-section--form">
+            <div className="settings-form-header">
+                <h3 className="settings-section__title">{title}</h3>
+                {toolbar ? (
+                    <div className="settings-form-toolbar">{toolbar}</div>
+                ) : null}
+            </div>
+            {desc ? (
+                typeof desc === "string" ? (
+                    <p className="settings-section__desc">{desc}</p>
+                ) : (
+                    <div className="settings-section__desc settings-section__desc--inline">
+                        {desc}
+                    </div>
+                )
+            ) : null}
+            <div className="settings-fields">{children}</div>
+            {footer ? <div className="settings-section__footer">{footer}</div> : null}
+        </section>
+    );
 }
 
 export function SettingsField({
-  label,
-  children,
-  narrow,
-  row,
+    label,
+    children,
+    narrow,
+    row,
 }: {
-  label: string;
-  children: ReactNode;
-  narrow?: boolean;
-  /** 标签与控件同一行（如 Switch），无卡片背景。 */
-  row?: boolean;
+    label: string;
+    children: ReactNode;
+    narrow?: boolean;
+    /** 标签与控件同一行（如 Switch），无卡片背景。 */
+    row?: boolean;
 }) {
-  return (
-    <label
-      className={`settings-field${narrow ? " settings-field--narrow" : ""}${
+    return (
+        <label
+            className={`settings-field${narrow ? " settings-field--narrow" : ""}${
         row ? " settings-field--row" : ""
       }`}
-    >
-      <span className="settings-field__label">{label}</span>
-      {children}
-    </label>
-  );
+        >
+            <span className="settings-field__label">{label}</span>
+            {children}
+        </label>
+    );
 }
 
 export function SettingsActionSection({
-  title,
-  desc,
-  action,
+    title,
+    desc,
+    action,
 }: {
-  title: string;
-  desc: string;
-  action: ReactNode;
+    title: string;
+    desc: string;
+    action: ReactNode;
 }) {
-  return (
-    <section className="settings-section settings-section--action">
-      <h3 className="settings-section__title">{title}</h3>
-      <p className="settings-section__desc">{desc}</p>
-      {action}
-    </section>
-  );
+    return (
+        <section className="settings-section settings-section--action">
+            <h3 className="settings-section__title">{title}</h3>
+            <p className="settings-section__desc">{desc}</p>
+            {action}
+        </section>
+    );
 }
 
 export function SettingsStatus({
-  message,
-  error,
-  inline,
+    message,
+    error,
+    inline,
 }: {
-  message?: string;
-  error?: string;
-  inline?: boolean;
+    message?: string;
+    error?: string;
+    inline?: boolean;
 }) {
-  if (!message && !error) return null;
-  return (
-    <p
-      className={`settings-status${inline ? " settings-status--inline" : ""}`}
-      style={{ color: error ? "var(--danger, #c00)" : undefined }}
-    >
-      {error ?? message}
-    </p>
-  );
+    if (!message && !error) return null;
+    return (
+        <p
+            className={`settings-status${inline ? " settings-status--inline" : ""}`}
+            style={{ color: error ? "var(--danger, #c00)" : undefined }}
+        >
+            {error ?? message}
+        </p>
+    );
 }
 
 export function SettingsListEmpty({ children }: { children: ReactNode }) {
-  return <p className="settings-list__empty">{children}</p>;
+    return <p className="settings-list__empty">{children}</p>;
 }

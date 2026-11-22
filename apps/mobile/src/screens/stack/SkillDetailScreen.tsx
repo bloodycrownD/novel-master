@@ -20,112 +20,114 @@ import type {RootStackParamList} from '@/navigation/types';
 import {useTheme} from '@/theme/ThemeProvider';
 import {useToast} from '@/components/chrome/ToastHost';
 import {ToastMessage} from '@/errors/toast-message';
+import {coreT} from '@/i18n/core';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type DetailRoute = RouteProp<RootStackParamList, 'SkillDetail'>;
 
 export function SkillDetailScreen() {
-  const {tokens} = useTheme();
-  const {showToast} = useToast();
-  const runtime = useRuntime();
-  const navigation = useNavigation<Nav>();
-  const route = useRoute<DetailRoute>();
-  const {domain, name, projectId} = route.params;
+    const {tokens} = useTheme();
+    const {showToast} = useToast();
+    const runtime = useRuntime();
+    const navigation = useNavigation<Nav>();
+    const route = useRoute<DetailRoute>();
+    const {domain, name, projectId} = route.params;
 
-  const [item, setItem] = useState<SkillListItem | null>(null);
-  const [loading, setLoading] = useState(true);
-  // 踢回只做一次：reload 多次 notFound 也只弹一次 toast + goBack
-  const kickedRef = useRef(false);
+    const [item, setItem] = useState<SkillListItem | null>(null);
+    const [loading, setLoading] = useState(true);
+    // 踢回只做一次：reload 多次 notFound 也只弹一次 toast + goBack
+    const kickedRef = useRef(false);
 
-  const reload = useCallback(async () => {
-    setLoading(true);
-    try {
-      const list = await runtime.skills().listSkills(domain === 'global' ? 'global' : {projectId: projectId!});
-      if (list.kind === 'failed') throw list.error;
-      // 未注入 hooks：中断分支不可达；真出现时按「清单不可用」收尾，不伪造空清单。
-      if (list.kind !== 'completed') return;
-      const found = list.value.find(entry => entry.name === name) ?? null;
-      setItem(found);
-      if (found == null && !kickedRef.current) {
-        kickedRef.current = true;
-        showToast('技能不存在或已被删除');
-        navigation.goBack();
-        return;
-      }
-    } catch (error) {
-      showToast(ToastMessage.toast('加载技能失败', error));
-    } finally {
-      setLoading(false);
-    }
-  }, [runtime, domain, projectId, name, showToast, navigation]);
+    const reload = useCallback(async () => {
+        setLoading(true);
+        try {
+            const list = await runtime.skills().listSkills(domain === 'global' ? 'global' : {projectId: projectId!});
+            // nm-throw: keep — UI 回调解包边界：失败位转 throw 交本地 catch toast（React 回调，调用方改不动）
+            if (list.kind === 'failed') throw list.error;
+            // 未注入 hooks：中断分支不可达；真出现时按「清单不可用」收尾，不伪造空清单。
+            if (list.kind !== 'completed') return;
+            const found = list.value.find(entry => entry.name === name) ?? null;
+            setItem(found);
+            if (found == null && !kickedRef.current) {
+                kickedRef.current = true;
+                showToast(coreT({key: "ui.skills.missing_toast"}));
+                navigation.goBack();
+                return;
+            }
+        } catch (error) {
+            showToast(ToastMessage.toast(coreT({key: "ui.skills.load_failed"}), error));
+        } finally {
+            setLoading(false);
+        }
+    }, [runtime, domain, projectId, name, showToast, navigation]);
 
-  // 标题 = 技能名；返回上翻三件套（header 覆盖/硬件返回/侧滑手势）见 hook 内注释。
-  const fileRef = useRef<VfsFileManagerHandle>(null);
-  const {syncGestureEnabled} = useVfsBackNavigation(fileRef, navigation, {
-    title: name,
-  });
+    // 标题 = 技能名；返回上翻三件套（header 覆盖/硬件返回/侧滑手势）见 hook 内注释。
+    const fileRef = useRef<VfsFileManagerHandle>(null);
+    const {syncGestureEnabled} = useVfsBackNavigation(fileRef, navigation, {
+        title: name,
+    });
 
-  const onScreenFocus = useCallback(() => {
-    reload().catch(() => undefined);
-  }, [reload]);
-  useFocusEffect(onScreenFocus);
+    const onScreenFocus = useCallback(() => {
+        reload().catch(() => undefined);
+    }, [reload]);
+    useFocusEffect(onScreenFocus);
 
-  const skillRoot = `/meta/skills/${name}`;
-  // 技能域直接复用 VfsFileManager（workplace 不传，纳入/目录规则菜单自动隐藏）。
-  // 技能已重定位到独立 meta 域，这里取 meta 域 vfs/scope（逻辑路径 /meta/skills 不变）。
-  // SKILL.md 是技能入口，拦截删除/重命名/移动，其余文件全功能开放（含新建目录）。
-  const fileScope: VfsScope = domain === 'global' ? {kind: 'global-meta'} : {kind: 'project-meta', projectId: projectId!};
-  const fileVfs = domain === 'global' ? runtime.globalMetaVfs() : runtime.projectMetaVfs(projectId!);
+    const skillRoot = `/meta/skills/${name}`;
+    // 技能域直接复用 VfsFileManager（workplace 不传，纳入/目录规则菜单自动隐藏）。
+    // 技能已重定位到独立 meta 域，这里取 meta 域 vfs/scope（逻辑路径 /meta/skills 不变）。
+    // SKILL.md 是技能入口，拦截删除/重命名/移动，其余文件全功能开放（含新建目录）。
+    const fileScope: VfsScope = domain === 'global' ? {kind: 'global-meta'} : {kind: 'project-meta', projectId: projectId!};
+    const fileVfs = domain === 'global' ? runtime.globalMetaVfs() : runtime.projectMetaVfs(projectId!);
 
-  const openFile = useCallback(
-    (fullPath: string) => {
-      navigation.navigate('FileEditor', {
-        path: fullPath,
-        scopeKind: 'skill',
-        skillRef: {
-          domain,
-          name,
-          ...(domain === 'project' && projectId != null ? {projectId} : {}),
+    const openFile = useCallback(
+        (fullPath: string) => {
+            navigation.navigate('FileEditor', {
+                path: fullPath,
+                scopeKind: 'skill',
+                skillRef: {
+                    domain,
+                    name,
+                    ...(domain === 'project' && projectId != null ? {projectId} : {}),
+                },
+            });
         },
-      });
-    },
-    [navigation, domain, name, projectId],
-  );
-
-  if (loading && item == null) {
-    return (
-      <View style={[styles.root, styles.center, {backgroundColor: tokens.background}]}>
-        <ActivityIndicator color={tokens.primary} />
-      </View>
+        [navigation, domain, name, projectId],
     );
-  }
 
-  if (item == null) {
+    if (loading && item == null) {
+        return (
+            <View style={[styles.root, styles.center, {backgroundColor: tokens.background}]}>
+                <ActivityIndicator color={tokens.primary} />
+            </View>
+        );
+    }
+
+    if (item == null) {
+        return (
+            <View style={[styles.root, styles.center, {backgroundColor: tokens.background}]}>
+<Text style={{color: tokens.textSecondary}}>{coreT({key: "ui.skills.missing_toast"})}</Text>
+            </View>
+        );
+    }
+
     return (
-      <View style={[styles.root, styles.center, {backgroundColor: tokens.background}]}>
-        <Text style={{color: tokens.textSecondary}}>技能不存在或已被删除</Text>
-      </View>
+        <View style={[styles.root, {backgroundColor: tokens.background}]}>
+            <VfsFileManager
+                ref={fileRef}
+                // 目录变化时同步侧滑手势开关：根目录开（侧滑退出），子目录关（防误退）。
+                onDirectoryChange={syncGestureEnabled}
+                scope={fileScope}
+                vfs={fileVfs}
+                rootPath={skillRoot}
+                onOpenFile={openFile}
+                isProtectedPath={path => (path === `${skillRoot}/SKILL.md` ? coreT({key: "ui.skills.entry_protected_mobile"}) : null)}
+                pathLabel={path => (path === skillRoot ? '/' : path.slice(skillRoot.length))}
+            />
+        </View>
     );
-  }
-
-  return (
-    <View style={[styles.root, {backgroundColor: tokens.background}]}>
-      <VfsFileManager
-        ref={fileRef}
-        // 目录变化时同步侧滑手势开关：根目录开（侧滑退出），子目录关（防误退）。
-        onDirectoryChange={syncGestureEnabled}
-        scope={fileScope}
-        vfs={fileVfs}
-        rootPath={skillRoot}
-        onOpenFile={openFile}
-        isProtectedPath={path => (path === `${skillRoot}/SKILL.md` ? 'SKILL.md 是技能入口文件，不能删除或重命名' : null)}
-        pathLabel={path => (path === skillRoot ? '/' : path.slice(skillRoot.length))}
-      />
-    </View>
-  );
 }
 
 const styles = StyleSheet.create({
-  root: {flex: 1},
-  center: {justifyContent: 'center', alignItems: 'center'},
+    root: {flex: 1},
+    center: {justifyContent: 'center', alignItems: 'center'},
 });

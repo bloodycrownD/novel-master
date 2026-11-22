@@ -23,27 +23,27 @@ const CAP = 500;
 const liveManagers: SessionStreamUnitManager[] = [];
 
 afterEach(() => {
-  while (liveManagers.length > 0) {
-    liveManagers.pop()?.dispose();
-  }
-  SessionViewCache.clearAll();
+    while (liveManagers.length > 0) {
+        liveManagers.pop()?.dispose();
+    }
+    SessionViewCache.clearAll();
 });
 
 /** 造一条 settled run_state 行（hydrate 的回填源）。 */
 function settledRow(sessionId: string) {
-  return {
-    sessionId,
-    projectId: 'p1',
-    runId: `run-${sessionId}`,
-    startedAtMs: 1,
-    updatedAtMs: 2,
-    textChars: 10,
-    thinkingChars: 0,
-    completionTokens: 20,
-    tokenSource: 'provider',
-    partialText: '',
-    partialThinking: '',
-  };
+    return {
+        sessionId,
+        projectId: 'p1',
+        runId: `run-${sessionId}`,
+        startedAtMs: 1,
+        updatedAtMs: 2,
+        textChars: 10,
+        thinkingChars: 0,
+        completionTokens: 20,
+        tokenSource: 'provider',
+        partialText: '',
+        partialThinking: '',
+    };
 }
 
 /**
@@ -54,84 +54,84 @@ function settledRow(sessionId: string) {
  *   用真实量子会让 CAP+1 次让步把用例拖到超时。
  */
 function createManager(opts: {
-  readonly settledSessions: readonly string[];
-  readonly skipHydrate?: boolean;
+    readonly settledSessions: readonly string[];
+    readonly skipHydrate?: boolean;
 }): SessionStreamUnitManager {
-  const runtime = {
-    eventBus: new SimpleEventBus(),
-    abortRegistry: {
-      has: jest.fn(() => false),
-      abort: jest.fn(),
-      register: jest.fn(),
-      unregister: jest.fn(),
-    },
-    sessions: {get: jest.fn(async (id: string) => ({id, title: id}))},
-    projects: {get: jest.fn(async (id: string) => ({id, name: id}))},
-    // sessionKkv 缺省 ⇒ readFinalRateRaw 直接回 null，不额外读库。
-  } as never;
-  const manager = new SessionStreamUnitManager({
-    runtime,
-    runAgentTurn: jest.fn(async () => undefined) as never,
-    runStateService: {
-      listByStatuses: jest.fn(async (statuses: readonly string[]) =>
-        statuses.includes('settled')
-          ? opts.settledSessions.map(settledRow)
-          : [],
-      ),
-    } as never,
-    yieldQuantum: async () => undefined,
-  });
-  liveManagers.push(manager);
-  if (opts.skipHydrate !== true) {
-    manager.markHydrated();
-  }
-  return manager;
+    const runtime = {
+        eventBus: new SimpleEventBus(),
+        abortRegistry: {
+            has: jest.fn(() => false),
+            abort: jest.fn(),
+            register: jest.fn(),
+            unregister: jest.fn(),
+        },
+        sessions: {get: jest.fn(async (id: string) => ({id, title: id}))},
+        projects: {get: jest.fn(async (id: string) => ({id, name: id}))},
+        // sessionKkv 缺省 ⇒ readFinalRateRaw 直接回 null，不额外读库。
+    } as never;
+    const manager = new SessionStreamUnitManager({
+        runtime,
+        runAgentTurn: jest.fn(async () => undefined) as never,
+        runStateService: {
+            listByStatuses: jest.fn(async (statuses: readonly string[]) =>
+                statuses.includes('settled')
+                    ? opts.settledSessions.map(settledRow)
+                    : [],
+            ),
+        } as never,
+        yieldQuantum: async () => undefined,
+    });
+    liveManagers.push(manager);
+    if (opts.skipHydrate !== true) {
+        manager.markHydrated();
+    }
+    return manager;
 }
 
 /** 灌 idleMessageViews：公开入口 hydrateSessionMessages（无单元即写入）。 */
 function fillIdleViews(
-  manager: SessionStreamUnitManager,
-  count: number,
-  start = 0,
+    manager: SessionStreamUnitManager,
+    count: number,
+    start = 0,
 ): void {
-  for (let i = start; i < start + count; i++) {
-    manager.hydrateSessionMessages(`idle-${i}`, 'p1');
-  }
+    for (let i = start; i < start + count; i++) {
+        manager.hydrateSessionMessages(`idle-${i}`, 'p1');
+    }
 }
 
 describe('AM-1 两张常驻表挂 500 LRU', () => {
-  it('T-AM1-4 idleMessageViews 插入 CAP+1 → size 封顶且最旧淘汰', () => {
-    const manager = createManager({settledSessions: [], skipHydrate: true});
-    manager.markHydrated();
-    fillIdleViews(manager, CAP + 1);
-    expect(manager.idleMessageViewsSize()).toBe(CAP);
-    // 最早写入的那个已被淘汰（读口回 null）
-    expect(manager.readMessagesSnapshot('idle-0')).toBeNull();
-    // 最近的还在
-    expect(manager.readMessagesSnapshot(`idle-${CAP}`)).not.toBeNull();
-  });
+    it('T-AM1-4 idleMessageViews 插入 CAP+1 → size 封顶且最旧淘汰', () => {
+        const manager = createManager({settledSessions: [], skipHydrate: true});
+        manager.markHydrated();
+        fillIdleViews(manager, CAP + 1);
+        expect(manager.idleMessageViewsSize()).toBe(CAP);
+        // 最早写入的那个已被淘汰（读口回 null）
+        expect(manager.readMessagesSnapshot('idle-0')).toBeNull();
+        // 最近的还在
+        expect(manager.readMessagesSnapshot(`idle-${CAP}`)).not.toBeNull();
+    });
 
-  it('T-AM1-4 settledProjections 插入 CAP+1 → size 封顶且最旧淘汰', async () => {
-    const sessions = Array.from({length: CAP + 1}, (_, i) => `s-${i}`);
-    const manager = createManager({settledSessions: sessions});
-    await manager.hydrate();
-    expect(manager.settledProjectionsSize()).toBe(CAP);
-    // 最早写入的投影已被淘汰（读口回 null）
-    expect(manager.getSettledProjection('s-0')).toBeNull();
-    // 最近的还在
-    expect(manager.getSettledProjection(`s-${CAP}`)).not.toBeNull();
-  });
+    it('T-AM1-4 settledProjections 插入 CAP+1 → size 封顶且最旧淘汰', async () => {
+        const sessions = Array.from({length: CAP + 1}, (_, i) => `s-${i}`);
+        const manager = createManager({settledSessions: sessions});
+        await manager.hydrate();
+        expect(manager.settledProjectionsSize()).toBe(CAP);
+        // 最早写入的投影已被淘汰（读口回 null）
+        expect(manager.getSettledProjection('s-0')).toBeNull();
+        // 最近的还在
+        expect(manager.getSettledProjection(`s-${CAP}`)).not.toBeNull();
+    });
 
-  it('T-AM1-5 LRU 命中刷新新鲜度 → 最近读过的会话不被淘汰', () => {
-    const manager = createManager({settledSessions: [], skipHydrate: true});
-    manager.markHydrated();
-    fillIdleViews(manager, CAP);
-    // 刷新最旧那条的新鲜度（命中即 delete+set 重排）
-    expect(manager.readMessagesSnapshot('idle-0')).not.toBeNull();
-    // 再灌一条新的 ⇒ 淘汰的应该是现在的最旧（idle-1），而不是刚读过的 idle-0
-    fillIdleViews(manager, 1, CAP);
-    expect(manager.idleMessageViewsSize()).toBe(CAP);
-    expect(manager.readMessagesSnapshot('idle-0')).not.toBeNull();
-    expect(manager.readMessagesSnapshot('idle-1')).toBeNull();
-  });
+    it('T-AM1-5 LRU 命中刷新新鲜度 → 最近读过的会话不被淘汰', () => {
+        const manager = createManager({settledSessions: [], skipHydrate: true});
+        manager.markHydrated();
+        fillIdleViews(manager, CAP);
+        // 刷新最旧那条的新鲜度（命中即 delete+set 重排）
+        expect(manager.readMessagesSnapshot('idle-0')).not.toBeNull();
+        // 再灌一条新的 ⇒ 淘汰的应该是现在的最旧（idle-1），而不是刚读过的 idle-0
+        fillIdleViews(manager, 1, CAP);
+        expect(manager.idleMessageViewsSize()).toBe(CAP);
+        expect(manager.readMessagesSnapshot('idle-0')).not.toBeNull();
+        expect(manager.readMessagesSnapshot('idle-1')).toBeNull();
+    });
 });

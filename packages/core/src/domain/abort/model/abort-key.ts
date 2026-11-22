@@ -8,12 +8,12 @@
 
 /** key 命名空间。 */
 export const ABORT_KEY = {
-  agent: (sessionId: string) => `agent:${sessionId}`,
-  run: (runId: string) => `run:${runId}`,
-  backup: (runId: string) => `backup:${runId}`,
-  dbMaintenance: (runId: string) => `dbmaint:${runId}`,
-  usageStats: (runId: string) => `stats:${runId}`,
-  providerModels: (providerId: string) => `models:${providerId}`,
-  cloudSync: (id: string) => `sync:${id}`,
-  compaction: (sessionId: string) => `compaction:${sessionId}`,
+    agent: (sessionId: string) => `agent:${sessionId}`,
+    run: (runId: string) => `run:${runId}`,
+    backup: (runId: string) => `backup:${runId}`,
+    dbMaintenance: (runId: string) => `dbmaint:${runId}`,
+    usageStats: (runId: string) => `stats:${runId}`,
+    providerModels: (providerId: string) => `models:${providerId}`,
+    cloudSync: (id: string) => `sync:${id}`,
+    compaction: (sessionId: string) => `compaction:${sessionId}`,
 } as const;

@@ -20,8 +20,6 @@ export {TdbcError} from '../../../packages/core/dist/infra/tdbc/errors.js';
 export {SqliteBackupHeader} from '../../../packages/core/dist/infra/db-backup/sqlite-backup-header.js';
 // 跨端控制流哨兵（十九期上收 core）：desktop / mobile / core 导入同一份类，
 // `instanceof` 才跨包成立。直连窄文件，不拉主 barrel（避开 yaml ESM 入口）。
-export {DatabaseReplacedError} from '../../../packages/core/dist/infra/cloud-sync/model/database-replaced-error.js';
-export {ChatPromptBuildBailedError} from '../../../packages/core/dist/service/chat/model/chat-prompt-build-bailed-error.js';
 export {AppError} from '../../../packages/core/dist/errors/app-error.js';
 // Result 同时是值（ok/err 静态入口）与类型（Ok|Err 联合）：云同步测试按
 // coordinator 的 Result 通道造 mock 返回值（错误通道迁移四期适配）。
@@ -51,7 +49,6 @@ export type {AgentRunResult} from '../../../packages/core/dist/domain/agent/mode
 export {PRESET_ENGINE_TEMPLATES} from '../../../packages/core/dist/domain/tool/builtin/search/preset-templates.js';
 export {SearchEngine} from '../../../packages/core/dist/domain/tool/builtin/search/types.js';
 export {DEFAULT_USER_VFS_UNIFIED_TOOL_TURN, userVfsUnifiedToolTurnFlag} from '../../../packages/core/dist/domain/feature-flags/user-vfs-unified-tool-turn.js';
-export {userVfsTurns, USER_VFS_TURN_SPAN} from '../../../packages/core/dist/domain/chat/logic/vfs-turn/user-vfs-turn-view.js';
-export {UserVfsTurnPreview} from '../../../packages/core/dist/presentation/chat/user-vfs-turn-preview.js';
+export {USER_VFS_TURN_SPAN} from '../../../packages/core/dist/domain/chat/logic/vfs-turn/user-vfs-turn-view.js';
 export {USER_VFS_TURN_ACK_TEXT, userVfsTurnStorage} from '../../../packages/core/dist/domain/chat/logic/vfs-turn/user-vfs-turn-constants.js';
 export type {ParsedUserVfsAction, ParsedUserVfsEditHunk, UserVfsTurnView} from '../../../packages/core/dist/domain/chat/logic/vfs-turn/user-vfs-turn-view.js';

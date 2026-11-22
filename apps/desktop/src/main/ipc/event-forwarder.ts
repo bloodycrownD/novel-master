@@ -16,46 +16,47 @@ import type { WebContents } from "electron";
 export type ForwardTargetResolver = () => WebContents | undefined;
 
 export interface EventForwarder<Payload, AttachArgs extends unknown[] = []> {
-  /** 注册 renderer webContents 解析器。 */
-  setTarget(resolver: ForwardTargetResolver): void;
-  /** 挂订阅并返回 cleanup；重复 attach 先解掉旧订阅。 */
-  attach(...args: AttachArgs): () => void;
-  /** 单次推送（调用点已持有载荷，不走订阅）。 */
-  notify(payload: Payload): void;
+    /** 注册 renderer webContents 解析器。 */
+    setTarget(resolver: ForwardTargetResolver): void;
+    /** 挂订阅并返回 cleanup；重复 attach 先解掉旧订阅。 */
+    attach(...args: AttachArgs): () => void;
+    /** 单次推送（调用点已持有载荷，不走订阅）。 */
+    notify(payload: Payload): void;
 }
 
 export interface EventForwarderOptions<Payload, AttachArgs extends unknown[]> {
-  /**
+    /**
    * 订阅来源：`emit` 收到的就是通道载荷（envelope / 投影对象由订阅方组装）。
    * 返回值必须解除本订阅；缺省表示该通道只支持 {@link EventForwarder.notify}。
    */
-  readonly subscribe?: (emit: (payload: Payload) => void, ...args: AttachArgs) => () => void;
+    readonly subscribe?: (emit: (payload: Payload) => void, ...args: AttachArgs) => () => void;
 }
 
 export const EventForwarder = {
-  create<Payload, AttachArgs extends unknown[] = []>(channelName: string, options: EventForwarderOptions<Payload, AttachArgs> = {}): EventForwarder<Payload, AttachArgs> {
-    let getTarget: ForwardTargetResolver | undefined;
-    let detach: (() => void) | undefined;
+    create<Payload, AttachArgs extends unknown[] = []>(channelName: string, options: EventForwarderOptions<Payload, AttachArgs> = {}): EventForwarder<Payload, AttachArgs> {
+        let getTarget: ForwardTargetResolver | undefined;
+        let detach: (() => void) | undefined;
 
-    const detachCurrent = (): void => {
-      detach?.();
-      detach = undefined;
-    };
+        // nm-style: keep-closure — detach 是 attach 重绑定的单槽句柄且闭包逃逸（attach 返回的 cleanup 被进程级长持）；对象槽需污染公开接口或引 WeakMap，闭包槽即正解。
+        const detachCurrent = (): void => {
+            detach?.();
+            detach = undefined;
+        };
 
-    return {
-      setTarget(resolver) {
-        getTarget = resolver;
-      },
+        return {
+            setTarget(resolver) {
+                getTarget = resolver;
+            },
 
-      attach(...args) {
-        detachCurrent();
-        detach = options.subscribe?.((payload) => getTarget?.()?.send(channelName, payload), ...args) ?? (() => undefined);
-        return detachCurrent;
-      },
+            attach(...args) {
+                detachCurrent();
+                detach = options.subscribe?.((payload) => getTarget?.()?.send(channelName, payload), ...args) ?? (() => undefined);
+                return detachCurrent;
+            },
 
-      notify(payload) {
-        getTarget?.()?.send(channelName, payload);
-      },
-    };
-  },
+            notify(payload) {
+                getTarget?.()?.send(channelName, payload);
+            },
+        };
+    },
 } as const;

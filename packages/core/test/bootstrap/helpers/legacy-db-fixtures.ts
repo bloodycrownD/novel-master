@@ -7,62 +7,59 @@ import type { TdbcConnection } from "@novel-master/core";
 export const LEGACY_DB_NOW_MS = 1_700_000_000_000;
 
 const DEFAULT_SETTINGS_JSON = JSON.stringify({
-  schemaVersion: 1,
-  contextWindowTokens: 128_000,
-  sampling: { enabled: false },
+    schemaVersion: 1,
+    contextWindowTokens: 128_000,
+    sampling: { enabled: false },
 });
 
 /** 向 legacy llm_saved_model 写入 openai 两行测试数据。 */
 export async function seedLegacySavedModelRows(conn: TdbcConnection): Promise<void> {
-  await conn.execute(
-    `INSERT INTO llm_provider (
-      id, protocol, base_url, display_name, secret_ref, headers_json,
-      is_builtin, created_at_ms, updated_at_ms
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      "openai",
-      "openai",
-      "https://api.openai.com/v1",
-      "OpenAI",
-      null,
-      "{}",
-      1,
-      LEGACY_DB_NOW_MS,
-      LEGACY_DB_NOW_MS,
-    ],
-  );
-  await conn.execute(
-    `INSERT INTO llm_saved_model (
-      provider_id, vendor_model_id, display_name, settings_json, created_at_ms, updated_at_ms
-    ) VALUES (?, ?, ?, ?, ?, ?)`,
-    [
-      "openai",
-      "gpt-4o",
-      "openai/gpt-4o",
-      DEFAULT_SETTINGS_JSON,
-      LEGACY_DB_NOW_MS,
-      LEGACY_DB_NOW_MS,
-    ],
-  );
-  await conn.execute(
-    `INSERT INTO llm_saved_model (
-      provider_id, vendor_model_id, display_name, settings_json, created_at_ms, updated_at_ms
-    ) VALUES (?, ?, ?, ?, ?, ?)`,
-    [
-      "openai",
-      "gpt-4o-mini",
-      "写作专用",
-      DEFAULT_SETTINGS_JSON,
-      LEGACY_DB_NOW_MS,
-      LEGACY_DB_NOW_MS,
-    ],
-  );
+    await conn.execute(
+        `INSERT INTO llm_provider ( id, protocol, base_url, display_name, secret_ref, headers_json, is_builtin, created_at_ms,
+    updated_at_ms )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+            "openai",
+            "openai",
+            "https://api.openai.com/v1",
+            "OpenAI",
+            null,
+            "{}",
+            1,
+            LEGACY_DB_NOW_MS,
+            LEGACY_DB_NOW_MS,
+        ],
+    );
+    await conn.execute(
+        `INSERT INTO llm_saved_model ( provider_id, vendor_model_id, display_name, settings_json, created_at_ms, updated_at_ms )
+    VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+            "openai",
+            "gpt-4o",
+            "openai/gpt-4o",
+            DEFAULT_SETTINGS_JSON,
+            LEGACY_DB_NOW_MS,
+            LEGACY_DB_NOW_MS,
+        ],
+    );
+    await conn.execute(
+        `INSERT INTO llm_saved_model ( provider_id, vendor_model_id, display_name, settings_json, created_at_ms, updated_at_ms )
+    VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+            "openai",
+            "gpt-4o-mini",
+            "写作专用",
+            DEFAULT_SETTINGS_JSON,
+            LEGACY_DB_NOW_MS,
+            LEGACY_DB_NOW_MS,
+        ],
+    );
 }
 
 
 /** v1.0.7 风格 chat_session（无 user_vfs_pending_json）。 */
 export async function execLegacyV107ChatDdl(conn: TdbcConnection): Promise<void> {
-  await conn.execute(`
+    await conn.execute(`
     CREATE TABLE IF NOT EXISTS chat_session (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL,
@@ -71,7 +68,7 @@ export async function execLegacyV107ChatDdl(conn: TdbcConnection): Promise<void>
       updated_at_ms INTEGER NOT NULL
     )
   `);
-  await conn.execute(`
+    await conn.execute(`
     CREATE INDEX IF NOT EXISTS idx_chat_session_project
       ON chat_session(project_id)
   `);
@@ -79,9 +76,9 @@ export async function execLegacyV107ChatDdl(conn: TdbcConnection): Promise<void>
 
 /** v1.0.7 风格 chat_message（无 hidden）。 */
 export async function execLegacyChatMessageWithoutHidden(
-  conn: TdbcConnection,
+    conn: TdbcConnection,
 ): Promise<void> {
-  await conn.execute(`
+    await conn.execute(`
     CREATE TABLE IF NOT EXISTS chat_message (
       id TEXT PRIMARY KEY,
       session_id TEXT NOT NULL,
@@ -98,9 +95,9 @@ export async function execLegacyChatMessageWithoutHidden(
 
 /** v7 风格 chat_message（有 hidden/usage 列，无 cache_read_tokens/cache_creation_tokens/model_name）。 */
 export async function execLegacyV7ChatMessageDdl(
-  conn: TdbcConnection,
+    conn: TdbcConnection,
 ): Promise<void> {
-  await conn.execute(`
+    await conn.execute(`
     CREATE TABLE IF NOT EXISTS chat_message (
       id TEXT PRIMARY KEY,
       session_id TEXT NOT NULL,
@@ -122,7 +119,7 @@ export async function execLegacyV7ChatMessageDdl(
 
 /** 旧 vfs_entry（无 entry_kind / head_version）。 */
 export async function execLegacyVfsEntryTable(conn: TdbcConnection): Promise<void> {
-  await conn.execute(`
+    await conn.execute(`
     CREATE TABLE IF NOT EXISTS vfs_entry (
       path TEXT PRIMARY KEY,
       content TEXT NOT NULL,
@@ -132,14 +129,14 @@ export async function execLegacyVfsEntryTable(conn: TdbcConnection): Promise<voi
       external_uri TEXT
     )
   `);
-  await conn.execute(`
+    await conn.execute(`
     CREATE INDEX IF NOT EXISTS idx_vfs_entry_path_prefix ON vfs_entry(path)
   `);
 }
 
 /** legacy llm_saved_model（复合主键，无 id / model_name）。 */
 export async function execLegacySavedModelTable(conn: TdbcConnection): Promise<void> {
-  await conn.execute(`
+    await conn.execute(`
     CREATE TABLE IF NOT EXISTS llm_provider (
       id TEXT PRIMARY KEY,
       protocol TEXT NOT NULL CHECK (protocol IN ('openai', 'anthropic', 'gemini')),
@@ -152,7 +149,7 @@ export async function execLegacySavedModelTable(conn: TdbcConnection): Promise<v
       updated_at_ms INTEGER NOT NULL
     )
   `);
-  await conn.execute(`
+    await conn.execute(`
     CREATE TABLE IF NOT EXISTS llm_saved_model (
       provider_id TEXT NOT NULL,
       vendor_model_id TEXT NOT NULL,
@@ -171,9 +168,9 @@ export async function execLegacySavedModelTable(conn: TdbcConnection): Promise<v
  * （v1.4.27 前形态，列非 NULL）。
  */
 export async function execLegacyChatProjectWithAgentConfig(
-  conn: TdbcConnection,
+    conn: TdbcConnection,
 ): Promise<void> {
-  await conn.execute(`
+    await conn.execute(`
     CREATE TABLE IF NOT EXISTS chat_project (
       id TEXT PRIMARY KEY,
       display_name TEXT,
@@ -182,24 +179,24 @@ export async function execLegacyChatProjectWithAgentConfig(
       agent_config_json TEXT NULL
     )
   `);
-  await conn.execute(
-    `INSERT INTO chat_project (id, display_name, created_at_ms, updated_at_ms, agent_config_json)
-     VALUES (?, ?, ?, ?, ?)`,
-    [
-      "legacy-project",
-      "旧项目",
-      LEGACY_DB_NOW_MS,
-      LEGACY_DB_NOW_MS,
-      JSON.stringify({ agentId: "builtin-writer" }),
-    ],
-  );
+    await conn.execute(
+        `INSERT INTO chat_project (id, display_name, created_at_ms, updated_at_ms, agent_config_json)
+    VALUES (?, ?, ?, ?, ?)`,
+        [
+            "legacy-project",
+            "旧项目",
+            LEGACY_DB_NOW_MS,
+            LEGACY_DB_NOW_MS,
+            JSON.stringify({ agentId: "builtin-writer" }),
+        ],
+    );
 }
 
 /** pre-C3 worktree_* 规则表（物理旧名）。 */
 export async function execLegacyWorktreeRuleTables(
-  conn: TdbcConnection,
+    conn: TdbcConnection,
 ): Promise<void> {
-  await conn.execute(`
+    await conn.execute(`
     CREATE TABLE IF NOT EXISTS worktree_dir_rule (
       scope_key TEXT NOT NULL,
       logical_path TEXT NOT NULL,
@@ -212,7 +209,7 @@ export async function execLegacyWorktreeRuleTables(
       PRIMARY KEY (scope_key, logical_path)
     )
   `);
-  await conn.execute(`
+    await conn.execute(`
     CREATE TABLE IF NOT EXISTS worktree_file_rule (
       scope_key TEXT NOT NULL,
       logical_path TEXT NOT NULL,
@@ -220,29 +217,28 @@ export async function execLegacyWorktreeRuleTables(
       PRIMARY KEY (scope_key, logical_path)
     )
   `);
-  await conn.execute(
-    `CREATE INDEX IF NOT EXISTS idx_worktree_dir_scope ON worktree_dir_rule(scope_key)`,
-  );
-  await conn.execute(
-    `CREATE INDEX IF NOT EXISTS idx_worktree_file_scope ON worktree_file_rule(scope_key)`,
-  );
+    await conn.execute(
+        `CREATE INDEX IF NOT EXISTS idx_worktree_dir_scope ON worktree_dir_rule(scope_key)`,
+    );
+    await conn.execute(
+        `CREATE INDEX IF NOT EXISTS idx_worktree_file_scope ON worktree_file_rule(scope_key)`,
+    );
 }
 
 /** 向 legacy worktree_* 写入一条 dir + file 规则（T-R4）。 */
 export async function seedLegacyWorktreeRuleRows(
-  conn: TdbcConnection,
-  scopeKey = "project:legacy-wp",
+    conn: TdbcConnection,
+    scopeKey = "project:legacy-wp",
 ): Promise<void> {
-  await conn.execute(
-    `INSERT INTO worktree_dir_rule (
-      scope_key, logical_path, rule_enabled, sort_field, sort_order,
-      head_count, tail_count, fill_policy
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [scopeKey, "/", 1, "name", "asc", 0, 1000, "hidden"],
-  );
-  await conn.execute(
-    `INSERT INTO worktree_file_rule (scope_key, logical_path, inclusion_mode)
-     VALUES (?, ?, ?)`,
-    [scopeKey, "/readme.md", "force"],
-  );
+    await conn.execute(
+        `INSERT INTO worktree_dir_rule ( scope_key, logical_path, rule_enabled, sort_field, sort_order, head_count, tail_count,
+    fill_policy )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [scopeKey, "/", 1, "name", "asc", 0, 1000, "hidden"],
+    );
+    await conn.execute(
+        `INSERT INTO worktree_file_rule (scope_key, logical_path, inclusion_mode)
+    VALUES (?, ?, ?)`,
+        [scopeKey, "/readme.md", "force"],
+    );
 }

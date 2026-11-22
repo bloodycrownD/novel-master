@@ -11,82 +11,83 @@ import type {Result} from '@novel-master/core/errors';
 import {AppError} from '@novel-master/core/errors';
 import {useRuntime} from '../../hooks/useRuntime';
 import {ToastMessage} from '../../errors/toast-message';
+import {coreT} from '../../i18n/core';
 import {useToast} from '../chrome/ToastHost';
 import {useTheme} from '../../theme/ThemeProvider';
 import {
-  PickerListModal,
-  type PickerListLoadResult,
+    PickerListModal,
+    type PickerListLoadResult,
 } from '../ui/PickerListModal';
 import {AGENT_PICKER_EMPTY_MESSAGE, AgentPicker, type AgentPickerRow} from '../../services/agent-picker';
 
 type Props = {
-  visible: boolean;
-  onClose: () => void;
-  onSelected?: (agentId: string) => void;
-  /**
+    visible: boolean;
+    onClose: () => void;
+    onSelected?: (agentId: string) => void;
+    /**
    * 传入后会话级分流：读 session 绑定作为当前选中，写 selectSessionAgent。
    * 不传则维持 workspace 全局行为（「我的」tab）。
    */
-  sessionId?: string;
+    sessionId?: string;
 };
 
 export function AgentPickerModal({
-  visible,
-  onClose,
-  onSelected,
-  sessionId,
+    visible,
+    onClose,
+    onSelected,
+    sessionId,
 }: Props) {
-  const {tokens} = useTheme();
-  const {showToast} = useToast();
-  const runtime = useRuntime();
+    const {tokens} = useTheme();
+    const {showToast} = useToast();
+    const runtime = useRuntime();
 
-  const load = useCallback(async (): Promise<
-    Result<PickerListLoadResult<AgentPickerRow>, AppError>
-  > => {
-    // 有 sessionId 走会话级（绑定优先、缺失回退 workspace）；否则读 workspace 全局。
-    return sessionId != null
-      ? AgentPicker.loadSessionRows(runtime, sessionId)
-      : AgentPicker.loadRows(runtime);
-  }, [runtime, sessionId]);
+    const load = useCallback(async (): Promise<
+        Result<PickerListLoadResult<AgentPickerRow>, AppError>
+    > => {
+        // 有 sessionId 走会话级（绑定优先、缺失回退 workspace）；否则读 workspace 全局。
+        return sessionId != null
+            ? AgentPicker.loadSessionRows(runtime, sessionId)
+            : AgentPicker.loadRows(runtime);
+    }, [runtime, sessionId]);
 
-  const select = useCallback(
-    async (agentId: string) => {
-      // 分流：session 绑定只影响单个会话；workspace 入口继续写全局指针。
-      // 写入成功才回调并关闭；失败留在弹窗里 toast 提示，方便重试。
-      try {
-        if (sessionId != null) {
-          await AgentPicker.selectSession(runtime, sessionId, agentId);
-        } else {
-          await AgentPicker.selectWorkspace(runtime, agentId);
-        }
-      } catch (cause) {
-        showToast(ToastMessage.toast('设置失败', cause));
-        return;
-      }
-      onSelected?.(agentId);
-      onClose();
-    },
-    [runtime, sessionId, onSelected, onClose, showToast],
-  );
+    const select = useCallback(
+        async (agentId: string) => {
+            // 分流：session 绑定只影响单个会话；workspace 入口继续写全局指针。
+            // 写入成功才回调并关闭；失败留在弹窗里 toast 提示，方便重试。
+            try {
+                if (sessionId != null) {
+                    await AgentPicker.selectSession(runtime, sessionId, agentId);
+                } else {
+                    await AgentPicker.selectWorkspace(runtime, agentId);
+                }
+            } catch (cause) {
+                showToast(ToastMessage.toast(coreT({key: "ui.common.set_failed"}), cause));
+                return;
+            }
+            onSelected?.(agentId);
+            onClose();
+        },
+        [runtime, sessionId, onSelected, onClose, showToast],
+    );
 
-  return (
-    <PickerListModal<AgentPickerRow>
-      visible={visible}
-      title="选择 Agent"
-      load={load}
-      keyExtractor={item => item.agentId}
-      isSelected={(item, index, selectedId) =>
-        AgentPicker.isRowSelected(item.agentId, index, selectedId)
-      }
-      renderRow={(item, selected) => (
-        <>
-          <Text style={{color: tokens.text, flex: 1}}>{item.label}</Text>
-          {selected ? <Text style={{color: tokens.primary}}>当前</Text> : null}
-        </>
-      )}
-      onPick={item => select(item.agentId)}
-      emptyText={AGENT_PICKER_EMPTY_MESSAGE}
-      onClose={onClose}
-    />
-  );
+    return (
+        <PickerListModal<AgentPickerRow>
+            visible={visible}
+            title={coreT({key: "ui.session.agent_picker_title"})}
+            load={load}
+            keyExtractor={item => item.agentId}
+            isSelected={(item, index, selectedId) =>
+                AgentPicker.isRowSelected(item.agentId, index, selectedId)
+            }
+            renderRow={(item, selected) => (
+                <>
+                    <Text style={{color: tokens.text, flex: 1}}>{item.label}</Text>
+                    {selected ? <Text style={{color: tokens.primary}}>{coreT({key: "ui.common.current"})}</Text> : null}
+                </>
+            )}
+            onPick={item => select(item.agentId)}
+            emptyText={AGENT_PICKER_EMPTY_MESSAGE}
+            onClose={onClose}
+        />
+    );
 }

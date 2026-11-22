@@ -5,39 +5,39 @@ import type { ProviderModelService } from "../../src/service/provider/provider-m
 import {  unwrap  } from "../helpers/result-unwrap.js";
 
 function stubProviderModels(
-  modes: Record<string, string>,
+    modes: Record<string, string>,
 ): Pick<ProviderModelService, "getTokenCounterMode"> {
-  return {
-    // 错误通道迁移四期：getTokenCounterMode 走 Result 通道。
-    async getTokenCounterMode(savedModelId: string) {
-      const r: Awaited<ReturnType<ProviderModelService["getTokenCounterMode"]>> =
-        (modes[savedModelId] ?? "auto") as never;
-      return r;
-    },
-  };
+    return {
+        // 错误通道迁移四期：getTokenCounterMode 走 Result 通道。
+        async getTokenCounterMode(savedModelId: string) {
+            const r: Awaited<ReturnType<ProviderModelService["getTokenCounterMode"]>> =
+                (modes[savedModelId] ?? "auto") as never;
+            return r;
+        },
+    };
 }
 
 describe("resolveTokenCounterModeForModel", () => {
-  it("returns auto for null or empty savedModelId", async () => {
-    const models = stubProviderModels({});
-    assert.equal(unwrap(await TokenCounterMode.resolveForModel(models, null)), "auto");
-    assert.equal(unwrap(await TokenCounterMode.resolveForModel(models, "")), "auto");
-    assert.equal(
-      unwrap(await TokenCounterMode.resolveForModel(models, undefined)),
-      "auto",
-    );
-  });
-
-  it("delegates to getTokenCounterMode for saved model", async () => {
-    const models = stubProviderModels({
-      "00000000-0000-4000-8000-000000000010": "heuristic",
+    it("returns auto for null or empty savedModelId", async () => {
+        const models = stubProviderModels({});
+        assert.equal(unwrap(await TokenCounterMode.resolveForModel(models, null)), "auto");
+        assert.equal(unwrap(await TokenCounterMode.resolveForModel(models, "")), "auto");
+        assert.equal(
+            unwrap(await TokenCounterMode.resolveForModel(models, undefined)),
+            "auto",
+        );
     });
-    assert.equal(
-      unwrap(await TokenCounterMode.resolveForModel(
-        models,
-        "00000000-0000-4000-8000-000000000010",
-      )),
-      "heuristic",
-    );
-  });
+
+    it("delegates to getTokenCounterMode for saved model", async () => {
+        const models = stubProviderModels({
+            "00000000-0000-4000-8000-000000000010": "heuristic",
+        });
+        assert.equal(
+            unwrap(await TokenCounterMode.resolveForModel(
+                models,
+                "00000000-0000-4000-8000-000000000010",
+            )),
+            "heuristic",
+        );
+    });
 });

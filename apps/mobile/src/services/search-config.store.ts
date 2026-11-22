@@ -16,13 +16,13 @@ import type {SearchConfigStore as CoreSearchConfigStore} from '@novel-master/cor
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
 export namespace SearchConfigStore {
-  /**
+    /**
    * 取 runtime 装配好的搜索配置存储。
    * nm-style: keep-public — spec §7/§8 双端 UI 访问搜索配置 store 的唯一入口
    * （kkv + secretStore 在 runtime 装配处注入，UI 不感知依赖装配）。
    */
-  // prettier-ignore
-  export function get(runtime: MobileNovelMasterRuntime): CoreSearchConfigStore {
-    return runtime.searchConfig;
-  }
+    // prettier-ignore
+    export function get(runtime: MobileNovelMasterRuntime): CoreSearchConfigStore {
+        return runtime.searchConfig;
+    }
 }

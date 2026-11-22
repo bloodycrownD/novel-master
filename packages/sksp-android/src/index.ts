@@ -1,6 +1,6 @@
 export { SkspNative } from "./native.js";
 export {
-  AndroidSecretStore,
-  AndroidSecretStoreFactory,
+    AndroidSecretStore,
+    AndroidSecretStoreFactory,
 } from "./android-secret-store.js";
 export { SkspAndroidRegister } from "./register.js";

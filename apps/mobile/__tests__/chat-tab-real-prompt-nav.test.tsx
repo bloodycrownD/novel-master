@@ -16,28 +16,28 @@ import {useChatTabController} from '@/screens/tabs/chat-tab/useChatTabController
 const mockNavigate = jest.fn();
 
 function makeCtx(overrides: Record<string, unknown> = {}): unknown {
-  return {
-    navigation: {navigate: mockNavigate},
-    projectId: 'p1',
-    sessionId: 's1',
-    chatMessages: [],
-    unitView: null,
-    runtime: {sessionStreamUnitManager: {}},
-    messages: {setDraftRestoreToken: jest.fn()},
-    scope: {refreshChatTokenLabel: jest.fn(), reloadLists: jest.fn()},
-    showToast: jest.fn(),
-    bumpWorktreeUiToken: jest.fn(),
-    setCurrentSession: jest.fn(),
-    setChatSubview: jest.fn(),
-    setConversationPanel: jest.fn(),
-    setMessageEditPrompt: jest.fn(),
-    setMessageMenuTarget: jest.fn(),
-    setMessageMenuAnchor: jest.fn(),
-    setWebMenuOpen: jest.fn(),
-    closeMessageMenu: jest.fn(),
-    messageMenuTarget: null,
-    ...overrides,
-  };
+    return {
+        navigation: {navigate: mockNavigate},
+        projectId: 'p1',
+        sessionId: 's1',
+        chatMessages: [],
+        unitView: null,
+        runtime: {sessionStreamUnitManager: {}},
+        messages: {setDraftRestoreToken: jest.fn()},
+        scope: {refreshChatTokenLabel: jest.fn(), reloadLists: jest.fn()},
+        showToast: jest.fn(),
+        bumpWorktreeUiToken: jest.fn(),
+        setCurrentSession: jest.fn(),
+        setChatSubview: jest.fn(),
+        setConversationPanel: jest.fn(),
+        setMessageEditPrompt: jest.fn(),
+        setMessageMenuTarget: jest.fn(),
+        setMessageMenuAnchor: jest.fn(),
+        setWebMenuOpen: jest.fn(),
+        closeMessageMenu: jest.fn(),
+        messageMenuTarget: null,
+        ...overrides,
+    };
 }
 
 // 名字必须以 mock 开头：jest.mock 工厂被提升到 import 之前，
@@ -45,63 +45,63 @@ function makeCtx(overrides: Record<string, unknown> = {}): unknown {
 const mockCtxHolder: {current: unknown} = {current: makeCtx()};
 
 jest.mock('@/screens/tabs/chat-tab/ChatTabProvider', () => ({
-  useChatTabContext: () => mockCtxHolder.current,
+    useChatTabContext: () => mockCtxHolder.current,
 }));
 
 // 消息动作那支与本断言无关，桩掉避免把 message-edit / workplace 依赖树拖进来。
 jest.mock('@/screens/tabs/chat-tab/useChatTabMessageActions', () => ({
-  useChatTabMessageActions: () => ({
-    handleMessageMenuAction: jest.fn(),
-  }),
+    useChatTabMessageActions: () => ({
+        handleMessageMenuAction: jest.fn(),
+    }),
 }));
 
 jest.mock('@/services/workplace-block.service', () => {
-  const legacy = {
-  clearSessionWorkplaceKkv: jest.fn(),
+    const legacy = {
+    clearSessionWorkplaceKkv: jest.fn(),
 };
-  return {...legacy, WorkplaceBlockService: {clearSessionKkv: legacy.clearSessionWorkplaceKkv}};
+    return {...legacy, WorkplaceBlockService: {clearSessionKkv: legacy.clearSessionWorkplaceKkv}};
 });
 
 describe('T-AM3-4 useChatTabController RealPrompt 入口', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockCtxHolder.current = makeCtx();
-  });
+    beforeEach(() => {
+        jest.clearAllMocks();
+        mockCtxHolder.current = makeCtx();
+    });
 
-  it('onNavigateRealPrompt 传 projectId / sessionId', () => {
-    let api: ReturnType<typeof useChatTabController> | undefined;
-    function Harness() {
-      api = useChatTabController();
-      return null;
-    }
-    act(() => {
-      TestRenderer.create(<Harness />);
+    it('onNavigateRealPrompt 传 projectId / sessionId', () => {
+        let api: ReturnType<typeof useChatTabController> | undefined;
+        function Harness() {
+            api = useChatTabController();
+            return null;
+        }
+        act(() => {
+            TestRenderer.create(<Harness />);
+        });
+        act(() => {
+            api!.onNavigateRealPrompt();
+        });
+        expect(mockNavigate).toHaveBeenCalledWith('RealPrompt', {
+            projectId: 'p1',
+            sessionId: 's1',
+        });
     });
-    act(() => {
-      api!.onNavigateRealPrompt();
-    });
-    expect(mockNavigate).toHaveBeenCalledWith('RealPrompt', {
-      projectId: 'p1',
-      sessionId: 's1',
-    });
-  });
 
-  it('scope 两值皆空时退化为无参（屏内回落，不引入新分支）', () => {
-    mockCtxHolder.current = makeCtx({projectId: null, sessionId: null});
-    let api: ReturnType<typeof useChatTabController> | undefined;
-    function Harness() {
-      api = useChatTabController();
-      return null;
-    }
-    act(() => {
-      TestRenderer.create(<Harness />);
+    it('scope 两值皆空时退化为无参（屏内回落，不引入新分支）', () => {
+        mockCtxHolder.current = makeCtx({projectId: null, sessionId: null});
+        let api: ReturnType<typeof useChatTabController> | undefined;
+        function Harness() {
+            api = useChatTabController();
+            return null;
+        }
+        act(() => {
+            TestRenderer.create(<Harness />);
+        });
+        act(() => {
+            api!.onNavigateRealPrompt();
+        });
+        expect(mockNavigate).toHaveBeenCalledWith('RealPrompt', {
+            projectId: undefined,
+            sessionId: undefined,
+        });
     });
-    act(() => {
-      api!.onNavigateRealPrompt();
-    });
-    expect(mockNavigate).toHaveBeenCalledWith('RealPrompt', {
-      projectId: undefined,
-      sessionId: undefined,
-    });
-  });
 });

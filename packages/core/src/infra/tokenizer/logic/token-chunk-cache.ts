@@ -68,43 +68,59 @@ const TOKEN_CHUNKS_PAYLOAD_VERSION = 2;
  * 任一字段变化都会产生新 scope（旧条目自动失活），因此无需主动失效。
  */
 interface CounterScopeInput {
-  readonly vendorModelId: string;
-  readonly tokenizerOverride?: TokenizerOverride | null;
-  readonly tokenizerFamily?: TokenizerFamily | null;
-  readonly driverName?: string | null;
+    readonly vendorModelId: string;
+    readonly tokenizerOverride?: TokenizerOverride | null;
+    readonly tokenizerFamily?: TokenizerFamily | null;
+    readonly driverName?: string | null;
 }
 
 /** advanceGeneration 的持久化选项。 */
 interface AdvanceGenerationOptions {
-  /**
+    /**
    * 持久化通道：`sessionKkv` 缺省（未装配 / 测试未注入）时只推进代际、
    * 不落库，行为与无持久化前完全一致。
    */
-  readonly persist?: {
-    readonly sessionKkv: SessionKkvService | null | undefined;
-  };
-  /**
+    readonly persist?: {
+        readonly sessionKkv: SessionKkvService | null | undefined;
+    };
+    /**
    * 本轮计数是否源于**真实刷新**（非预热）。只有真实刷新才写 KKV——预热
    * 批量灌入的计数不代表用户可见的稳定状态，避免写放大。
    */
-  readonly realRefresh?: boolean;
+    readonly realRefresh?: boolean;
 }
 
 /** 持久化条目三元组：`[hash16, scope, count]`。 */
 type TokenChunkCacheItem = readonly [
-  hash16: string,
-  scope: string,
-  count: number
+    hash16: string,
+    scope: string,
+    count: number
 ];
 
-// ---- 三代环形状态（index 越小越新：0=当前代，1=第二代，2=第三代） ----
-let genCurrent = new Map<string, number>();
-let genSecond = new Map<string, number>();
-let genThird = new Map<string, number>();
-
-let maxTotalEntries = CHUNK_CACHE_MAX_TOTAL_ENTRIES;
-let hits = 0;
-let misses = 0;
+// ---- 三代环形状态（模块内 holder，对象管理，不裸露离散 let）----
+const generationRing = {
+    /** 当前代（index 越小越新：0=当前代，1=第二代，2=第三代）。 */
+    genCurrent: new Map<string, number>(),
+    /** 第二代。 */
+    genSecond: new Map<string, number>(),
+    /** 第三代（最旧；推进时淘汰清空后轮换为新当前代）。 */
+    genThird: new Map<string, number>(),
+    /** 三代总量条数上限（测试可注入小值，clearForTests 恢复默认）。 */
+    maxTotalEntries: CHUNK_CACHE_MAX_TOTAL_ENTRIES,
+    /** 命中计数（观测用，stats() 读出）。 */
+    hits: 0,
+    /** 未命中计数（观测用，stats() 读出）。 */
+    misses: 0,
+    /**
+   * 当前代自上次**安排**持久化以来是否有过新记录（`record` 置位）。
+   *
+   * false ⇒ 当前代与上次落盘的内容逐条相同，整表序列化 + 覆盖写纯浪费，跳过。
+   * 注意只被 `record` 置位：`lookup` 的「提升至当前代」不改任何计数，漏记它
+   * 最多让某条块计数不进这次的种子表（下次重启重算一次），不值得为它每轮多
+   * 写一次整表。
+   */
+    currentGenDirty: false,
+};
 
 /**
  * 已完成 KKV 种子载入的会话（每会话每进程只 seed 一次）。
@@ -116,30 +132,20 @@ let misses = 0;
  */
 const seededSessions = new Set<string>();
 
-/**
- * 当前代自上次**安排**持久化以来是否有过新记录（`record` 置位）。
- *
- * false ⇒ 当前代与上次落盘的内容逐条相同，整表序列化 + 覆盖写纯浪费，跳过。
- * 注意只被 `record` 置位：`lookup` 的「提升至当前代」不改任何计数，漏记它
- * 最多让某条块计数不进这次的种子表（下次重启重算一次），不值得为它每轮多
- * 写一次整表。
- */
-let currentGenDirty = false;
-
 export const TokenChunkCache = {
-  /**
+    /**
    * 拼计数器身份（scope）：四段以字面 `\u0000` 六字符文本分隔——模型名 /
    * 驱动名理论上是自由字符串，该文本不会出现在标识符里，防「字段组合碰撞」。
    * 注：join 的实参是 `"\\u0000"`（源码双反斜杠，运行时为字面文本而非 NUL），
    * 功能等价；**勿改成真 NUL**——会整体更换 scope 键、全部 L1/L2/KKV 缓存
    * 一次性 miss。
    */
-  buildCounterScope(input: CounterScopeInput): string {
-    const parts = [input.vendorModelId, input.tokenizerOverride ?? "", input.tokenizerFamily ?? "", input.driverName ?? ""];
-    return parts.join("\\u0000");
-  },
+    buildCounterScope(input: CounterScopeInput): string {
+        const parts = [input.vendorModelId, input.tokenizerOverride ?? "", input.tokenizerFamily ?? "", input.driverName ?? ""];
+        return parts.join("\\u0000");
+    },
 
-  /**
+    /**
    * 块内容寻址键段：双 FNV-1a 输出 16 hex（实现与碰撞论证见 {@link Hash.fnv1aHex16}）。
    *
    * 16 hex = 64 bit：100K 量级条目下碰撞概率可忽略（生日界 ~2^32 条才显著），
@@ -147,131 +153,131 @@ export const TokenChunkCache = {
    * 风险。L1 整串键与 L2 块键共用本函数——整串（百 KB 级）单次哈希的收益
    * 与块级（数千次小哈希）同源。
    */
-  // nm-style: keep-local — chunkHash16 是 16-hex 键形态的公开契约入口（public/provider 与双 driver 消费），哈希实现在 common/hash，直接暴露通用实现会让调用方耦合实现细节。
-  chunkHash16(chunk: string): string {
-    return Hash.fnv1aHex16(chunk);
-  },
+    // nm-style: keep-local — chunkHash16 是 16-hex 键形态的公开契约入口（public/provider 与双 driver 消费），哈希实现在 common/hash，直接暴露通用实现会让调用方耦合实现细节。
+    chunkHash16(chunk: string): string {
+        return Hash.fnv1aHex16(chunk);
+    },
 
-  /** 完整条目键：`l2:${hash16}:${scope}`（hash16 恒 16 字符，可无损拆回）。 */
-  buildEntryKey(hash16: string, scope: string): string {
-    return `l2:${hash16}:${scope}`;
-  },
+    /** 完整条目键：`l2:${hash16}:${scope}`（hash16 恒 16 字符，可无损拆回）。 */
+    buildEntryKey(hash16: string, scope: string): string {
+        return `l2:${hash16}:${scope}`;
+    },
 
-  /** 总量超限时淘汰：先清最旧代，仍超再清次旧代，最后按插入序裁当前代。 */
-  enforceTotalCap(): void {
-    let total = genCurrent.size + genSecond.size + genThird.size;
-    if (total <= maxTotalEntries) {
-      return;
-    }
-    genThird.clear();
-    total = genCurrent.size + genSecond.size;
-    if (total <= maxTotalEntries) {
-      return;
-    }
-    genSecond.clear();
-    // 单代自身超限（测试注入小上限时的路径）：按插入序删当前代最旧条目。
-    while (genCurrent.size > maxTotalEntries) {
-      const oldest = genCurrent.keys().next();
-      if (oldest.done === true) {
-        break;
-      }
-      genCurrent.delete(oldest.value);
-    }
-  },
+    /** 总量超限时淘汰：先清最旧代，仍超再清次旧代，最后按插入序裁当前代。 */
+    enforceTotalCap(): void {
+        let total = generationRing.genCurrent.size + generationRing.genSecond.size + generationRing.genThird.size;
+        if (total <= generationRing.maxTotalEntries) {
+            return;
+        }
+        generationRing.genThird.clear();
+        total = generationRing.genCurrent.size + generationRing.genSecond.size;
+        if (total <= generationRing.maxTotalEntries) {
+            return;
+        }
+        generationRing.genSecond.clear();
+        // 单代自身超限（测试注入小上限时的路径）：按插入序删当前代最旧条目。
+        while (generationRing.genCurrent.size > generationRing.maxTotalEntries) {
+            const oldest = generationRing.genCurrent.keys().next();
+            if (oldest.done === true) {
+                break;
+            }
+            generationRing.genCurrent.delete(oldest.value);
+        }
+    },
 
-  /**
+    /**
    * 解析持久化整表；缺失 / 损坏 / `v` 不符 / 任一条目字段非法 → 整体 null
    * （静默按 miss，不抛错、不造数）。未知键一律忽略（兼容未来加字段）。
    *
    * nm-style: keep-local — KKV 载荷 v2 版本守卫与 16-hex 键形态是持久化契约，seed 与解析共用同一份
    */
-  parsePayload(raw: string | null | undefined): TokenChunkCacheItem[] | null {
-    if (raw == null || raw.length === 0) {
-      return null;
-    }
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      return null;
-    }
-    if (parsed == null || typeof parsed !== "object") {
-      return null;
-    }
-    const { v, items } = parsed as { v?: unknown; items?: unknown };
-    if (v !== TOKEN_CHUNKS_PAYLOAD_VERSION) {
-      return null;
-    }
-    if (!Array.isArray(items)) {
-      return null;
-    }
-    const out: TokenChunkCacheItem[] = [];
-    for (const item of items) {
-      if (!Array.isArray(item) || item.length < 3) {
-        return null;
-      }
-      const [hash16, scope, count] = item as [unknown, unknown, unknown];
-      if (
-        typeof hash16 !== "string" ||
-        hash16.length !== CHUNK_HASH_HEX_LENGTH ||
-        !/^[0-9a-f]+$/.test(hash16)
-      ) {
-        return null;
-      }
-      if (typeof scope !== "string" || scope.length === 0) {
-        return null;
-      }
-      if (
-        typeof count !== "number" ||
-        !Number.isFinite(count) ||
-        count < 0
-      ) {
-        return null;
-      }
-      out.push([hash16, scope, count]);
-    }
-    return out;
-  },
+    parsePayload(raw: string | null | undefined): TokenChunkCacheItem[] | null {
+        if (raw == null || raw.length === 0) {
+            return null;
+        }
+        let parsed: unknown;
+        try {
+            parsed = JSON.parse(raw);
+        } catch {
+            return null;
+        }
+        if (parsed == null || typeof parsed !== "object") {
+            return null;
+        }
+        const { v, items } = parsed as { v?: unknown; items?: unknown };
+        if (v !== TOKEN_CHUNKS_PAYLOAD_VERSION) {
+            return null;
+        }
+        if (!Array.isArray(items)) {
+            return null;
+        }
+        const out: TokenChunkCacheItem[] = [];
+        for (const item of items) {
+            if (!Array.isArray(item) || item.length < 3) {
+                return null;
+            }
+            const [hash16, scope, count] = item as [unknown, unknown, unknown];
+            if (
+                typeof hash16 !== "string" ||
+                hash16.length !== CHUNK_HASH_HEX_LENGTH ||
+                !/^[0-9a-f]+$/.test(hash16)
+            ) {
+                return null;
+            }
+            if (typeof scope !== "string" || scope.length === 0) {
+                return null;
+            }
+            if (
+                typeof count !== "number" ||
+                !Number.isFinite(count) ||
+                count < 0
+            ) {
+                return null;
+            }
+            out.push([hash16, scope, count]);
+        }
+        return out;
+    },
 } as const;
 
 /**
  * L2 平面缓存单例（进程内、跨会话共享）。
  */
 export const tokenChunkCache = {
-  /**
+    /**
    * 查一块的 token 数：命中任意一代即算命中并提升至当前代（回滚/压缩场景
    * 的旧块被再次触碰时「续命」）；三代皆 miss 返回 `undefined`，由调用方
    * 现算（`TokenizerTextCount.count`）后 record。
    */
-  lookup(hash16: string, scope: string): number | undefined {
-    const key = TokenChunkCache.buildEntryKey(hash16, scope);
-    const current = genCurrent.get(key);
-    if (current !== undefined) {
-      hits += 1;
-      return current;
-    }
-    for (const gen of [genSecond, genThird]) {
-      const count = gen.get(key);
-      if (count !== undefined) {
-        // 提升至当前代：从旧代摘除、写当前代（下一次推进才再往后挪）。
-        gen.delete(key);
-        genCurrent.set(key, count);
-        hits += 1;
-        return count;
-      }
-    }
-    misses += 1;
-    return undefined;
-  },
+    lookup(hash16: string, scope: string): number | undefined {
+        const key = TokenChunkCache.buildEntryKey(hash16, scope);
+        const current = generationRing.genCurrent.get(key);
+        if (current !== undefined) {
+            generationRing.hits += 1;
+            return current;
+        }
+        for (const gen of [generationRing.genSecond, generationRing.genThird]) {
+            const count = gen.get(key);
+            if (count !== undefined) {
+                // 提升至当前代：从旧代摘除、写当前代（下一次推进才再往后挪）。
+                gen.delete(key);
+                generationRing.genCurrent.set(key, count);
+                generationRing.hits += 1;
+                return count;
+            }
+        }
+        generationRing.misses += 1;
+        return undefined;
+    },
 
-  /** 记一块的 token 数（写当前代，覆盖同键旧值），随后执行总量上限淘汰。 */
-  record(hash16: string, scope: string, count: number): void {
-    genCurrent.set(TokenChunkCache.buildEntryKey(hash16, scope), count);
-    currentGenDirty = true;
-    TokenChunkCache.enforceTotalCap();
-  },
+    /** 记一块的 token 数（写当前代，覆盖同键旧值），随后执行总量上限淘汰。 */
+    record(hash16: string, scope: string, count: number): void {
+        generationRing.genCurrent.set(TokenChunkCache.buildEntryKey(hash16, scope), count);
+        generationRing.currentGenDirty = true;
+        TokenChunkCache.enforceTotalCap();
+    },
 
-  /**
+    /**
    * 推进一代（当前→二→三淘汰），一轮整 prompt 计数收尾调用一次。
    *
    * 当 `options.persist.sessionKkv` 存在、`options.realRefresh === true`
@@ -283,37 +289,37 @@ export const tokenChunkCache = {
    * 无新记录的轮次跳过序列化与写入（整表内容与上次落盘逐条相同）；**代际
    * 轮换在任何分支都照旧执行**，内存语义与优化前完全一致。
    */
-  advanceGeneration(sessionId: string, options?: AdvanceGenerationOptions): void {
-    const sessionKkv = options?.persist?.sessionKkv;
-    let payload: string | null = null;
-    if (sessionKkv != null && options?.realRefresh === true && currentGenDirty && genCurrent.size > 0) {
-      const items: [string, string, number][] = [];
-      for (const [key, count] of genCurrent) {
-        const [hash16, scope] = [key.slice(3, 3 + CHUNK_HASH_HEX_LENGTH), key.slice(4 + CHUNK_HASH_HEX_LENGTH)];
-        items.push([hash16, scope, count]);
-      }
-      payload = JSON.stringify({ v: TOKEN_CHUNKS_PAYLOAD_VERSION, items });
-    }
+    advanceGeneration(sessionId: string, options?: AdvanceGenerationOptions): void {
+        const sessionKkv = options?.persist?.sessionKkv;
+        let payload: string | null = null;
+        if (sessionKkv != null && options?.realRefresh === true && generationRing.currentGenDirty && generationRing.genCurrent.size > 0) {
+            const items: [string, string, number][] = [];
+            for (const [key, count] of generationRing.genCurrent) {
+                const [hash16, scope] = [key.slice(3, 3 + CHUNK_HASH_HEX_LENGTH), key.slice(4 + CHUNK_HASH_HEX_LENGTH)];
+                items.push([hash16, scope, count]);
+            }
+            payload = JSON.stringify({ v: TOKEN_CHUNKS_PAYLOAD_VERSION, items });
+        }
 
-    // 三代环形轮换：第三代淘汰后清空复用为新当前代（省一次分配）。
-    const evicted = genThird;
-    evicted.clear();
-    genThird = genSecond;
-    genSecond = genCurrent;
-    genCurrent = evicted;
+        // 三代环形轮换：第三代淘汰后清空复用为新当前代（省一次分配）。
+        const evicted = generationRing.genThird;
+        evicted.clear();
+        generationRing.genThird = generationRing.genSecond;
+        generationRing.genSecond = generationRing.genCurrent;
+        generationRing.genCurrent = evicted;
 
-    if (sessionKkv != null && payload != null) {
-      // 脏标记在**安排**写入后即清（不等落库结果）：整表写入是 fire-and-forget
-      // 的覆盖写，没有重试语义；等落库反而会让写失败时下一轮又付一次整表代价。
-      currentGenDirty = false;
-      const write = sessionKkv.set(sessionId, SESSION_KKV_DOMAIN_TOKEN_CHUNKS, TOKEN_CHUNKS_CACHE_KEY, payload);
-      void write.catch((error) => {
-        log.warn(`KKV 写入失败（session=${sessionId}）`, { error });
-      });
-    }
-  },
+        if (sessionKkv != null && payload != null) {
+            // 脏标记在**安排**写入后即清（不等落库结果）：整表写入是 fire-and-forget
+            // 的覆盖写，没有重试语义；等落库反而会让写失败时下一轮又付一次整表代价。
+            generationRing.currentGenDirty = false;
+            const write = sessionKkv.set(sessionId, SESSION_KKV_DOMAIN_TOKEN_CHUNKS, TOKEN_CHUNKS_CACHE_KEY, payload);
+            void write.catch((error) => {
+                log.warn(`KKV 写入失败（session=${sessionId}）`, { error });
+            });
+        }
+    },
 
-  /**
+    /**
    * 从 session KKV 载入持久化整表为**最旧可用代**种子（第三代，不顶当前
    * 代——热层当前代的条目更新鲜）。返回载入条数；KKV 行缺失 / 坏 JSON /
    * `v` 不符 / 字段非法 / 读库异常一律静默返回 0（按无种子处理，不抛错）。
@@ -332,79 +338,79 @@ export const tokenChunkCache = {
    * 坏行时每轮都会重试一次整表读（与 12.5s 止血目标相反），但「加速」让位于
    * 「正确性」，且坏行属于应当被上游写侧修掉的异常形态，不是常态。
    */
-  async seedFromKkv(sessionKkv: SessionKkvService | null | undefined, sessionId: string): Promise<number> {
-    if (sessionKkv == null) {
-      return 0;
-    }
-    if (seededSessions.has(sessionId)) {
-      return 0;
-    }
-    // 先登记再 await：并发调用也只发一次读（同一行读两遍没有意义）。
-    seededSessions.add(sessionId);
-    let raw: string | null;
-    try {
-      raw = await sessionKkv.get(sessionId, SESSION_KKV_DOMAIN_TOKEN_CHUNKS, TOKEN_CHUNKS_CACHE_KEY);
-    } catch (error) {
-      log.warn(`KKV 读取失败（session=${sessionId}），按无种子处理`, { error });
-      // 撤销登记：读失败是瞬时的，不撤销则本进程内该会话永远失去种子。
-      seededSessions.delete(sessionId);
-      return 0;
-    }
-    const items = TokenChunkCache.parsePayload(raw);
-    if (items == null) {
-      // 只有「行存在但坏」（截断 / 版本不符 / 字段非法）才撤销登记：那种行
-      // 可能是别的写入方瞬态写坏、随后被修好，留着登记会让本进程永久按
-      // 「无种子」处理。**行不存在（首次运行/该会话还没落过盘）不是失败**——
-      // 那就是「本来就没东西可 seed」，撤销登记等于把 seed-once 整个废掉
-      // （此后每轮都白读一次整表，正是本次要治的病）。
-      if (raw != null && raw.length > 0) {
-        seededSessions.delete(sessionId);
-      }
-      return 0;
-    }
-    for (const [hash16, scope, count] of items) {
-      // 合并进最旧代：同键以种子覆盖（种子即该会话最近一次落盘的当前代）。
-      genThird.set(TokenChunkCache.buildEntryKey(hash16, scope), count);
-    }
-    TokenChunkCache.enforceTotalCap();
-    return items.length;
-  },
+    async seedFromKkv(sessionKkv: SessionKkvService | null | undefined, sessionId: string): Promise<number> {
+        if (sessionKkv == null) {
+            return 0;
+        }
+        if (seededSessions.has(sessionId)) {
+            return 0;
+        }
+        // 先登记再 await：并发调用也只发一次读（同一行读两遍没有意义）。
+        seededSessions.add(sessionId);
+        let raw: string | null;
+        try {
+            raw = await sessionKkv.get(sessionId, SESSION_KKV_DOMAIN_TOKEN_CHUNKS, TOKEN_CHUNKS_CACHE_KEY);
+        } catch (error) {
+            log.warn(`KKV 读取失败（session=${sessionId}），按无种子处理`, { error });
+            // 撤销登记：读失败是瞬时的，不撤销则本进程内该会话永远失去种子。
+            seededSessions.delete(sessionId);
+            return 0;
+        }
+        const items = TokenChunkCache.parsePayload(raw);
+        if (items == null) {
+            // 只有「行存在但坏」（截断 / 版本不符 / 字段非法）才撤销登记：那种行
+            // 可能是别的写入方瞬态写坏、随后被修好，留着登记会让本进程永久按
+            // 「无种子」处理。**行不存在（首次运行/该会话还没落过盘）不是失败**——
+            // 那就是「本来就没东西可 seed」，撤销登记等于把 seed-once 整个废掉
+            // （此后每轮都白读一次整表，正是本次要治的病）。
+            if (raw != null && raw.length > 0) {
+                seededSessions.delete(sessionId);
+            }
+            return 0;
+        }
+        for (const [hash16, scope, count] of items) {
+            // 合并进最旧代：同键以种子覆盖（种子即该会话最近一次落盘的当前代）。
+            generationRing.genThird.set(TokenChunkCache.buildEntryKey(hash16, scope), count);
+        }
+        TokenChunkCache.enforceTotalCap();
+        return items.length;
+    },
 
-  /**
+    /**
    * 测试用：清空三代与命中计数，并恢复默认总量上限。
    *
    * 同时复位 {@link seededSessions} 与脏标记——否则 seed-once 会让「模拟进程
    * 重启后重新 seed」的后续用例静默按已 seed 处理。
    */
-  clearForTests(): void {
-    genCurrent.clear();
-    genSecond.clear();
-    genThird.clear();
-    hits = 0;
-    misses = 0;
-    maxTotalEntries = CHUNK_CACHE_MAX_TOTAL_ENTRIES;
-    seededSessions.clear();
-    currentGenDirty = false;
-  },
+    clearForTests(): void {
+        generationRing.genCurrent.clear();
+        generationRing.genSecond.clear();
+        generationRing.genThird.clear();
+        generationRing.hits = 0;
+        generationRing.misses = 0;
+        generationRing.maxTotalEntries = CHUNK_CACHE_MAX_TOTAL_ENTRIES;
+        seededSessions.clear();
+        generationRing.currentGenDirty = false;
+    },
 
-  /** 测试用：注入小总量上限（clearForTests 会恢复默认值）。 */
-  setMaxTotalEntriesForTests(max: number): void {
-    maxTotalEntries = max;
-    TokenChunkCache.enforceTotalCap();
-  },
+    /** 测试用：注入小总量上限（clearForTests 会恢复默认值）。 */
+    setMaxTotalEntriesForTests(max: number): void {
+        generationRing.maxTotalEntries = max;
+        TokenChunkCache.enforceTotalCap();
+    },
 
-  /** 观测用：命中/未命中计数、总条数与各代条数（[当前, 第二, 第三]）。 */
-  stats(): {
-    hits: number;
-    misses: number;
-    total: number;
-    genCounts: [number, number, number];
-  } {
-    return {
-      hits,
-      misses,
-      total: genCurrent.size + genSecond.size + genThird.size,
-      genCounts: [genCurrent.size, genSecond.size, genThird.size],
-    };
-  },
+    /** 观测用：命中/未命中计数、总条数与各代条数（[当前, 第二, 第三]）。 */
+    stats(): {
+        hits: number;
+        misses: number;
+        total: number;
+        genCounts: [number, number, number];
+    } {
+        return {
+            hits: generationRing.hits,
+            misses: generationRing.misses,
+            total: generationRing.genCurrent.size + generationRing.genSecond.size + generationRing.genThird.size,
+            genCounts: [generationRing.genCurrent.size, generationRing.genSecond.size, generationRing.genThird.size],
+        };
+    },
 } as const;

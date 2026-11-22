@@ -11,35 +11,38 @@
  */
 import type {ComponentChildren} from 'preact';
 import {TrustedHtml} from '@web/shared/ui/TrustedHtml';
-import {OVER_LIMIT_HINT, DocumentModel, type DocumentPayload} from '../runtime/document-model';
+import {DocumentModel, type DocumentPayload} from '../runtime/document-model';
+import {RichDocumentBridge} from '../runtime/bridge';
 
 type DocumentAppProps = {
-  payload: DocumentPayload;
+    payload: DocumentPayload;
 };
 
 /** 落 `.doc-body` 的 class（HTML 布局按 payload.layout 区分富/纯）。 */
 export function DocumentApp({payload}: DocumentAppProps) {
-  const bodyDesc = DocumentModel.buildBody(payload);
-  const overLimit = !!payload.overLimit;
+    const bodyDesc = DocumentModel.buildBody(payload);
+    const overLimit = !!payload.overLimit;
 
-  let body: ComponentChildren = null;
-  if (bodyDesc?.kind === 'html') {
-    body = <TrustedHtml html={bodyDesc.html} className={bodyDesc.layout === 'plain' ? 'doc-body' : 'doc-body rich'} />;
-  } else if (bodyDesc) {
-    body = (
-      <div className="doc-body">
-        {bodyDesc.fmHtml ? <TrustedHtml html={bodyDesc.fmHtml} /> : null}
-        {bodyDesc.text}
-      </div>
-    );
-  }
+    let body: ComponentChildren = null;
+    if (bodyDesc?.kind === 'html') {
+        body = <TrustedHtml html={bodyDesc.html} className={bodyDesc.layout === 'plain' ? 'doc-body' : 'doc-body rich'} />;
+    } else if (bodyDesc) {
+        body = (
+            <div className="doc-body">
+                {bodyDesc.fmHtml ? <TrustedHtml html={bodyDesc.fmHtml} /> : null}
+                {bodyDesc.text}
+            </div>
+        );
+    }
 
-  const children: ComponentChildren[] = [];
-  if (body) {
-    children.push(body);
-  }
-  if (overLimit) {
-    children.push(<div className="over-limit-hint">{OVER_LIMIT_HINT}</div>);
-  }
-  return children;
+    const children: ComponentChildren[] = [];
+    if (body) {
+        children.push(body);
+    }
+    if (overLimit) {
+        // 超限提示文案走第二桥 labels 读取口（宿主 init.labels 下发）；
+        // 旧宿主/缺省由 DEFAULT_RICH_DOCUMENT_UI_LABELS 回退原常量，渲染值恒存在。
+        children.push(<div className="over-limit-hint">{RichDocumentBridge.currentLabels().ui['ui.rich_document.over_limit_hint']}</div>);
+    }
+    return children;
 }

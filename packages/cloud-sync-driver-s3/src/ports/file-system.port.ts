@@ -6,7 +6,7 @@
  * 的实现，driver 本身不再静态依赖任何平台模块（对应 A-26）。
  */
 export interface FileSystemPort {
-  /**
+    /**
    * 读取本地文件全部字节，返回 Uint8Array。
    *
    * 契约：**必须返回独立新分配的数组，不得返回内部复用缓冲。**
@@ -15,7 +15,7 @@ export interface FileSystemPort {
    * 调用覆写的内容。现有两处注入实现（Node `fs.readFile`、mobile
    * `ReactNativeBlobUtil.fs.readFile(path, 'base64')` 解出的新数组）都满足。
    */
-  readFile(path: string): Promise<Uint8Array>;
-  /** 将字节写入本地文件（覆盖写入）。 */
-  writeFile(path: string, bytes: Uint8Array): Promise<void>;
+    readFile(path: string): Promise<Uint8Array>;
+    /** 将字节写入本地文件（覆盖写入）。 */
+    writeFile(path: string, bytes: Uint8Array): Promise<void>;
 }

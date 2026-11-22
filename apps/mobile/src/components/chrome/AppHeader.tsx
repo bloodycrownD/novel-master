@@ -9,124 +9,125 @@ import {PAGE_HEADER_CONFIG} from '../../navigation/header-config';
 import {useHeaderContext} from '../../navigation/HeaderContext';
 import {useChatTabNavigationOptional} from '@/navigation/ChatTabNavContext';
 import {useTheme} from '../../theme/ThemeProvider';
+import {coreT} from '@/i18n/core';
 
 /** 顶栏内容区高度：48 minHeight + 10 paddingBottom */
 export const APP_HEADER_CONTENT_HEIGHT = 58;
 
 type Props = {
-  pageKey: keyof typeof PAGE_HEADER_CONFIG;
-  onBack?: () => void;
-  onMenu?: () => void;
-  /** 归属屏 route key（StackScreenLayout 传入）：override 仅在归属屏应用。 */
-  ownerRouteKey?: string;
+    pageKey: keyof typeof PAGE_HEADER_CONFIG;
+    onBack?: () => void;
+    onMenu?: () => void;
+    /** 归属屏 route key（StackScreenLayout 传入）：override 仅在归属屏应用。 */
+    ownerRouteKey?: string;
 };
 
 export function AppHeader({pageKey, ownerRouteKey, onBack, onMenu}: Props) {
-  const insets = useSafeAreaInsets();
-  const {tokens, mode, toggleMode} = useTheme();
-  const {stackOverride} = useHeaderContext();
-  const chatNav = useChatTabNavigationOptional();
+    const insets = useSafeAreaInsets();
+    const {tokens, mode, toggleMode} = useTheme();
+    const {stackOverride} = useHeaderContext();
+    const chatNav = useChatTabNavigationOptional();
 
-  const resolved = useMemo(() => {
-    const base = PAGE_HEADER_CONFIG[pageKey];
-    // ownerRouteKey 过滤：转场动画期间两个屏的 header 同时可见，
-    // override 只在归属屏应用，避免「?」/标题闪烁到相邻屏。
-    const owned = stackOverride != null && (stackOverride.ownerRouteKey == null || stackOverride.ownerRouteKey === ownerRouteKey);
-    if (owned && pageKey !== 'chat') {
-      return {
-        title: stackOverride.title ?? base.title,
-        showBack: stackOverride.showBack ?? base.showBack,
-        showMenu: stackOverride.showMenu ?? false,
-        menuIcon: stackOverride.menuIcon,
-        onBack: stackOverride.onBack ?? onBack,
-        onMenu: stackOverride.onMenu ?? onMenu,
-      };
-    }
-    if (pageKey === 'chat' && chatNav != null) {
-      const {state, actions} = chatNav;
-      let title = base.title;
-      let showBack = false;
-      if (state.chatSubview === 'conversation') {
-        title = state.sessionTitle ?? '会话';
-        showBack = true;
-      } else if (state.sessionListPanel === 'projects') {
-        title = '项目工作区';
-      } else if (state.chatSubview === 'list' && state.sessionListPanel === 'sessions') {
-        title = state.projectName ?? base.title;
-      }
-      return {
-        title,
-        showBack,
-        showMenu: true,
-        onBack: actions.backFromConversation ?? onBack,
-        onMenu: actions.openDrawer ?? onMenu,
-      };
-    }
-    return {
-      title: base.title,
-      showBack: base.showBack,
-      showMenu: false,
-      menuIcon: undefined,
-      onBack,
-      onMenu,
-    };
-  }, [pageKey, chatNav, stackOverride, onBack, onMenu, ownerRouteKey]);
+    const resolved = useMemo(() => {
+        const base = PAGE_HEADER_CONFIG[pageKey];
+        // ownerRouteKey 过滤：转场动画期间两个屏的 header 同时可见，
+        // override 只在归属屏应用，避免「?」/标题闪烁到相邻屏。
+        const owned = stackOverride != null && (stackOverride.ownerRouteKey == null || stackOverride.ownerRouteKey === ownerRouteKey);
+        if (owned && pageKey !== 'chat') {
+            return {
+                title: stackOverride.title ?? base.title,
+                showBack: stackOverride.showBack ?? base.showBack,
+                showMenu: stackOverride.showMenu ?? false,
+                menuIcon: stackOverride.menuIcon,
+                onBack: stackOverride.onBack ?? onBack,
+                onMenu: stackOverride.onMenu ?? onMenu,
+            };
+        }
+        if (pageKey === 'chat' && chatNav != null) {
+            const {state, actions} = chatNav;
+            let title = base.title;
+            let showBack = false;
+            if (state.chatSubview === 'conversation') {
+                title = state.sessionTitle ?? coreT({key: "ui.nav.chat"});
+                showBack = true;
+            } else if (state.sessionListPanel === 'projects') {
+                title = coreT({key: "ui.nav.project_workspace_title"});
+            } else if (state.chatSubview === 'list' && state.sessionListPanel === 'sessions') {
+                title = state.projectName ?? base.title;
+            }
+            return {
+                title,
+                showBack,
+                showMenu: true,
+                onBack: actions.backFromConversation ?? onBack,
+                onMenu: actions.openDrawer ?? onMenu,
+            };
+        }
+        return {
+            title: base.title,
+            showBack: base.showBack,
+            showMenu: false,
+            menuIcon: undefined,
+            onBack,
+            onMenu,
+        };
+    }, [pageKey, chatNav, stackOverride, onBack, onMenu, ownerRouteKey]);
 
-  const menuLabel = pageKey === 'chat' && chatNav != null && chatNav.state.chatSubview === 'conversation' ? '会话操作' : '项目列表';
+    const menuLabel = pageKey === 'chat' && chatNav != null && chatNav.state.chatSubview === 'conversation' ? coreT({key: "ui.nav.session_actions"}) : coreT({key: "ui.nav.project_list_menu"});
 
-  return (
-    <View
-      style={[
-        styles.bar,
-        {
-          paddingTop: insets.top,
-          backgroundColor: tokens.headerBackground,
-          borderBottomColor: tokens.border,
-        },
-      ]}
-    >
-      <View style={styles.row}>
-        {resolved.showBack ? (
-          <Pressable onPress={resolved.onBack} style={styles.iconBtn} accessibilityLabel="返回">
-            <BackIcon color={tokens.primary} />
-          </Pressable>
-        ) : (
-          <View style={styles.iconPlaceholder} />
-        )}
-        <Text style={[styles.title, {color: tokens.text}]} numberOfLines={1} accessibilityRole="header">
-          {resolved.title}
-        </Text>
-        <Pressable onPress={() => toggleMode()} style={styles.iconBtn}>
-          {mode === 'dark' ? <SunIcon color={tokens.text} /> : <MoonIcon color={tokens.text} />}
-        </Pressable>
-        {resolved.showMenu ? (
-          <Pressable onPress={resolved.onMenu} style={styles.iconBtn} accessibilityLabel={menuLabel}>
-            {resolved.menuIcon ?? <MenuIcon color={tokens.text} />}
-          </Pressable>
-        ) : (
-          <View style={styles.iconPlaceholder} />
-        )}
-      </View>
-    </View>
-  );
+    return (
+        <View
+            style={[
+                styles.bar,
+                {
+                    paddingTop: insets.top,
+                    backgroundColor: tokens.headerBackground,
+                    borderBottomColor: tokens.border,
+                },
+            ]}
+        >
+            <View style={styles.row}>
+                {resolved.showBack ? (
+                    <Pressable onPress={resolved.onBack} style={styles.iconBtn} accessibilityLabel={coreT({key: "ui.common.back"})}>
+                        <BackIcon color={tokens.primary} />
+                    </Pressable>
+                ) : (
+                    <View style={styles.iconPlaceholder} />
+                )}
+                <Text style={[styles.title, {color: tokens.text}]} numberOfLines={1} accessibilityRole="header">
+                    {resolved.title}
+                </Text>
+                <Pressable onPress={() => toggleMode()} style={styles.iconBtn}>
+                    {mode === 'dark' ? <SunIcon color={tokens.text} /> : <MoonIcon color={tokens.text} />}
+                </Pressable>
+                {resolved.showMenu ? (
+                    <Pressable onPress={resolved.onMenu} style={styles.iconBtn} accessibilityLabel={menuLabel}>
+                        {resolved.menuIcon ?? <MenuIcon color={tokens.text} />}
+                    </Pressable>
+                ) : (
+                    <View style={styles.iconPlaceholder} />
+                )}
+            </View>
+        </View>
+    );
 }
 
 const styles = StyleSheet.create({
-  bar: {borderBottomWidth: StyleSheet.hairlineWidth},
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingBottom: 10,
-    minHeight: 48,
-  },
-  title: {flex: 1, fontSize: 18, fontWeight: '600', textAlign: 'center'},
-  iconBtn: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 10,
-  },
-  iconPlaceholder: {width: 40},
+    bar: {borderBottomWidth: StyleSheet.hairlineWidth},
+    row: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 8,
+        paddingBottom: 10,
+        minHeight: 48,
+    },
+    title: {flex: 1, fontSize: 18, fontWeight: '600', textAlign: 'center'},
+    iconBtn: {
+        width: 40,
+        height: 40,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: 10,
+    },
+    iconPlaceholder: {width: 40},
 });

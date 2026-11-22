@@ -4,6 +4,9 @@
  * @module bootstrap/schema-align/schema-column-alignments
  */
 
+import { SqlTemplateParser } from "@/infra/sql-template/index.js";
+import { TdbcTemplate } from "@/infra/tdbc/logic/template-helper.js";
+import { BootstrapProbeSql } from "@/infra/sql-template/generated/bootstrap_probe.mapper.generated.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 
 /**
@@ -12,144 +15,144 @@ import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
  * nm-style: keep-public — 导出常量的声明类型，撤导出会触发声明发射对私有类型的引用错误。
  */
 export type SchemaColumnAlignment = {
-  readonly table: string;
-  readonly column: string;
-  readonly addColumnSql: string;
-  /** ADD 列后可选一次性回填（如 head_version ← version）。 */
-  readonly afterAdd?: (tx: TdbcConnection) => Promise<void>;
+    readonly table: string;
+    readonly column: string;
+    readonly addColumnSql: string;
+    /** ADD 列后可选一次性回填（如 head_version ← version）。 */
+    readonly afterAdd?: (tx: TdbcConnection) => Promise<void>;
 };
 
 /** 当前版本运行必需的 legacy 列清单（顺序无关，逐项幂等）。 */
 export const SCHEMA_COLUMN_ALIGNMENTS: readonly SchemaColumnAlignment[] = [
-  {
-    table: "chat_session",
-    column: "composer_draft_json",
-    addColumnSql: "ALTER TABLE chat_session ADD COLUMN composer_draft_json TEXT NULL",
-  },
-  {
-    table: "chat_session",
-    column: "agent_config_json",
-    addColumnSql: "ALTER TABLE chat_session ADD COLUMN agent_config_json TEXT NULL",
-  },
-  {
-    table: "chat_session",
-    column: "parent_session_id",
-    addColumnSql: "ALTER TABLE chat_session ADD COLUMN parent_session_id TEXT NULL",
-    afterAdd: async (tx) => {
-      // 老库升版补列后建索引（新库由 bootstrap 末尾的幂等步骤建）。
-      await tx.execute("CREATE INDEX IF NOT EXISTS idx_chat_session_parent ON chat_session(parent_session_id)");
+    {
+        table: "chat_session",
+        column: "composer_draft_json",
+        addColumnSql: "ALTER TABLE chat_session ADD COLUMN composer_draft_json TEXT NULL",
     },
-  },
-  {
-    table: "chat_message",
-    column: "hidden",
-    addColumnSql: "ALTER TABLE chat_message ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0",
-  },
-  {
-    table: "chat_message",
-    column: "attachments_json",
-    addColumnSql: "ALTER TABLE chat_message ADD COLUMN attachments_json TEXT NULL",
-  },
-  {
-    table: "chat_message",
-    column: "provider_id",
-    addColumnSql: "ALTER TABLE chat_message ADD COLUMN provider_id TEXT NULL",
-  },
-  {
-    table: "chat_message",
-    column: "prompt_tokens",
-    addColumnSql: "ALTER TABLE chat_message ADD COLUMN prompt_tokens INTEGER",
-  },
-  {
-    table: "chat_message",
-    column: "completion_tokens",
-    addColumnSql: "ALTER TABLE chat_message ADD COLUMN completion_tokens INTEGER",
-  },
-  {
-    table: "chat_message",
-    column: "total_tokens",
-    addColumnSql: "ALTER TABLE chat_message ADD COLUMN total_tokens INTEGER",
-  },
-  {
-    table: "chat_message",
-    column: "cache_read_tokens",
-    addColumnSql: "ALTER TABLE chat_message ADD COLUMN cache_read_tokens INTEGER NULL",
-  },
-  {
-    table: "chat_message",
-    column: "cache_creation_tokens",
-    addColumnSql: "ALTER TABLE chat_message ADD COLUMN cache_creation_tokens INTEGER NULL",
-  },
-  {
-    table: "chat_message",
-    column: "model_name",
-    addColumnSql: "ALTER TABLE chat_message ADD COLUMN model_name TEXT NULL",
-  },
-  {
-    table: "chat_message",
-    column: "first_token_ms",
-    addColumnSql: "ALTER TABLE chat_message ADD COLUMN first_token_ms INTEGER NULL",
-  },
-  {
-    table: "chat_message",
-    column: "duration_ms",
-    addColumnSql: "ALTER TABLE chat_message ADD COLUMN duration_ms INTEGER NULL",
-  },
-  {
-    table: "chat_project",
-    column: "agent_config_json",
-    addColumnSql: "ALTER TABLE chat_project ADD COLUMN agent_config_json TEXT NULL",
-  },
-  {
-    table: "vfs_entry",
-    column: "entry_kind",
-    addColumnSql: "ALTER TABLE vfs_entry ADD COLUMN entry_kind TEXT NOT NULL DEFAULT 'file'",
-  },
-  {
-    table: "vfs_entry",
-    column: "head_version",
-    addColumnSql: "ALTER TABLE vfs_entry ADD COLUMN head_version INTEGER NOT NULL DEFAULT 1",
-    afterAdd: async (tx) => {
-      await tx.execute("UPDATE vfs_entry SET head_version = version");
+    {
+        table: "chat_session",
+        column: "agent_config_json",
+        addColumnSql: "ALTER TABLE chat_session ADD COLUMN agent_config_json TEXT NULL",
     },
-  },
-  {
-    table: "llm_provider",
-    column: "body_params_json",
-    addColumnSql: "ALTER TABLE llm_provider ADD COLUMN body_params_json TEXT NOT NULL DEFAULT '{}'",
-  },
-  // session_run_state token 加列（stream-metrics-tokens：指标条 token 化）。
-  // 旧库 align 后新列取缺省（0 / 'heuristic'），水合按 0 t 起算兜底。
-  {
-    table: "session_run_state",
-    column: "completion_tokens",
-    addColumnSql: "ALTER TABLE session_run_state ADD COLUMN completion_tokens INTEGER NOT NULL DEFAULT 0",
-  },
-  {
-    table: "session_run_state",
-    column: "token_source",
-    addColumnSql: "ALTER TABLE session_run_state ADD COLUMN token_source TEXT NOT NULL DEFAULT 'heuristic'",
-  },
-  // vfs_content_blob.ref_count：双保险。entry-id migration 的 Step 5b 已先补列，
-  // 此条目防「旧库跳过 migration 直进 align」的边角场景（理论上不会发生，但成本低）。
-  {
-    table: "vfs_content_blob",
-    column: "ref_count",
-    addColumnSql: "ALTER TABLE vfs_content_blob ADD COLUMN ref_count INTEGER NOT NULL DEFAULT 0",
-  },
-  // 消息正文存储两列（明文为正形态）：老库靠
-  // SCHEMA_BOOT_VERSION v17 bump 走慢路径补列；新列全 NULL = 明文行的
-  // 正常形态。存量压缩行的搬运原由后台解压任务（infra/db-maintenance）谓词
-  // 驱动完成，不在 align 里回填（空占位 migration 禁令；数据迁移走后台
-  // 任务拍板）；该任务已随 V1' 退役（v1.5.40 同批，真实库实测谓词归零）。
-  {
-    table: "chat_message",
-    column: "content_encoding",
-    addColumnSql: "ALTER TABLE chat_message ADD COLUMN content_encoding TEXT NULL CHECK (content_encoding IN ('zlib', 'zlib-b64'))",
-  },
-  {
-    table: "chat_message",
-    column: "content_blob",
-    addColumnSql: "ALTER TABLE chat_message ADD COLUMN content_blob BLOB NULL",
-  },
+    {
+        table: "chat_session",
+        column: "parent_session_id",
+        addColumnSql: "ALTER TABLE chat_session ADD COLUMN parent_session_id TEXT NULL",
+        afterAdd: async (tx) => {
+            // 老库升版补列后建索引（新库由 bootstrap 末尾的幂等步骤建）。
+            await tx.execute("CREATE INDEX IF NOT EXISTS idx_chat_session_parent ON chat_session(parent_session_id)");
+        },
+    },
+    {
+        table: "chat_message",
+        column: "hidden",
+        addColumnSql: "ALTER TABLE chat_message ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0",
+    },
+    {
+        table: "chat_message",
+        column: "attachments_json",
+        addColumnSql: "ALTER TABLE chat_message ADD COLUMN attachments_json TEXT NULL",
+    },
+    {
+        table: "chat_message",
+        column: "provider_id",
+        addColumnSql: "ALTER TABLE chat_message ADD COLUMN provider_id TEXT NULL",
+    },
+    {
+        table: "chat_message",
+        column: "prompt_tokens",
+        addColumnSql: "ALTER TABLE chat_message ADD COLUMN prompt_tokens INTEGER",
+    },
+    {
+        table: "chat_message",
+        column: "completion_tokens",
+        addColumnSql: "ALTER TABLE chat_message ADD COLUMN completion_tokens INTEGER",
+    },
+    {
+        table: "chat_message",
+        column: "total_tokens",
+        addColumnSql: "ALTER TABLE chat_message ADD COLUMN total_tokens INTEGER",
+    },
+    {
+        table: "chat_message",
+        column: "cache_read_tokens",
+        addColumnSql: "ALTER TABLE chat_message ADD COLUMN cache_read_tokens INTEGER NULL",
+    },
+    {
+        table: "chat_message",
+        column: "cache_creation_tokens",
+        addColumnSql: "ALTER TABLE chat_message ADD COLUMN cache_creation_tokens INTEGER NULL",
+    },
+    {
+        table: "chat_message",
+        column: "model_name",
+        addColumnSql: "ALTER TABLE chat_message ADD COLUMN model_name TEXT NULL",
+    },
+    {
+        table: "chat_message",
+        column: "first_token_ms",
+        addColumnSql: "ALTER TABLE chat_message ADD COLUMN first_token_ms INTEGER NULL",
+    },
+    {
+        table: "chat_message",
+        column: "duration_ms",
+        addColumnSql: "ALTER TABLE chat_message ADD COLUMN duration_ms INTEGER NULL",
+    },
+    {
+        table: "chat_project",
+        column: "agent_config_json",
+        addColumnSql: "ALTER TABLE chat_project ADD COLUMN agent_config_json TEXT NULL",
+    },
+    {
+        table: "vfs_entry",
+        column: "entry_kind",
+        addColumnSql: "ALTER TABLE vfs_entry ADD COLUMN entry_kind TEXT NOT NULL DEFAULT 'file'",
+    },
+    {
+        table: "vfs_entry",
+        column: "head_version",
+        addColumnSql: "ALTER TABLE vfs_entry ADD COLUMN head_version INTEGER NOT NULL DEFAULT 1",
+        afterAdd: async (tx) => {
+            await TdbcTemplate.execute(tx, new SqlTemplateParser(), BootstrapProbeSql.alignVfsEntryHeadVersion, {});
+        },
+    },
+    {
+        table: "llm_provider",
+        column: "body_params_json",
+        addColumnSql: "ALTER TABLE llm_provider ADD COLUMN body_params_json TEXT NOT NULL DEFAULT '{}'",
+    },
+    // session_run_state token 加列（stream-metrics-tokens：指标条 token 化）。
+    // 旧库 align 后新列取缺省（0 / 'heuristic'），水合按 0 t 起算兜底。
+    {
+        table: "session_run_state",
+        column: "completion_tokens",
+        addColumnSql: "ALTER TABLE session_run_state ADD COLUMN completion_tokens INTEGER NOT NULL DEFAULT 0",
+    },
+    {
+        table: "session_run_state",
+        column: "token_source",
+        addColumnSql: "ALTER TABLE session_run_state ADD COLUMN token_source TEXT NOT NULL DEFAULT 'heuristic'",
+    },
+    // vfs_content_blob.ref_count：双保险。entry-id migration 的 Step 5b 已先补列，
+    // 此条目防「旧库跳过 migration 直进 align」的边角场景（理论上不会发生，但成本低）。
+    {
+        table: "vfs_content_blob",
+        column: "ref_count",
+        addColumnSql: "ALTER TABLE vfs_content_blob ADD COLUMN ref_count INTEGER NOT NULL DEFAULT 0",
+    },
+    // 消息正文存储两列（明文为正形态）：老库靠
+    // SCHEMA_BOOT_VERSION v17 bump 走慢路径补列；新列全 NULL = 明文行的
+    // 正常形态。存量压缩行的搬运原由后台解压任务（infra/db-maintenance）谓词
+    // 驱动完成，不在 align 里回填（空占位 migration 禁令；数据迁移走后台
+    // 任务拍板）；该任务已随 V1' 退役（v1.5.40 同批，真实库实测谓词归零）。
+    {
+        table: "chat_message",
+        column: "content_encoding",
+        addColumnSql: "ALTER TABLE chat_message ADD COLUMN content_encoding TEXT NULL CHECK (content_encoding IN ('zlib', 'zlib-b64'))",
+    },
+    {
+        table: "chat_message",
+        column: "content_blob",
+        addColumnSql: "ALTER TABLE chat_message ADD COLUMN content_blob BLOB NULL",
+    },
 ];

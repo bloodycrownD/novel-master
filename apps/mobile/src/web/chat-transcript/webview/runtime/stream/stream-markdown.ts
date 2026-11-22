@@ -8,23 +8,23 @@ import {Stream, type StreamKind} from './stream';
 const STREAM_RICH_UPGRADE_MS = 350;
 
 type StreamRichUpgradeState = {
-  timer: ReturnType<typeof setTimeout> | null;
-  kinds: {text: boolean; thinking: boolean};
-  plainMode: {text: boolean; thinking: boolean};
+    timer: ReturnType<typeof setTimeout> | null;
+    kinds: {text: boolean; thinking: boolean};
+    plainMode: {text: boolean; thinking: boolean};
 };
 
 export const streamRichUpgrade: StreamRichUpgradeState = {
-  timer: null,
-  kinds: {text: false, thinking: false},
-  plainMode: {text: true, thinking: true},
+    timer: null,
+    kinds: {text: false, thinking: false},
+    plainMode: {text: true, thinking: true},
 };
 
 export const StreamRichUpgrade = {
-  renderStreamingInline: (s: string): string => {
-    const escaped = HtmlEscape.escapeRaw(s);
-    const bolded = escaped.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-    const italic = bolded.replace(/\*(.+?)\*/g, '<em>$1</em>');
-    return italic.replace(/`([^`]+)`/g, '<code>$1</code>');
+    renderStreamingInline: (s: string): string => {
+        const escaped = HtmlEscape.escapeRaw(s);
+        const bolded = escaped.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        const italic = bolded.replace(/\*(.+?)\*/g, '<em>$1</em>');
+        return italic.replace(/`([^`]+)`/g, '<code>$1</code>');
   },
 
   renderStreamingMarkdown: (text: unknown): string => {

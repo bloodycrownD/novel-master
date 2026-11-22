@@ -16,120 +16,121 @@ import {ModelDisplayLabel} from '@/services/model-display-label';
 import {AgentDisplayLabel} from '@/services/agent-display-label';
 import type {RootStackParamList} from '@/navigation/types';
 import {useTheme} from '@/theme/ThemeProvider';
+import {coreT} from '@/i18n/core';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 const WORKSPACE_MODEL_MENU = {
-  icon: '🤖',
-  label: '当前大模型',
+    icon: '🤖',
+    label: coreT({key: "ui.session.current_model"}),
 } as const;
 
 const WORKSPACE_AGENT_MENU = {
-  icon: '🧠',
-  label: '当前智能体',
+    icon: '🧠',
+    label: coreT({key: "ui.session.current_agent"}),
 } as const;
 
 const WORKSPACE_GLOBAL_MENU = {
-  icon: '🌐',
-  label: '文件浏览器',
-  route: 'GlobalTemplate',
+    icon: '🌐',
+    label: coreT({key: "ui.nav.file_browser"}),
+    route: 'GlobalTemplate',
 } as const;
 
 const CONFIG_MENU: Array<{
-  icon: string;
-  label: string;
-  route: keyof RootStackParamList;
+    icon: string;
+    label: string;
+    route: keyof RootStackParamList;
 }> = [
-  {icon: '🤖', label: '智能体配置', route: 'AgentsSettings'},
-  {icon: '🔌', label: '服务商配置', route: 'Providers'},
-  {icon: '🔍', label: '搜索配置', route: 'SearchEngines'},
-  {icon: '🧩', label: '技能管理', route: 'SkillsSettings'},
-  {icon: '💬', label: '聊天配置', route: 'ChatConfig'},
-  {icon: '💾', label: '存储配置', route: 'StorageConfig'},
-  {icon: '📊', label: '数据统计', route: 'TokenUsageStats'},
-  {icon: '🔢', label: '智能排序', route: 'SmartSortRules'},
+    {icon: '🤖', label: coreT({key: "ui.nav.agent_settings"}), route: 'AgentsSettings'},
+    {icon: '🔌', label: coreT({key: "ui.nav.providers"}), route: 'Providers'},
+    {icon: '🔍', label: coreT({key: "ui.nav.search_engines"}), route: 'SearchEngines'},
+    {icon: '🧩', label: coreT({key: "ui.nav.skills_manage"}), route: 'SkillsSettings'},
+    {icon: '💬', label: coreT({key: "ui.chat_config.title"}), route: 'ChatConfig'},
+    {icon: '💾', label: coreT({key: "ui.nav.storage"}), route: 'StorageConfig'},
+    {icon: '📊', label: coreT({key: "ui.nav.token_stats"}), route: 'TokenUsageStats'},
+    {icon: '🔢', label: coreT({key: "ui.nav.settings_smart_sort"}), route: 'SmartSortRules'},
 ];
 
 export function ProfileTabScreen() {
-  const {tokens} = useTheme();
-  const runtime = useRuntime();
-  const navigation = useNavigation<Nav>();
-  const [modelLabel, setModelLabel] = useState('—');
-  const [agentLabel, setAgentLabel] = useState('—');
-  const [modelPickerVisible, setModelPickerVisible] = useState(false);
-  const [agentPickerVisible, setAgentPickerVisible] = useState(false);
+    const {tokens} = useTheme();
+    const runtime = useRuntime();
+    const navigation = useNavigation<Nav>();
+    const [modelLabel, setModelLabel] = useState('—');
+    const [agentLabel, setAgentLabel] = useState('—');
+    const [modelPickerVisible, setModelPickerVisible] = useState(false);
+    const [agentPickerVisible, setAgentPickerVisible] = useState(false);
 
-  const dismissAllOverlays = useCallback(() => {
-    setModelPickerVisible(false);
-    setAgentPickerVisible(false);
-  }, []);
+    const dismissAllOverlays = useCallback(() => {
+        setModelPickerVisible(false);
+        setAgentPickerVisible(false);
+    }, []);
 
-  useDismissOverlaysOnBlur(dismissAllOverlays);
+    useDismissOverlaysOnBlur(dismissAllOverlays);
 
-  const refreshAgentLabel = useCallback(async () => {
-    try {
-      setAgentLabel(await AgentDisplayLabel.resolveCurrent(runtime));
-    } catch {
-      setAgentLabel('—');
-    }
-  }, [runtime]);
+    const refreshAgentLabel = useCallback(async () => {
+        try {
+            setAgentLabel(await AgentDisplayLabel.resolveCurrent(runtime));
+        } catch {
+            setAgentLabel('—');
+        }
+    }, [runtime]);
 
-  const refreshModelLabel = useCallback(async () => {
-    const currentModel = await runtime.state.getCurrentModelId();
-    // 读取失败回退占位（错误通道迁移四期：与焦点 .catch 同款收场）。
-    if (!currentModel.ok) {
-      setModelLabel('—');
-      return;
-    }
-    const currentId = currentModel.value;
-    if (!currentId) {
-      setModelLabel('—');
-      return;
-    }
-    try {
-      const label = await ModelDisplayLabel.resolve(runtime, currentId);
-      setModelLabel(label.ok ? label.value : currentId);
-    } catch {
-      setModelLabel(currentId);
-    }
-  }, [runtime]);
+    const refreshModelLabel = useCallback(async () => {
+        const currentModel = await runtime.state.getCurrentModelId();
+        // 读取失败回退占位（错误通道迁移四期：与焦点 .catch 同款收场）。
+        if (!currentModel.ok) {
+            setModelLabel('—');
+            return;
+        }
+        const currentId = currentModel.value;
+        if (!currentId) {
+            setModelLabel('—');
+            return;
+        }
+        try {
+            const label = await ModelDisplayLabel.resolve(runtime, currentId);
+            setModelLabel(label.ok ? label.value : currentId);
+        } catch {
+            setModelLabel(currentId);
+        }
+    }, [runtime]);
 
-  const onScreenFocus = useCallback(() => {
-    refreshModelLabel().catch(() => setModelLabel('—'));
-    refreshAgentLabel().catch(() => setAgentLabel('—'));
-  }, [refreshModelLabel, refreshAgentLabel]);
-  useFocusEffect(onScreenFocus);
+    const onScreenFocus = useCallback(() => {
+        refreshModelLabel().catch(() => setModelLabel('—'));
+        refreshAgentLabel().catch(() => setAgentLabel('—'));
+    }, [refreshModelLabel, refreshAgentLabel]);
+    useFocusEffect(onScreenFocus);
 
-  const navigateTo = (route: keyof RootStackParamList) => {
-    const parent = navigation.getParent();
-    if (parent) {
-      parent.navigate(route as string);
-    }
-  };
+    const navigateTo = (route: keyof RootStackParamList) => {
+        const parent = navigation.getParent();
+        if (parent) {
+            parent.navigate(route as string);
+        }
+    };
 
-  return (
-    <View style={[styles.root, {backgroundColor: tokens.background}]}>
-      <AppHeader pageKey="profile" />
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-        <ListSectionTitle title="工作区" tokens={tokens} />
-        <ProfileMenuItem icon={WORKSPACE_MODEL_MENU.icon} label={WORKSPACE_MODEL_MENU.label} value={modelLabel} tokens={tokens} onPress={() => setModelPickerVisible(true)} />
-        <ProfileMenuItem icon={WORKSPACE_AGENT_MENU.icon} label={WORKSPACE_AGENT_MENU.label} value={agentLabel} tokens={tokens} onPress={() => setAgentPickerVisible(true)} />
-        <ProfileMenuItem icon={WORKSPACE_GLOBAL_MENU.icon} label={WORKSPACE_GLOBAL_MENU.label} tokens={tokens} onPress={() => navigateTo(WORKSPACE_GLOBAL_MENU.route)} />
-        <ListSectionTitle title="配置" tokens={tokens} />
-        {CONFIG_MENU.map(item => (
-          <ProfileMenuItem key={item.route} icon={item.icon} label={item.label} tokens={tokens} onPress={() => navigateTo(item.route)} />
-        ))}
-        <ListSectionTitle title="应用" tokens={tokens} />
-        <ProfileMenuItem icon="ℹ️" label="关于 Novel Master" tokens={tokens} onPress={() => navigateTo('About')} />
-      </ScrollView>
-      <ModelPickerModal visible={modelPickerVisible} onClose={() => setModelPickerVisible(false)} onSelected={() => refreshModelLabel().catch(() => undefined)} />
-      <AgentPickerModal visible={agentPickerVisible} onClose={() => setAgentPickerVisible(false)} onSelected={() => refreshAgentLabel().catch(() => undefined)} />
-    </View>
-  );
+    return (
+        <View style={[styles.root, {backgroundColor: tokens.background}]}>
+            <AppHeader pageKey="profile" />
+            <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+                <ListSectionTitle title={coreT({key: "ui.nav.workspace"})} tokens={tokens} />
+                <ProfileMenuItem icon={WORKSPACE_MODEL_MENU.icon} label={WORKSPACE_MODEL_MENU.label} value={modelLabel} tokens={tokens} onPress={() => setModelPickerVisible(true)} />
+                <ProfileMenuItem icon={WORKSPACE_AGENT_MENU.icon} label={WORKSPACE_AGENT_MENU.label} value={agentLabel} tokens={tokens} onPress={() => setAgentPickerVisible(true)} />
+                <ProfileMenuItem icon={WORKSPACE_GLOBAL_MENU.icon} label={WORKSPACE_GLOBAL_MENU.label} tokens={tokens} onPress={() => navigateTo(WORKSPACE_GLOBAL_MENU.route)} />
+                <ListSectionTitle title={coreT({key: "ui.nav.profile_config"})} tokens={tokens} />
+                {CONFIG_MENU.map(item => (
+                    <ProfileMenuItem key={item.route} icon={item.icon} label={item.label} tokens={tokens} onPress={() => navigateTo(item.route)} />
+                ))}
+                <ListSectionTitle title={coreT({key: "ui.nav.settings_app"})} tokens={tokens} />
+                <ProfileMenuItem icon="ℹ️" label={coreT({key: "ui.nav.about"})} tokens={tokens} onPress={() => navigateTo('About')} />
+            </ScrollView>
+            <ModelPickerModal visible={modelPickerVisible} onClose={() => setModelPickerVisible(false)} onSelected={() => refreshModelLabel().catch(() => undefined)} />
+            <AgentPickerModal visible={agentPickerVisible} onClose={() => setAgentPickerVisible(false)} onSelected={() => refreshAgentLabel().catch(() => undefined)} />
+        </View>
+    );
 }
 
 const styles = StyleSheet.create({
-  root: {flex: 1},
-  scroll: {flex: 1},
-  scrollContent: {paddingBottom: 24},
+    root: {flex: 1},
+    scroll: {flex: 1},
+    scrollContent: {paddingBottom: 24},
 });

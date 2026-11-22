@@ -16,114 +16,114 @@ import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 
 jest.mock('@/theme/ThemeProvider', () => ({
-  useTheme: () => ({
-    tokens: {
-      background: '#fff',
-      surface: '#f8f8f8',
-      text: '#111',
-      textSecondary: '#666',
-      border: '#ccc',
-      primary: '#007aff',
-      danger: '#f00',
-    },
-  }),
+    useTheme: () => ({
+        tokens: {
+            background: '#fff',
+            surface: '#f8f8f8',
+            text: '#111',
+            textSecondary: '#666',
+            border: '#ccc',
+            primary: '#007aff',
+            danger: '#f00',
+        },
+    }),
 }));
 
 jest.mock('@react-navigation/native', () => {
-  const mockReact = require('react');
-  return {
-    // 挂载时执行一次，对齐真实 focus 语义（每渲染都跑会触发 refresh 无限循环）
-    useFocusEffect: (cb: () => void | (() => void)) => {
-      mockReact.useEffect(cb, []);
-    },
-    // ChatConfigScreen 经通知模块间接引入 navigation-container-ref 的
-    // 模块级调用，mock 需提供该工厂防 suite 装载失败。
-    createNavigationContainerRef: () => ({}),
-  };
+    const mockReact = require('react');
+    return {
+        // 挂载时执行一次，对齐真实 focus 语义（每渲染都跑会触发 refresh 无限循环）
+        useFocusEffect: (cb: () => void | (() => void)) => {
+            mockReact.useEffect(cb, []);
+        },
+        // ChatConfigScreen 经通知模块间接引入 navigation-container-ref 的
+        // 模块级调用，mock 需提供该工厂防 suite 装载失败。
+        createNavigationContainerRef: () => ({}),
+    };
 });
 
 jest.mock('@/components/profile/ProfileSwitchItem', () => {
-  const mockReact = require('react');
-  const {Pressable, Text} = require('react-native');
-  return {
-    ProfileSwitchItem: (props: {
-      label: string;
-      value: boolean;
-      onValueChange: (value: boolean) => void;
-    }) =>
-      mockReact.createElement(
-        Pressable,
-        {
-          testID: `switch-${props.label}`,
-          onPress: () => props.onValueChange(!props.value),
-        },
-        mockReact.createElement(
-          Text,
-          null,
-          `${props.label}:${props.value ? '开' : '关'}`,
-        ),
-      ),
-  };
+    const mockReact = require('react');
+    const {Pressable, Text} = require('react-native');
+    return {
+        ProfileSwitchItem: (props: {
+            label: string;
+            value: boolean;
+            onValueChange: (value: boolean) => void;
+        }) =>
+            mockReact.createElement(
+                Pressable,
+                {
+                    testID: `switch-${props.label}`,
+                    onPress: () => props.onValueChange(!props.value),
+                },
+                mockReact.createElement(
+                    Text,
+                    null,
+                    `${props.label}:${props.value ? '开' : '关'}`,
+                ),
+            ),
+    };
 });
 
 // 权限行 mock（ui/G-1）：照 ProfileSwitchItem 的风格做成可点击节点，
 // 文本带 label 与 value（三态文案的断言面）。
 jest.mock('@/components/profile/ProfileMenuItem', () => {
-  const mockReact = require('react');
-  const {Pressable, Text} = require('react-native');
-  return {
-    ProfileMenuItem: (props: {
-      label: string;
-      value?: string;
-      onPress: () => void;
-    }) =>
-      mockReact.createElement(
-        Pressable,
-        {
-          testID: `menu-${props.label}`,
-          onPress: props.onPress,
-        },
-        mockReact.createElement(
-          Text,
-          null,
-          `${props.label}:${props.value ?? ''}`,
-        ),
-      ),
-  };
+    const mockReact = require('react');
+    const {Pressable, Text} = require('react-native');
+    return {
+        ProfileMenuItem: (props: {
+            label: string;
+            value?: string;
+            onPress: () => void;
+        }) =>
+            mockReact.createElement(
+                Pressable,
+                {
+                    testID: `menu-${props.label}`,
+                    onPress: props.onPress,
+                },
+                mockReact.createElement(
+                    Text,
+                    null,
+                    `${props.label}:${props.value ?? ''}`,
+                ),
+            ),
+    };
 });
 
 jest.mock('@/components/form/FormField', () => {
-  // 渲染 children（压缩配置的 Switch 挂在 FormField 内，即时保存用例需要触达）；
-  // 无文本节点，不影响既有文本断言。
-  const mockReact = require('react');
-  return {
-    FormField: ({children}: {children?: unknown}) =>
-      mockReact.createElement(mockReact.Fragment, null, children),
-  };
+    // 渲染 children（压缩配置的 Switch 挂在 FormField 内，即时保存用例需要触达）；
+    // 无文本节点，不影响既有文本断言。
+    const mockReact = require('react');
+    return {
+        FormField: ({children}: {children?: unknown}) =>
+            mockReact.createElement(mockReact.Fragment, null, children),
+    };
 });
 jest.mock('@/components/form/FormSectionCard', () => {
-  // 同 FormField：渲染 children 以触达压缩配置区的 Switch，无文本节点。
-  const mockReact = require('react');
-  return {
-    FormSectionCard: ({children}: {children?: unknown}) =>
-      mockReact.createElement(mockReact.Fragment, null, children),
-  };
+    // 同 FormField：渲染 children 以触达压缩配置区的 Switch，无文本节点。
+    const mockReact = require('react');
+    return {
+        FormSectionCard: ({children}: {children?: unknown}) =>
+            mockReact.createElement(mockReact.Fragment, null, children),
+    };
 });
 jest.mock('@/components/form/FormTextInput', () => ({
-  FormTextInput: () => null,
+    FormTextInput: () => null,
 }));
 
 jest.mock('@/components/form/ScreenFormLayout', () => {
-  const mockReact = require('react');
-  const {View} = require('react-native');
-  return {
-    ScreenFormLayout: ({children}: {children?: React.ReactNode}) =>
-      mockReact.createElement(View, null, children),
-  };
+    const mockReact = require('react');
+    const {View} = require('react-native');
+    return {
+        ScreenFormLayout: ({children}: {children?: React.ReactNode}) =>
+            mockReact.createElement(View, null, children),
+    };
 });
 
 jest.mock('@/components/chrome/ToastHost', () => ({
-  useToast: () => ({showToast: mockShowToast}),
+    useToast: () => ({showToast: mockShowToast}),
 }));
 
 const mockShowToast = jest.fn();
@@ -138,22 +138,22 @@ const mockGetConditions = jest.fn();
 const mockSetConditions = jest.fn();
 
 const mockRuntime = {
-  preferences: {
-    getLlmStreamEnabled: mockGetLlmStreamEnabled,
-    setLlmStreamEnabled: mockSetLlmStreamEnabled,
-    getSubagentStreamEnabled: mockGetSubagentStreamEnabled,
-    setSubagentStreamEnabled: mockSetSubagentStreamEnabled,
-    getThinkingContextEnabled: mockGetThinkingContextEnabled,
-    setThinkingContextEnabled: mockSetThinkingContextEnabled,
-  },
-  compactionConditions: {
-    getConditions: mockGetConditions,
-    setConditions: mockSetConditions,
-  },
+    preferences: {
+        getLlmStreamEnabled: mockGetLlmStreamEnabled,
+        setLlmStreamEnabled: mockSetLlmStreamEnabled,
+        getSubagentStreamEnabled: mockGetSubagentStreamEnabled,
+        setSubagentStreamEnabled: mockSetSubagentStreamEnabled,
+        getThinkingContextEnabled: mockGetThinkingContextEnabled,
+        setThinkingContextEnabled: mockSetThinkingContextEnabled,
+    },
+    compactionConditions: {
+        getConditions: mockGetConditions,
+        setConditions: mockSetConditions,
+    },
 };
 
 jest.mock('@/hooks/useRuntime', () => ({
-  useRuntime: () => mockRuntime,
+    useRuntime: () => mockRuntime,
 }));
 
 const mockReadBoolPref = jest.fn();
@@ -162,11 +162,11 @@ const mockAppUi = {get: jest.fn(), set: jest.fn()};
 
 // 富文本 / 消息通知两个布尔开关都经 app-ui-pref-io 的通用读写口。
 jest.mock('@/storage/app-ui-pref-io', () => {
-  const legacy = {
-  readBoolPref: (...args: unknown[]) => mockReadBoolPref(...args),
-  writeBoolPref: (...args: unknown[]) => mockWriteBoolPref(...args),
+    const legacy = {
+    readBoolPref: (...args: unknown[]) => mockReadBoolPref(...args),
+    writeBoolPref: (...args: unknown[]) => mockWriteBoolPref(...args),
 };
-  return {...legacy, AppUiPrefIo: {readBoolPref: legacy.readBoolPref, writeBoolPref: legacy.writeBoolPref}};
+    return {...legacy, AppUiPrefIo: {readBoolPref: legacy.readBoolPref, writeBoolPref: legacy.writeBoolPref}};
 });
 
 // 消息通知开关的通知模块副作用（平台门禁在服务内部，屏幕侧只断言调用接线）。
@@ -176,21 +176,21 @@ const mockGetAgentNotificationPermissionStatus = jest.fn();
 const mockRequestAgentNotificationPermissionManually = jest.fn();
 
 jest.mock('@/services/agent-finished-notification', () => {
-  const legacy = {
-  setKeepAliveResidentEnabled: (...args: unknown[]) =>
-    mockSetKeepAliveResidentEnabled(...args),
-  ensureAgentNotificationPermission: (...args: unknown[]) =>
-    mockEnsureAgentNotificationPermission(...args),
-  getAgentNotificationPermissionStatus: (...args: unknown[]) =>
-    mockGetAgentNotificationPermissionStatus(...args),
-  requestAgentNotificationPermissionManually: (...args: unknown[]) =>
-    mockRequestAgentNotificationPermissionManually(...args),
+    const legacy = {
+    setKeepAliveResidentEnabled: (...args: unknown[]) =>
+        mockSetKeepAliveResidentEnabled(...args),
+    ensureAgentNotificationPermission: (...args: unknown[]) =>
+        mockEnsureAgentNotificationPermission(...args),
+    getAgentNotificationPermissionStatus: (...args: unknown[]) =>
+        mockGetAgentNotificationPermissionStatus(...args),
+    requestAgentNotificationPermissionManually: (...args: unknown[]) =>
+        mockRequestAgentNotificationPermissionManually(...args),
 };
-  return {...legacy, AgentFinishedNotification: {setResidentEnabled: legacy.setKeepAliveResidentEnabled, ensurePermission: legacy.ensureAgentNotificationPermission, getPermissionStatus: legacy.getAgentNotificationPermissionStatus, requestPermissionManually: legacy.requestAgentNotificationPermissionManually}};
+    return {...legacy, AgentFinishedNotification: {setResidentEnabled: legacy.setKeepAliveResidentEnabled, ensurePermission: legacy.ensureAgentNotificationPermission, getPermissionStatus: legacy.getAgentNotificationPermissionStatus, requestPermissionManually: legacy.requestAgentNotificationPermissionManually}};
 });
 
 jest.mock('@/runtime/novel-master-context', () => ({
-  useNovelMaster: () => ({appUi: mockAppUi, status: 'ready'}),
+    useNovelMaster: () => ({appUi: mockAppUi, status: 'ready'}),
 }));
 
 import {ChatConfigScreen} from '@/screens/stack/ChatConfigScreen';
@@ -198,403 +198,403 @@ import {APP_UI_KEY_MESSAGE_NOTIFICATION} from '@/storage/app-ui-keys';
 
 /** 递归收集渲染树里全部展示文本（避开 toJSON 的循环引用）。 */
 function treeText(
-  node: TestRenderer.ReactTestInstance | string | number,
+    node: TestRenderer.ReactTestInstance | string | number,
 ): string {
-  if (node == null) {
-    return '';
-  }
-  if (typeof node === 'string' || typeof node === 'number') {
-    return String(node);
-  }
-  let out = '';
-  for (const child of node.children) {
-    out += treeText(child);
-  }
-  return out;
+    if (node == null) {
+        return '';
+    }
+    if (typeof node === 'string' || typeof node === 'number') {
+        return String(node);
+    }
+    let out = '';
+    for (const child of node.children) {
+        out += treeText(child);
+    }
+    return out;
 }
 
 function json(renderer: TestRenderer.ReactTestRenderer) {
-  return treeText(renderer.root);
+    return treeText(renderer.root);
 }
 
 function findSwitch(
-  root: TestRenderer.ReactTestInstance,
-  label: string,
+    root: TestRenderer.ReactTestInstance,
+    label: string,
 ): TestRenderer.ReactTestInstance {
-  const nodes = root.findAll(
-    n => n.props && n.props.testID === `switch-${label}`,
-  );
-  // Pressable 会把 props 复制到内部 responder 节点，取最外层那个即可
-  expect(nodes.length).toBeGreaterThanOrEqual(1);
-  return nodes[0];
+    const nodes = root.findAll(
+        n => n.props && n.props.testID === `switch-${label}`,
+    );
+    // Pressable 会把 props 复制到内部 responder 节点，取最外层那个即可
+    expect(nodes.length).toBeGreaterThanOrEqual(1);
+    return nodes[0];
 }
 
 /** 同 findSwitch，找 ProfileMenuItem（权限行）的可点击节点。 */
 function findMenu(
-  root: TestRenderer.ReactTestInstance,
-  label: string,
+    root: TestRenderer.ReactTestInstance,
+    label: string,
 ): TestRenderer.ReactTestInstance {
-  const nodes = root.findAll(
-    n => n.props && n.props.testID === `menu-${label}`,
-  );
-  expect(nodes.length).toBeGreaterThanOrEqual(1);
-  return nodes[0];
+    const nodes = root.findAll(
+        n => n.props && n.props.testID === `menu-${label}`,
+    );
+    expect(nodes.length).toBeGreaterThanOrEqual(1);
+    return nodes[0];
 }
 
 /** 覆盖 Platform.OS 为指定平台；getter 描述符兼容 RN jest-preset 实现。 */
 function setPlatform(os: 'android' | 'ios') {
-  Object.defineProperty(Platform, 'OS', {
-    configurable: true,
-    get: () => os,
-  });
+    Object.defineProperty(Platform, 'OS', {
+        configurable: true,
+        get: () => os,
+    });
 }
 
 async function renderScreen() {
-  let renderer: TestRenderer.ReactTestRenderer;
-  await act(async () => {
-    renderer = TestRenderer.create(<ChatConfigScreen />);
-  });
-  return {renderer: renderer!};
+    let renderer: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+        renderer = TestRenderer.create(<ChatConfigScreen />);
+    });
+    return {renderer: renderer!};
 }
 
 /** 同步点一下开关（只 flush 渲染，不等持久化 promise），便于断言乐观翻转的中间态。 */
 function toggleSwitchSync(root: TestRenderer.ReactTestInstance, label: string) {
-  act(() => {
-    findSwitch(root, label).props.onPress();
-  });
+    act(() => {
+        findSwitch(root, label).props.onPress();
+    });
 }
 
 /** 等持久化 promise 落定（reject 后的回滚也在此生效）。 */
 async function flushPersist() {
-  await act(async () => {
-    await Promise.resolve();
-    await Promise.resolve();
-  });
+    await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+    });
 }
 
 /** 点一下开关并等持久化 promise 落定（不断言中间态的用例用这个）。 */
 async function toggleSwitchAsync(
-  root: TestRenderer.ReactTestInstance,
-  label: string,
+    root: TestRenderer.ReactTestInstance,
+    label: string,
 ) {
-  toggleSwitchSync(root, label);
-  await flushPersist();
+    toggleSwitchSync(root, label);
+    await flushPersist();
 }
 
 describe('ChatConfigScreen 开关持久化失败回滚', () => {
-  beforeEach(() => {
-    mockShowToast.mockReset();
-    mockGetLlmStreamEnabled.mockReset().mockResolvedValue({ok: true, value: false});
-    mockSetLlmStreamEnabled.mockReset().mockResolvedValue(undefined);
-    // 子会话流式偏好默认开（chat.subagentStream 未设时 true），get 默认 resolve true。
-    mockGetSubagentStreamEnabled.mockReset().mockResolvedValue({ok: true, value: true});
-    mockSetSubagentStreamEnabled.mockReset().mockResolvedValue(undefined);
-    mockGetThinkingContextEnabled.mockReset().mockResolvedValue({ok: true, value: false});
-    mockSetThinkingContextEnabled.mockReset().mockResolvedValue(undefined);
-    mockGetConditions.mockReset().mockResolvedValue({ok: true, value: {
-      schemaVersion: 4,
-      enabled: false,
-      tokenRatio: 0.8,
-      hideStartDepth: 6,
-    }});
-    mockSetConditions.mockReset().mockResolvedValue(undefined);
-    mockReadBoolPref.mockReset().mockResolvedValue(false);
-    mockWriteBoolPref.mockReset().mockResolvedValue(undefined);
-  });
+    beforeEach(() => {
+        mockShowToast.mockReset();
+        mockGetLlmStreamEnabled.mockReset().mockResolvedValue({ok: true, value: false});
+        mockSetLlmStreamEnabled.mockReset().mockResolvedValue(undefined);
+        // 子会话流式偏好默认开（chat.subagentStream 未设时 true），get 默认 resolve true。
+        mockGetSubagentStreamEnabled.mockReset().mockResolvedValue({ok: true, value: true});
+        mockSetSubagentStreamEnabled.mockReset().mockResolvedValue(undefined);
+        mockGetThinkingContextEnabled.mockReset().mockResolvedValue({ok: true, value: false});
+        mockSetThinkingContextEnabled.mockReset().mockResolvedValue(undefined);
+        mockGetConditions.mockReset().mockResolvedValue({ok: true, value: {
+            schemaVersion: 4,
+            enabled: false,
+            tokenRatio: 0.8,
+            hideStartDepth: 6,
+        }});
+        mockSetConditions.mockReset().mockResolvedValue(undefined);
+        mockReadBoolPref.mockReset().mockResolvedValue(false);
+        mockWriteBoolPref.mockReset().mockResolvedValue(undefined);
+    });
 
-  it('B-3: 父会话流式写入失败回滚并 toast', async () => {
-    mockSetLlmStreamEnabled.mockRejectedValueOnce(new Error('盘炸了'));
-    const {renderer} = await renderScreen();
-    expect(json(renderer)).toContain('父会话流式:关');
+    it('B-3: 父会话流式写入失败回滚并 toast', async () => {
+        mockSetLlmStreamEnabled.mockRejectedValueOnce(new Error('盘炸了'));
+        const {renderer} = await renderScreen();
+        expect(json(renderer)).toContain('父会话流式:关');
 
-    toggleSwitchSync(renderer.root, '父会话流式');
-    expect(json(renderer)).toContain('父会话流式:开');
+        toggleSwitchSync(renderer.root, '父会话流式');
+        expect(json(renderer)).toContain('父会话流式:开');
 
-    // reject 落定后回滚到原值
-    await flushPersist();
-    expect(json(renderer)).toContain('父会话流式:关');
-    expect(mockShowToast).toHaveBeenCalledWith('保存失败：盘炸了');
-  });
+        // reject 落定后回滚到原值
+        await flushPersist();
+        expect(json(renderer)).toContain('父会话流式:关');
+        expect(mockShowToast).toHaveBeenCalledWith('保存失败：盘炸了');
+    });
 
-  it('B-3: 思考提示词写入失败回滚并 toast', async () => {
-    mockSetThinkingContextEnabled.mockRejectedValueOnce(new Error('盘炸了'));
-    const {renderer} = await renderScreen();
+    it('B-3: 思考提示词写入失败回滚并 toast', async () => {
+        mockSetThinkingContextEnabled.mockRejectedValueOnce(new Error('盘炸了'));
+        const {renderer} = await renderScreen();
 
-    await toggleSwitchAsync(renderer.root, '思考提示词');
-    expect(json(renderer)).toContain('思考提示词:关');
-    expect(mockShowToast).toHaveBeenCalledWith('保存失败：盘炸了');
-  });
+        await toggleSwitchAsync(renderer.root, '思考提示词');
+        expect(json(renderer)).toContain('思考提示词:关');
+        expect(mockShowToast).toHaveBeenCalledWith('保存失败：盘炸了');
+    });
 
-  it('B-3: 富文本消息写入失败回滚并 toast', async () => {
-    mockWriteBoolPref.mockRejectedValueOnce(new Error('盘炸了'));
-    const {renderer} = await renderScreen();
+    it('B-3: 富文本消息写入失败回滚并 toast', async () => {
+        mockWriteBoolPref.mockRejectedValueOnce(new Error('盘炸了'));
+        const {renderer} = await renderScreen();
 
-    await toggleSwitchAsync(renderer.root, '富文本消息');
-    expect(json(renderer)).toContain('富文本消息:关');
-    expect(mockShowToast).toHaveBeenCalledWith('保存失败：盘炸了');
-  });
+        await toggleSwitchAsync(renderer.root, '富文本消息');
+        expect(json(renderer)).toContain('富文本消息:关');
+        expect(mockShowToast).toHaveBeenCalledWith('保存失败：盘炸了');
+    });
 
-  it('T-M1: 子会话流式写入失败回滚并 toast', async () => {
-    mockSetSubagentStreamEnabled.mockRejectedValueOnce(new Error('盘炸了'));
-    const {renderer} = await renderScreen();
-    expect(json(renderer)).toContain('子会话流式:开');
+    it('T-M1: 子会话流式写入失败回滚并 toast', async () => {
+        mockSetSubagentStreamEnabled.mockRejectedValueOnce(new Error('盘炸了'));
+        const {renderer} = await renderScreen();
+        expect(json(renderer)).toContain('子会话流式:开');
 
-    toggleSwitchSync(renderer.root, '子会话流式');
-    expect(json(renderer)).toContain('子会话流式:关');
+        toggleSwitchSync(renderer.root, '子会话流式');
+        expect(json(renderer)).toContain('子会话流式:关');
 
-    // reject 落定后回滚到原值
-    await flushPersist();
-    expect(json(renderer)).toContain('子会话流式:开');
-    expect(mockShowToast).toHaveBeenCalledWith('保存失败：盘炸了');
-  });
+        // reject 落定后回滚到原值
+        await flushPersist();
+        expect(json(renderer)).toContain('子会话流式:开');
+        expect(mockShowToast).toHaveBeenCalledWith('保存失败：盘炸了');
+    });
 
-  it('T-M1: 子会话流式写入成功保持新值且不 toast', async () => {
-    const {renderer} = await renderScreen();
-    expect(json(renderer)).toContain('子会话流式:开');
+    it('T-M1: 子会话流式写入成功保持新值且不 toast', async () => {
+        const {renderer} = await renderScreen();
+        expect(json(renderer)).toContain('子会话流式:开');
 
-    toggleSwitchSync(renderer.root, '子会话流式');
-    await flushPersist();
-    expect(json(renderer)).toContain('子会话流式:关');
-    expect(mockShowToast).not.toHaveBeenCalled();
-  });
+        toggleSwitchSync(renderer.root, '子会话流式');
+        await flushPersist();
+        expect(json(renderer)).toContain('子会话流式:关');
+        expect(mockShowToast).not.toHaveBeenCalled();
+    });
 
-  it('B-3: 写入成功保持新值且不 toast', async () => {
-    const {renderer} = await renderScreen();
-    expect(json(renderer)).toContain('父会话流式:关');
+    it('B-3: 写入成功保持新值且不 toast', async () => {
+        const {renderer} = await renderScreen();
+        expect(json(renderer)).toContain('父会话流式:关');
 
-    toggleSwitchSync(renderer.root, '父会话流式');
-    await flushPersist();
-    expect(json(renderer)).toContain('父会话流式:开');
-    expect(mockShowToast).not.toHaveBeenCalled();
-  });
+        toggleSwitchSync(renderer.root, '父会话流式');
+        await flushPersist();
+        expect(json(renderer)).toContain('父会话流式:开');
+        expect(mockShowToast).not.toHaveBeenCalled();
+    });
 });
 
 // ── 消息通知开关回调与权限行（cr-fix-spec ui/G-1，T-K10 屏幕侧）──────────
 
 describe('ChatConfigScreen 消息通知开关与权限行（ui/G-1）', () => {
-  beforeEach(() => {
-    mockShowToast.mockReset();
-    mockGetLlmStreamEnabled.mockReset().mockResolvedValue({ok: true, value: false});
-    mockSetLlmStreamEnabled.mockReset().mockResolvedValue(undefined);
-    // 子会话流式偏好默认开（chat.subagentStream 未设时 true），get 默认 resolve true。
-    mockGetSubagentStreamEnabled.mockReset().mockResolvedValue({ok: true, value: true});
-    mockSetSubagentStreamEnabled.mockReset().mockResolvedValue(undefined);
-    mockGetThinkingContextEnabled.mockReset().mockResolvedValue({ok: true, value: false});
-    mockSetThinkingContextEnabled.mockReset().mockResolvedValue(undefined);
-    mockGetConditions.mockReset().mockResolvedValue({ok: true, value: {
-      schemaVersion: 4,
-      enabled: false,
-      tokenRatio: 0.8,
-      hideStartDepth: 6,
-    }});
-    mockReadBoolPref.mockReset().mockResolvedValue(false);
-    mockWriteBoolPref.mockReset().mockResolvedValue(undefined);
-    mockSetConditions.mockReset().mockResolvedValue(undefined);
-    mockReadBoolPref.mockReset().mockResolvedValue(false);
-    mockWriteBoolPref.mockReset().mockResolvedValue(undefined);
-    mockSetKeepAliveResidentEnabled.mockReset().mockResolvedValue(undefined);
-    mockEnsureAgentNotificationPermission.mockReset().mockResolvedValue(true);
-    mockGetAgentNotificationPermissionStatus
-      .mockReset()
-      .mockResolvedValue('authorized');
-    mockRequestAgentNotificationPermissionManually
-      .mockReset()
-      .mockResolvedValue('authorized');
-    // RN jest-preset 默认 ios；权限行相关用例自行切 android。
-    setPlatform('ios');
-  });
-
-  it('T-K10: 开关开 persist 成功 → AgentFinishedNotification.setResidentEnabled(true) 被调且不回滚；关→开附带 ensureAgentNotificationPermission', async () => {
-    // 开关行为与平台无关（resident 的平台门禁在服务内部，已 mock）。
-    const {renderer} = await renderScreen();
-    expect(json(renderer)).toContain('消息通知:关');
-
-    // 关 → 开：存储先持久化成功，通知模块副作用照常接线
-    await toggleSwitchAsync(renderer.root, '消息通知');
-    expect(mockWriteBoolPref).toHaveBeenCalledWith(
-      mockAppUi,
-      APP_UI_KEY_MESSAGE_NOTIFICATION,
-      true,
-    );
-    expect(mockSetKeepAliveResidentEnabled).toHaveBeenCalledWith(true);
-    // persist 成功不回滚：开关保持新值
-    expect(json(renderer)).toContain('消息通知:开');
-    // 关→开附带权限申请（拒绝过一次后不再自动弹的入口前移）
-    expect(mockEnsureAgentNotificationPermission).toHaveBeenCalledTimes(1);
-
-    // 开 → 关：不再附带权限申请，常驻开关同步关
-    await toggleSwitchAsync(renderer.root, '消息通知');
-    expect(mockSetKeepAliveResidentEnabled).toHaveBeenLastCalledWith(false);
-    expect(mockEnsureAgentNotificationPermission).toHaveBeenCalledTimes(1);
-    expect(json(renderer)).toContain('消息通知:关');
-  });
-
-  it('T-K10: 权限行 authorized / denied / checking 三态文案', async () => {
-    setPlatform('android');
-    // 同一用例内三段挂载/卸载，每段照 renderScreen 的 act 包裹（create 与
-    // 挂载期 refresh 链都在 act 内落定，避免 act 外 setState 告警）。
-    const renderOnce = async () => {
-      let renderer!: TestRenderer.ReactTestRenderer;
-      await act(async () => {
-        renderer = TestRenderer.create(<ChatConfigScreen />);
-      });
-      return renderer;
-    };
-
-    mockGetAgentNotificationPermissionStatus.mockResolvedValue('authorized');
-    let renderer = await renderOnce();
-    expect(json(renderer)).toContain('通知权限:已授权');
-    act(() => {
-      renderer.unmount();
+    beforeEach(() => {
+        mockShowToast.mockReset();
+        mockGetLlmStreamEnabled.mockReset().mockResolvedValue({ok: true, value: false});
+        mockSetLlmStreamEnabled.mockReset().mockResolvedValue(undefined);
+        // 子会话流式偏好默认开（chat.subagentStream 未设时 true），get 默认 resolve true。
+        mockGetSubagentStreamEnabled.mockReset().mockResolvedValue({ok: true, value: true});
+        mockSetSubagentStreamEnabled.mockReset().mockResolvedValue(undefined);
+        mockGetThinkingContextEnabled.mockReset().mockResolvedValue({ok: true, value: false});
+        mockSetThinkingContextEnabled.mockReset().mockResolvedValue(undefined);
+        mockGetConditions.mockReset().mockResolvedValue({ok: true, value: {
+            schemaVersion: 4,
+            enabled: false,
+            tokenRatio: 0.8,
+            hideStartDepth: 6,
+        }});
+        mockReadBoolPref.mockReset().mockResolvedValue(false);
+        mockWriteBoolPref.mockReset().mockResolvedValue(undefined);
+        mockSetConditions.mockReset().mockResolvedValue(undefined);
+        mockReadBoolPref.mockReset().mockResolvedValue(false);
+        mockWriteBoolPref.mockReset().mockResolvedValue(undefined);
+        mockSetKeepAliveResidentEnabled.mockReset().mockResolvedValue(undefined);
+        mockEnsureAgentNotificationPermission.mockReset().mockResolvedValue(true);
+        mockGetAgentNotificationPermissionStatus
+            .mockReset()
+            .mockResolvedValue('authorized');
+        mockRequestAgentNotificationPermissionManually
+            .mockReset()
+            .mockResolvedValue('authorized');
+        // RN jest-preset 默认 ios；权限行相关用例自行切 android。
+        setPlatform('ios');
     });
 
-    mockGetAgentNotificationPermissionStatus.mockResolvedValue('denied');
-    renderer = await renderOnce();
-    expect(json(renderer)).toContain('通知权限:未授权');
-    act(() => {
-      renderer.unmount();
+    it('T-K10: 开关开 persist 成功 → AgentFinishedNotification.setResidentEnabled(true) 被调且不回滚；关→开附带 ensureAgentNotificationPermission', async () => {
+        // 开关行为与平台无关（resident 的平台门禁在服务内部，已 mock）。
+        const {renderer} = await renderScreen();
+        expect(json(renderer)).toContain('消息通知:关');
+
+        // 关 → 开：存储先持久化成功，通知模块副作用照常接线
+        await toggleSwitchAsync(renderer.root, '消息通知');
+        expect(mockWriteBoolPref).toHaveBeenCalledWith(
+            mockAppUi,
+            APP_UI_KEY_MESSAGE_NOTIFICATION,
+            true,
+        );
+        expect(mockSetKeepAliveResidentEnabled).toHaveBeenCalledWith(true);
+        // persist 成功不回滚：开关保持新值
+        expect(json(renderer)).toContain('消息通知:开');
+        // 关→开附带权限申请（拒绝过一次后不再自动弹的入口前移）
+        expect(mockEnsureAgentNotificationPermission).toHaveBeenCalledTimes(1);
+
+        // 开 → 关：不再附带权限申请，常驻开关同步关
+        await toggleSwitchAsync(renderer.root, '消息通知');
+        expect(mockSetKeepAliveResidentEnabled).toHaveBeenLastCalledWith(false);
+        expect(mockEnsureAgentNotificationPermission).toHaveBeenCalledTimes(1);
+        expect(json(renderer)).toContain('消息通知:关');
     });
 
-    // 查询不落定 → 首帧占位 checking（「申请中…」）
-    mockGetAgentNotificationPermissionStatus.mockReturnValue(
-      new Promise<never>(() => undefined),
-    );
-    renderer = await renderOnce();
-    expect(json(renderer)).toContain('通知权限:申请中…');
-    act(() => {
-      renderer.unmount();
+    it('T-K10: 权限行 authorized / denied / checking 三态文案', async () => {
+        setPlatform('android');
+        // 同一用例内三段挂载/卸载，每段照 renderScreen 的 act 包裹（create 与
+        // 挂载期 refresh 链都在 act 内落定，避免 act 外 setState 告警）。
+        const renderOnce = async () => {
+            let renderer!: TestRenderer.ReactTestRenderer;
+            await act(async () => {
+                renderer = TestRenderer.create(<ChatConfigScreen />);
+            });
+            return renderer;
+        };
+
+        mockGetAgentNotificationPermissionStatus.mockResolvedValue('authorized');
+        let renderer = await renderOnce();
+        expect(json(renderer)).toContain('通知权限:已授权');
+        act(() => {
+            renderer.unmount();
+        });
+
+        mockGetAgentNotificationPermissionStatus.mockResolvedValue('denied');
+        renderer = await renderOnce();
+        expect(json(renderer)).toContain('通知权限:未授权');
+        act(() => {
+            renderer.unmount();
+        });
+
+        // 查询不落定 → 首帧占位 checking（「申请中…」）
+        mockGetAgentNotificationPermissionStatus.mockReturnValue(
+            new Promise<never>(() => undefined),
+        );
+        renderer = await renderOnce();
+        expect(json(renderer)).toContain('通知权限:申请中…');
+        act(() => {
+            renderer.unmount();
+        });
     });
-  });
 
-  it('T-K10: denied 点击走 requestAgentNotificationPermissionManually 并按回执更新', async () => {
-    setPlatform('android');
-    mockGetAgentNotificationPermissionStatus.mockResolvedValue('denied');
-    const {renderer} = await renderScreen();
-    expect(json(renderer)).toContain('通知权限:未授权');
+    it('T-K10: denied 点击走 requestAgentNotificationPermissionManually 并按回执更新', async () => {
+        setPlatform('android');
+        mockGetAgentNotificationPermissionStatus.mockResolvedValue('denied');
+        const {renderer} = await renderScreen();
+        expect(json(renderer)).toContain('通知权限:未授权');
 
-    // 手动申请回执 authorized：权限行按回执翻新
-    mockRequestAgentNotificationPermissionManually.mockResolvedValue(
-      'authorized',
-    );
-    act(() => {
-      findMenu(renderer.root, '通知权限').props.onPress();
+        // 手动申请回执 authorized：权限行按回执翻新
+        mockRequestAgentNotificationPermissionManually.mockResolvedValue(
+            'authorized',
+        );
+        act(() => {
+            findMenu(renderer.root, '通知权限').props.onPress();
+        });
+        // 点击后即时切 checking（手动申请中的防重入标记）
+        expect(json(renderer)).toContain('通知权限:申请中…');
+        await flushPersist();
+        expect(
+            mockRequestAgentNotificationPermissionManually,
+        ).toHaveBeenCalledTimes(1);
+        expect(json(renderer)).toContain('通知权限:已授权');
     });
-    // 点击后即时切 checking（手动申请中的防重入标记）
-    expect(json(renderer)).toContain('通知权限:申请中…');
-    await flushPersist();
-    expect(
-      mockRequestAgentNotificationPermissionManually,
-    ).toHaveBeenCalledTimes(1);
-    expect(json(renderer)).toContain('通知权限:已授权');
-  });
 
-  it('T-K10: checking 态点击不重复发起手动申请（防重入）', async () => {
-    setPlatform('android');
-    // 权限查询不落定 → 权限行停留在 checking
-    mockGetAgentNotificationPermissionStatus.mockReturnValue(
-      new Promise<never>(() => undefined),
-    );
-    const {renderer} = await renderScreen();
-    expect(json(renderer)).toContain('通知权限:申请中…');
+    it('T-K10: checking 态点击不重复发起手动申请（防重入）', async () => {
+        setPlatform('android');
+        // 权限查询不落定 → 权限行停留在 checking
+        mockGetAgentNotificationPermissionStatus.mockReturnValue(
+            new Promise<never>(() => undefined),
+        );
+        const {renderer} = await renderScreen();
+        expect(json(renderer)).toContain('通知权限:申请中…');
 
-    act(() => {
-      findMenu(renderer.root, '通知权限').props.onPress();
+        act(() => {
+            findMenu(renderer.root, '通知权限').props.onPress();
+        });
+        await flushPersist();
+        // checking（含 authorized）非 denied：点击早退，不发起手动申请
+        expect(
+            mockRequestAgentNotificationPermissionManually,
+        ).not.toHaveBeenCalled();
     });
-    await flushPersist();
-    // checking（含 authorized）非 denied：点击早退，不发起手动申请
-    expect(
-      mockRequestAgentNotificationPermissionManually,
-    ).not.toHaveBeenCalled();
-  });
 
-  it('T-K10: iOS 权限行不渲染', async () => {
-    setPlatform('ios');
-    const {renderer} = await renderScreen();
-    expect(json(renderer)).not.toContain('通知权限:');
-    // iOS 不查询权限状态（平台门禁在屏幕侧的读取口）
-    expect(mockGetAgentNotificationPermissionStatus).not.toHaveBeenCalled();
-  });
+    it('T-K10: iOS 权限行不渲染', async () => {
+        setPlatform('ios');
+        const {renderer} = await renderScreen();
+        expect(json(renderer)).not.toContain('通知权限:');
+        // iOS 不查询权限状态（平台门禁在屏幕侧的读取口）
+        expect(mockGetAgentNotificationPermissionStatus).not.toHaveBeenCalled();
+    });
 });
 
 // ── 压缩配置即时保存（保存按钮移除，改为修改即生效）────────────────────
 
 describe('ChatConfigScreen 压缩配置即时保存', () => {
-  beforeEach(() => {
-    mockShowToast.mockReset();
-    mockGetLlmStreamEnabled.mockReset().mockResolvedValue({ok: true, value: false});
-    mockSetLlmStreamEnabled.mockReset().mockResolvedValue(undefined);
-    // 子会话流式偏好默认开（chat.subagentStream 未设时 true），get 默认 resolve true。
-    mockGetSubagentStreamEnabled.mockReset().mockResolvedValue({ok: true, value: true});
-    mockSetSubagentStreamEnabled.mockReset().mockResolvedValue(undefined);
-    mockGetThinkingContextEnabled.mockReset().mockResolvedValue({ok: true, value: false});
-    mockSetThinkingContextEnabled.mockReset().mockResolvedValue(undefined);
-    mockGetConditions.mockReset().mockResolvedValue({ok: true, value: {
-      schemaVersion: 4,
-      enabled: false,
-      tokenRatio: 0.8,
-      hideStartDepth: 6,
-    }});
-    mockSetConditions.mockReset().mockResolvedValue(undefined);
-    mockReadBoolPref.mockReset().mockResolvedValue(false);
-    mockWriteBoolPref.mockReset().mockResolvedValue(undefined);
-    mockSetKeepAliveResidentEnabled.mockReset().mockResolvedValue(undefined);
-    mockEnsureAgentNotificationPermission.mockReset().mockResolvedValue(true);
-    mockGetAgentNotificationPermissionStatus
-      .mockReset()
-      .mockResolvedValue('authorized');
-    mockRequestAgentNotificationPermissionManually
-      .mockReset()
-      .mockResolvedValue('authorized');
-    setPlatform('ios');
-  });
-
-  it('开启自动压缩开关即落库（无需保存按钮）', async () => {
-    const {renderer} = await renderScreen();
-    expect(renderer.root.findByType(Switch).props.value).toBe(false);
-
-    await act(async () => {
-      renderer.root.findByType(Switch).props.onValueChange(true);
+    beforeEach(() => {
+        mockShowToast.mockReset();
+        mockGetLlmStreamEnabled.mockReset().mockResolvedValue({ok: true, value: false});
+        mockSetLlmStreamEnabled.mockReset().mockResolvedValue(undefined);
+        // 子会话流式偏好默认开（chat.subagentStream 未设时 true），get 默认 resolve true。
+        mockGetSubagentStreamEnabled.mockReset().mockResolvedValue({ok: true, value: true});
+        mockSetSubagentStreamEnabled.mockReset().mockResolvedValue(undefined);
+        mockGetThinkingContextEnabled.mockReset().mockResolvedValue({ok: true, value: false});
+        mockSetThinkingContextEnabled.mockReset().mockResolvedValue(undefined);
+        mockGetConditions.mockReset().mockResolvedValue({ok: true, value: {
+            schemaVersion: 4,
+            enabled: false,
+            tokenRatio: 0.8,
+            hideStartDepth: 6,
+        }});
+        mockSetConditions.mockReset().mockResolvedValue(undefined);
+        mockReadBoolPref.mockReset().mockResolvedValue(false);
+        mockWriteBoolPref.mockReset().mockResolvedValue(undefined);
+        mockSetKeepAliveResidentEnabled.mockReset().mockResolvedValue(undefined);
+        mockEnsureAgentNotificationPermission.mockReset().mockResolvedValue(true);
+        mockGetAgentNotificationPermissionStatus
+            .mockReset()
+            .mockResolvedValue('authorized');
+        mockRequestAgentNotificationPermissionManually
+            .mockReset()
+            .mockResolvedValue('authorized');
+        setPlatform('ios');
     });
-    await flushPersist();
 
-    expect(mockSetConditions).toHaveBeenCalledTimes(1);
-    expect(mockSetConditions).toHaveBeenCalledWith({
-      schemaVersion: 4,
-      enabled: true,
-      tokenRatio: 0.8,
-      hideStartDepth: 6,
+    it('开启自动压缩开关即落库（无需保存按钮）', async () => {
+        const {renderer} = await renderScreen();
+        expect(renderer.root.findByType(Switch).props.value).toBe(false);
+
+        await act(async () => {
+            renderer.root.findByType(Switch).props.onValueChange(true);
+        });
+        await flushPersist();
+
+        expect(mockSetConditions).toHaveBeenCalledTimes(1);
+        expect(mockSetConditions).toHaveBeenCalledWith({
+            schemaVersion: 4,
+            enabled: true,
+            tokenRatio: 0.8,
+            hideStartDepth: 6,
+        });
+        expect(renderer.root.findByType(Switch).props.value).toBe(true);
     });
-    expect(renderer.root.findByType(Switch).props.value).toBe(true);
-  });
 
-  it('启用但 token 比例为空 → toast 提示、开关回滚、不落库', async () => {
-    mockGetConditions.mockResolvedValue({ok: true, value: {
-      schemaVersion: 4,
-      enabled: false,
-      hideStartDepth: 6,
-    }});
-    const {renderer} = await renderScreen();
+    it('启用但 token 比例为空 → toast 提示、开关回滚、不落库', async () => {
+        mockGetConditions.mockResolvedValue({ok: true, value: {
+            schemaVersion: 4,
+            enabled: false,
+            hideStartDepth: 6,
+        }});
+        const {renderer} = await renderScreen();
 
-    await act(async () => {
-      renderer.root.findByType(Switch).props.onValueChange(true);
+        await act(async () => {
+            renderer.root.findByType(Switch).props.onValueChange(true);
+        });
+        await flushPersist();
+
+        expect(mockSetConditions).not.toHaveBeenCalled();
+        expect(mockShowToast).toHaveBeenCalledWith('启用时至少填写 token 比例');
+        expect(renderer.root.findByType(Switch).props.value).toBe(false);
     });
-    await flushPersist();
 
-    expect(mockSetConditions).not.toHaveBeenCalled();
-    expect(mockShowToast).toHaveBeenCalledWith('启用时至少填写 token 比例');
-    expect(renderer.root.findByType(Switch).props.value).toBe(false);
-  });
+    it('落库失败 → toast 且开关回滚', async () => {
+        mockSetConditions.mockRejectedValueOnce(new Error('盘炸了'));
+        const {renderer} = await renderScreen();
 
-  it('落库失败 → toast 且开关回滚', async () => {
-    mockSetConditions.mockRejectedValueOnce(new Error('盘炸了'));
-    const {renderer} = await renderScreen();
+        await act(async () => {
+            renderer.root.findByType(Switch).props.onValueChange(true);
+        });
+        await flushPersist();
 
-    await act(async () => {
-      renderer.root.findByType(Switch).props.onValueChange(true);
+        expect(mockShowToast).toHaveBeenCalledWith('保存失败：盘炸了');
+        expect(renderer.root.findByType(Switch).props.value).toBe(false);
     });
-    await flushPersist();
-
-    expect(mockShowToast).toHaveBeenCalledWith('保存失败：盘炸了');
-    expect(renderer.root.findByType(Switch).props.value).toBe(false);
-  });
 });

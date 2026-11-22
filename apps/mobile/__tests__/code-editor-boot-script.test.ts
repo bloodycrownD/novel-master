@@ -4,56 +4,56 @@
 import {readWebViewDistFile} from './helpers/read-webview-dist';
 
 function bootScript(): string {
-  return readWebViewDistFile('code-editor', 'app.js');
+    return readWebViewDistFile('code-editor', 'app.js');
 }
 
 function indexHtml(): string {
-  return readWebViewDistFile('code-editor', 'index.html');
+    return readWebViewDistFile('code-editor', 'index.html');
 }
 
 function appCss(): string {
-  return readWebViewDistFile('code-editor', 'app.css');
+    return readWebViewDistFile('code-editor', 'app.css');
 }
 
 describe('code-editor WebView boot (dist)', () => {
-  it('T-CE-ASM-01: script parses', () => {
-    const script = bootScript();
-    expect(() => {
-      // eslint-disable-next-line no-new-func -- 语法守护
-      new Function(script);
-    }).not.toThrow();
-  });
+    it('T-CE-ASM-01: script parses', () => {
+        const script = bootScript();
+        expect(() => {
+            // eslint-disable-next-line no-new-func -- 语法守护
+            new Function(script);
+        }).not.toThrow();
+    });
 
-  it('T-CE-ASM-02: shell has #root; relative app.js/app.css', () => {
-    const html = indexHtml();
-    expect(html).toContain('id="root"');
-    expect(html).toContain('./app.js');
-    expect(html).toContain('./app.css');
-    expect(html).toContain('<script src="./app.js"');
-    expect(html).not.toContain('type="module"');
-  });
+    it('T-CE-ASM-02: shell has #root; relative app.js/app.css', () => {
+        const html = indexHtml();
+        expect(html).toContain('id="root"');
+        expect(html).toContain('./app.js');
+        expect(html).toContain('./app.css');
+        expect(html).toContain('<script src="./app.js"');
+        expect(html).not.toContain('type="module"');
+    });
 
-  it('T-PF8(code-editor): head 内联 bootstrap 先于 stylesheet 且双变量（C′ fix-D 契约）', () => {
-    // dist 面契约：编辑器背景链 var(--editor-bg, var(--bg, #fff))——bootstrap
-    // 须物理先于 stylesheet，并同时预置 --bg 与 --editor-bg（同值），否则首帧
-    // 仍走 --editor-bg 的 #fff 兜底。
-    const html = indexHtml();
-    const scriptAt = html.indexOf('decodeURIComponent');
-    const linkAt = html.indexOf('<link rel="stylesheet"');
-    expect(scriptAt).toBeGreaterThan(-1);
-    expect(linkAt).toBeGreaterThan(-1);
-    expect(scriptAt).toBeLessThan(linkAt);
-    expect(html).toContain('location.search + location.hash');
-    expect(html).toContain("setProperty('--bg'");
-    expect(html).toContain("setProperty('--editor-bg'");
-  });
+    it('T-PF8(code-editor): head 内联 bootstrap 先于 stylesheet 且双变量（C′ fix-D 契约）', () => {
+        // dist 面契约：编辑器背景链 var(--editor-bg, var(--bg, #fff))——bootstrap
+        // 须物理先于 stylesheet，并同时预置 --bg 与 --editor-bg（同值），否则首帧
+        // 仍走 --editor-bg 的 #fff 兜底。
+        const html = indexHtml();
+        const scriptAt = html.indexOf('decodeURIComponent');
+        const linkAt = html.indexOf('<link rel="stylesheet"');
+        expect(scriptAt).toBeGreaterThan(-1);
+        expect(linkAt).toBeGreaterThan(-1);
+        expect(scriptAt).toBeLessThan(linkAt);
+        expect(html).toContain('location.search + location.hash');
+        expect(html).toContain("setProperty('--bg'");
+        expect(html).toContain("setProperty('--editor-bg'");
+    });
 
-  it('T-CE-BR-01: init / setDocument / themeUpdate / blur; emits ready/change', () => {
-    const script = bootScript();
-    // minify 重命名 dispatcher 形参与 handler 本体（`msg.type === …` → `e.type === …`，
-    // `handleHostMessage` 消失）。断言换稳定的协议面：`<局部>.type === "<type>"`
-    // 路由形态（引号风格容忍）+ 协议 type 字符串本身。
-    expect(script).toMatch(/type\s*===\s*['"]init['"]/);
+    it('T-CE-BR-01: init / setDocument / themeUpdate / blur; emits ready/change', () => {
+        const script = bootScript();
+        // minify 重命名 dispatcher 形参与 handler 本体（`msg.type === …` → `e.type === …`，
+        // `handleHostMessage` 消失）。断言换稳定的协议面：`<局部>.type === "<type>"`
+        // 路由形态（引号风格容忍）+ 协议 type 字符串本身。
+        expect(script).toMatch(/type\s*===\s*['"]init['"]/);
     expect(script).toContain('setDocument');
     expect(script).toContain('themeUpdate');
     expect(script).toMatch(/type\s*===\s*['"]blur['"]/);
@@ -61,7 +61,7 @@ describe('code-editor WebView boot (dist)', () => {
     // 且 minify 会重命名绑定本身——锚「(type 字面量, payload 形态)」这个调用
     // 形态而非函数名：ready 带 {version:1}，change 带 {text:…}。
     expect(script).toMatch(/\(\s*['"]ready['"]\s*,\s*\{\s*version:\s*1\s*\}\s*\)/);
-    expect(script).toMatch(/\(\s*['"]change['"]\s*,\s*\{\s*text:/);
+        expect(script).toMatch(/\(\s*['"]change['"]\s*,\s*\{\s*text:/);
   });
 
   it('T-CE-CSS-01: editor shell CSS for full height + touch scroll', () => {

@@ -8,46 +8,46 @@ import {ScopeKeyCache} from './scope-key-cache';
 export const CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION = 2 as const;
 
 export type ChatTranscriptScrollSnapshot = {
-  readonly schemaVersion: typeof CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION;
-  /** Distance from visual bottom, px (forward DOM scrollTop semantics). */
-  readonly offsetY: number;
-  readonly nearBottom: boolean;
+    readonly schemaVersion: typeof CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION;
+    /** Distance from visual bottom, px (forward DOM scrollTop semantics). */
+    readonly offsetY: number;
+    readonly nearBottom: boolean;
 };
 
 /** @deprecated v1 inverted list snapshot — rejected by transcript cache. */
 type LegacyChatListScrollSnapshot = {
-  readonly offsetY: number;
-  readonly nearBottom: boolean;
+    readonly offsetY: number;
+    readonly nearBottom: boolean;
 };
 
 const cache = ScopeKeyCache.create<ChatTranscriptScrollSnapshot>({
-  maxEntries: 500,
+    maxEntries: 500,
 });
 
 export namespace ChatTranscriptScrollCache {
-  // nm-style: keep-public — scoped cache 的 key 收口（隐藏 cache 对象）
-  export function key(projectId: string, sessionId: string): string {
-    return cache.key(projectId, sessionId);
-  }
-
-  // nm-style: keep-public — scoped cache 的读取收口（隐藏 cache 对象）
-  export function get(key: string): ChatTranscriptScrollSnapshot | undefined {
-    return cache.get(key);
-  }
-
-  export function set(key: string, snap: ChatTranscriptScrollSnapshot): void {
-    if (snap.schemaVersion !== CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION) {
-      return;
+    // nm-style: keep-public — scoped cache 的 key 收口（隐藏 cache 对象）
+    export function key(projectId: string, sessionId: string): string {
+        return cache.key(projectId, sessionId);
     }
-    cache.set(key, snap);
-  }
 
-  /** 项目删除后按前缀清理其全部会话快照。 */
-  export function clearByProject(projectId: string): void {
-    cache.clearByProjectPrefix(projectId);
-  }
+    // nm-style: keep-public — scoped cache 的读取收口（隐藏 cache 对象）
+    export function get(key: string): ChatTranscriptScrollSnapshot | undefined {
+        return cache.get(key);
+    }
 
-  /**
+    export function set(key: string, snap: ChatTranscriptScrollSnapshot): void {
+        if (snap.schemaVersion !== CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION) {
+            return;
+        }
+        cache.set(key, snap);
+    }
+
+    /** 项目删除后按前缀清理其全部会话快照。 */
+    export function clearByProject(projectId: string): void {
+        cache.clearByProjectPrefix(projectId);
+    }
+
+    /**
    * v2-only 读闸门：v1（无 `schemaVersion`）一律返回 undefined。
    *
    * 写入侧（`set`）已按 schemaVersion 拦过一次，这里挡的是
@@ -55,23 +55,23 @@ export namespace ChatTranscriptScrollCache {
    * （v1 的唯一写入者 `MessageList` 已删），故返回值就是快照本身——原先配套的
    * `discardedLegacy` 标志与 `legacy_cache_discarded` 遥测一并退场。
    */
-  export function normalize(snap: LegacyChatListScrollSnapshot | ChatTranscriptScrollSnapshot | undefined): ChatTranscriptScrollSnapshot | undefined {
-    if (snap == null) {
-      return undefined;
+    export function normalize(snap: LegacyChatListScrollSnapshot | ChatTranscriptScrollSnapshot | undefined): ChatTranscriptScrollSnapshot | undefined {
+        if (snap == null) {
+            return undefined;
+        }
+        if ('schemaVersion' in snap && snap.schemaVersion === CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION) {
+            return snap;
+        }
+        return undefined;
     }
-    if ('schemaVersion' in snap && snap.schemaVersion === CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION) {
-      return snap;
+
+    /** Test-only: reset process-wide cache between cases. */
+    export function clearAll(): void {
+        cache.clearAll();
     }
-    return undefined;
-  }
 
-  /** Test-only: reset process-wide cache between cases. */
-  export function clearAll(): void {
-    cache.clearAll();
-  }
-
-  /** Test-only: entry count for LRU-bound assertions. */
-  export function size(): number {
-    return cache.size;
-  }
+    /** Test-only: entry count for LRU-bound assertions. */
+    export function size(): number {
+        return cache.size;
+    }
 }

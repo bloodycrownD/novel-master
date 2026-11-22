@@ -21,10 +21,10 @@ import {Text} from 'react-native';
 import {Result} from '@novel-master/core/errors';
 import {SimpleEventBus} from '@novel-master/core/events';
 import {
-  EVENT_AGENT_RUN_FINISHED,
-  EVENT_AGENT_RUN_STARTED,
-  EVENT_AGENT_STREAM_TEXT_DELTA,
-  EVENT_SUBAGENT_CHILD_SESSION_CREATED,
+    EVENT_AGENT_RUN_FINISHED,
+    EVENT_AGENT_RUN_STARTED,
+    EVENT_AGENT_STREAM_TEXT_DELTA,
+    EVENT_SUBAGENT_CHILD_SESSION_CREATED,
 } from '@novel-master/core/events';
 import {agentActivity} from '@/runtime/agent-activity';
 import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
@@ -50,58 +50,58 @@ const mockNavigate = jest.fn();
 const mockNavigation = {navigate: mockNavigate, setOptions: jest.fn()};
 
 jest.mock('../src/hooks/useRuntime', () => ({
-  useRuntime: () => mockRuntime,
+    useRuntime: () => mockRuntime,
 }));
 
 jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => mockNavigation,
-  useRoute: () => ({
-    params: {
-      projectId: 'p1',
-      sessionId: 'child-1',
-      parentSessionId: 's1',
-    },
-  }),
+    useNavigation: () => mockNavigation,
+    useRoute: () => ({
+        params: {
+            projectId: 'p1',
+            sessionId: 'child-1',
+            parentSessionId: 's1',
+        },
+    }),
 }));
 
 jest.mock('../src/theme/ThemeProvider', () => ({
-  useTheme: () => ({
-    tokens: {
-      background: '#000',
-      text: '#111',
-      textSecondary: '#ccc',
-      textTertiary: '#999',
-      danger: '#f00',
-      border: '#222',
-    },
-  }),
+    useTheme: () => ({
+        tokens: {
+            background: '#000',
+            text: '#111',
+            textSecondary: '#ccc',
+            textTertiary: '#999',
+            danger: '#f00',
+            border: '#222',
+        },
+    }),
 }));
 
 // AppModal 走 RN 原生 Modal，jest 环境渲染不出内容，换透传 View
 // （metric-detail-sheet 起指标条挂 MetricDetailSheet，范式同
 // directory-rule-sheet.test）。
 jest.mock('../src/components/ui/AppModal', () => {
-  const mockReact = require('react');
-  return {
-    AppModal: ({
-      children,
-      visible,
-    }: {
-      children?: React.ReactNode;
-      visible?: boolean;
-    }) =>
-      visible
-        ? mockReact.createElement('View', {testID: 'app-modal'}, children)
-        : null,
-  };
+    const mockReact = require('react');
+    return {
+        AppModal: ({
+            children,
+            visible,
+        }: {
+            children?: React.ReactNode;
+            visible?: boolean;
+        }) =>
+            visible
+                ? mockReact.createElement('View', {testID: 'app-modal'}, children)
+                : null,
+    };
 });
 
 jest.mock('../src/components/chrome/ToastHost', () => ({
-  useToast: () => ({showToast: jest.fn()}),
+    useToast: () => ({showToast: jest.fn()}),
 }));
 
 jest.mock('../src/runtime/novel-master-context', () => ({
-  useNovelMaster: () => ({appUi: null}),
+    useNovelMaster: () => ({appUi: null}),
 }));
 
 // 指标条链路之外的哑元：webview 引擎不属本套件覆盖面。
@@ -113,476 +113,476 @@ jest.mock('../src/runtime/novel-master-context', () => ({
 // 位（退回主对话形态：无 dock 时多出全选/粘贴死按钮、还判降级横幅）不会有任何
 // 红灯。渲染仍返 null，与旧哑元同形态，不干扰本套件的指标条断言。
 jest.mock('../src/components/chat/ChatConversationWebView', () => {
-  const ReactModule = require('react');
-  return {
-    // 两个形参（props / ref）都给上：forwardRef 的 render 函数少一个形参时
-    // React 会打一条 console.error 警告，噪音掩盖真失败。
-    ChatConversationWebView: ReactModule.forwardRef(
-      (props: Record<string, unknown>, _ref: unknown) => {
-        mockChatWebViewProps.push(props);
-        return null;
-      },
-    ),
-  };
+    const ReactModule = require('react');
+    return {
+        // 两个形参（props / ref）都给上：forwardRef 的 render 函数少一个形参时
+        // React 会打一条 console.error 警告，噪音掩盖真失败。
+        ChatConversationWebView: ReactModule.forwardRef(
+            (props: Record<string, unknown>, _ref: unknown) => {
+                mockChatWebViewProps.push(props);
+                return null;
+            },
+        ),
+    };
 });
 
 import {SubagentSessionScreen} from '../src/screens/stack/SubagentSessionScreen';
 import {promptTurnDetailSlot} from '../src/components/prompt/prompt-turn-callback';
 
 function buildHarness(): {
-  manager: SessionStreamUnitManager;
-  eventBus: SimpleEventBus;
+    manager: SessionStreamUnitManager;
+    eventBus: SimpleEventBus;
 } {
-  const eventBus = new SimpleEventBus();
-  const manager = new SessionStreamUnitManager({
-    runtime: {
-      eventBus,
-      abortRegistry: {has: () => false, abort: jest.fn()},
-      sessions: {get: async () => ({id: CHILD_SESSION_ID, title: '子会话'})},
-      projects: {get: async () => ({id: 'p1', name: '项目'})},
-      messages: {
-        listBySession: jest.fn(async () => ({kind: 'completed' as const, value: []})),
-        listBySessionTail: jest.fn(async () => ({kind: 'completed' as const, value: []})),
-        listBySessionPage: jest.fn(async () => ({kind: 'completed' as const, value: []})),
-      },
-    } as never,
-    settledGraceMs: 30_000,
-    runAgentTurn: jest.fn() as never,
-  });
-  manager.markHydrated();
-  return {manager, eventBus};
+    const eventBus = new SimpleEventBus();
+    const manager = new SessionStreamUnitManager({
+        runtime: {
+            eventBus,
+            abortRegistry: {has: () => false, abort: jest.fn()},
+            sessions: {get: async () => ({id: CHILD_SESSION_ID, title: '子会话'})},
+            projects: {get: async () => ({id: 'p1', name: '项目'})},
+            messages: {
+                listBySession: jest.fn(async () => ({kind: 'completed' as const, value: []})),
+                listBySessionTail: jest.fn(async () => ({kind: 'completed' as const, value: []})),
+                listBySessionPage: jest.fn(async () => ({kind: 'completed' as const, value: []})),
+            },
+        } as never,
+        settledGraceMs: 30_000,
+        runAgentTurn: jest.fn() as never,
+    });
+    manager.markHydrated();
+    return {manager, eventBus};
 }
 
 /** 挂载子会话屏并收集全部 Text 文案（异步水合 flush 后返回）。 */
 async function renderScreen(): Promise<{
-  texts: string[];
-  unmount: () => void;
+    texts: string[];
+    unmount: () => void;
 }> {
-  let tree!: TestRenderer.ReactTestRenderer;
-  await act(async () => {
-    tree = TestRenderer.create(<SubagentSessionScreen />);
-  });
-  const texts = tree.root
-    .findAllByType(Text)
-    .map(node =>
-      Array.isArray(node.props.children)
-        ? node.props.children.join('')
-        : String(node.props.children),
-    );
-  return {
-    texts,
-    unmount: () => {
-      act(() => {
-        tree.unmount();
-      });
-    },
-  };
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+        tree = TestRenderer.create(<SubagentSessionScreen />);
+    });
+    const texts = tree.root
+        .findAllByType(Text)
+        .map(node =>
+            Array.isArray(node.props.children)
+                ? node.props.children.join('')
+                : String(node.props.children),
+        );
+    return {
+        texts,
+        unmount: () => {
+            act(() => {
+                tree.unmount();
+            });
+        },
+    };
 }
 
 /** 某段文案在屏上出现的次数（C-4 的单标识断言用）。 */
 function countText(texts: string[], target: string): number {
-  return texts.filter(text => text === target).length;
+    return texts.filter(text => text === target).length;
 }
 
 /** 推进消费型 run：RUN_STARTED + 若干带间隔的 delta。 */
 function driveConsumptiveRun(eventBus: SimpleEventBus, deltaCount = 6): void {
-  eventBus.publish(EVENT_AGENT_RUN_STARTED, {
-    sessionId: CHILD_SESSION_ID,
-    projectId: 'p1',
-    runId: 'rc',
-  });
-  for (let i = 0; i < deltaCount; i += 1) {
-    eventBus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
-      sessionId: CHILD_SESSION_ID,
-      runId: 'rc',
-      text: 'x'.repeat(50),
+    eventBus.publish(EVENT_AGENT_RUN_STARTED, {
+        sessionId: CHILD_SESSION_ID,
+        projectId: 'p1',
+        runId: 'rc',
     });
-    jest.advanceTimersByTime(250);
-  }
+    for (let i = 0; i < deltaCount; i += 1) {
+        eventBus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
+            sessionId: CHILD_SESSION_ID,
+            runId: 'rc',
+            text: 'x'.repeat(50),
+        });
+        jest.advanceTimersByTime(250);
+    }
 }
 
 function finishRun(eventBus: SimpleEventBus): void {
-  eventBus.publish(EVENT_AGENT_RUN_FINISHED, {
-    sessionId: CHILD_SESSION_ID,
-    projectId: 'p1',
-    runId: 'rc',
-    stopReason: 'end_turn',
-  } as never);
+    eventBus.publish(EVENT_AGENT_RUN_FINISHED, {
+        sessionId: CHILD_SESSION_ID,
+        projectId: 'p1',
+        runId: 'rc',
+        stopReason: 'end_turn',
+    } as never);
 }
 
 describe('SubagentSessionScreen 指标条渲染（G-2）', () => {
-  beforeEach(() => {
-    jest.useFakeTimers();
-    agentActivity.setActive(false);
-  });
-
-  afterEach(() => {
-    mockManager?.dispose();
-    mockManager = undefined;
-    mockRuntime = undefined;
-    mockGetSessionUsageDetail.mockClear();
-    mockChatWebViewProps.length = 0;
-    mockNavigate.mockClear();
-    jest.useRealTimers();
-    agentActivity.setActive(false);
-  });
-
-  it('transcript-converge: 子会话屏以统一宿主的 transcriptOnly 变体装配', async () => {
-    const h = buildHarness();
-    mockManager = h.manager;
-    mockRuntime = {
-      sessionStreamUnitManager: h.manager,
-      usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail},
-    };
-    driveConsumptiveRun(h.eventBus, 3);
-
-    const {unmount} = await renderScreen();
-    // 真传了变体位：子会话屏无 dock，漏传就退化成主对话形态（多两项死按钮 +
-    // 误判降级横幅），而这种退化在屏上**看不出来**——所以必须在这里钉住。
-    expect(mockChatWebViewProps.length).toBeGreaterThan(0);
-    for (const props of mockChatWebViewProps) {
-      expect(props.transcriptOnly).toBe(true);
-      // T-SP28 / P2-18c：流式投影 props 必须真传到宿主（漏传 = 子会话屏没有
-      // 流式正文）。只断言 defined/instanceof 会被 `streamingRows={[]}` 或空
-      // Map 骗过——这里钉住 driveConsumptiveRun 产出的当前 streaming 行本身。
-      const streamingRows = props.streamingRows as Array<
-        Record<string, unknown>
-      >;
-      expect(Array.isArray(streamingRows)).toBe(true);
-      expect(streamingRows.length).toBeGreaterThan(0);
-      expect(streamingRows[streamingRows.length - 1]?.status).toBe('streaming');
-      expect(props.streamRowIds).toBeInstanceOf(Map);
-    }
-    // 变体位与主对话形态的关键分野：宿主不收 composer 域 props（子会话屏没有
-    // 输入框，全套 composer* 传下去也只是把 dock 判成「该变体没有」）。
-    expect(
-      mockChatWebViewProps.some(props => props.composerHasModel !== undefined),
-    ).toBe(false);
-    unmount();
-  });
-
-  it('活跃：消费型 run 运行中显示「生成中 · 输出 N tok」', async () => {
-    const h = buildHarness();
-    mockManager = h.manager;
-    mockRuntime = {
-      sessionStreamUnitManager: h.manager,
-      usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail},
-    };
-    driveConsumptiveRun(h.eventBus, 3);
-
-    const {texts, unmount} = await renderScreen();
-    expect(texts.join(' | ')).toContain('生成中');
-    // 3 × 50 字符 heuristic 折算 ceil(150/3.35)=45。
-    expect(texts.join(' | ')).toContain('输出 45 tok');
-    expect(texts.join(' | ')).not.toContain('上次生成');
-    unmount();
-  });
-
-  it('终态：FINISHED 后冻结为「上次生成 · 历时 · 输出 N tok · N tok/s」', async () => {
-    const h = buildHarness();
-    mockManager = h.manager;
-    mockRuntime = {
-      sessionStreamUnitManager: h.manager,
-      usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail},
-    };
-    driveConsumptiveRun(h.eventBus, 6);
-    finishRun(h.eventBus);
-
-    const {texts, unmount} = await renderScreen();
-    const line = texts.join(' | ');
-    expect(line).toContain('上次生成');
-    expect(line).toContain('输出 90 tok'); // ceil(300/3.35)
-    expect(line).toMatch(/\d+(\.\d)? tok\/s/);
-    expect(line).not.toContain('生成中');
-    unmount();
-  });
-
-  it('中断（指标条可见）：「已中断」只在条上出现一次（不叠屏级横幅）', async () => {
-    const h = buildHarness();
-    mockManager = h.manager;
-    mockRuntime = {
-      sessionStreamUnitManager: h.manager,
-      usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail},
-    };
-    // 重启水合现场：run 被杀 → interrupted 单元（常驻，无 settled 投影）。
-    const unit = h.manager.adoptInterruptedUnit(CHILD_SESSION_ID, 'p1');
-    unit.hydrateFromRunState({
-      runId: 'rc-old',
-      startedAtMs: 1_000,
-      settledAtMs: 4_000,
-      metrics: {
-        textChars: 100,
-        thinkingChars: 0,
-        completionTokens: 30,
-        tokenSource: 'usage',
-      },
-      partialText: '中断正文',
-      partialThinking: '',
-      pendingChildren: [],
+    beforeEach(() => {
+        jest.useFakeTimers();
+        agentActivity.setActive(false);
     });
 
-    const {texts, unmount} = await renderScreen();
-    // C-4：屏级横幅与指标条徽标不再同时出现——「已中断」恰好一次。
-    expect(countText(texts, '已中断')).toBe(1);
-    expect(texts.join(' | ')).toContain('上次生成');
-    expect(texts.join(' | ')).toContain('输出 30 tok');
-    unmount();
-  });
-
-  it('中断（指标条不可见）：「已中断」由屏级横幅兜底，仍是单标识', async () => {
-    const h = buildHarness();
-    mockManager = h.manager;
-    mockRuntime = {
-      sessionStreamUnitManager: h.manager,
-      usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail},
-    };
-    // starting 阶段被杀：起点与指标皆零 → 指标条全零守卫不渲染。
-    const unit = h.manager.adoptInterruptedUnit(CHILD_SESSION_ID, 'p1');
-    unit.hydrateFromRunState({
-      runId: '',
-      startedAtMs: 0,
-      settledAtMs: 4_000,
-      metrics: {
-        textChars: 0,
-        thinkingChars: 0,
-        completionTokens: 0,
-        tokenSource: 'heuristic',
-      },
-      partialText: '',
-      partialThinking: '',
-      pendingChildren: [],
+    afterEach(() => {
+        mockManager?.dispose();
+        mockManager = undefined;
+        mockRuntime = undefined;
+        mockGetSessionUsageDetail.mockClear();
+        mockChatWebViewProps.length = 0;
+        mockNavigate.mockClear();
+        jest.useRealTimers();
+        agentActivity.setActive(false);
     });
 
-    const {texts, unmount} = await renderScreen();
-    expect(countText(texts, '已中断')).toBe(1);
-    expect(texts.join(' | ')).not.toContain('上次生成');
-    unmount();
-  });
+    it('transcript-converge: 子会话屏以统一宿主的 transcriptOnly 变体装配', async () => {
+        const h = buildHarness();
+        mockManager = h.manager;
+        mockRuntime = {
+            sessionStreamUnitManager: h.manager,
+            usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail},
+        };
+        driveConsumptiveRun(h.eventBus, 3);
 
-  it('metric-detail-sheet：指标条可点开用量 sheet，数据按子会话自身 sessionId 统计', async () => {
-    const h = buildHarness();
-    mockManager = h.manager;
-    mockRuntime = {
-      sessionStreamUnitManager: h.manager,
-      usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail},
-    };
-    // 冻结指标现场：指标条可见 → 详情入口存在。
-    const unit = h.manager.adoptInterruptedUnit(CHILD_SESSION_ID, 'p1');
-    unit.hydrateFromRunState({
-      runId: 'rc-old',
-      startedAtMs: 1_000,
-      settledAtMs: 4_000,
-      metrics: {
-        textChars: 100,
-        thinkingChars: 0,
-        completionTokens: 30,
-        tokenSource: 'usage',
-      },
-      partialText: '中断正文',
-      partialThinking: '',
-      pendingChildren: [],
-    });
-    // 错误通道迁移二期后走 Result（sheet 侧 `!ok` 即 throw）。
-    mockGetSessionUsageDetail.mockResolvedValue({
-      ok: true,
-      value: {
-        last: {
-          seq: 2,
-          modelName: 'gpt-x',
-          provider: 'openai',
-          promptTokens: 50,
-          completionTokens: 20,
-          cacheReadTokens: null,
-          cacheCreationTokens: null,
-          atMs: 1,
-        },
-        totals: {
-          promptTokens: 80,
-          completionTokens: 30,
-          cacheReadTokens: 0,
-          cacheCreationTokens: 0,
-          billedInputTokens: 80,
-          assistantRows: 2,
-        },
-        visibleMessageCount: 3,
-        toolUseCount: 1,
-      },
+        const {unmount} = await renderScreen();
+        // 真传了变体位：子会话屏无 dock，漏传就退化成主对话形态（多两项死按钮 +
+        // 误判降级横幅），而这种退化在屏上**看不出来**——所以必须在这里钉住。
+        expect(mockChatWebViewProps.length).toBeGreaterThan(0);
+        for (const props of mockChatWebViewProps) {
+            expect(props.transcriptOnly).toBe(true);
+            // T-SP28 / P2-18c：流式投影 props 必须真传到宿主（漏传 = 子会话屏没有
+            // 流式正文）。只断言 defined/instanceof 会被 `streamingRows={[]}` 或空
+            // Map 骗过——这里钉住 driveConsumptiveRun 产出的当前 streaming 行本身。
+            const streamingRows = props.streamingRows as Array<
+                Record<string, unknown>
+            >;
+            expect(Array.isArray(streamingRows)).toBe(true);
+            expect(streamingRows.length).toBeGreaterThan(0);
+            expect(streamingRows[streamingRows.length - 1]?.status).toBe('streaming');
+            expect(props.streamRowIds).toBeInstanceOf(Map);
+        }
+        // 变体位与主对话形态的关键分野：宿主不收 composer 域 props（子会话屏没有
+        // 输入框，全套 composer* 传下去也只是把 dock 判成「该变体没有」）。
+        expect(
+            mockChatWebViewProps.some(props => props.composerHasModel !== undefined),
+        ).toBe(false);
+        unmount();
     });
 
-    let tree!: TestRenderer.ReactTestRenderer;
-    await act(async () => {
-      tree = TestRenderer.create(<SubagentSessionScreen />);
+    it('活跃：消费型 run 运行中显示「生成中 · 输出 N tok」', async () => {
+        const h = buildHarness();
+        mockManager = h.manager;
+        mockRuntime = {
+            sessionStreamUnitManager: h.manager,
+            usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail},
+        };
+        driveConsumptiveRun(h.eventBus, 3);
+
+        const {texts, unmount} = await renderScreen();
+        expect(texts.join(' | ')).toContain('生成中');
+        // 3 × 50 字符 heuristic 折算 ceil(150/3.35)=45。
+        expect(texts.join(' | ')).toContain('输出 45 tok');
+        expect(texts.join(' | ')).not.toContain('上次生成');
+        unmount();
     });
-    const pressable = tree.root.find(
-      node =>
-        node.props?.accessibilityRole === 'button' &&
-        typeof node.props?.onPress === 'function' &&
-        Array.isArray(node.props?.style) === false, // 指标条 Pressable（屏上还有停止按钮等）
-    );
-    await act(async () => {
-      pressable.props.onPress();
+
+    it('终态：FINISHED 后冻结为「上次生成 · 历时 · 输出 N tok · N tok/s」', async () => {
+        const h = buildHarness();
+        mockManager = h.manager;
+        mockRuntime = {
+            sessionStreamUnitManager: h.manager,
+            usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail},
+        };
+        driveConsumptiveRun(h.eventBus, 6);
+        finishRun(h.eventBus);
+
+        const {texts, unmount} = await renderScreen();
+        const line = texts.join(' | ');
+        expect(line).toContain('上次生成');
+        expect(line).toContain('输出 90 tok'); // ceil(300/3.35)
+        expect(line).toMatch(/\d+(\.\d)? tok\/s/);
+        expect(line).not.toContain('生成中');
+        unmount();
     });
-    // 数据按子会话自身 sessionId（child-1）统计，非父会话。
-    expect(mockGetSessionUsageDetail).toHaveBeenCalledWith(CHILD_SESSION_ID);
-    const texts = tree.root
-      .findAllByType(Text)
-      .map(node => String(node.props.children));
-    expect(texts.join()).toContain('用量详情');
-    expect(texts.join()).toContain('gpt-x');
-    act(() => {
-      tree.unmount();
+
+    it('中断（指标条可见）：「已中断」只在条上出现一次（不叠屏级横幅）', async () => {
+        const h = buildHarness();
+        mockManager = h.manager;
+        mockRuntime = {
+            sessionStreamUnitManager: h.manager,
+            usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail},
+        };
+        // 重启水合现场：run 被杀 → interrupted 单元（常驻，无 settled 投影）。
+        const unit = h.manager.adoptInterruptedUnit(CHILD_SESSION_ID, 'p1');
+        unit.hydrateFromRunState({
+            runId: 'rc-old',
+            startedAtMs: 1_000,
+            settledAtMs: 4_000,
+            metrics: {
+                textChars: 100,
+                thinkingChars: 0,
+                completionTokens: 30,
+                tokenSource: 'usage',
+            },
+            partialText: '中断正文',
+            partialThinking: '',
+            pendingChildren: [],
+        });
+
+        const {texts, unmount} = await renderScreen();
+        // C-4：屏级横幅与指标条徽标不再同时出现——「已中断」恰好一次。
+        expect(countText(texts, '已中断')).toBe(1);
+        expect(texts.join(' | ')).toContain('上次生成');
+        expect(texts.join(' | ')).toContain('输出 30 tok');
+        unmount();
     });
-  });
+
+    it('中断（指标条不可见）：「已中断」由屏级横幅兜底，仍是单标识', async () => {
+        const h = buildHarness();
+        mockManager = h.manager;
+        mockRuntime = {
+            sessionStreamUnitManager: h.manager,
+            usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail},
+        };
+        // starting 阶段被杀：起点与指标皆零 → 指标条全零守卫不渲染。
+        const unit = h.manager.adoptInterruptedUnit(CHILD_SESSION_ID, 'p1');
+        unit.hydrateFromRunState({
+            runId: '',
+            startedAtMs: 0,
+            settledAtMs: 4_000,
+            metrics: {
+                textChars: 0,
+                thinkingChars: 0,
+                completionTokens: 0,
+                tokenSource: 'heuristic',
+            },
+            partialText: '',
+            partialThinking: '',
+            pendingChildren: [],
+        });
+
+        const {texts, unmount} = await renderScreen();
+        expect(countText(texts, '已中断')).toBe(1);
+        expect(texts.join(' | ')).not.toContain('上次生成');
+        unmount();
+    });
+
+    it('metric-detail-sheet：指标条可点开用量 sheet，数据按子会话自身 sessionId 统计', async () => {
+        const h = buildHarness();
+        mockManager = h.manager;
+        mockRuntime = {
+            sessionStreamUnitManager: h.manager,
+            usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail},
+        };
+        // 冻结指标现场：指标条可见 → 详情入口存在。
+        const unit = h.manager.adoptInterruptedUnit(CHILD_SESSION_ID, 'p1');
+        unit.hydrateFromRunState({
+            runId: 'rc-old',
+            startedAtMs: 1_000,
+            settledAtMs: 4_000,
+            metrics: {
+                textChars: 100,
+                thinkingChars: 0,
+                completionTokens: 30,
+                tokenSource: 'usage',
+            },
+            partialText: '中断正文',
+            partialThinking: '',
+            pendingChildren: [],
+        });
+        // 错误通道迁移二期后走 Result（sheet 侧 `!ok` 即 throw）。
+        mockGetSessionUsageDetail.mockResolvedValue({
+            ok: true,
+            value: {
+                last: {
+                    seq: 2,
+                    modelName: 'gpt-x',
+                    provider: 'openai',
+                    promptTokens: 50,
+                    completionTokens: 20,
+                    cacheReadTokens: null,
+                    cacheCreationTokens: null,
+                    atMs: 1,
+                },
+                totals: {
+                    promptTokens: 80,
+                    completionTokens: 30,
+                    cacheReadTokens: 0,
+                    cacheCreationTokens: 0,
+                    billedInputTokens: 80,
+                    assistantRows: 2,
+                },
+                visibleMessageCount: 3,
+                toolUseCount: 1,
+            },
+        });
+
+        let tree!: TestRenderer.ReactTestRenderer;
+        await act(async () => {
+            tree = TestRenderer.create(<SubagentSessionScreen />);
+        });
+        const pressable = tree.root.find(
+            node =>
+                node.props?.accessibilityRole === 'button' &&
+                typeof node.props?.onPress === 'function' &&
+                Array.isArray(node.props?.style) === false, // 指标条 Pressable（屏上还有停止按钮等）
+        );
+        await act(async () => {
+            pressable.props.onPress();
+        });
+        // 数据按子会话自身 sessionId（child-1）统计，非父会话。
+        expect(mockGetSessionUsageDetail).toHaveBeenCalledWith(CHILD_SESSION_ID);
+        const texts = tree.root
+            .findAllByType(Text)
+            .map(node => String(node.props.children));
+        expect(texts.join()).toContain('用量详情');
+        expect(texts.join()).toContain('gpt-x');
+        act(() => {
+            tree.unmount();
+        });
+    });
 });
 
 describe('SubagentSessionScreen 卡片点击 handler 装配（子会话点卡片进预览）', () => {
-  beforeEach(() => {
-    jest.useFakeTimers();
-    agentActivity.setActive(false);
-  });
+    beforeEach(() => {
+        jest.useFakeTimers();
+        agentActivity.setActive(false);
+    });
 
-  afterEach(() => {
-    mockManager?.dispose();
-    mockManager = undefined;
-    mockRuntime = undefined;
-    mockGetSessionUsageDetail.mockClear();
-    mockChatWebViewProps.length = 0;
-    mockNavigate.mockClear();
-    jest.useRealTimers();
-    agentActivity.setActive(false);
-  });
+    afterEach(() => {
+        mockManager?.dispose();
+        mockManager = undefined;
+        mockRuntime = undefined;
+        mockGetSessionUsageDetail.mockClear();
+        mockChatWebViewProps.length = 0;
+        mockNavigate.mockClear();
+        jest.useRealTimers();
+        agentActivity.setActive(false);
+    });
 
-  /** 挂一次屏并返回最后一次 webview 收到的 props + 事件总线（驱动重渲染）。 */
-  async function renderAndGetProps(): Promise<{
-    props: Record<string, unknown>;
-    eventBus: SimpleEventBus;
-    unmount: () => void;
-  }> {
-    const h = buildHarness();
-    mockManager = h.manager;
-    mockRuntime = {
-      sessionStreamUnitManager: h.manager,
-      usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail},
-    };
-    driveConsumptiveRun(h.eventBus, 3);
-    const {unmount} = await renderScreen();
-    return {
-      props: mockChatWebViewProps[mockChatWebViewProps.length - 1],
-      eventBus: h.eventBus,
-      unmount,
-    };
-  }
+    /** 挂一次屏并返回最后一次 webview 收到的 props + 事件总线（驱动重渲染）。 */
+    async function renderAndGetProps(): Promise<{
+        props: Record<string, unknown>;
+        eventBus: SimpleEventBus;
+        unmount: () => void;
+    }> {
+        const h = buildHarness();
+        mockManager = h.manager;
+        mockRuntime = {
+            sessionStreamUnitManager: h.manager,
+            usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail},
+        };
+        driveConsumptiveRun(h.eventBus, 3);
+        const {unmount} = await renderScreen();
+        return {
+            props: mockChatWebViewProps[mockChatWebViewProps.length - 1],
+            eventBus: h.eventBus,
+            unmount,
+        };
+    }
 
-  it('回归护栏：onOpenToolResult / onOpenSkillDetail 都有传（漏传=点了没反应）', async () => {
-    // 事故根因：本屏曾只传 onOpenToolFile/onLinkClick/onOpenSubagentSession，
-    // 桥消息里的 openToolResult/openSkillDetail 被宿主 `?.()` 可选调用静默吞掉。
-    const {props, unmount} = await renderAndGetProps();
-    expect(props.onOpenToolResult).toBeInstanceOf(Function);
-    expect(props.onOpenSkillDetail).toBeInstanceOf(Function);
-    unmount();
-  });
+    it('回归护栏：onOpenToolResult / onOpenSkillDetail 都有传（漏传=点了没反应）', async () => {
+        // 事故根因：本屏曾只传 onOpenToolFile/onLinkClick/onOpenSubagentSession，
+        // 桥消息里的 openToolResult/openSkillDetail 被宿主 `?.()` 可选调用静默吞掉。
+        const {props, unmount} = await renderAndGetProps();
+        expect(props.onOpenToolResult).toBeInstanceOf(Function);
+        expect(props.onOpenSkillDetail).toBeInstanceOf(Function);
+        unmount();
+    });
 
-  it('两个 handler 是稳定引用（重渲染后仍是同一个函数，webview 不重挂）', async () => {
-    // ChatConversationWebView 的 memo 比较器不比 handler prop，靠稳定引用兜底：
-    // handler 写成内联箭头函数就会每次渲染换引用，整块 webview 跟着重挂。
-    const h = buildHarness();
-    mockManager = h.manager;
-    mockRuntime = {
-      sessionStreamUnitManager: h.manager,
-      usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail},
-    };
-    driveConsumptiveRun(h.eventBus, 3);
-    let tree!: TestRenderer.ReactTestRenderer;
-    await act(async () => {
-      tree = TestRenderer.create(<SubagentSessionScreen />);
+    it('两个 handler 是稳定引用（重渲染后仍是同一个函数，webview 不重挂）', async () => {
+        // ChatConversationWebView 的 memo 比较器不比 handler prop，靠稳定引用兜底：
+        // handler 写成内联箭头函数就会每次渲染换引用，整块 webview 跟着重挂。
+        const h = buildHarness();
+        mockManager = h.manager;
+        mockRuntime = {
+            sessionStreamUnitManager: h.manager,
+            usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail},
+        };
+        driveConsumptiveRun(h.eventBus, 3);
+        let tree!: TestRenderer.ReactTestRenderer;
+        await act(async () => {
+            tree = TestRenderer.create(<SubagentSessionScreen />);
+        });
+        const first = mockChatWebViewProps[mockChatWebViewProps.length - 1];
+        await act(async () => {
+            tree.update(<SubagentSessionScreen />);
+        });
+        const last = mockChatWebViewProps[mockChatWebViewProps.length - 1];
+        expect(mockChatWebViewProps.length).toBeGreaterThan(1);
+        expect(last.onOpenToolResult).toBe(first.onOpenToolResult);
+        expect(last.onOpenSkillDetail).toBe(first.onOpenSkillDetail);
+        act(() => {
+            tree.unmount();
+        });
     });
-    const first = mockChatWebViewProps[mockChatWebViewProps.length - 1];
-    await act(async () => {
-      tree.update(<SubagentSessionScreen />);
-    });
-    const last = mockChatWebViewProps[mockChatWebViewProps.length - 1];
-    expect(mockChatWebViewProps.length).toBeGreaterThan(1);
-    expect(last.onOpenToolResult).toBe(first.onOpenToolResult);
-    expect(last.onOpenSkillDetail).toBe(first.onOpenSkillDetail);
-    act(() => {
-      tree.unmount();
-    });
-  });
 
-  it('onOpenToolResult：带 inputJson → 写两段 body 并跳 PromptTurnDetail', async () => {
-    const {props, unmount} = await renderAndGetProps();
-    const handler = props.onOpenToolResult as (payload: {
-      title: string;
-      content: string;
-      inputJson?: string;
-    }) => void;
-    act(() => {
-      handler({
-        title: 'curl',
-        content: 'HTTP 200',
-        inputJson: '{\n  "url": "https://example.com"\n}',
-      });
+    it('onOpenToolResult：带 inputJson → 写两段 body 并跳 PromptTurnDetail', async () => {
+        const {props, unmount} = await renderAndGetProps();
+        const handler = props.onOpenToolResult as (payload: {
+            title: string;
+            content: string;
+            inputJson?: string;
+        }) => void;
+        act(() => {
+            handler({
+                title: 'curl',
+                content: 'HTTP 200',
+                inputJson: '{\n  "url": "https://example.com"\n}',
+            });
+        });
+        expect(mockNavigate).toHaveBeenCalledWith('PromptTurnDetail', {
+            title: 'curl',
+            turnId: 'tool-result-curl',
+        });
+        // 正文走模块级单例（不进路由参数），读走即清。
+        expect(promptTurnDetailSlot.take()).toEqual({
+            title: 'curl',
+            body: '【输入】\n{\n  "url": "https://example.com"\n}\n\n【输出】\nHTTP 200',
+        });
+        unmount();
     });
-    expect(mockNavigate).toHaveBeenCalledWith('PromptTurnDetail', {
-      title: 'curl',
-      turnId: 'tool-result-curl',
-    });
-    // 正文走模块级单例（不进路由参数），读走即清。
-    expect(promptTurnDetailSlot.take()).toEqual({
-      title: 'curl',
-      body: '【输入】\n{\n  "url": "https://example.com"\n}\n\n【输出】\nHTTP 200',
-    });
-    unmount();
-  });
 
-  it('onOpenToolResult：无 inputJson → body 就是纯 content（旧行为不变）', async () => {
-    const {props, unmount} = await renderAndGetProps();
-    const handler = props.onOpenToolResult as (payload: {
-      title: string;
-      content: string;
-      inputJson?: string;
-    }) => void;
-    act(() => {
-      handler({title: 'search', content: '结果正文'});
+    it('onOpenToolResult：无 inputJson → body 就是纯 content（旧行为不变）', async () => {
+        const {props, unmount} = await renderAndGetProps();
+        const handler = props.onOpenToolResult as (payload: {
+            title: string;
+            content: string;
+            inputJson?: string;
+        }) => void;
+        act(() => {
+            handler({title: 'search', content: '结果正文'});
+        });
+        expect(promptTurnDetailSlot.take()).toEqual({title: 'search', body: '结果正文'});
+        unmount();
     });
-    expect(promptTurnDetailSlot.take()).toEqual({title: 'search', body: '结果正文'});
-    unmount();
-  });
 
-  it('onOpenSkillDetail：project 域缺 projectId → 用 route.params 的项目补齐', async () => {
-    const {props, unmount} = await renderAndGetProps();
-    const handler = props.onOpenSkillDetail as (ref: {
-      domain: 'global' | 'project';
-      name: string;
-      projectId?: string;
-    }) => void;
-    act(() => {
-      handler({domain: 'project', name: 'my-skill'});
+    it('onOpenSkillDetail：project 域缺 projectId → 用 route.params 的项目补齐', async () => {
+        const {props, unmount} = await renderAndGetProps();
+        const handler = props.onOpenSkillDetail as (ref: {
+            domain: 'global' | 'project';
+            name: string;
+            projectId?: string;
+        }) => void;
+        act(() => {
+            handler({domain: 'project', name: 'my-skill'});
+        });
+        expect(mockNavigate).toHaveBeenCalledWith('SkillDetail', {
+            domain: 'project',
+            name: 'my-skill',
+            projectId: 'p1',
+        });
+        unmount();
     });
-    expect(mockNavigate).toHaveBeenCalledWith('SkillDetail', {
-      domain: 'project',
-      name: 'my-skill',
-      projectId: 'p1',
-    });
-    unmount();
-  });
 
-  it('onOpenSkillDetail：global 域不带 projectId', async () => {
-    const {props, unmount} = await renderAndGetProps();
-    const handler = props.onOpenSkillDetail as (ref: {
-      domain: 'global' | 'project';
-      name: string;
-      projectId?: string;
-    }) => void;
-    act(() => {
-      handler({domain: 'global', name: 'my-skill'});
+    it('onOpenSkillDetail：global 域不带 projectId', async () => {
+        const {props, unmount} = await renderAndGetProps();
+        const handler = props.onOpenSkillDetail as (ref: {
+            domain: 'global' | 'project';
+            name: string;
+            projectId?: string;
+        }) => void;
+        act(() => {
+            handler({domain: 'global', name: 'my-skill'});
+        });
+        expect(mockNavigate).toHaveBeenCalledWith('SkillDetail', {
+            domain: 'global',
+            name: 'my-skill',
+        });
+        unmount();
     });
-    expect(mockNavigate).toHaveBeenCalledWith('SkillDetail', {
-      domain: 'global',
-      name: 'my-skill',
-    });
-    unmount();
-  });
 });
 
 /**
@@ -592,94 +592,94 @@ describe('SubagentSessionScreen 卡片点击 handler 装配（子会话点卡片
  *    否则子会话里新发的孙任务 pending 卡在「执行中」不可点。
  */
 describe('F-B4 子会话屏兜底：force 回源 + 孙任务 pending 映射注入', () => {
-  beforeEach(() => {
-    jest.useFakeTimers();
-    agentActivity.setActive(false);
-  });
-
-  afterEach(() => {
-    mockManager?.dispose();
-    mockManager = undefined;
-    mockRuntime = undefined;
-    mockGetSessionUsageDetail.mockClear();
-    mockChatWebViewProps.length = 0;
-    mockNavigate.mockClear();
-    jest.useRealTimers();
-  });
-
-  it('挂载即 force 加载尾部，并把 pendingChildrenByTitle 传给 WebView', async () => {
-    const h = buildHarness();
-    mockManager = h.manager;
-    mockRuntime = {
-      sessionStreamUnitManager: h.manager,
-      usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail},
-    };
-    const loadSpy = jest.spyOn(h.manager, 'loadSessionTailMessages');
-    driveConsumptiveRun(h.eventBus, 2);
-
-    const {unmount} = await renderScreen();
-    expect(loadSpy).toHaveBeenCalledWith(CHILD_SESSION_ID, {force: true});
-
-    // 子会话里再派一个孙任务：登记进 pendingChildrenByTitle，屏幕必须把它带下去
-    h.eventBus.publish(EVENT_SUBAGENT_CHILD_SESSION_CREATED, {
-      parentSessionId: CHILD_SESSION_ID,
-      projectId: 'p1',
-      childSessionId: 'grand-1',
-      title: '孙任务',
-    } as never);
-    await act(async () => {
-      jest.advanceTimersByTime(10);
+    beforeEach(() => {
+        jest.useFakeTimers();
+        agentActivity.setActive(false);
     });
 
-    const latest = mockChatWebViewProps[mockChatWebViewProps.length - 1];
-    expect(latest.pendingSubagentSessions).toBeInstanceOf(Map);
-    expect(
-      (latest.pendingSubagentSessions as Map<string, string>).get('孙任务'),
-    ).toBe('grand-1');
-    unmount();
-  });
+    afterEach(() => {
+        mockManager?.dispose();
+        mockManager = undefined;
+        mockRuntime = undefined;
+        mockGetSessionUsageDetail.mockClear();
+        mockChatWebViewProps.length = 0;
+        mockNavigate.mockClear();
+        jest.useRealTimers();
+    });
+
+    it('挂载即 force 加载尾部，并把 pendingChildrenByTitle 传给 WebView', async () => {
+        const h = buildHarness();
+        mockManager = h.manager;
+        mockRuntime = {
+            sessionStreamUnitManager: h.manager,
+            usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail},
+        };
+        const loadSpy = jest.spyOn(h.manager, 'loadSessionTailMessages');
+        driveConsumptiveRun(h.eventBus, 2);
+
+        const {unmount} = await renderScreen();
+        expect(loadSpy).toHaveBeenCalledWith(CHILD_SESSION_ID, {force: true});
+
+        // 子会话里再派一个孙任务：登记进 pendingChildrenByTitle，屏幕必须把它带下去
+        h.eventBus.publish(EVENT_SUBAGENT_CHILD_SESSION_CREATED, {
+            parentSessionId: CHILD_SESSION_ID,
+            projectId: 'p1',
+            childSessionId: 'grand-1',
+            title: '孙任务',
+        } as never);
+        await act(async () => {
+            jest.advanceTimersByTime(10);
+        });
+
+        const latest = mockChatWebViewProps[mockChatWebViewProps.length - 1];
+        expect(latest.pendingSubagentSessions).toBeInstanceOf(Map);
+        expect(
+            (latest.pendingSubagentSessions as Map<string, string>).get('孙任务'),
+        ).toBe('grand-1');
+        unmount();
+    });
 });
 
 /** 造一条可用的只手写投影视图（屏幕只消费视图字段，不关心单元内部状态机）。 */
 function makeUnitView(
-  overrides: Partial<SessionStreamUnitView>,
+    overrides: Partial<SessionStreamUnitView>,
 ): SessionStreamUnitView {
-  return {
-    sessionId: CHILD_SESSION_ID,
-    projectId: 'p1',
-    status: 'idle',
-    runId: null,
-    settledAtMs: null,
-    metrics: {
-      textChars: 0,
-      thinkingChars: 0,
-      completionTokens: 0,
-      tokenSource: 'heuristic',
-    },
-    startedAtMs: 0,
-    elapsedMs: null,
-    partialText: '',
-    partialThinking: '',
-    streamRows: [],
-    streamRowIds: new Map<string, string>(),
-    pendingChildren: [],
-    pendingChildrenByTitle: new Map<string, string>(),
-    messages: [],
-    hasMoreMessages: false,
-    loadingMoreMessages: false,
-    ...overrides,
-  };
+    return {
+        sessionId: CHILD_SESSION_ID,
+        projectId: 'p1',
+        status: 'idle',
+        runId: null,
+        settledAtMs: null,
+        metrics: {
+            textChars: 0,
+            thinkingChars: 0,
+            completionTokens: 0,
+            tokenSource: 'heuristic',
+        },
+        startedAtMs: 0,
+        elapsedMs: null,
+        partialText: '',
+        partialThinking: '',
+        streamRows: [],
+        streamRowIds: new Map<string, string>(),
+        pendingChildren: [],
+        pendingChildrenByTitle: new Map<string, string>(),
+        messages: [],
+        hasMoreMessages: false,
+        loadingMoreMessages: false,
+        ...overrides,
+    };
 }
 
 function makeAssistantMessage(id: string): ChatMessageData {
-  return {
-    id,
-    sessionId: CHILD_SESSION_ID,
-    seq: 1,
-    role: 'assistant',
-    content: `正文-${id}`,
-    createdAtMs: 1_000,
-  } as unknown as ChatMessageData;
+    return {
+        id,
+        sessionId: CHILD_SESSION_ID,
+        seq: 1,
+        role: 'assistant',
+        content: `正文-${id}`,
+        createdAtMs: 1_000,
+    } as unknown as ChatMessageData;
 }
 
 /**
@@ -690,111 +690,111 @@ function makeAssistantMessage(id: string): ChatMessageData {
  * 有个空壳。
  */
 describe('SubagentSessionScreen 消费侧投影接线（P1-3/P2-5/P2-18c）', () => {
-  beforeEach(() => {
-    jest.useFakeTimers();
-    agentActivity.setActive(false);
-  });
-
-  afterEach(() => {
-    mockManager?.dispose();
-    mockManager = undefined;
-    mockRuntime = undefined;
-    mockGetSessionUsageDetail.mockClear();
-    mockChatWebViewProps.length = 0;
-    mockNavigate.mockClear();
-    jest.useRealTimers();
-    agentActivity.setActive(false);
-  });
-
-  function installManager(manager: SessionStreamUnitManager): void {
-    mockManager = manager;
-    mockRuntime = {
-      sessionStreamUnitManager: manager,
-      usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail},
-    };
-  }
-
-  it('P2-18c：streamingRows/streamRowIds 的内容真传到宿主（不止 defined/instanceof）', async () => {
-    const h = buildHarness();
-    installManager(h.manager);
-    const streamRows = [
-      {
-        streamId: 'st-1',
-        status: 'streaming',
-        text: '流式正文',
-        thinking: '流式思考',
-        tools: [],
-        messageId: null,
-      },
-    ];
-    const rowIds = new Map([['db-1', 'st-1']]);
-    jest.spyOn(h.manager, 'snapshot').mockReturnValue(
-      makeUnitView({
-        status: 'running',
-        runId: 'rc',
-        startedAtMs: 1_000,
-        streamRows,
-        streamRowIds: rowIds,
-        messages: [makeAssistantMessage('db-1')],
-      }),
-    );
-
-    const {unmount} = await renderScreen();
-    const props = mockChatWebViewProps[mockChatWebViewProps.length - 1]!;
-    const passedRows = props.streamingRows as Array<Record<string, unknown>>;
-    expect(passedRows).toHaveLength(1);
-    expect(passedRows[0]?.streamId).toBe('st-1');
-    expect(passedRows[0]?.status).toBe('streaming');
-    expect(passedRows[0]?.text).toBe('流式正文');
-    expect(passedRows[0]?.thinking).toBe('流式思考');
-    const passedIds = props.streamRowIds as ReadonlyMap<string, string>;
-    expect(passedIds).toBeInstanceOf(Map);
-    expect(passedIds.size).toBe(1);
-    expect(passedIds.get('db-1')).toBe('st-1');
-    unmount();
-  });
-
-  it('P1-3：单元 streamRowIds 是空 Map 时不遮蔽 idle 交接映射', async () => {
-    const h = buildHarness();
-    installManager(h.manager);
-    jest.spyOn(h.manager, 'snapshot').mockReturnValue(
-      makeUnitView({
-        status: 'running',
-        runId: 'rc',
-        startedAtMs: 1_000,
-        messages: [makeAssistantMessage('db-a')],
-        // 新单元刚建立：空 Map（不是 null）——旧写法 `unit ?? idle` 会选中它。
-        streamRowIds: new Map<string, string>(),
-      }),
-    );
-    jest.spyOn(h.manager, 'readMessagesSnapshot').mockReturnValue({
-      messages: [makeAssistantMessage('db-a')],
-      hasMoreMessages: false,
-      loadingMoreMessages: false,
-      streamRowIds: new Map([['db-a', 'st-a']]),
+    beforeEach(() => {
+        jest.useFakeTimers();
+        agentActivity.setActive(false);
     });
 
-    const {unmount} = await renderScreen();
-    const props = mockChatWebViewProps[mockChatWebViewProps.length - 1]!;
-    const passedIds = props.streamRowIds as ReadonlyMap<string, string>;
-    expect(passedIds.size).toBe(1);
-    expect(passedIds.get('db-a')).toBe('st-a');
-    unmount();
-  });
+    afterEach(() => {
+        mockManager?.dispose();
+        mockManager = undefined;
+        mockRuntime = undefined;
+        mockGetSessionUsageDetail.mockClear();
+        mockChatWebViewProps.length = 0;
+        mockNavigate.mockClear();
+        jest.useRealTimers();
+        agentActivity.setActive(false);
+    });
 
-  it('P2-5：单元消息面为空（二轮替换的中间态）时回落本地消息，不发空转录', async () => {
-    const h = buildHarness();
-    installManager(h.manager);
-    const history = [makeAssistantMessage('db-hist')];
-    jest
-      .spyOn(h.manager, 'snapshot')
-      .mockReturnValue(makeUnitView({status: 'starting'}));
-    jest.spyOn(h.manager, 'loadSessionTailMessages').mockResolvedValue(Result.ok(history));
+    function installManager(manager: SessionStreamUnitManager): void {
+        mockManager = manager;
+        mockRuntime = {
+            sessionStreamUnitManager: manager,
+            usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail},
+        };
+    }
 
-    const {texts, unmount} = await renderScreen();
-    expect(texts.join(' | ')).not.toContain('子会话暂无消息');
-    const props = mockChatWebViewProps[mockChatWebViewProps.length - 1]!;
-    expect(props.messages).toEqual(history);
-    unmount();
-  });
+    it('P2-18c：streamingRows/streamRowIds 的内容真传到宿主（不止 defined/instanceof）', async () => {
+        const h = buildHarness();
+        installManager(h.manager);
+        const streamRows = [
+            {
+                streamId: 'st-1',
+                status: 'streaming',
+                text: '流式正文',
+                thinking: '流式思考',
+                tools: [],
+                messageId: null,
+            },
+        ];
+        const rowIds = new Map([['db-1', 'st-1']]);
+        jest.spyOn(h.manager, 'snapshot').mockReturnValue(
+            makeUnitView({
+                status: 'running',
+                runId: 'rc',
+                startedAtMs: 1_000,
+                streamRows,
+                streamRowIds: rowIds,
+                messages: [makeAssistantMessage('db-1')],
+            }),
+        );
+
+        const {unmount} = await renderScreen();
+        const props = mockChatWebViewProps[mockChatWebViewProps.length - 1]!;
+        const passedRows = props.streamingRows as Array<Record<string, unknown>>;
+        expect(passedRows).toHaveLength(1);
+        expect(passedRows[0]?.streamId).toBe('st-1');
+        expect(passedRows[0]?.status).toBe('streaming');
+        expect(passedRows[0]?.text).toBe('流式正文');
+        expect(passedRows[0]?.thinking).toBe('流式思考');
+        const passedIds = props.streamRowIds as ReadonlyMap<string, string>;
+        expect(passedIds).toBeInstanceOf(Map);
+        expect(passedIds.size).toBe(1);
+        expect(passedIds.get('db-1')).toBe('st-1');
+        unmount();
+    });
+
+    it('P1-3：单元 streamRowIds 是空 Map 时不遮蔽 idle 交接映射', async () => {
+        const h = buildHarness();
+        installManager(h.manager);
+        jest.spyOn(h.manager, 'snapshot').mockReturnValue(
+            makeUnitView({
+                status: 'running',
+                runId: 'rc',
+                startedAtMs: 1_000,
+                messages: [makeAssistantMessage('db-a')],
+                // 新单元刚建立：空 Map（不是 null）——旧写法 `unit ?? idle` 会选中它。
+                streamRowIds: new Map<string, string>(),
+            }),
+        );
+        jest.spyOn(h.manager, 'readMessagesSnapshot').mockReturnValue({
+            messages: [makeAssistantMessage('db-a')],
+            hasMoreMessages: false,
+            loadingMoreMessages: false,
+            streamRowIds: new Map([['db-a', 'st-a']]),
+        });
+
+        const {unmount} = await renderScreen();
+        const props = mockChatWebViewProps[mockChatWebViewProps.length - 1]!;
+        const passedIds = props.streamRowIds as ReadonlyMap<string, string>;
+        expect(passedIds.size).toBe(1);
+        expect(passedIds.get('db-a')).toBe('st-a');
+        unmount();
+    });
+
+    it('P2-5：单元消息面为空（二轮替换的中间态）时回落本地消息，不发空转录', async () => {
+        const h = buildHarness();
+        installManager(h.manager);
+        const history = [makeAssistantMessage('db-hist')];
+        jest
+            .spyOn(h.manager, 'snapshot')
+            .mockReturnValue(makeUnitView({status: 'starting'}));
+        jest.spyOn(h.manager, 'loadSessionTailMessages').mockResolvedValue(Result.ok(history));
+
+        const {texts, unmount} = await renderScreen();
+        expect(texts.join(' | ')).not.toContain('子会话暂无消息');
+        const props = mockChatWebViewProps[mockChatWebViewProps.length - 1]!;
+        expect(props.messages).toEqual(history);
+        unmount();
+    });
 });

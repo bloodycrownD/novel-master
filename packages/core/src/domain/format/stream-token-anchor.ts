@@ -14,24 +14,24 @@
  */
 
 export const StreamTokenAnchor = {
-  /**
+    /**
    * 读值 = `max(0, 基线 + 增量估算)`。
    *
    * 夹负是「读值不得为负」的收敛点：usage 真值比已累计的增量小（校正点
    * 提前到达、模型重算等）时，基线 + 增量可能算出负数，读值一律夹到 0。
    */
-  composeTokens(base: number, increment: number): number {
-    return Math.max(0, base + increment);
-  },
+    composeTokens(base: number, increment: number): number {
+        return Math.max(0, base + increment);
+    },
 
-  /**
+    /**
    * 重锚基线 = `真值 − 当前增量估算`。
    *
    * 校正点（usage 事件到达 / 启动水合回填）把 `truth` 定成此刻的读值，
    * 此后每个 delta 的增量继续叠加上去——多步 run 的数字因此单调增长，
    * 而不是冻结在上一 step 的真值上。
    */
-  reanchorBase(truth: number, increment: number): number {
-    return truth - increment;
-  },
+    reanchorBase(truth: number, increment: number): number {
+        return truth - increment;
+    },
 } as const;

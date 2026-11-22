@@ -14,31 +14,31 @@
  * - fork / copy 会话**不**复制本表行。
  */
 export interface SessionKkvService {
-  get(sessionId: string, domain: string, key: string): Promise<string | null>;
+    get(sessionId: string, domain: string, key: string): Promise<string | null>;
 
-  /**
+    /**
    * 批量按键读值（miss 键不进结果）：N 键消费方（workplace 组装）的读链
    * 从逐键 2N 条串行 SQL 收敛到常数条 IN 查询。
    */
-  getMany(
-    sessionId: string,
-    domain: string,
-    keys: readonly string[]
-  ): Promise<Map<string, string>>;
+    getMany(
+        sessionId: string,
+        domain: string,
+        keys: readonly string[]
+    ): Promise<Map<string, string>>;
 
-  set(
-    sessionId: string,
-    domain: string,
-    key: string,
-    value: string
-  ): Promise<void>;
+    set(
+        sessionId: string,
+        domain: string,
+        key: string,
+        value: string
+    ): Promise<void>;
 
-  delete(sessionId: string, domain: string, key: string): Promise<void>;
+    delete(sessionId: string, domain: string, key: string): Promise<void>;
 
-  /** 清空指定 domain（如 file_cache / user_vfs_pending）。 */
-  clearDomain(sessionId: string, domain: string): Promise<void>;
+    /** 清空指定 domain（如 file_cache / user_vfs_pending）。 */
+    clearDomain(sessionId: string, domain: string): Promise<void>;
 
-  clearSession(sessionId: string): Promise<void>;
+    clearSession(sessionId: string): Promise<void>;
 
-  listKeys(sessionId: string, domain: string): Promise<string[]>;
+    listKeys(sessionId: string, domain: string): Promise<string[]>;
 }

@@ -8,121 +8,121 @@ import {  getNovelMasterTestContext, novelMasterTestFixture  } from "../helpers/
 import {  tCore  } from "../helpers/core-i18n.js";
 
 describe("AgentDefinitionWire.assess", () => {
-  it("T-A1: prompts.blocks agent wire → invalid(removed_feature)", () => {
-    const wire = {
-      schemaVersion: 1,
-      name: "legacy",
-      prompts: { blocks: {} },
-    };
-    const health = AgentDefinitionWire.assess(wire);
-    assert.equal(health.status, "invalid");
-    if (health.status === "invalid") {
-      assert.equal(health.code, "removed_feature");
-      assert.match(health.message, /prompts\.blocks/);
-    }
-  });
+    it("T-A1: prompts.blocks agent wire → invalid(removed_feature)", () => {
+        const wire = {
+            schemaVersion: 1,
+            name: "legacy",
+            prompts: { blocks: {} },
+        };
+        const health = AgentDefinitionWire.assess(wire);
+        assert.equal(health.status, "invalid");
+        if (health.status === "invalid") {
+            assert.equal(health.code, "removed_feature");
+            assert.match(health.message, /prompts\.blocks/);
+        }
+    });
 
-  it("T-A2: 合法 agent v1 → valid", () => {
-    const wire = {
-      schemaVersion: 1,
-      name: "writer",
-      prompts: {
-        system: "hi",
-        persist: {},
-        dynamic: {},
-      },
-      runtime: { maxSteps: 5 },
-    };
-    const health = AgentDefinitionWire.assess(wire);
-    assert.equal(health.status, "valid");
-    if (health.status === "valid") {
-      assert.equal(health.value.name, "writer");
-      assert.equal(health.value.runtime?.maxSteps, 5);
-    }
-  });
+    it("T-A2: 合法 agent v1 → valid", () => {
+        const wire = {
+            schemaVersion: 1,
+            name: "writer",
+            prompts: {
+                system: "hi",
+                persist: {},
+                dynamic: {},
+            },
+            runtime: { maxSteps: 5 },
+        };
+        const health = AgentDefinitionWire.assess(wire);
+        assert.equal(health.status, "valid");
+        if (health.status === "valid") {
+            assert.equal(health.value.name, "writer");
+            assert.equal(health.value.runtime?.maxSteps, 5);
+        }
+    });
 });
 
 describe("AgentDefinitionWire.resolveFromStorage", () => {
-  it("已解析领域对象（persist 为数组）→ valid", () => {
-    const wire = {
-      schemaVersion: 1,
-      name: "writer",
-      prompts: { persist: {}, dynamic: {} },
-    };
-    const parsed = AgentDefinitionWire.assess(wire);
-    assert.equal(parsed.status, "valid");
-    if (parsed.status !== "valid") {
-      return;
-    }
-    const health = AgentDefinitionWire.resolveFromStorage(parsed.value);
-    assert.equal(health.status, "valid");
-    if (health.status === "valid") {
-      assert.equal(health.value.name, "writer");
-    }
-  });
+    it("已解析领域对象（persist 为数组）→ valid", () => {
+        const wire = {
+            schemaVersion: 1,
+            name: "writer",
+            prompts: { persist: {}, dynamic: {} },
+        };
+        const parsed = AgentDefinitionWire.assess(wire);
+        assert.equal(parsed.status, "valid");
+        if (parsed.status !== "valid") {
+            return;
+        }
+        const health = AgentDefinitionWire.resolveFromStorage(parsed.value);
+        assert.equal(health.status, "valid");
+        if (health.status === "valid") {
+            assert.equal(health.value.name, "writer");
+        }
+    });
 
-  it("wire 文档仍走 assess", () => {
-    const wire = {
-      schemaVersion: 1,
-      name: "writer",
-      prompts: { persist: {}, dynamic: {} },
-    };
-    const health = AgentDefinitionWire.resolveFromStorage(wire);
-    assert.equal(health.status, "valid");
-  });
+    it("wire 文档仍走 assess", () => {
+        const wire = {
+            schemaVersion: 1,
+            name: "writer",
+            prompts: { persist: {}, dynamic: {} },
+        };
+        const health = AgentDefinitionWire.resolveFromStorage(wire);
+        assert.equal(health.status, "valid");
+    });
 });
 
 describe("DefaultAgentDefinition.build", () => {
-  it("T-A3: 保留 name、默认 prompts 与 maxSteps", () => {
-    const def = DefaultAgentDefinition.build("  我的 Agent  ");
-    assert.equal(def.name, "我的 Agent");
-    // 等价表单侧 layoutFromFormInput(createDefaultAgentEditorPrompts())（全空表单 → 空 layout）
-    assert.deepEqual(def.prompts, { persist: [], dynamic: [] });
-    assert.deepEqual(def.runtime, { maxSteps: 20 });
-    assert.doesNotThrow(() => {
-      SerializationDecode.decode(SerializationEncode.encode(def, agentDefinitionSchema), agentDefinitionSchema);
+    it("T-A3: 保留 name、默认 prompts 与 maxSteps", () => {
+        const def = DefaultAgentDefinition.build("  我的 Agent  ");
+        assert.equal(def.name, "我的 Agent");
+        // 等价表单侧 layoutFromFormInput(createDefaultAgentEditorPrompts())（全空表单 → 空 layout）
+        assert.deepEqual(def.prompts, { persist: [], dynamic: [] });
+        assert.deepEqual(def.runtime, { maxSteps: 20 });
+        assert.doesNotThrow(() => {
+            SerializationDecode.decode(SerializationEncode.encode(def, agentDefinitionSchema), agentDefinitionSchema);
+        });
     });
-  });
 });
 
 describe("STORED_CONFIG_LABELS", () => {
-  it("提供失效面板主文案（经 core translator 渲染）", () => {
-    assert.equal(tCore(STORED_CONFIG_LABELS.invalidTitle), "配置已失效");
-    assert.equal(tCore(STORED_CONFIG_LABELS.eventsRestoreAndSave), "恢复默认并保存");
-    assert.equal(tCore(STORED_CONFIG_LABELS.agentOverwriteDefault), "用默认模板覆盖并保存");
-  });
+    it("提供失效面板主文案（经 core translator 渲染）", () => {
+        assert.equal(tCore(STORED_CONFIG_LABELS.invalidTitle), "配置已失效");
+        assert.equal(tCore(STORED_CONFIG_LABELS.eventsRestoreAndSave), "恢复默认并保存");
+        assert.equal(tCore(STORED_CONFIG_LABELS.agentOverwriteDefault), "用默认模板覆盖并保存");
+    });
 });
 
 describe("AGENT_LIST_LABELS", () => {
-  it("提供需修复与最大步数文案（经 core translator 渲染）", () => {
-    assert.equal(tCore(AGENT_LIST_LABELS.needsRepair), "需修复");
-    assert.equal(tCore(AGENT_LIST_LABELS.maxSteps(12)), "最大步数 12");
-  });
+    it("提供需修复与最大步数文案（经 core translator 渲染）", () => {
+        assert.equal(tCore(AGENT_LIST_LABELS.needsRepair), "需修复");
+        assert.equal(tCore(AGENT_LIST_LABELS.maxSteps(12)), "最大步数 12");
+    });
 });
 
 novelMasterTestFixture();
 
 describe("getRawWire + assess 集成", () => {
-  it("SqliteAgentDefinitionRepository.getRawWire 不解码，可 assess", async () => {
-    const ctx = getNovelMasterTestContext();
-    const repo = new SqliteAgentDefinitionRepository(ctx.conn);
-    const legacyWire = {
-      schemaVersion: 1,
-      name: "broken",
-      prompts: { blocks: {} },
-    };
-    const now = Date.now();
-    await ctx.conn.execute(
-      `INSERT INTO agent_definition (agent_id, prompts_json, created_at_ms, updated_at_ms)
-       VALUES (?, ?, ?, ?)`,
-      ["legacy-agent", JSON.stringify(legacyWire), now, now],
-    );
+    it("SqliteAgentDefinitionRepository.getRawWire 不解码，可 assess", async () => {
+        const ctx = getNovelMasterTestContext();
+        const repo = new SqliteAgentDefinitionRepository(ctx.conn);
+        const legacyWire = {
+            schemaVersion: 1,
+            name: "broken",
+            prompts: { blocks: {} },
+        };
+        const now = Date.now();
+        await ctx.conn.execute(
+            `INSERT INTO agent_definition (agent_id, prompts_json, created_at_ms, updated_at_ms)
+    VALUES (?, ?, ?, ?)`,
+            ["legacy-agent", JSON.stringify(legacyWire), now, now],
+        );
 
-    const raw = await repo.getRawWire("legacy-agent");
-    assert.deepEqual(raw, legacyWire);
+        const raw = await repo.getRawWire("legacy-agent");
+        assert.deepEqual(raw, legacyWire);
 
-    const health = AgentDefinitionWire.assess(raw);
-    assert.equal(health.status, "invalid");
-    assert.equal(await repo.getRawWire("missing"), null);
-  });
+        const health = AgentDefinitionWire.assess(raw);
+        assert.equal(health.status, "invalid");
+        assert.equal(await repo.getRawWire("missing"), null);
+    });
 });

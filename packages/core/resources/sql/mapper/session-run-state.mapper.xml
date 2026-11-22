@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  session_run_state 表的 SQL mapper（schema 见 resources/sql/schema/session-run-state.sql）。
+
+  结构约定与 chat-message.mapper.xml 一致：语句 id 与 repo 方法同名（camelCase），
+  生成物在 src/infra/sql-template/generated/，repo 内只留引用。
+  get 与 listByStatuses 共用 13 列读投影（<sql id="selectColumns">），
+  长列清单的换行形态按原 SQL 保留（不做风格化重排）。
+-->
+<mapper namespace="session_run_state">
+
+  <sql id="selectColumns">session_id, project_id, run_id, status, started_at_ms, text_chars, thinking_chars, completion_tokens,
+    token_source, partial_text, partial_thinking, pending_children_json, updated_at_ms</sql>
+
+  <select id="get">
+    SELECT <include ref="selectColumns"/>
+    FROM session_run_state
+    WHERE session_id = #{sessionId}
+  </select>
+
+  <insert id="upsert">
+    INSERT INTO session_run_state (session_id, project_id, run_id, status, started_at_ms, text_chars, thinking_chars,
+    completion_tokens, token_source, partial_text, partial_thinking, pending_children_json, updated_at_ms)
+    VALUES (#{sessionId}, #{projectId}, #{runId}, #{status}, #{startedAtMs}, #{textChars}, #{thinkingChars},
+    #{completionTokens}, #{tokenSource}, #{partialText}, #{partialThinking}, #{pendingChildrenJson}, #{updatedAtMs})
+    ON CONFLICT(session_id) DO UPDATE
+    SET project_id = excluded.project_id, run_id = excluded.run_id, status = excluded.status,
+    started_at_ms = excluded.started_at_ms, text_chars = excluded.text_chars, thinking_chars = excluded.thinking_chars,
+    completion_tokens = excluded.completion_tokens, token_source = excluded.token_source,
+    partial_text = excluded.partial_text, partial_thinking = excluded.partial_thinking,
+    pending_children_json = excluded.pending_children_json, updated_at_ms = excluded.updated_at_ms
+  </insert>
+
+  <select id="listByStatuses">
+    SELECT <include ref="selectColumns"/>
+    FROM session_run_state
+    WHERE status IN (<foreach collection="statuses" item="status" separator=", ">#{status}</foreach>)
+    ORDER BY session_id
+  </select>
+
+  <delete id="deleteBySession">
+    DELETE
+    FROM session_run_state
+    WHERE session_id = #{sessionId}
+  </delete>
+
+  <delete id="deleteByProject">
+    DELETE
+    FROM session_run_state
+    WHERE project_id = #{projectId}
+  </delete>
+
+</mapper>

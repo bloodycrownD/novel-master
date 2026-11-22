@@ -10,322 +10,322 @@ import {RowsClick} from '../src/web/chat-transcript/webview/runtime/render/rows-
 import {state} from '../src/web/chat-transcript/webview/runtime/state/state';
 
 type FakeElement = {
-  tagName: string;
-  attrs: Record<string, string>;
-  closest: (selector: string) => FakeElement | null;
-  getAttribute: (name: string) => string | null;
+    tagName: string;
+    attrs: Record<string, string>;
+    closest: (selector: string) => FakeElement | null;
+    getAttribute: (name: string) => string | null;
 };
 
 function makeEl(
-  tagName: string,
-  attrs: Record<string, string> = {},
+    tagName: string,
+    attrs: Record<string, string> = {},
 ): FakeElement {
-  const el: FakeElement = {
-    tagName,
-    attrs,
-    closest(selector) {
-      return selector === '[data-action]' && el.attrs['data-action'] != null
-        ? el
-        : null;
-    },
-    getAttribute(name) {
-      return el.attrs[name] ?? null;
-    },
-  };
-  return el;
+    const el: FakeElement = {
+        tagName,
+        attrs,
+        closest(selector) {
+            return selector === '[data-action]' && el.attrs['data-action'] != null
+                ? el
+                : null;
+        },
+        getAttribute(name) {
+            return el.attrs[name] ?? null;
+        },
+    };
+    return el;
 }
 
 function makeEvent(target: FakeElement): MouseEvent {
-  return {target, preventDefault: jest.fn()} as unknown as MouseEvent;
+    return {target, preventDefault: jest.fn()} as unknown as MouseEvent;
 }
 
 function postedEnvelopes(): Array<{v: number; type: string; payload: unknown}> {
-  const bridge = (
-    window as unknown as {
-      ReactNativeWebView?: {postMessage: (msg: string) => void};
-    }
-  ).ReactNativeWebView;
-  return bridge
-    ? (bridge.postMessage as unknown as jest.Mock).mock.calls.map(call =>
-        JSON.parse(call[0] as string),
-      )
-    : [];
+    const bridge = (
+        window as unknown as {
+            ReactNativeWebView?: {postMessage: (msg: string) => void};
+        }
+    ).ReactNativeWebView;
+    return bridge
+        ? (bridge.postMessage as unknown as jest.Mock).mock.calls.map(call =>
+                JSON.parse(call[0] as string),
+            )
+        : [];
 }
 
 /** 往 state.rows 塞一条带工具组的消息行（浅引用赋值语义，直接换数组）。 */
 function seedToolRow(toolUseId: string, row: object): void {
-  state.rows = [
-    {
-      kind: 'message',
-      id: 'm1',
-      role: 'assistant',
-      tools: [{toolUseId, name: 'search', ...row}],
-    },
-  ];
+    state.rows = [
+        {
+            kind: 'message',
+            id: 'm1',
+            role: 'assistant',
+            tools: [{toolUseId, name: 'search', ...row}],
+        },
+    ];
 }
 
 describe('rows-click open-tool-result 分支 (T-TRW)', () => {
-  let postMessage: jest.Mock;
+    let postMessage: jest.Mock;
 
-  beforeEach(() => {
-    postMessage = jest.fn();
-    (window as unknown as {ReactNativeWebView?: unknown}).ReactNativeWebView = {
-      postMessage,
-    };
-  });
-
-  afterEach(() => {
-    delete (window as unknown as {ReactNativeWebView?: unknown})
-      .ReactNativeWebView;
-    state.rows = [];
-  });
-
-  it('T-TRW1: data-tool-use-id 命中 state 行 → 上抛 openToolResult（title=工具名，content=正文全文）', () => {
-    seedToolRow('tu-1', {resultContent: '第 1 条结果\n第 2 条结果'});
-    RowsClick.on(
-      makeEvent(
-        makeEl('div', {
-          'data-action': 'open-tool-result',
-          'data-tool-use-id': 'tu-1',
-        }),
-      ),
-    );
-    expect(postedEnvelopes()).toEqual([
-      {
-        v: 1,
-        type: 'openToolResult',
-        payload: {title: 'search', content: '第 1 条结果\n第 2 条结果'},
-      },
-    ]);
-  });
-
-  it('T-TRW2: toolUseId 在 state 里找不到行 → 不上抛（静默无动作）', () => {
-    seedToolRow('tu-1', {resultContent: '结果'});
-    RowsClick.on(
-      makeEvent(
-        makeEl('div', {
-          'data-action': 'open-tool-result',
-          'data-tool-use-id': 'tu-missing',
-        }),
-      ),
-    );
-    expect(postedEnvelopes()).toEqual([]);
-  });
-
-  it('T-TRW3: 反查到的 resultContent 非字符串/空串 → 不上抛', () => {
-    seedToolRow('tu-1', {resultContent: ''});
-    RowsClick.on(
-      makeEvent(
-        makeEl('div', {
-          'data-action': 'open-tool-result',
-          'data-tool-use-id': 'tu-1',
-        }),
-      ),
-    );
-    seedToolRow('tu-2', {resultContent: 42});
-    RowsClick.on(
-      makeEvent(
-        makeEl('div', {
-          'data-action': 'open-tool-result',
-          'data-tool-use-id': 'tu-2',
-        }),
-      ),
-    );
-    expect(postedEnvelopes()).toEqual([]);
-  });
-
-  it('T-TRW4: data-tool-use-id 属性缺失 → 不上抛（防 undefined 当 key 误配）', () => {
-    seedToolRow('tu-1', {resultContent: '结果'});
-    RowsClick.on(makeEvent(makeEl('div', {'data-action': 'open-tool-result'})));
-    expect(postedEnvelopes()).toEqual([]);
-  });
-
-  it('T-TRW5: 多行多工具时按 toolUseId 精确命中（不串卡）', () => {
-    state.rows = [
-      {
-        kind: 'message',
-        id: 'm1',
-        role: 'assistant',
-        tools: [
-          {toolUseId: 'tu-a', name: 'glob', resultContent: 'a.md'},
-          {toolUseId: 'tu-b', name: 'grep', resultContent: 'grep 命中行'},
-        ],
-      },
-      {
-        kind: 'message',
-        id: 'm2',
-        role: 'assistant',
-        tools: [{toolUseId: 'tu-c', name: 'curl', resultContent: 'HTTP 200'}],
-      },
-    ];
-    RowsClick.on(
-      makeEvent(
-        makeEl('div', {
-          'data-action': 'open-tool-result',
-          'data-tool-use-id': 'tu-b',
-        }),
-      ),
-    );
-    expect(postedEnvelopes()).toEqual([
-      {
-        v: 1,
-        type: 'openToolResult',
-        payload: {title: 'grep', content: 'grep 命中行'},
-      },
-    ]);
-  });
-
-  it('T-TRW6: content 空串但 summary 有信息 → 上抛 summary（fs 空目录真机实锤）', () => {
-    state.rows = [
-      {
-        kind: 'message',
-        id: 'm1',
-        role: 'assistant',
-        tools: [
-          {
-            toolUseId: 'tu-1',
-            name: 'fs',
-            resultContent: '',
-            summary: '0 entries',
-          },
-        ],
-      },
-    ];
-    RowsClick.on(
-      makeEvent(
-        makeEl('div', {
-          'data-action': 'open-tool-result',
-          'data-tool-use-id': 'tu-1',
-        }),
-      ),
-    );
-    expect(postedEnvelopes()).toEqual([
-      {
-        v: 1,
-        type: 'openToolResult',
-        payload: {title: 'fs', content: '0 entries'},
-      },
-    ]);
-  });
-
-  it('T-TRW7: content 纯空白串 + summary 有信息 → 上抛 summary（CR-1：点击侧与渲染侧 trim 口径统一）', () => {
-    // 渲染侧 pickReadable 判空白 content「不可读」回落 summary；修复前
-    // 点击侧用 `content !== ''` 把空白串当正文上抛——阅读页一片空白。
-    state.rows = [
-      {
-        kind: 'message',
-        id: 'm1',
-        role: 'assistant',
-        tools: [
-          {
-            toolUseId: 'tu-1',
-            name: 'glob',
-            resultContent: '   ',
-            summary: '0 paths',
-          },
-        ],
-      },
-    ];
-    RowsClick.on(
-      makeEvent(
-        makeEl('div', {
-          'data-action': 'open-tool-result',
-          'data-tool-use-id': 'tu-1',
-        }),
-      ),
-    );
-    expect(postedEnvelopes()).toEqual([
-      {
-        v: 1,
-        type: 'openToolResult',
-        payload: {title: 'glob', content: '0 paths'},
-      },
-    ]);
-  });
-
-  it('T-TRW8: content 纯空白串 + 无 summary → 不上抛', () => {
-    state.rows = [
-      {
-        kind: 'message',
-        id: 'm1',
-        role: 'assistant',
-        tools: [{toolUseId: 'tu-1', name: 'curl', resultContent: '  '}],
-      },
-    ];
-    RowsClick.on(
-      makeEvent(
-        makeEl('div', {
-          'data-action': 'open-tool-result',
-          'data-tool-use-id': 'tu-1',
-        }),
-      ),
-    );
-    expect(postedEnvelopes()).toEqual([]);
-  });
-
-  it('T-TRW9: 行上有 input → 载荷带 inputJson（原文 pretty JSON，2 空格缩进）', () => {
-    // 阅读页要能同时看「发了什么」：curl 的 body/headers 只在原始入参里。
-    // 用原文 pretty JSON，不是 formatToolUsePreviewJson 的格子预览形态。
-    seedToolRow('tu-1', {
-      name: 'curl',
-      input: {url: 'https://example.com', method: 'POST', body: {a: 1}},
-      resultContent: 'HTTP 200',
+    beforeEach(() => {
+        postMessage = jest.fn();
+        (window as unknown as {ReactNativeWebView?: unknown}).ReactNativeWebView = {
+            postMessage,
+        };
     });
-    RowsClick.on(
-      makeEvent(
-        makeEl('div', {
-          'data-action': 'open-tool-result',
-          'data-tool-use-id': 'tu-1',
-        }),
-      ),
-    );
-    expect(postedEnvelopes()).toEqual([
-      {
-        v: 1,
-        type: 'openToolResult',
-        payload: {
-          title: 'curl',
-          content: 'HTTP 200',
-          inputJson: JSON.stringify(
-            {url: 'https://example.com', method: 'POST', body: {a: 1}},
-            null,
-            2,
-          ),
-        },
-      },
-    ]);
-    // 明确钉住「是 pretty JSON」：带换行与缩进，不是压平的一行。
-    const payload = postedEnvelopes()[0].payload as {inputJson: string};
-    expect(payload.inputJson).toContain('\n  "url": "https://example.com"');
-  });
 
-  it('T-TRW10: 行上无 input / input 为 null → 载荷不带 inputJson 字段（不是 undefined 值）', () => {
-    seedToolRow('tu-1', {name: 'search', resultContent: '结果'});
-    RowsClick.on(
-      makeEvent(
-        makeEl('div', {
-          'data-action': 'open-tool-result',
-          'data-tool-use-id': 'tu-1',
-        }),
-      ),
-    );
-    seedToolRow('tu-2', {
-      name: 'search',
-      input: null,
-      resultContent: '结果2',
+    afterEach(() => {
+        delete (window as unknown as {ReactNativeWebView?: unknown})
+            .ReactNativeWebView;
+        state.rows = [];
     });
-    RowsClick.on(
-      makeEvent(
-        makeEl('div', {
-          'data-action': 'open-tool-result',
-          'data-tool-use-id': 'tu-2',
-        }),
-      ),
-    );
-    const envelopes = postedEnvelopes();
-    expect(envelopes).toHaveLength(2);
-    for (const envelope of envelopes) {
-      expect(Object.keys(envelope.payload as object)).not.toContain('inputJson');
-    }
-  });
+
+    it('T-TRW1: data-tool-use-id 命中 state 行 → 上抛 openToolResult（title=工具名，content=正文全文）', () => {
+        seedToolRow('tu-1', {resultContent: '第 1 条结果\n第 2 条结果'});
+        RowsClick.on(
+            makeEvent(
+                makeEl('div', {
+                    'data-action': 'open-tool-result',
+                    'data-tool-use-id': 'tu-1',
+                }),
+            ),
+        );
+        expect(postedEnvelopes()).toEqual([
+            {
+                v: 1,
+                type: 'openToolResult',
+                payload: {title: 'search', content: '第 1 条结果\n第 2 条结果'},
+            },
+        ]);
+    });
+
+    it('T-TRW2: toolUseId 在 state 里找不到行 → 不上抛（静默无动作）', () => {
+        seedToolRow('tu-1', {resultContent: '结果'});
+        RowsClick.on(
+            makeEvent(
+                makeEl('div', {
+                    'data-action': 'open-tool-result',
+                    'data-tool-use-id': 'tu-missing',
+                }),
+            ),
+        );
+        expect(postedEnvelopes()).toEqual([]);
+    });
+
+    it('T-TRW3: 反查到的 resultContent 非字符串/空串 → 不上抛', () => {
+        seedToolRow('tu-1', {resultContent: ''});
+        RowsClick.on(
+            makeEvent(
+                makeEl('div', {
+                    'data-action': 'open-tool-result',
+                    'data-tool-use-id': 'tu-1',
+                }),
+            ),
+        );
+        seedToolRow('tu-2', {resultContent: 42});
+        RowsClick.on(
+            makeEvent(
+                makeEl('div', {
+                    'data-action': 'open-tool-result',
+                    'data-tool-use-id': 'tu-2',
+                }),
+            ),
+        );
+        expect(postedEnvelopes()).toEqual([]);
+    });
+
+    it('T-TRW4: data-tool-use-id 属性缺失 → 不上抛（防 undefined 当 key 误配）', () => {
+        seedToolRow('tu-1', {resultContent: '结果'});
+        RowsClick.on(makeEvent(makeEl('div', {'data-action': 'open-tool-result'})));
+        expect(postedEnvelopes()).toEqual([]);
+    });
+
+    it('T-TRW5: 多行多工具时按 toolUseId 精确命中（不串卡）', () => {
+        state.rows = [
+            {
+                kind: 'message',
+                id: 'm1',
+                role: 'assistant',
+                tools: [
+                    {toolUseId: 'tu-a', name: 'glob', resultContent: 'a.md'},
+                    {toolUseId: 'tu-b', name: 'grep', resultContent: 'grep 命中行'},
+                ],
+            },
+            {
+                kind: 'message',
+                id: 'm2',
+                role: 'assistant',
+                tools: [{toolUseId: 'tu-c', name: 'curl', resultContent: 'HTTP 200'}],
+            },
+        ];
+        RowsClick.on(
+            makeEvent(
+                makeEl('div', {
+                    'data-action': 'open-tool-result',
+                    'data-tool-use-id': 'tu-b',
+                }),
+            ),
+        );
+        expect(postedEnvelopes()).toEqual([
+            {
+                v: 1,
+                type: 'openToolResult',
+                payload: {title: 'grep', content: 'grep 命中行'},
+            },
+        ]);
+    });
+
+    it('T-TRW6: content 空串但 summary 有信息 → 上抛 summary（fs 空目录真机实锤）', () => {
+        state.rows = [
+            {
+                kind: 'message',
+                id: 'm1',
+                role: 'assistant',
+                tools: [
+                    {
+                        toolUseId: 'tu-1',
+                        name: 'fs',
+                        resultContent: '',
+                        summary: '0 entries',
+                    },
+                ],
+            },
+        ];
+        RowsClick.on(
+            makeEvent(
+                makeEl('div', {
+                    'data-action': 'open-tool-result',
+                    'data-tool-use-id': 'tu-1',
+                }),
+            ),
+        );
+        expect(postedEnvelopes()).toEqual([
+            {
+                v: 1,
+                type: 'openToolResult',
+                payload: {title: 'fs', content: '0 entries'},
+            },
+        ]);
+    });
+
+    it('T-TRW7: content 纯空白串 + summary 有信息 → 上抛 summary（CR-1：点击侧与渲染侧 trim 口径统一）', () => {
+        // 渲染侧 pickReadable 判空白 content「不可读」回落 summary；修复前
+        // 点击侧用 `content !== ''` 把空白串当正文上抛——阅读页一片空白。
+        state.rows = [
+            {
+                kind: 'message',
+                id: 'm1',
+                role: 'assistant',
+                tools: [
+                    {
+                        toolUseId: 'tu-1',
+                        name: 'glob',
+                        resultContent: '   ',
+                        summary: '0 paths',
+                    },
+                ],
+            },
+        ];
+        RowsClick.on(
+            makeEvent(
+                makeEl('div', {
+                    'data-action': 'open-tool-result',
+                    'data-tool-use-id': 'tu-1',
+                }),
+            ),
+        );
+        expect(postedEnvelopes()).toEqual([
+            {
+                v: 1,
+                type: 'openToolResult',
+                payload: {title: 'glob', content: '0 paths'},
+            },
+        ]);
+    });
+
+    it('T-TRW8: content 纯空白串 + 无 summary → 不上抛', () => {
+        state.rows = [
+            {
+                kind: 'message',
+                id: 'm1',
+                role: 'assistant',
+                tools: [{toolUseId: 'tu-1', name: 'curl', resultContent: '  '}],
+            },
+        ];
+        RowsClick.on(
+            makeEvent(
+                makeEl('div', {
+                    'data-action': 'open-tool-result',
+                    'data-tool-use-id': 'tu-1',
+                }),
+            ),
+        );
+        expect(postedEnvelopes()).toEqual([]);
+    });
+
+    it('T-TRW9: 行上有 input → 载荷带 inputJson（原文 pretty JSON，2 空格缩进）', () => {
+        // 阅读页要能同时看「发了什么」：curl 的 body/headers 只在原始入参里。
+        // 用原文 pretty JSON，不是 formatToolUsePreviewJson 的格子预览形态。
+        seedToolRow('tu-1', {
+            name: 'curl',
+            input: {url: 'https://example.com', method: 'POST', body: {a: 1}},
+            resultContent: 'HTTP 200',
+        });
+        RowsClick.on(
+            makeEvent(
+                makeEl('div', {
+                    'data-action': 'open-tool-result',
+                    'data-tool-use-id': 'tu-1',
+                }),
+            ),
+        );
+        expect(postedEnvelopes()).toEqual([
+            {
+                v: 1,
+                type: 'openToolResult',
+                payload: {
+                    title: 'curl',
+                    content: 'HTTP 200',
+                    inputJson: JSON.stringify(
+                        {url: 'https://example.com', method: 'POST', body: {a: 1}},
+                        null,
+                        2,
+                    ),
+                },
+            },
+        ]);
+        // 明确钉住「是 pretty JSON」：带换行与缩进，不是压平的一行。
+        const payload = postedEnvelopes()[0].payload as {inputJson: string};
+        expect(payload.inputJson).toContain('\n  "url": "https://example.com"');
+    });
+
+    it('T-TRW10: 行上无 input / input 为 null → 载荷不带 inputJson 字段（不是 undefined 值）', () => {
+        seedToolRow('tu-1', {name: 'search', resultContent: '结果'});
+        RowsClick.on(
+            makeEvent(
+                makeEl('div', {
+                    'data-action': 'open-tool-result',
+                    'data-tool-use-id': 'tu-1',
+                }),
+            ),
+        );
+        seedToolRow('tu-2', {
+            name: 'search',
+            input: null,
+            resultContent: '结果2',
+        });
+        RowsClick.on(
+            makeEvent(
+                makeEl('div', {
+                    'data-action': 'open-tool-result',
+                    'data-tool-use-id': 'tu-2',
+                }),
+            ),
+        );
+        const envelopes = postedEnvelopes();
+        expect(envelopes).toHaveLength(2);
+        for (const envelope of envelopes) {
+            expect(Object.keys(envelope.payload as object)).not.toContain('inputJson');
+        }
+    });
 });

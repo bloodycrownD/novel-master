@@ -14,14 +14,14 @@
  * 收缩量以双端 statSync 实测为准）。
  */
 export interface StorageStats {
-  /** 单页字节数（PRAGMA page_size）。 */
-  readonly pageSize: number;
-  /** 总页数（PRAGMA page_count）。 */
-  readonly pageCount: number;
-  /** freelist 空闲页数（PRAGMA freelist_count）。 */
-  readonly freelistPages: number;
-  /** freelist 可回收字节（freelistPages × pageSize）。 */
-  readonly reclaimableBytes: number;
+    /** 单页字节数（PRAGMA page_size）。 */
+    readonly pageSize: number;
+    /** 总页数（PRAGMA page_count）。 */
+    readonly pageCount: number;
+    /** freelist 空闲页数（PRAGMA freelist_count）。 */
+    readonly freelistPages: number;
+    /** freelist 可回收字节（freelistPages × pageSize）。 */
+    readonly reclaimableBytes: number;
 }
 
 /**
@@ -33,23 +33,23 @@ export interface StorageStats {
  * 「存量 freelist + 本次 GC 释放页」两部分，与文件实际收缩量对应。
  */
 export interface DatabaseMaintenanceResult {
-  /** 缓存 GC 之后、VACUUM 之前的存储统计。 */
-  readonly before: StorageStats;
-  /** VACUUM 完成后的存储统计（freelistPages 应为 0）。 */
-  readonly after: StorageStats;
-  /** before.reclaimableBytes - after.reclaimableBytes（下限 0 防御）。 */
-  readonly reclaimedBytes: number;
+    /** 缓存 GC 之后、VACUUM 之前的存储统计。 */
+    readonly before: StorageStats;
+    /** VACUUM 完成后的存储统计（freelistPages 应为 0）。 */
+    readonly after: StorageStats;
+    /** before.reclaimableBytes - after.reclaimableBytes（下限 0 防御）。 */
+    readonly reclaimedBytes: number;
 }
 
 /** 数据库维护服务：存储统计 + 数据清理维护链路。 */
 export interface DbMaintenanceService {
-  /** 采样当前存储统计（只读 PRAGMA，无副作用）。 */
-  getStorageStats(): Promise<StorageStats>;
-  /**
+    /** 采样当前存储统计（只读 PRAGMA，无副作用）。 */
+    getStorageStats(): Promise<StorageStats>;
+    /**
    * 执行数据清理维护链路：缓存 GC → 防御性 WAL checkpoint → VACUUM。
    *
    * 必须在**事务外**调用（SQLite 原生拒绝事务内 VACUUM，事务中调用会
    * 得到错误而非静默）；并发安全由 tdbc 驱动层的连接级互斥串行保证。
    */
-  runDatabaseMaintenance(): Promise<DatabaseMaintenanceResult>;
+    runDatabaseMaintenance(): Promise<DatabaseMaintenanceResult>;
 }

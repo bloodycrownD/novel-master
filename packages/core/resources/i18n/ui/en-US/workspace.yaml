@@ -1,0 +1,177 @@
+  nav:
+    tab_chat: Chat
+    tab_profile: Me
+    chat: Sessions
+    profile_config: Configuration
+    agent_settings: Agent settings
+    view_prompt: View prompt
+    turn_detail: Turn details
+    providers: Providers
+    provider_create: Add provider
+    model_management: Model management
+    sampling: Sampling
+    storage: Storage
+    cloud_sync: Cloud sync
+    cloud_storage: Cloud storage settings
+    cloud_storage_setup: Cloud storage setup
+    search_engines: Search engines
+    file_browser: File browser
+    smart_sort_rules: Smart sort rules
+    rule_editor: Rule details
+    file_editor: Edit file
+    session_detail: Session details
+    skills: Skills
+    prompt_editor: Edit prompt
+    skills_manage: Skill management
+    skill_detail: Skill details
+    subagent_session: Subagent session
+    subagent_session_view: Subagent session
+    token_stats: Usage stats
+    about: About Novel Master
+    settings: Settings
+    settings_categories: Settings categories
+    settings_general: General
+    workspace: Workspace
+    settings_advanced: Advanced
+    settings_data: Data
+    settings_backup: "Backup & restore"
+    settings_smart_sort: Smart sort
+    settings_app: App
+    global_actions: Global actions
+    pane_visibility: Pane visibility
+    pane_left: Left pane (file preview)
+    pane_center: Center pane (workspace)
+    pane_right: Right pane (chat)
+    pane_toggle_aria: "Show or hide {label}"
+    toggle_light_theme: Switch to light theme
+    toggle_dark_theme: Switch to dark theme
+    toggle_theme: Toggle theme
+    open_settings: Open settings
+    close_settings: Close settings
+    back_level: Back
+    chat_nav_aria: Chat navigation
+    chat_content_aria: Chat content
+    workspace_session: Session workspace
+    workspace_chat: Chat workspace
+    untitled_session: Untitled session
+    this_session: This session
+    project_workspace_title: Project workspace
+    project_list_menu: Project list
+    session_actions: Session actions
+    project_actions: Project actions
+    resize_left_aria: Adjust preview and workspace width
+    resize_right_aria: Adjust workspace and chat width
+  project:
+    title: Projects
+    new_title: New project
+    rename_title: Rename project
+    name_label: Project name
+    name_placeholder: e.g. sci-fi novel
+    delete_select_hint: Select projects to delete (all their sessions are removed too)
+    delete_batch_confirm: "Delete the selected {count} projects? All their sessions are removed too."
+    delete_confirm_named: "Delete project \"{name}\"? All its sessions are removed too."
+    empty_mobile: "No projects. Tap \"New\" to start."
+    empty_desktop: No projects
+    new_session: New session
+    rename_session: Rename session
+    empty_sessions: No sessions
+    select_sessions_hint: Select sessions to delete
+  update:
+    available_title: New version available
+    available_line: "New version {version}"
+    open_releases_suffix: Will open the GitHub releases page in your browser to download.
+    open_releases_hint: Opens the GitHub releases page in your browser; download the installer for your platform.
+    check_title: Update check
+    up_to_date: Already the latest version
+    check_failed: Cannot check for updates; check the network
+    later: Later
+    go_download: Go to download
+    remind_off_today: "Don't remind me today"
+    section: Updates
+    auto_check: Auto-check updates
+    check_now: Check for updates
+    checking: Checking…
+    check_now_desktop: Check now
+    new_version_line: "New version {version}"
+    last_check_failed: Last check failed
+  about:
+    version: "Version {version}"
+    links_section: Project links
+    github_repo: GitHub repository
+    releases: Releases
+    license: License
+    # p27 wave 3c-a: wave 3-2 MISS backfill (D1 settings-nav plain "About")
+    title: About
+  runtime:
+    loading: Loading…
+    boot_failed: Startup failed
+    reload: Reload
+    load_failed: Chat page failed to load
+    timeout_hint: "Page load timed out; tap reload. If it persists, restart the app"
+  notification:
+    channel_finished: Generation finished
+    channel_running: Generation in progress
+    finished_title: Generation completed
+    failed_title: Generation failed
+    body_finished: "\"{session}\" generation finished"
+    body_interrupted: "\"{session}\" generation was interrupted"
+    body_finished_short: This generation has finished
+    body_interrupted_short: This generation was interrupted
+    idle_title: novel master · idle
+    running_title: "Generating · {session}"
+    running_title_plain: Generating
+    running_count: "{count} sessions generating"
+    running_hint: "Ends automatically when done; don't force-close the app meanwhile"
+  menu:
+    file: File
+    quit: Quit
+    edit: Edit
+    undo: Undo
+    redo: Redo
+    cut: Cut
+    view: View
+    reload: Reload
+    dev_tools: Developer Tools
+    fullscreen: Fullscreen
+    window: Window
+    minimize: Minimize
+    close_window: Close Window
+    help: Help
+    open_logs_dir: Open Logs Directory
+    export_diagnostics: Export Diagnostics
+    about: About
+    version_line: "Version {version}"
+
+# —— chat：locales JSON 并轨（i18n 双轨收敛；段内扁平点分键）——
+
+  storage:
+    space_section: Storage
+    space_desc: Database file size and reclaimable space
+    db_size: Database size
+    reclaimable: Reclaimable
+    cloud_entry: Cloud settings
+    cleanup_section: Data cleanup
+    cleanup_action: Clean up database space
+    cleanup_confirm: This reclaims cache slack and compacts the database file; duration grows with database size (possibly tens of seconds). Keep the app open; cleanup may temporarily use extra disk space. Continue?
+    cleanup_start: Start cleanup
+    cleanup_done: "Cleanup done: {before} → {after}"
+    cleanup_desktop_desc: "Reclaims cache slack and free pages and compacts the database file. Current size {before} · reclaimable about {after}"
+    cleanup_confirm_desktop: Cleanup reclaims cache slack and compacts the database; duration grows with size (tens of seconds for large databases) and the app may briefly hang; disk usage usually drops afterwards. Continue?
+    cleanup_confirm_title_desktop: Confirm cleanup
+    export_db: Export database
+    export_desc: "Exports the current database as a .nmbackup file, interoperable with mobile."
+    share_backup: Share backup file
+    export_db_done: Database exported; the backup contains plaintext chat history — keep it safe
+    export_db_done_desktop: Database exported
+    export_logs: Export logs
+    share_logs: Share log file
+    logs_exported: Logs exported
+    import_db: Import database
+    import_desc_desktop: Fully replaces the current database with the backup file. Local providers and API keys are kept; provider settings in the backup are not imported. Irreversible.
+    replace_all: Replace all
+    import_confirm_mobile: "This fully replaces app data (projects, sessions, messages, etc.) with the selected backup. Local providers and API keys are kept; provider settings in the backup are not imported. Irreversible. Continue?"
+    import_confirm_desktop: Import fully replaces the current database; local providers and API keys are kept; provider settings in the backup are not imported. Continue?
+    import_confirm_title_desktop: Confirm import
+    continue_pick: Continue choosing a file
+    reloading: Reloading; please wait…
+    imported_done: Imported and reloaded

@@ -3,81 +3,81 @@
  */
 import assert from "node:assert/strict";
 import {  describe, it  } from "node:test";
-import {  composerSendPolicy  } from "../../src/domain/chat/logic/composer/composer-send-policy.js";
+import {  ComposerSendPolicy  } from "../../src/domain/chat/logic/composer/composer-send-policy.js";
 
 describe("resolveComposerSendIntent", () => {
-  it("T-CR3: 空输入 + 无 resume → 不可发；attachOnly 恒空", () => {
-    const intent = composerSendPolicy.evaluate({
-      text: "",
-      canResumeWithoutInput: false,
-      hasModel: true,
+    it("T-CR3: 空输入 + 无 resume → 不可发；attachOnly 恒空", () => {
+        const intent = ComposerSendPolicy.evaluate({
+            text: "",
+            canResumeWithoutInput: false,
+            hasModel: true,
+        });
+        assert.equal(intent.sendDisabled, true);
+        assert.equal(intent.hasSendable, false);
+        assert.equal(intent.allowResumeWithoutInput, false);
+        assert.equal(intent.attachOnly.length, 0);
     });
-    assert.equal(intent.sendDisabled, true);
-    assert.equal(intent.hasSendable, false);
-    assert.equal(intent.allowResumeWithoutInput, false);
-    assert.equal(intent.attachOnly.length, 0);
-  });
 
-  it("T-ATD*: 正文含 @path 可发；attachOnly 恒空", () => {
-    const intent = composerSendPolicy.evaluate({
-      text: "见 @/a.md",
-      canResumeWithoutInput: true,
-      hasModel: true,
+    it("T-ATD*: 正文含 @path 可发；attachOnly 恒空", () => {
+        const intent = ComposerSendPolicy.evaluate({
+            text: "见 @/a.md",
+            canResumeWithoutInput: true,
+            hasModel: true,
+        });
+        assert.equal(intent.sendDisabled, false);
+        assert.equal(intent.attachOnly.length, 0);
+        assert.equal(intent.hasSendable, true);
     });
-    assert.equal(intent.sendDisabled, false);
-    assert.equal(intent.attachOnly.length, 0);
-    assert.equal(intent.hasSendable, true);
-  });
 
-  it("T-SK11: 纯 `$技能` 无正文可发送（门闩计入 $ 扫描）", () => {
-    const intent = composerSendPolicy.evaluate({
-      text: "$demo-skill",
-      canResumeWithoutInput: false,
-      hasModel: true,
+    it("T-SK11: 纯 `$技能` 无正文可发送（门闩计入 $ 扫描）", () => {
+        const intent = ComposerSendPolicy.evaluate({
+            text: "$demo-skill",
+            canResumeWithoutInput: false,
+            hasModel: true,
+        });
+        assert.equal(intent.hasSendable, true);
+        assert.equal(intent.sendDisabled, false);
+        assert.equal(intent.allowResumeWithoutInput, false);
     });
-    assert.equal(intent.hasSendable, true);
-    assert.equal(intent.sendDisabled, false);
-    assert.equal(intent.allowResumeWithoutInput, false);
-  });
 
-  it("空输入 + 不可 resume → 禁用发送", () => {
-    const intent = composerSendPolicy.evaluate({
-      text: "",
-      canResumeWithoutInput: false,
-      hasModel: true,
+    it("空输入 + 不可 resume → 禁用发送", () => {
+        const intent = ComposerSendPolicy.evaluate({
+            text: "",
+            canResumeWithoutInput: false,
+            hasModel: true,
+        });
+        assert.equal(intent.sendDisabled, true);
+        assert.equal(intent.hasSendable, false);
     });
-    assert.equal(intent.sendDisabled, true);
-    assert.equal(intent.hasSendable, false);
-  });
 
-  it("T-AN4: 仅 hasAnnotateDrafts → 可发；intent 须透传", () => {
-    const without = composerSendPolicy.evaluate({
-      text: "",
-      canResumeWithoutInput: false,
-      hasModel: true,
-    });
-    assert.equal(without.hasSendable, false);
-    assert.equal(without.sendDisabled, true);
+    it("T-AN4: 仅 hasAnnotateDrafts → 可发；intent 须透传", () => {
+        const without = ComposerSendPolicy.evaluate({
+            text: "",
+            canResumeWithoutInput: false,
+            hasModel: true,
+        });
+        assert.equal(without.hasSendable, false);
+        assert.equal(without.sendDisabled, true);
 
-    const withAnnotate = composerSendPolicy.evaluate({
-      text: "",
-      canResumeWithoutInput: false,
-      hasAnnotateDrafts: true,
-      hasModel: true,
+        const withAnnotate = ComposerSendPolicy.evaluate({
+            text: "",
+            canResumeWithoutInput: false,
+            hasAnnotateDrafts: true,
+            hasModel: true,
+        });
+        assert.equal(withAnnotate.hasSendable, true);
+        assert.equal(withAnnotate.sendDisabled, false);
+        assert.equal(withAnnotate.allowResumeWithoutInput, false);
     });
-    assert.equal(withAnnotate.hasSendable, true);
-    assert.equal(withAnnotate.sendDisabled, false);
-    assert.equal(withAnnotate.allowResumeWithoutInput, false);
-  });
 
-  it("running 时即使无可发输入也不禁用（供中止）", () => {
-    const intent = composerSendPolicy.evaluate({
-      text: "",
-      canResumeWithoutInput: false,
-      hasModel: true,
-      running: true,
+    it("running 时即使无可发输入也不禁用（供中止）", () => {
+        const intent = ComposerSendPolicy.evaluate({
+            text: "",
+            canResumeWithoutInput: false,
+            hasModel: true,
+            running: true,
+        });
+        assert.equal(intent.sendDisabled, false);
+        assert.equal(intent.hasSendable, false);
     });
-    assert.equal(intent.sendDisabled, false);
-    assert.equal(intent.hasSendable, false);
-  });
 });

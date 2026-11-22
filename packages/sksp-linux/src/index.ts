@@ -1,6 +1,6 @@
 export { SkspLinuxRegister } from "./register.js";
 export {
-  LinuxSecretStore,
-  LinuxSqliteSecretStore,
+    LinuxSecretStore,
+    LinuxSqliteSecretStore,
 } from "./sqlite-secret-store.js";
 export { setLinuxKeychainTestPassthrough } from "./keychain.js";

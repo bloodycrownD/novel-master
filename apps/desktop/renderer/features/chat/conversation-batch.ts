@@ -17,105 +17,103 @@
 import { useCallback, useEffect, useRef } from "react";
 
 interface ConversationBatchSink {
-  pushTextDelta(delta: string): void;
-  pushThinkingDelta(delta: string): void;
-  /** 立刻把 buffer 里的剩余 delta 冲到回调（step commit / run 结束前调）。 */
-  flush(): void;
-  /** 丢弃 buffer 里还没 flush 的内容（abort / 切会话用）。 */
-  reset(): void;
+    pushTextDelta(delta: string): void;
+    pushThinkingDelta(delta: string): void;
+    /** 立刻把 buffer 里的剩余 delta 冲到回调（step commit / run 结束前调）。 */
+    flush(): void;
+    /** 丢弃 buffer 里还没 flush 的内容（abort / 切会话用）。 */
+    reset(): void;
 }
 
 interface UseConversationBatchOptions {
-  readonly enabled: boolean;
-  readonly onTextFlush: (delta: string) => void;
-  readonly onThinkingFlush: (delta: string) => void;
+    readonly enabled: boolean;
+    readonly onTextFlush: (delta: string) => void;
+    readonly onThinkingFlush: (delta: string) => void;
 }
 
-export function useConversationBatch(
-  options: UseConversationBatchOptions,
-): ConversationBatchSink {
-  const { enabled, onTextFlush, onThinkingFlush } = options;
+export function useConversationBatch( options: UseConversationBatchOptions ): ConversationBatchSink {
+    const { enabled, onTextFlush, onThinkingFlush } = options;
 
-  const enabledRef = useRef(enabled);
-  enabledRef.current = enabled;
+    const enabledRef = useRef(enabled);
+    enabledRef.current = enabled;
 
-  const textBufRef = useRef("");
-  const thinkingBufRef = useRef("");
-  const rafIdRef = useRef<number | null>(null);
+    const textBufRef = useRef("");
+    const thinkingBufRef = useRef("");
+    const rafIdRef = useRef<number | null>(null);
 
-  // flush 回调存 ref：每帧拿最新的 onTextFlush / onThinkingFlush，不用重排 RAF。
-  const flushRef = useRef<() => void>(() => {});
-  flushRef.current = () => {
-    const text = textBufRef.current;
-    const thinking = thinkingBufRef.current;
-    textBufRef.current = "";
-    thinkingBufRef.current = "";
-    if (text.length > 0) {
-      onTextFlush(text);
-    }
-    if (thinking.length > 0) {
-      onThinkingFlush(thinking);
-    }
-  };
-
-  const cancelRaf = useCallback(() => {
-    if (rafIdRef.current != null) {
-      cancelAnimationFrame(rafIdRef.current);
-      rafIdRef.current = null;
-    }
-  }, []);
-
-  const schedule = useCallback(() => {
-    if (rafIdRef.current != null) {
-      return;
-    }
-    rafIdRef.current = requestAnimationFrame(() => {
-      rafIdRef.current = null;
-      flushRef.current();
-    });
-  }, []);
-
-  // 卸载时把挂着的 RAF 取消，避免离开会话后还在写老 state。
-  useEffect(() => {
-    return () => {
-      cancelRaf();
+    // flush 回调存 ref：每帧拿最新的 onTextFlush / onThinkingFlush，不用重排 RAF。
+    const flushRef = useRef<() => void>(() => {});
+    flushRef.current = () => {
+        const text = textBufRef.current;
+        const thinking = thinkingBufRef.current;
+        textBufRef.current = "";
+        thinkingBufRef.current = "";
+        if (text.length > 0) {
+            onTextFlush(text);
+        }
+        if (thinking.length > 0) {
+            onThinkingFlush(thinking);
+        }
     };
-  }, [cancelRaf]);
 
-  const pushTextDelta = useCallback(
-    (delta: string) => {
-      if (!enabledRef.current) {
-        onTextFlush(delta);
-        return;
-      }
-      textBufRef.current += delta;
-      schedule();
-    },
-    [onTextFlush, schedule],
-  );
+    const cancelRaf = useCallback(() => {
+        if (rafIdRef.current != null) {
+            cancelAnimationFrame(rafIdRef.current);
+            rafIdRef.current = null;
+        }
+    }, []);
 
-  const pushThinkingDelta = useCallback(
-    (delta: string) => {
-      if (!enabledRef.current) {
-        onThinkingFlush(delta);
-        return;
-      }
-      thinkingBufRef.current += delta;
-      schedule();
-    },
-    [onThinkingFlush, schedule],
-  );
+    const schedule = useCallback(() => {
+        if (rafIdRef.current != null) {
+            return;
+        }
+        rafIdRef.current = requestAnimationFrame(() => {
+            rafIdRef.current = null;
+            flushRef.current();
+        });
+    }, []);
 
-  const flush = useCallback(() => {
-    cancelRaf();
-    flushRef.current();
-  }, [cancelRaf]);
+    // 卸载时把挂着的 RAF 取消，避免离开会话后还在写老 state。
+    useEffect(() => {
+        return () => {
+            cancelRaf();
+        };
+    }, [cancelRaf]);
 
-  const reset = useCallback(() => {
-    cancelRaf();
-    textBufRef.current = "";
-    thinkingBufRef.current = "";
-  }, [cancelRaf]);
+    const pushTextDelta = useCallback(
+        (delta: string) => {
+            if (!enabledRef.current) {
+                onTextFlush(delta);
+                return;
+            }
+            textBufRef.current += delta;
+            schedule();
+        },
+        [onTextFlush, schedule],
+    );
 
-  return { pushTextDelta, pushThinkingDelta, flush, reset };
+    const pushThinkingDelta = useCallback(
+        (delta: string) => {
+            if (!enabledRef.current) {
+                onThinkingFlush(delta);
+                return;
+            }
+            thinkingBufRef.current += delta;
+            schedule();
+        },
+        [onThinkingFlush, schedule],
+    );
+
+    const flush = useCallback(() => {
+        cancelRaf();
+        flushRef.current();
+    }, [cancelRaf]);
+
+    const reset = useCallback(() => {
+        cancelRaf();
+        textBufRef.current = "";
+        thinkingBufRef.current = "";
+    }, [cancelRaf]);
+
+    return { pushTextDelta, pushThinkingDelta, flush, reset };
 }

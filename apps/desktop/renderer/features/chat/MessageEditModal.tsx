@@ -1,91 +1,92 @@
 import { useEffect, useState } from "react";
+import { coreT } from "@shared/logic/core-i18n";
 import { Button } from "@/components/ui/Button";
 import { TextArea } from "@/components/ui/TextArea";
 import { handleMultilineSubmitKeyDown } from "@/utils/textarea-enter-shortcuts";
 
 type MessageEditModalProps = {
-  open: boolean;
-  title: string;
-  initialValue?: string;
-  onClose: () => void;
-  onConfirm: (value: string) => void | Promise<void>;
+    open: boolean;
+    title: string;
+    initialValue?: string;
+    onClose: () => void;
+    onConfirm: (value: string) => void | Promise<void>;
 };
 
 export function MessageEditModal({
-  open,
-  title,
-  initialValue = "",
-  onClose,
-  onConfirm,
+    open,
+    title,
+    initialValue = "",
+    onClose,
+    onConfirm,
 }: MessageEditModalProps) {
-  const [value, setValue] = useState(initialValue);
-  const [saving, setSaving] = useState(false);
+    const [value, setValue] = useState(initialValue);
+    const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    if (open) {
-      setValue(initialValue);
+    useEffect(() => {
+        if (open) {
+            setValue(initialValue);
+        }
+    }, [open, initialValue]);
+
+    if (!open) {
+        return null;
     }
-  }, [open, initialValue]);
 
-  if (!open) {
-    return null;
-  }
+    const trimmed = value.trim();
+    const canSubmit = trimmed.length > 0 && !saving;
 
-  const trimmed = value.trim();
-  const canSubmit = trimmed.length > 0 && !saving;
+    const handleConfirm = async () => {
+        if (!canSubmit) {
+            return;
+        }
+        setSaving(true);
+        try {
+            await onConfirm(trimmed);
+            onClose();
+        } finally {
+            setSaving(false);
+        }
+    };
 
-  const handleConfirm = async () => {
-    if (!canSubmit) {
-      return;
-    }
-    setSaving(true);
-    try {
-      await onConfirm(trimmed);
-      onClose();
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="text-prompt-overlay" onClick={onClose}>
-      <div
-        className="text-prompt-modal text-prompt-modal--wide"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="message-edit-title"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 id="message-edit-title" className="text-prompt-modal__title">
-          {title}
-        </h3>
-        <TextArea
-          code
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          autoFocus
-          rows={8}
-          onKeyDown={(e) => {
-            handleMultilineSubmitKeyDown(
-              e,
-              () => void handleConfirm(),
-              { disabled: !canSubmit },
-            );
-          }}
-        />
-        <div className="text-prompt-modal__actions">
-          <Button variant="secondary" disabled={saving} onClick={onClose}>
-            取消
-          </Button>
-          <Button
-            variant="primary"
-            disabled={!canSubmit}
-            onClick={() => void handleConfirm()}
-          >
-            {saving ? "保存中…" : "保存"}
-          </Button>
+    return (
+        <div className="text-prompt-overlay" onClick={onClose}>
+            <div
+                className="text-prompt-modal text-prompt-modal--wide"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="message-edit-title"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <h3 id="message-edit-title" className="text-prompt-modal__title">
+                    {title}
+                </h3>
+                <TextArea
+                    code
+                    value={value}
+                    onChange={(e) => setValue(e.target.value)}
+                    autoFocus
+                    rows={8}
+                    onKeyDown={(e) => {
+                        handleMultilineSubmitKeyDown(
+                            e,
+                            () => void handleConfirm(),
+                            { disabled: !canSubmit },
+                        );
+                    }}
+                />
+                <div className="text-prompt-modal__actions">
+                    <Button variant="secondary" disabled={saving} onClick={onClose}>
+                        {coreT({key: "ui.common.cancel"})}
+                    </Button>
+                    <Button
+                        variant="primary"
+                        disabled={!canSubmit}
+                        onClick={() => void handleConfirm()}
+                    >
+                        {saving ? coreT({key: "ui.common.saving"}) : coreT({key: "ui.common.save"})}
+                    </Button>
+                </div>
+            </div>
         </div>
-      </div>
-    </div>
-  );
+    );
 }

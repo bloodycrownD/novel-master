@@ -6,27 +6,28 @@
 
 import type { AppError } from "@/errors/app-error.js";
 import type { Result } from "@/errors/either.js";
+import type { Outcome } from "@/errors/outcome.js";
 import type { LongTaskHooks } from "@/domain/abort/model/abort-scope.js";
 import type { ChatSession } from "@/domain/chat/model/session.js";
 import type {
-  SessionAgentConfig,
-  SessionAgentConfigPatch,
+    SessionAgentConfig,
+    SessionAgentConfigPatch,
 } from "@/domain/chat/model/session-agent-config.js";
 
 /** Session CRUD, template copy on create, and full copy. */
 export interface SessionService {
-  /**
+    /**
    * 只返回 `parent_session_id IS NULL` 的顶层会话；子 session 用 repository 的
    * `listByParentSession` 自行 BFS。
    */
-  listByProject(projectId: string): Promise<Result<ChatSession[], AppError>>;
+    listByProject(projectId: string): Promise<Result<ChatSession[], AppError>>;
 
-  get(id: string): Promise<Result<ChatSession, AppError>>;
+    get(id: string): Promise<Result<ChatSession, AppError>>;
 
-  /** Creates session and copies project template VFS into session domain. */
-  create(projectId: string, title?: string | null): Promise<Result<ChatSession, AppError>>;
+    /** Creates session and copies project template VFS into session domain. */
+    create(projectId: string, title?: string | null): Promise<Result<ChatSession, AppError>>;
 
-  /**
+    /**
    * 创建子 agent 会话（SPEC agent-subagent / P0-4）。
    *
    * 与 {@link create} 不同：**仅 insert**（带 `parentSessionId`），完全不碰 VFS 与
@@ -40,55 +41,55 @@ export interface SessionService {
    * 子 session delete 时 `deleteVfsPrefix(session:{pid}:{childId})` 是无害空操作
    * （child scope 根本没建过），不需 special-case。
    */
-  createSubSession(
-    parentSessionId: string,
-    projectId: string,
-    title?: string | null
-  ): Promise<Result<ChatSession, AppError>>;
+    createSubSession(
+        parentSessionId: string,
+        projectId: string,
+        title?: string | null
+    ): Promise<Result<ChatSession, AppError>>;
 
-  rename(id: string, title: string): Promise<Result<ChatSession, AppError>>;
+    rename(id: string, title: string): Promise<Result<ChatSession, AppError>>;
 
-  delete(id: string): Promise<Result<void, AppError>>;
+    delete(id: string): Promise<Result<void, AppError>>;
 
-  /**
+    /**
    * Copies session VFS tree and all messages to a new session.
    *
    * `hooks` 透传给源会话全量读与 `batchInsert`：中断在事务边界转
    * `throw createAbortError()` 整体回滚（不留半写 copy）。
    */
-  copy(id: string, hooks?: LongTaskHooks): Promise<Result<ChatSession, AppError>>;
+    copy(id: string, hooks?: LongTaskHooks): Promise<Outcome<ChatSession>>;
 
-  /**
+    /**
    * Overwrites session VFS + worktree from project template;
    * clears session-fs data but not messages.
    *
    * 分层门面：树复制 / 事务 / GC 的权威在 {@link TemplatePullService}，
    * 会话存在性校验也只在那里做一次。
    */
-  pullSessionTemplate(sessionId: string): Promise<Result<void, AppError>>;
+    pullSessionTemplate(sessionId: string): Promise<Result<void, AppError>>;
 
-  /**
+    /**
    * 用当前 session 工作区（文件 + workplace 规则）整树覆盖 project 模板，
    * 后续新建会话与其它会话「从上级同步」都会拿到覆盖后的母本。
    */
-  pushSessionTemplate(sessionId: string): Promise<Result<void, AppError>>;
+    pushSessionTemplate(sessionId: string): Promise<Result<void, AppError>>;
 
-  /** 读取 `composer_draft_json` 原始 JSON；未设置时为 null。 */
-  getComposerDraftJson(id: string): Promise<Result<string | null, AppError>>;
+    /** 读取 `composer_draft_json` 原始 JSON；未设置时为 null。 */
+    getComposerDraftJson(id: string): Promise<Result<string | null, AppError>>;
 
-  /**
+    /**
    * 写入 `composer_draft_json`；`draftJson` 为 null 时清空列。
    * 不更新 `updated_at_ms`。
    */
-  setComposerDraftJson(id: string, draftJson: string | null): Promise<Result<boolean, AppError>>;
+    setComposerDraftJson(id: string, draftJson: string | null): Promise<Result<boolean, AppError>>;
 
-  /**
+    /**
    * 读取会话智能体配置；列 NULL 视为异常（migration 后不应存在 NULL），
    * 该不变量破坏保留 throw（`CHAT_INVALID_ARGUMENT`），提示运行迁移。
    */
-  getSessionAgentConfig(id: string): Promise<Result<SessionAgentConfig, AppError>>;
+    getSessionAgentConfig(id: string): Promise<Result<SessionAgentConfig, AppError>>;
 
-  /**
+    /**
    * partial overlay 更新会话智能体配置。
    *
    * 调用方只传要改的字段即可：`agentId` 可选（不传就保留），`modelId` 不传
@@ -96,8 +97,8 @@ export interface SessionService {
    * 当前配置当基线 merge，merge 完再走 schema 校验（`agentId` 必填），最后
    * 序列化写库。返回 merge 之后的完整配置。
    */
-  updateSessionAgentConfig(
-    id: string,
-    patch: SessionAgentConfigPatch
-  ): Promise<Result<SessionAgentConfig, AppError>>;
+    updateSessionAgentConfig(
+        id: string,
+        patch: SessionAgentConfigPatch
+    ): Promise<Result<SessionAgentConfig, AppError>>;
 }

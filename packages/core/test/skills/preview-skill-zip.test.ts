@@ -13,58 +13,58 @@ import {  VfsZipBuild  } from "../../src/domain/vfs/logic/vfs-zip-build.js";
 import {  SkillZip  } from "../../src/domain/skills/logic/preview-skill-zip.js";
 
 function zipOf(files: Record<string, string>, dirs: string[] = []): Uint8Array {
-  return VfsZipBuild.build(new Map(Object.entries(files)), dirs);
+    return VfsZipBuild.build(new Map(Object.entries(files)), dirs);
 }
 
 /** 预检成功路径；失败时把 AppError 抛给测试（测试是边界）。 */
 function previewOf(bytes: Uint8Array) {
-  const result = SkillZip.preview(bytes);
-  if (!result.ok) {
-    throw result.error;
-  }
-  return result.value;
+    const result = SkillZip.preview(bytes);
+    if (!result.ok) {
+        throw result.error;
+    }
+    return result.value;
 }
 
 describe("SkillZip.preview", () => {
-  it("根含 SKILL.md：提取 front matter 元数据与文件数（目录条目不计）", () => {
-    const bytes = zipOf(
-      {
-        "SKILL.md": "---\nname: demo\ndescription: 演示技能\n---\n# 正文",
-        "references/x.md": "辅助",
-      },
-      ["references"],
-    );
-    const preview = previewOf(bytes);
-    assert.equal(preview.name, "demo");
-    assert.equal(preview.description, "演示技能");
-    assert.equal(preview.valid, true);
-    assert.equal(preview.fileCount, 2);
-    assert.match(preview.skillMd ?? "", /# 正文/);
-  });
-
-  it("front matter 无效：valid=false，name/description 可空但 skillMd 保留", () => {
-    const bytes = zipOf({"SKILL.md": "# 没有 front matter"});
-    const preview = previewOf(bytes);
-    assert.equal(preview.valid, false);
-    assert.equal(preview.name, null);
-    assert.equal(preview.description, null);
-    assert.match(preview.skillMd ?? "", /没有 front matter/);
-    assert.equal(preview.fileCount, 1);
-  });
-
-  it("zip 根缺少 SKILL.md：skillMd=null（嵌套目录不算根）", () => {
-    const bytes = zipOf({"demo/SKILL.md": "---\nname: demo\n---\n"});
-    const preview = previewOf(bytes);
-    assert.equal(preview.skillMd, null);
-    assert.equal(preview.name, null);
-    assert.equal(preview.fileCount, 1);
-  });
-
-  it("description 含冒号等特殊字符可正常提取（YAML 双引号标量）", () => {
-    const bytes = zipOf({
-      "SKILL.md": '---\nname: demo\ndescription: "含: 冒号 与 引号"\n---\n',
+    it("根含 SKILL.md：提取 front matter 元数据与文件数（目录条目不计）", () => {
+        const bytes = zipOf(
+            {
+                "SKILL.md": "---\nname: demo\ndescription: 演示技能\n---\n# 正文",
+                "references/x.md": "辅助",
+            },
+            ["references"],
+        );
+        const preview = previewOf(bytes);
+        assert.equal(preview.name, "demo");
+        assert.equal(preview.description, "演示技能");
+        assert.equal(preview.valid, true);
+        assert.equal(preview.fileCount, 2);
+        assert.match(preview.skillMd ?? "", /# 正文/);
     });
-    const preview = previewOf(bytes);
-    assert.equal(preview.description, "含: 冒号 与 引号");
-  });
+
+    it("front matter 无效：valid=false，name/description 可空但 skillMd 保留", () => {
+        const bytes = zipOf({"SKILL.md": "# 没有 front matter"});
+        const preview = previewOf(bytes);
+        assert.equal(preview.valid, false);
+        assert.equal(preview.name, null);
+        assert.equal(preview.description, null);
+        assert.match(preview.skillMd ?? "", /没有 front matter/);
+        assert.equal(preview.fileCount, 1);
+    });
+
+    it("zip 根缺少 SKILL.md：skillMd=null（嵌套目录不算根）", () => {
+        const bytes = zipOf({"demo/SKILL.md": "---\nname: demo\n---\n"});
+        const preview = previewOf(bytes);
+        assert.equal(preview.skillMd, null);
+        assert.equal(preview.name, null);
+        assert.equal(preview.fileCount, 1);
+    });
+
+    it("description 含冒号等特殊字符可正常提取（YAML 双引号标量）", () => {
+        const bytes = zipOf({
+            "SKILL.md": '---\nname: demo\ndescription: "含: 冒号 与 引号"\n---\n',
+        });
+        const preview = previewOf(bytes);
+        assert.equal(preview.description, "含: 冒号 与 引号");
+    });
 });

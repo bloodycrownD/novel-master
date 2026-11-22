@@ -7,11 +7,11 @@ import path from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
-  draftToRecogitoAnnotation,
-  draftsToRecogitoAnnotations,
-  extractRecogitoRenderRange,
-  getSelectionOffsetsInElement,
-  hasRecogitoRenderRange,
+    draftToRecogitoAnnotation,
+    draftsToRecogitoAnnotations,
+    extractRecogitoRenderRange,
+    getSelectionOffsetsInElement,
+    hasRecogitoRenderRange,
 } from "@/layout/preview-recogito";
 import type { AnnotateDraft } from "@shared/logic/chat";
 
@@ -24,161 +24,161 @@ const messageListPath = path.join(__dirname, "..", "renderer", "features", "chat
 const packageJsonPath = path.join(__dirname, "..", "package.json");
 
 describe("T-RG2 Desktop 退役插锚 / 搜字主路径", () => {
-  it("PreviewPane 不插锚；markdown 渲染经共享 MermaidMarkdown", () => {
-    const pane = readFileSync(previewPanePath, "utf8");
-    assert.doesNotMatch(pane, /rehypeRaw|rehype-raw/);
-    // T-MD1：改用共享 MermaidMarkdown（react-markdown 契约已转移到 MermaidMarkdown.tsx）
-    assert.doesNotMatch(pane, /from "react-markdown"/);
-    assert.match(pane, /MermaidMarkdown/);
-    assert.match(pane, /<MermaidMarkdown content=\{content\} \/>/);
-    const mermaid = readFileSync(mermaidMarkdownPath, "utf8");
-    assert.match(mermaid, /from "react-markdown"/);
-    assert.match(mermaid, /remarkGfm/);
-    assert.match(mermaid, /remarkPlugins=\{\[remarkGfm\]\}/);
-    // T-MD4：MessageList 两处（MessageBody + 流式尾）均用共享组件（matchAll 计数钉死两处）
-    const messageList = readFileSync(messageListPath, "utf8");
-    const mermaidUsages = messageList.match(/<MermaidMarkdown /g) ?? [];
-    assert.equal(mermaidUsages.length, 2, `期望两处 MermaidMarkdown，实际 ${mermaidUsages.length} 处`);
-    assert.doesNotMatch(messageList, /from "react-markdown"|from 'react-markdown'/);
-  });
+    it("PreviewPane 不插锚；markdown 渲染经共享 MermaidMarkdown", () => {
+        const pane = readFileSync(previewPanePath, "utf8");
+        assert.doesNotMatch(pane, /rehypeRaw|rehype-raw/);
+        // T-MD1：改用共享 MermaidMarkdown（react-markdown 契约已转移到 MermaidMarkdown.tsx）
+        assert.doesNotMatch(pane, /from "react-markdown"/);
+        assert.match(pane, /MermaidMarkdown/);
+        assert.match(pane, /<MermaidMarkdown content=\{content\} \/>/);
+        const mermaid = readFileSync(mermaidMarkdownPath, "utf8");
+        assert.match(mermaid, /from "react-markdown"/);
+        assert.match(mermaid, /remarkGfm/);
+        assert.match(mermaid, /remarkPlugins=\{\[remarkGfm\]\}/);
+        // T-MD4：MessageList 两处（MessageBody + 流式尾）均用共享组件（matchAll 计数钉死两处）
+        const messageList = readFileSync(messageListPath, "utf8");
+        const mermaidUsages = messageList.match(/<MermaidMarkdown /g) ?? [];
+        assert.equal(mermaidUsages.length, 2, `期望两处 MermaidMarkdown，实际 ${mermaidUsages.length} 处`);
+        assert.doesNotMatch(messageList, /from "react-markdown"|from 'react-markdown'/);
+    });
 });
 
 describe("T-RG6 Desktop MD Recogito；plain 禁用批注", () => {
-  it("package 依赖 @recogito/text-annotator", () => {
-    const pkg = JSON.parse(readFileSync(packageJsonPath, "utf8")) as {
-      dependencies?: Record<string, string>;
-    };
-    assert.ok(pkg.dependencies?.["@recogito/text-annotator"]);
-  });
-
-  it("PreviewPane 源码：createTextAnnotator + setAnnotations；仅 MD 根", () => {
-    const pane = readFileSync(previewPanePath, "utf8");
-    assert.match(pane, /createTextAnnotator/);
-    assert.match(pane, /@recogito\/text-annotator/);
-    assert.match(pane, /setAnnotations/);
-    assert.match(pane, /draftsToRecogitoAnnotations|extractRecogitoRenderRange/);
-    assert.match(pane, /mdRootRef|preview-markdown/);
-    assert.match(pane, /mode === "read" && previewFile\?\.workspaceScope === "chat"[\s\S]*isMarkdown/);
-    // plain 仅 pre.preview-text，不挂 Recogito
-    assert.match(pane, /preview-text/);
-    assert.doesNotMatch(pane, /createTextAnnotator\([^)]*preview-text/);
-  });
-
-  it("R6：annotatingEnabled false；mouseup 不直开 Add；显式 FloatingBar；cancelSelected/destroy", () => {
-    const pane = readFileSync(previewPanePath, "utf8");
-    assert.match(pane, /annotatingEnabled:\s*false/);
-    assert.match(pane, /PreviewAnnotateFloatingBar/);
-    assert.match(pane, /cancelSelected/);
-    assert.match(pane, /\.destroy\(\)/);
-    // mouseup 只更新 pending / floating，禁止 setAddOpen(true)
-    const mouseUpBody = pane.match(
-      /const onMouseUp = \(\) => \{[\s\S]*?\n {4}\};/,
-    );
-    assert.ok(mouseUpBody, "须存在 onMouseUp");
-    assert.doesNotMatch(mouseUpBody![0], /setAddOpen\(true\)/);
-    // 显式入口：FloatingBar onAdd 才开 AddModal
-    assert.match(pane, /PreviewAnnotateFloatingBar[\s\S]*?onAdd=\{[\s\S]*?setAddOpen\(true\)/);
-    // 命中已有 draft 时关 Add
-    assert.match(pane, /setAddOpen\(false\)/);
-  });
-
-  it("AddModal 写入 renderStart/renderEnd；不再写 soft offset 权威", () => {
-    const ui = readFileSync(previewAnnotateUiPath, "utf8");
-    assert.match(ui, /renderStart/);
-    assert.match(ui, /renderEnd/);
-    assert.match(ui, /chatAnnotateDraftStore\.add/);
-    assert.doesNotMatch(ui, /softOffsetRange/);
-    assert.doesNotMatch(ui, /startOffset:/);
-  });
-
-  it("映射：draft ↔ Recogito quote/start/end 一致", () => {
-    const draft: AnnotateDraft = {
-      id: "d1",
-      path: "/a.md",
-      originalText: "hello",
-      userAnnotation: "note",
-      renderStart: 4,
-      renderEnd: 9,
-    };
-    assert.equal(hasRecogitoRenderRange(draft), true);
-    const ann = draftToRecogitoAnnotation(draft);
-    assert.ok(ann != null);
-    assert.equal(ann!.id, "d1");
-    const range = extractRecogitoRenderRange(ann!);
-    assert.deepEqual(range, {
-      quote: "hello",
-      renderStart: 4,
-      renderEnd: 9,
+    it("package 依赖 @recogito/text-annotator", () => {
+        const pkg = JSON.parse(readFileSync(packageJsonPath, "utf8")) as {
+            dependencies?: Record<string, string>;
+        };
+        assert.ok(pkg.dependencies?.["@recogito/text-annotator"]);
     });
-    const legacy: AnnotateDraft = {
-      id: "old",
-      path: "/a.md",
-      originalText: "hello",
-      userAnnotation: "n",
-      startOffset: 0,
-      endOffset: 5,
-    };
-    assert.equal(hasRecogitoRenderRange(legacy), false);
-    assert.equal(draftToRecogitoAnnotation(legacy), null);
-    assert.deepEqual(draftsToRecogitoAnnotations([draft, legacy]).map((a) => a.id), [
-      "d1",
-    ]);
-  });
 
-  it("preview-recogito 模块存在且被 PreviewPane 引用", () => {
-    const mapSrc = readFileSync(previewRecogitoPath, "utf8");
-    assert.match(mapSrc, /draftToRecogitoAnnotation/);
-    assert.match(mapSrc, /extractRecogitoRenderRange/);
-    assert.match(mapSrc, /getSelectionOffsetsInElement/);
-    const pane = readFileSync(previewPanePath, "utf8");
-    assert.match(pane, /from "\.\/preview-recogito"/);
-  });
+    it("PreviewPane 源码：createTextAnnotator + setAnnotations；仅 MD 根", () => {
+        const pane = readFileSync(previewPanePath, "utf8");
+        assert.match(pane, /createTextAnnotator/);
+        assert.match(pane, /@recogito\/text-annotator/);
+        assert.match(pane, /setAnnotations/);
+        assert.match(pane, /draftsToRecogitoAnnotations|extractRecogitoRenderRange/);
+        assert.match(pane, /mdRootRef|preview-markdown/);
+        assert.match(pane, /mode === "read" && previewFile\?\.workspaceScope === "chat"[\s\S]*isMarkdown/);
+        // plain 仅 pre.preview-text，不挂 Recogito
+        assert.match(pane, /preview-text/);
+        assert.doesNotMatch(pane, /createTextAnnotator\([^)]*preview-text/);
+    });
 
-  it("getSelectionOffsetsInElement：首尾空白 trim 后 slice 对齐 quote（策略 b）", () => {
-    const bodyText = "prefix  hello  suffix";
-    const selStart = bodyText.indexOf("  hello  ");
-    const selEnd = selStart + "  hello  ".length;
-    const textNode = { nodeType: 3, nodeValue: bodyText };
-    const el = {
-      contains(node: unknown) {
-        return node === textNode;
-      },
-      ownerDocument: {
-        createRange() {
-          let endContainer: unknown = null;
-          let endOffset = 0;
-          return {
-            selectNodeContents() {},
-            setEnd(container: unknown, offset: number) {
-              endContainer = container;
-              endOffset = offset;
+    it("R6：annotatingEnabled false；mouseup 不直开 Add；显式 FloatingBar；cancelSelected/destroy", () => {
+        const pane = readFileSync(previewPanePath, "utf8");
+        assert.match(pane, /annotatingEnabled:\s*false/);
+        assert.match(pane, /PreviewAnnotateFloatingBar/);
+        assert.match(pane, /cancelSelected/);
+        assert.match(pane, /\.destroy\(\)/);
+        // mouseup 只更新 pending / floating，禁止 setAddOpen(true)
+        const mouseUpBody = pane.match(
+            /const onMouseUp = \(\) => \{[\s\S]*?\n {4}\};/,
+        );
+        assert.ok(mouseUpBody, "须存在 onMouseUp");
+        assert.doesNotMatch(mouseUpBody![0], /setAddOpen\(true\)/);
+        // 显式入口：FloatingBar onAdd 才开 AddModal
+        assert.match(pane, /PreviewAnnotateFloatingBar[\s\S]*?onAdd=\{[\s\S]*?setAddOpen\(true\)/);
+        // 命中已有 draft 时关 Add
+        assert.match(pane, /setAddOpen\(false\)/);
+    });
+
+    it("AddModal 写入 renderStart/renderEnd；不再写 soft offset 权威", () => {
+        const ui = readFileSync(previewAnnotateUiPath, "utf8");
+        assert.match(ui, /renderStart/);
+        assert.match(ui, /renderEnd/);
+        assert.match(ui, /chatAnnotateDraftStore\.add/);
+        assert.doesNotMatch(ui, /softOffsetRange/);
+        assert.doesNotMatch(ui, /startOffset:/);
+    });
+
+    it("映射：draft ↔ Recogito quote/start/end 一致", () => {
+        const draft: AnnotateDraft = {
+            id: "d1",
+            path: "/a.md",
+            originalText: "hello",
+            userAnnotation: "note",
+            renderStart: 4,
+            renderEnd: 9,
+        };
+        assert.equal(hasRecogitoRenderRange(draft), true);
+        const ann = draftToRecogitoAnnotation(draft);
+        assert.ok(ann != null);
+        assert.equal(ann!.id, "d1");
+        const range = extractRecogitoRenderRange(ann!);
+        assert.deepEqual(range, {
+            quote: "hello",
+            renderStart: 4,
+            renderEnd: 9,
+        });
+        const legacy: AnnotateDraft = {
+            id: "old",
+            path: "/a.md",
+            originalText: "hello",
+            userAnnotation: "n",
+            startOffset: 0,
+            endOffset: 5,
+        };
+        assert.equal(hasRecogitoRenderRange(legacy), false);
+        assert.equal(draftToRecogitoAnnotation(legacy), null);
+        assert.deepEqual(draftsToRecogitoAnnotations([draft, legacy]).map((a) => a.id), [
+            "d1",
+        ]);
+    });
+
+    it("preview-recogito 模块存在且被 PreviewPane 引用", () => {
+        const mapSrc = readFileSync(previewRecogitoPath, "utf8");
+        assert.match(mapSrc, /draftToRecogitoAnnotation/);
+        assert.match(mapSrc, /extractRecogitoRenderRange/);
+        assert.match(mapSrc, /getSelectionOffsetsInElement/);
+        const pane = readFileSync(previewPanePath, "utf8");
+        assert.match(pane, /from "\.\/preview-recogito"/);
+    });
+
+    it("getSelectionOffsetsInElement：首尾空白 trim 后 slice 对齐 quote（策略 b）", () => {
+        const bodyText = "prefix  hello  suffix";
+        const selStart = bodyText.indexOf("  hello  ");
+        const selEnd = selStart + "  hello  ".length;
+        const textNode = { nodeType: 3, nodeValue: bodyText };
+        const el = {
+            contains(node: unknown) {
+                return node === textNode;
             },
-            toString() {
-              if (endContainer === textNode) {
-                return bodyText.slice(0, endOffset);
-              }
-              return "";
+            ownerDocument: {
+                createRange() {
+                    let endContainer: unknown = null;
+                    let endOffset = 0;
+                    return {
+                        selectNodeContents() {},
+                        setEnd(container: unknown, offset: number) {
+                            endContainer = container;
+                            endOffset = offset;
+                        },
+                        toString() {
+                            if (endContainer === textNode) {
+                                return bodyText.slice(0, endOffset);
+                            }
+                            return "";
+                        },
+                    };
+                },
             },
-          };
-        },
-      },
-    } as unknown as Element;
-    const selRange = {
-      startContainer: textNode,
-      startOffset: selStart,
-      endContainer: textNode,
-      endOffset: selEnd,
-      toString: () => bodyText.slice(selStart, selEnd),
-    };
-    const selection = {
-      rangeCount: 1,
-      isCollapsed: false,
-      getRangeAt: () => selRange,
-    } as unknown as Selection;
+        } as unknown as Element;
+        const selRange = {
+            startContainer: textNode,
+            startOffset: selStart,
+            endContainer: textNode,
+            endOffset: selEnd,
+            toString: () => bodyText.slice(selStart, selEnd),
+        };
+        const selection = {
+            rangeCount: 1,
+            isCollapsed: false,
+            getRangeAt: () => selRange,
+        } as unknown as Selection;
 
-    const range = getSelectionOffsetsInElement(el, selection);
-    assert.ok(range != null);
-    assert.equal(range!.quote, "hello");
-    assert.equal(bodyText.slice(range!.renderStart, range!.renderEnd), range!.quote);
-  });
+        const range = getSelectionOffsetsInElement(el, selection);
+        assert.ok(range != null);
+        assert.equal(range!.quote, "hello");
+        assert.equal(bodyText.slice(range!.renderStart, range!.renderEnd), range!.quote);
+    });
 });

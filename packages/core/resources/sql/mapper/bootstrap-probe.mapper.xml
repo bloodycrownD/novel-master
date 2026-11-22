@@ -1,0 +1,63 @@
+<!--
+  bootstrap 基线/对齐探测语句。
+
+  收编 novel-master-bootstrap 的 assertMinimumBaseline 探测与 schema-align 的
+  一次性 UPDATE；表名走绑定参数（sqlite_master 的 name 是值不是标识符，可绑定）。
+
+  有意不进本 mapper 的（平台硬边界，保留在 TS 内）：
+  - PRAGMA user_version = <程序值>：赋值不接受绑定参数，值来自 SCHEMA_BOOT_VERSION 常量；
+  - CREATE TABLE / CREATE INDEX：DDL 通道（schema.generated / schema-migrations 同款豁免）。
+
+  ESCAPE 双反斜杠坑见 kkv.mapper.xml 头注。
+-->
+<mapper namespace="bootstrap_probe">
+  <select id="probeTable">
+    SELECT name FROM sqlite_master
+    WHERE type = 'table' AND name = #{tableName}
+  </select>
+
+  <!-- legacy worktree_* 规则表探测（rename-worktree-tables-to-workplace-v1 前形态），OR 字面双值不参数化 -->
+  <select id="probeWorktreeRuleTable">
+    SELECT name FROM sqlite_master
+    WHERE type = 'table' AND (name = 'worktree_dir_rule' OR name = 'worktree_file_rule')
+  </select>
+
+  <!-- vfs_revision WITHOUT ROWID 形态探测：取建表 SQL 原文做正则判据 -->
+  <select id="probeTableCreateSql">
+    SELECT sql FROM sqlite_master
+    WHERE type = 'table' AND name = #{tableName}
+  </select>
+
+  <!-- project-agent-config-cleanup-v1 残留探测：agent_config_json 非 NULL 行计数 -->
+  <select id="countChatProjectAgentConfigResidue">
+    SELECT COUNT(*) AS cnt FROM chat_project
+    WHERE agent_config_json IS NOT NULL
+  </select>
+
+  <!-- schema-column-alignments 收尾对齐：head_version 回填为当前 version（幂等，无参数） -->
+  <update id="alignVfsEntryHeadVersion">
+    UPDATE vfs_entry SET head_version = version
+  </update>
+
+  <!-- pragma_table_info 列探测：表值函数参数不可绑定，但表名字面量语句可进 mapper（表名写在语句文本里，与 FROM kkv_entry 同理） -->
+  <select id="probeVfsEntryColumns">
+    SELECT name FROM pragma_table_info('vfs_entry')
+  </select>
+  <select id="probeSavedModelColumns">
+    SELECT name FROM pragma_table_info('llm_saved_model')
+  </select>
+  <select id="probeVfsEntryPkColumns">
+    SELECT name, pk FROM pragma_table_info('vfs_entry')
+  </select>
+  <select id="probeChatSessionColumns">
+    SELECT name FROM pragma_table_info('chat_session')
+  </select>
+  <select id="probeChatProjectColumns">
+    SELECT name FROM pragma_table_info('chat_project')
+  </select>
+
+  <!-- PRAGMA user_version 读（整语句可进 mapper）；写因程序值插值（PRAGMA 赋值不接受绑定参数）保留在 TS -->
+  <select id="probeUserVersion">
+    PRAGMA user_version
+  </select>
+</mapper>

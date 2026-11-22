@@ -8,7 +8,7 @@ import { FILE_OPEN_TOOL_NAMES, type FileToolName } from "../builtin/vfs-tools.js
 import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 
 export const VfsToolFilePath = {
-  /**
+    /**
    * 解析工具调用输入中的 VFS 文件路径，供工具卡片「打开文件」门控使用。
    *
    * 仅对 read/write/edit（及 vfs.* 前缀别名）处理；非法或空路径返回 undefined，不抛错。
@@ -17,15 +17,15 @@ export const VfsToolFilePath = {
    * @param input - tool_use 输入对象，需含字符串字段 `path`
    * @returns 规范化逻辑路径（以 `/` 开头），或 undefined
    */
-  resolve(toolName: string, input: Record<string, unknown> | null | undefined): string | undefined {
-    const name = toolName.startsWith("vfs.") ? toolName.slice(4) : toolName;
-    if (!FILE_OPEN_TOOL_NAMES.has(name as FileToolName)) return undefined;
-    // Bug1 加固：某些 LLM 会用 file_path 作为字段名而非标准的 path。
-    // v1 只兜 input.path ?? input.file_path，不强加 filename（等真机日志确认后再扩展）。
-    const raw = input?.path ?? input?.file_path;
-    if (typeof raw !== "string") return undefined;
-    const resolved = LogicalPath.resolve(raw);
-    if (!resolved.ok) return undefined;
-    return resolved.value;
-  },
+    resolve(toolName: string, input: Record<string, unknown> | null | undefined): string | undefined {
+        const name = toolName.startsWith("vfs.") ? toolName.slice(4) : toolName;
+        if (!FILE_OPEN_TOOL_NAMES.has(name as FileToolName)) return undefined;
+        // Bug1 加固：某些 LLM 会用 file_path 作为字段名而非标准的 path。
+        // v1 只兜 input.path ?? input.file_path，不强加 filename（等真机日志确认后再扩展）。
+        const raw = input?.path ?? input?.file_path;
+        if (typeof raw !== "string") return undefined;
+        const resolved = LogicalPath.resolve(raw);
+        if (!resolved.ok) return undefined;
+        return resolved.value;
+    },
 } as const;

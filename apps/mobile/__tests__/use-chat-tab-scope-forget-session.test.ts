@@ -23,25 +23,25 @@ import {useChatTabScope} from '../src/screens/tabs/chat-tab/useChatTabScope';
 const mounted: TestRenderer.ReactTestRenderer[] = [];
 
 jest.mock('../src/services/chat-agent-meta', () => {
-  const legacy = {
-  loadChatAgentMeta: jest.fn(async () => ({
-    source: 'session',
-    agentId: 'a1',
-    agentName: 'Agent',
-    modelLabel: 'Model',
-    tokenLabel: '',
-    hasDedicatedModel: false,
-    modelSource: 'session',
-  })),
+    const legacy = {
+    loadChatAgentMeta: jest.fn(async () => ({
+        source: 'session',
+        agentId: 'a1',
+        agentName: 'Agent',
+        modelLabel: 'Model',
+        tokenLabel: '',
+        hasDedicatedModel: false,
+        modelSource: 'session',
+    })),
 };
-  return {...legacy, ChatAgentMeta: {load: legacy.loadChatAgentMeta}};
+    return {...legacy, ChatAgentMeta: {load: legacy.loadChatAgentMeta}};
 });
 
 jest.mock('../src/services/chat-prompt-tokens.service', () => ({
-  ChatPromptTokenLabel: {loadResilient: jest.fn(async () => '')},
-  // 防御性补键（tokenizer-native-cancel）：hook 的换 key 分支 / 卸载 cleanup
-  // 也会调 PreciseUpgrade.cancel，缺键即 undefined 抛。
-  PreciseUpgrade: {cancel: jest.fn(), cancelDelay: jest.fn()},
+    ChatPromptTokenLabel: {loadResilient: jest.fn(async () => '')},
+    // 防御性补键（tokenizer-native-cancel）：hook 的换 key 分支 / 卸载 cleanup
+    // 也会调 PreciseUpgrade.cancel，缺键即 undefined 抛。
+    PreciseUpgrade: {cancel: jest.fn(), cancelDelay: jest.fn()},
 }));
 
 const deletedSessionIds: string[] = [];
@@ -56,44 +56,44 @@ const deletedProjectIds: string[] = [];
  * 「读口本身不返回子会话」，正因如此 T-AM1-3 的负向断言才有牙。
  */
 const allProjectSessionRows = [
-  {id: 'p1s1', title: 'S1', updatedAtMs: 1},
-  {id: 'p1s2', title: 'S2', updatedAtMs: 2},
-  {id: 'p1s1c1', title: 'S1 子', updatedAtMs: 3, parentSessionId: 'p1s1'},
+    {id: 'p1s1', title: 'S1', updatedAtMs: 1},
+    {id: 'p1s2', title: 'S2', updatedAtMs: 2},
+    {id: 'p1s1c1', title: 'S1 子', updatedAtMs: 3, parentSessionId: 'p1s1'},
 ];
 
 /** 复刻 listByProject 的顶层过滤。 */
 const topLevelRows = () =>
-  allProjectSessionRows.filter(r => r.parentSessionId == null);
+    allProjectSessionRows.filter(r => r.parentSessionId == null);
 
 // 错误通道迁移二期后 get/listByProject/delete 走 Result（hook 侧 `!ok` 即 throw）。
 const mockRuntime: any = {
-  projects: {
-    list: jest.fn(async () => [{id: 'p1', name: 'P1'}]),
-    get: jest.fn(async () => ({ok: true, value: {id: 'p1', name: 'P1'}})),
-    delete: jest.fn(async (id: string) => {
-      deletedProjectIds.push(id);
-      return {ok: true, value: undefined};
-    }),
-  },
-  sessions: {
-    listByProject: jest.fn(async () => ({ok: true, value: topLevelRows()})),
-    delete: jest.fn(async (id: string) => {
-      deletedSessionIds.push(id);
-      return {ok: true, value: undefined};
-    }),
-  },
-  state: {
-    getCurrentModelId: jest.fn(async () => ({
-      ok: true as const,
-      value: 'openai/gpt-4o-mini',
-    })),
-  },
-  sessionVfs: jest.fn(() => ({})),
-  workplace: jest.fn(() => ({})),
-  projectVfs: jest.fn(() => ({})),
-  sessionStreamUnitManager: {
-    forgetSession: jest.fn(),
-  },
+    projects: {
+        list: jest.fn(async () => [{id: 'p1', name: 'P1'}]),
+        get: jest.fn(async () => ({ok: true, value: {id: 'p1', name: 'P1'}})),
+        delete: jest.fn(async (id: string) => {
+            deletedProjectIds.push(id);
+            return {ok: true, value: undefined};
+        }),
+    },
+    sessions: {
+        listByProject: jest.fn(async () => ({ok: true, value: topLevelRows()})),
+        delete: jest.fn(async (id: string) => {
+            deletedSessionIds.push(id);
+            return {ok: true, value: undefined};
+        }),
+    },
+    state: {
+        getCurrentModelId: jest.fn(async () => ({
+            ok: true as const,
+            value: 'openai/gpt-4o-mini',
+        })),
+    },
+    sessionVfs: jest.fn(() => ({})),
+    workplace: jest.fn(() => ({})),
+    projectVfs: jest.fn(() => ({})),
+    sessionStreamUnitManager: {
+        forgetSession: jest.fn(),
+    },
 };
 
 const mockShowToast = jest.fn();
@@ -111,130 +111,130 @@ const mockExitSessionBatch = jest.fn();
  * ⚠️ 渲染器另存在 `mounted` 里，由 afterEach 统一于 act 内卸载（原来从不卸载）。
  */
 async function mountScope() {
-  let api: ReturnType<typeof useChatTabScope> | undefined;
-  function Harness() {
-    api = useChatTabScope({
-      runtime: mockRuntime,
-      projectId: 'p1',
-      sessionId: 's1',
-      setCurrentProject: jest.fn(async () => undefined),
-      setCurrentSession: jest.fn(async () => undefined),
-      refreshScope: mockRefreshScope,
-      showToast: mockShowToast,
-      navigation: {navigate: jest.fn()} as any,
+    let api: ReturnType<typeof useChatTabScope> | undefined;
+    function Harness() {
+        api = useChatTabScope({
+            runtime: mockRuntime,
+            projectId: 'p1',
+            sessionId: 's1',
+            setCurrentProject: jest.fn(async () => undefined),
+            setCurrentSession: jest.fn(async () => undefined),
+            refreshScope: mockRefreshScope,
+            showToast: mockShowToast,
+            navigation: {navigate: jest.fn()} as any,
+        });
+        return null;
+    }
+    await act(async () => {
+        mounted.push(TestRenderer.create(React.createElement(Harness)));
     });
-    return null;
-  }
-  await act(async () => {
-    mounted.push(TestRenderer.create(React.createElement(Harness)));
-  });
-  return api!;
+    return api!;
 }
 
 beforeEach(() => {
-  mounted.length = 0;
+    mounted.length = 0;
 });
 
 afterEach(async () => {
-  await act(async () => {
-    for (const r of mounted.splice(0)) {
-      r.unmount();
-    }
-  });
+    await act(async () => {
+        for (const r of mounted.splice(0)) {
+            r.unmount();
+        }
+    });
 });
 
 function forgottenIds(): string[] {
-  return mockRuntime.sessionStreamUnitManager.forgetSession.mock.calls.map(
-    (c: unknown[]) => c[0] as string,
-  );
+    return mockRuntime.sessionStreamUnitManager.forgetSession.mock.calls.map(
+        (c: unknown[]) => c[0] as string,
+    );
 }
 
 describe('AM-1 删除链路补调 forgetSession', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    deletedSessionIds.length = 0;
-    deletedProjectIds.length = 0;
-    mockRuntime.sessions.delete.mockImplementation(async (id: string) => {
-      deletedSessionIds.push(id);
-      return {ok: true, value: undefined};
+    beforeEach(() => {
+        jest.clearAllMocks();
+        deletedSessionIds.length = 0;
+        deletedProjectIds.length = 0;
+        mockRuntime.sessions.delete.mockImplementation(async (id: string) => {
+            deletedSessionIds.push(id);
+            return {ok: true, value: undefined};
+        });
+        mockRuntime.projects.delete.mockImplementation(async (id: string) => {
+            deletedProjectIds.push(id);
+            return {ok: true, value: undefined};
+        });
+        mockRuntime.sessions.listByProject.mockImplementation(async () => ({
+            ok: true,
+            value: topLevelRows(),
+        }));
     });
-    mockRuntime.projects.delete.mockImplementation(async (id: string) => {
-      deletedProjectIds.push(id);
-      return {ok: true, value: undefined};
-    });
-    mockRuntime.sessions.listByProject.mockImplementation(async () => ({
-      ok: true,
-      value: topLevelRows(),
-    }));
-  });
 
-  it('T-AM1-1 单个删除成功 → forgetSession(id) 恰一次；删除失败 → 零次', async () => {
-    const api = await mountScope();
-    await act(async () => {
-      await api.handleDeleteSession('s9');
-    });
-    expect(forgottenIds()).toEqual(['s9']);
-    expect(
-      mockRuntime.sessionStreamUnitManager.forgetSession,
-    ).toHaveBeenCalledTimes(1);
+    it('T-AM1-1 单个删除成功 → forgetSession(id) 恰一次；删除失败 → 零次', async () => {
+        const api = await mountScope();
+        await act(async () => {
+            await api.handleDeleteSession('s9');
+        });
+        expect(forgottenIds()).toEqual(['s9']);
+        expect(
+            mockRuntime.sessionStreamUnitManager.forgetSession,
+        ).toHaveBeenCalledTimes(1);
 
-    // 失败路径不得误清：delete 抛错 ⇒ forget 零次（否则会清掉还活着的会话状态）
-    mockRuntime.sessionStreamUnitManager.forgetSession.mockClear();
-    mockRuntime.sessions.delete.mockImplementation(async () => {
-      return {ok: false as const, error: new Error('db locked')};
+        // 失败路径不得误清：delete 抛错 ⇒ forget 零次（否则会清掉还活着的会话状态）
+        mockRuntime.sessionStreamUnitManager.forgetSession.mockClear();
+        mockRuntime.sessions.delete.mockImplementation(async () => {
+            return {ok: false as const, error: new Error('db locked')};
+        });
+        await act(async () => {
+            await api.handleDeleteSession('s10');
+        });
+        expect(
+            mockRuntime.sessionStreamUnitManager.forgetSession,
+        ).not.toHaveBeenCalled();
     });
-    await act(async () => {
-      await api.handleDeleteSession('s10');
-    });
-    expect(
-      mockRuntime.sessionStreamUnitManager.forgetSession,
-    ).not.toHaveBeenCalled();
-  });
 
-  it('T-AM1-2 批量删除部分成功 → 只 forget 已删成功的，失败及其后的不清', async () => {
-    mockRuntime.sessions.delete.mockImplementation(async (id: string) => {
-      if (id === 's2') {
-        return {ok: false as const, error: new Error('db locked')};
-      }
-      deletedSessionIds.push(id);
-      return {ok: true, value: undefined};
+    it('T-AM1-2 批量删除部分成功 → 只 forget 已删成功的，失败及其后的不清', async () => {
+        mockRuntime.sessions.delete.mockImplementation(async (id: string) => {
+            if (id === 's2') {
+                return {ok: false as const, error: new Error('db locked')};
+            }
+            deletedSessionIds.push(id);
+            return {ok: true, value: undefined};
+        });
+        const api = await mountScope();
+        await act(async () => {
+            await api.deleteSelectedSessions(
+                new Set(['s1', 's2', 's3']),
+                mockExitSessionBatch,
+            );
+        });
+        // s1 删成功 ⇒ 立刻 forget；s2 抛错停住，s2/s3 根本没删 ⇒ 不得清
+        expect(forgottenIds()).toEqual(['s1']);
+        expect(deletedSessionIds).toEqual(['s1']);
     });
-    const api = await mountScope();
-    await act(async () => {
-      await api.deleteSelectedSessions(
-        new Set(['s1', 's2', 's3']),
-        mockExitSessionBatch,
-      );
-    });
-    // s1 删成功 ⇒ 立刻 forget；s2 抛错停住，s2/s3 根本没删 ⇒ 不得清
-    expect(forgottenIds()).toEqual(['s1']);
-    expect(deletedSessionIds).toEqual(['s1']);
-  });
 
-  it('T-AM1-3 项目删除成功 → 该项目顶层会话被 forget；失败 → 零次；子 agent 会话不被 forget（已知缺口）', async () => {
-    const api = await mountScope();
-    await act(async () => {
-      await api.handleDeleteProjects(['p1']);
-    });
-    const ids = forgottenIds();
-    expect(ids).toContain('p1s1');
-    expect(ids).toContain('p1s2');
-    // 负向断言（这条断言的就是「漏清」这个已知缺口本身）：
-    // 读口 listByProject 硬编码 parent_session_id IS NULL，子 agent 会话不在返回值里，
-    // 于是项目删除后 manager 仍留着它的条目，靠 500 LRU 兜底而不是被回收。
-    // 将来 core 侧补上 BFS 读口后，这条会翻红并提醒把缺口回收掉。
-    expect(ids).not.toContain('p1s1c1');
+    it('T-AM1-3 项目删除成功 → 该项目顶层会话被 forget；失败 → 零次；子 agent 会话不被 forget（已知缺口）', async () => {
+        const api = await mountScope();
+        await act(async () => {
+            await api.handleDeleteProjects(['p1']);
+        });
+        const ids = forgottenIds();
+        expect(ids).toContain('p1s1');
+        expect(ids).toContain('p1s2');
+        // 负向断言（这条断言的就是「漏清」这个已知缺口本身）：
+        // 读口 listByProject 硬编码 parent_session_id IS NULL，子 agent 会话不在返回值里，
+        // 于是项目删除后 manager 仍留着它的条目，靠 500 LRU 兜底而不是被回收。
+        // 将来 core 侧补上 BFS 读口后，这条会翻红并提醒把缺口回收掉。
+        expect(ids).not.toContain('p1s1c1');
 
-    // projects.delete 抛错 ⇒ 一个都不许清
-    mockRuntime.sessionStreamUnitManager.forgetSession.mockClear();
-    mockRuntime.projects.delete.mockImplementation(async () => {
-      return {ok: false as const, error: new Error('fs busy')};
+        // projects.delete 抛错 ⇒ 一个都不许清
+        mockRuntime.sessionStreamUnitManager.forgetSession.mockClear();
+        mockRuntime.projects.delete.mockImplementation(async () => {
+            return {ok: false as const, error: new Error('fs busy')};
+        });
+        await act(async () => {
+            await api.handleDeleteProjects(['p1']);
+        });
+        expect(
+            mockRuntime.sessionStreamUnitManager.forgetSession,
+        ).not.toHaveBeenCalled();
     });
-    await act(async () => {
-      await api.handleDeleteProjects(['p1']);
-    });
-    expect(
-      mockRuntime.sessionStreamUnitManager.forgetSession,
-    ).not.toHaveBeenCalled();
-  });
 });

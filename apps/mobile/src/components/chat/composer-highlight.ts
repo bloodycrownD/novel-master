@@ -12,64 +12,64 @@ const COMPOSER_TOKEN_RE = /@([^\s@$]+)@|\$([^\s$@]+)\$/g;
 
 /** `$技能名$` / `@路径@` 的完整区间（含两端触发符，end 为开区间下标）。 */
 export type ComposerTokenRange = {
-  readonly start: number;
-  readonly end: number;
+    readonly start: number;
+    readonly end: number;
 };
 
 type ComposerSegment = {readonly kind: 'plain'; readonly text: string} | {readonly kind: 'token'; readonly text: string};
 
 export namespace ComposerHighlight {
-  /** 区间文本形态是否合法（整段恰好是一颗完整 token）。水化自愈用。 */
-  export function isValidTokenRangeText(plain: string, range: ComposerTokenRange): boolean {
-    const {start, end} = range;
-    if (!Number.isInteger(start) || !Number.isInteger(end)) {
-      return false;
+    /** 区间文本形态是否合法（整段恰好是一颗完整 token）。水化自愈用。 */
+    export function isValidTokenRangeText(plain: string, range: ComposerTokenRange): boolean {
+        const {start, end} = range;
+        if (!Number.isInteger(start) || !Number.isInteger(end)) {
+            return false;
+        }
+        if (start < 0 || end > plain.length || start >= end) {
+            return false;
+        }
+        const ranges = ComposerHighlight.tokenRanges(plain.slice(start, end));
+        return ranges.length === 1 && ranges[0].start === 0 && ranges[0].end === end - start;
     }
-    if (start < 0 || end > plain.length || start >= end) {
-      return false;
-    }
-    const ranges = ComposerHighlight.tokenRanges(plain.slice(start, end));
-    return ranges.length === 1 && ranges[0].start === 0 && ranges[0].end === end - start;
-  }
 
-  /** 扫描 plain，返回全部 token 完整区间（按出现顺序，互不重叠）。 */
-  export function tokenRanges(plain: string): readonly ComposerTokenRange[] {
-    const ranges: ComposerTokenRange[] = [];
-    COMPOSER_TOKEN_RE.lastIndex = 0;
-    let match: RegExpExecArray | null;
-    while ((match = COMPOSER_TOKEN_RE.exec(plain)) != null) {
-      ranges.push({start: match.index, end: match.index + match[0].length});
+    /** 扫描 plain，返回全部 token 完整区间（按出现顺序，互不重叠）。 */
+    export function tokenRanges(plain: string): readonly ComposerTokenRange[] {
+        const ranges: ComposerTokenRange[] = [];
+        COMPOSER_TOKEN_RE.lastIndex = 0;
+        let match: RegExpExecArray | null;
+        while ((match = COMPOSER_TOKEN_RE.exec(plain)) != null) {
+            ranges.push({start: match.index, end: match.index + match[0].length});
+        }
+        return ranges;
     }
-    return ranges;
-  }
 
-  /**
+    /**
    * 将 plain 切分为普通文本段与 token 段（供高亮层逐段渲染）。
    *
    * token 区间互不重叠且按序排列，plain 段天然不会相邻（无需额外合并）；
    * 空串与纯文本均返回单段 plain（空串为 `{text: '', kind: 'plain'}`）。
    */
-  export function splitTokenSegments(plain: string): readonly ComposerSegment[] {
-    const ranges = ComposerHighlight.tokenRanges(plain);
-    if (ranges.length === 0) {
-      return [{kind: 'plain', text: plain}];
+    export function splitTokenSegments(plain: string): readonly ComposerSegment[] {
+        const ranges = ComposerHighlight.tokenRanges(plain);
+        if (ranges.length === 0) {
+            return [{kind: 'plain', text: plain}];
+        }
+
+        const segments: ComposerSegment[] = [];
+        let cursor = 0;
+
+        for (const range of ranges) {
+            if (cursor < range.start) {
+                segments.push({kind: 'plain', text: plain.slice(cursor, range.start)});
+            }
+            segments.push({kind: 'token', text: plain.slice(range.start, range.end)});
+            cursor = range.end;
+        }
+
+        if (cursor < plain.length) {
+            segments.push({kind: 'plain', text: plain.slice(cursor)});
+        }
+
+        return segments;
     }
-
-    const segments: ComposerSegment[] = [];
-    let cursor = 0;
-
-    for (const range of ranges) {
-      if (cursor < range.start) {
-        segments.push({kind: 'plain', text: plain.slice(cursor, range.start)});
-      }
-      segments.push({kind: 'token', text: plain.slice(range.start, range.end)});
-      cursor = range.end;
-    }
-
-    if (cursor < plain.length) {
-      segments.push({kind: 'plain', text: plain.slice(cursor)});
-    }
-
-    return segments;
-  }
 }

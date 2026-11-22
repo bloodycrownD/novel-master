@@ -12,615 +12,615 @@
  * 提供；requestAnimationFrame 以同步队列 stub 替换（stick 路径含嵌套 RAF）。
  */
 jest.mock('../src/web/chat-transcript/webview/runtime/render/row-logic', () => {
-  const legacy = {
-    renderRows: jest.fn(),
-  };
-  return {...legacy, RowLogic: {render: legacy.renderRows}};
+    const legacy = {
+        renderRows: jest.fn(),
+    };
+    return {...legacy, RowLogic: {render: legacy.renderRows}};
 });
 jest.mock('../src/web/chat-transcript/webview/runtime/mermaid', () => {
-  const legacy = {
-  scheduleMermaidScan: jest.fn(),
+    const legacy = {
+    scheduleMermaidScan: jest.fn(),
 };
-  return {...legacy, Mermaid: {scheduleScan: legacy.scheduleMermaidScan}};
+    return {...legacy, Mermaid: {scheduleScan: legacy.scheduleMermaidScan}};
 });
 jest.mock('../src/web/chat-transcript/webview/runtime/stream/stream', () => {
-  const legacy = {
-  requestResync: jest.fn(),
-  resetStreamBlockRenderState: jest.fn(),
+    const legacy = {
+    requestResync: jest.fn(),
+    resetStreamBlockRenderState: jest.fn(),
 };
-  return {...legacy, Stream: {requestResync: legacy.requestResync, resetBlockRenderState: legacy.resetStreamBlockRenderState}};
+    return {...legacy, Stream: {requestResync: legacy.requestResync, resetBlockRenderState: legacy.resetStreamBlockRenderState}};
 });
 jest.mock('../src/web/chat-transcript/webview/runtime/menu/menu', () => ({
-  Menu: {close: jest.fn()},
+    Menu: {close: jest.fn()},
 }));
 jest.mock('../src/web/chat-transcript/webview/runtime/bridge', () => ({
-  post: jest.fn(),
+    post: jest.fn(),
 }));
 
 import {RowLogic} from '../src/web/chat-transcript/webview/runtime/render/row-logic';
 import {Snapshot} from '@web/chat-transcript/webview/runtime/render/snapshot';
 import {post} from '../src/web/chat-transcript/webview/runtime/bridge';
 import {
-  createFakeDocument,
-  createRowShell,
-  installFakeDocument,
-  uninstallFakeDocument,
+    createFakeDocument,
+    createRowShell,
+    installFakeDocument,
+    uninstallFakeDocument,
 } from './helpers/fake-transcript-dom';
 
 type SnapshotModule =
-  typeof import('../src/web/chat-transcript/webview/runtime/render/snapshot');
+    typeof import('../src/web/chat-transcript/webview/runtime/render/snapshot');
 type StateModule =
-  typeof import('../src/web/chat-transcript/webview/runtime/state/state');
+    typeof import('../src/web/chat-transcript/webview/runtime/state/state');
 
 /** 每个用例取全新模块实例（拼装状态与 state 单例都随 isolate 重建）。 */
 function loadFreshModules(): {
-  snapshot: SnapshotModule;
-  state: StateModule['state'];
+    snapshot: SnapshotModule;
+    state: StateModule['state'];
 } {
-  let snapshot: SnapshotModule | null = null;
-  let state: StateModule['state'] | null = null;
-  jest.isolateModules(() => {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    snapshot = require('../src/web/chat-transcript/webview/runtime/render/snapshot').Snapshot;
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    state =
-      require('../src/web/chat-transcript/webview/runtime/state/state').state;
-  });
-  return {snapshot: snapshot!, state: state!};
+    let snapshot: SnapshotModule | null = null;
+    let state: StateModule['state'] | null = null;
+    jest.isolateModules(() => {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        snapshot = require('../src/web/chat-transcript/webview/runtime/render/snapshot').Snapshot;
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        state =
+            require('../src/web/chat-transcript/webview/runtime/state/state').state;
+    });
+    return {snapshot: snapshot!, state: state!};
 }
 
 function makeRows(prefix: string, count: number) {
-  const rows: Array<{kind: 'message'; id: string; role: string; text: string}> =
-    [];
-  for (let i = 0; i < count; i++) {
-    rows.push({
-      kind: 'message',
-      id: `${prefix}-${i}`,
-      role: 'user',
-      text: `${prefix} text ${i}`,
-    });
-  }
-  return rows;
+    const rows: Array<{kind: 'message'; id: string; role: string; text: string}> =
+        [];
+    for (let i = 0; i < count; i++) {
+        rows.push({
+            kind: 'message',
+            id: `${prefix}-${i}`,
+            role: 'user',
+            text: `${prefix} text ${i}`,
+        });
+    }
+    return rows;
 }
 
 describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
-  let rafQueue: Array<() => void>;
-  let fakeScroller: {
-    scrollTop: number;
-    scrollHeight: number;
-    clientHeight: number;
-  };
-
-  beforeEach(() => {
-    jest.clearAllMocks();
-    rafQueue = [];
-    fakeScroller = {scrollTop: 0, scrollHeight: 2000, clientHeight: 600};
-    (global as unknown as {document: unknown}).document = {
-      getElementById: (id: string) => (id === 'scroller' ? fakeScroller : null),
+    let rafQueue: Array<() => void>;
+    let fakeScroller: {
+        scrollTop: number;
+        scrollHeight: number;
+        clientHeight: number;
     };
-    (
-      global as unknown as {requestAnimationFrame: unknown}
-    ).requestAnimationFrame = (cb: () => void) => {
-      rafQueue.push(cb);
-      return rafQueue.length;
-    };
-  });
 
-  afterEach(() => {
-    delete (global as unknown as {document?: unknown}).document;
-  });
+    beforeEach(() => {
+        jest.clearAllMocks();
+        rafQueue = [];
+        fakeScroller = {scrollTop: 0, scrollHeight: 2000, clientHeight: 600};
+        (global as unknown as {document: unknown}).document = {
+            getElementById: (id: string) => (id === 'scroller' ? fakeScroller : null),
+        };
+        (
+            global as unknown as {requestAnimationFrame: unknown}
+        ).requestAnimationFrame = (cb: () => void) => {
+            rafQueue.push(cb);
+            return rafQueue.length;
+        };
+    });
 
-  /** 同步冲净当前排队的 RAF（stick 路径为两层嵌套，多轮兜底）。 */
-  function flushRaf(): void {
-    for (let round = 0; round < 6; round++) {
-      const cbs = rafQueue.splice(0, rafQueue.length);
-      if (cbs.length === 0) {
-        break;
-      }
-      for (const cb of cbs) {
-        cb();
-      }
+    afterEach(() => {
+        delete (global as unknown as {document?: unknown}).document;
+    });
+
+    /** 同步冲净当前排队的 RAF（stick 路径为两层嵌套，多轮兜底）。 */
+    function flushRaf(): void {
+        for (let round = 0; round < 6; round++) {
+            const cbs = rafQueue.splice(0, rafQueue.length);
+            if (cbs.length === 0) {
+                break;
+            }
+            for (const cb of cbs) {
+                cb();
+            }
+        }
     }
-  }
 
-  function scrollSnapshotPostCount(): number {
-    return (post as jest.Mock).mock.calls.filter(
-      (call: unknown[]) => call[0] === 'scrollSnapshot',
-    ).length;
-  }
-
-  it('T-S1: 同代次分片按 chunkIndex 拼装，末片到齐才整体应用且与单包等价', () => {
-    const {snapshot, state} = loadFreshModules();
-
-    snapshot.handlePayload({
-      generation: 1,
-      chunkIndex: 0,
-      chunkTotal: 3,
-      sessionKey: 'p1:s1',
-      hasMore: true,
-      rows: makeRows('a', 2),
-    });
-    snapshot.handlePayload({
-      generation: 1,
-      chunkIndex: 1,
-      chunkTotal: 3,
-      sessionKey: 'p1:s1',
-      hasMore: true,
-      rows: makeRows('b', 2),
-    });
-    // 分片期间：不产生中间渲染、rows 基线不动
-    expect(state.rows).toHaveLength(0);
-    expect(RowLogic.render).not.toHaveBeenCalled();
-
-    snapshot.handlePayload({
-      generation: 1,
-      chunkIndex: 2,
-      chunkTotal: 3,
-      sessionKey: 'p1:s1',
-      hasMore: true,
-      rows: makeRows('c', 1),
-      scrollIntent: 'stick',
-    });
-    flushRaf();
-
-    expect(state.rows.map(row => row.id)).toEqual([
-      'a-0',
-      'a-1',
-      'b-0',
-      'b-1',
-      'c-0',
-    ]);
-    expect(state.hasMore).toBe(true);
-    expect(RowLogic.render).toHaveBeenCalledTimes(1);
-
-    // 对照：同数据单包直发（gen2 单片）rows 与分片拼装全等
-    const chunkedRows = state.rows.slice();
-    snapshot.handlePayload({
-      generation: 2,
-      chunkIndex: 0,
-      chunkTotal: 1,
-      sessionKey: 'p1:s1',
-      hasMore: true,
-      rows: [...makeRows('a', 2), ...makeRows('b', 2), ...makeRows('c', 1)],
-      scrollIntent: 'stick',
-    });
-    flushRaf();
-    expect(state.rows).toEqual(chunkedRows);
-  });
-
-  it('T-S2: 分片在途时新代次顶替——旧代次收集作废、迟到旧片丢弃不叠加', () => {
-    const {snapshot, state} = loadFreshModules();
-
-    snapshot.handlePayload({
-      generation: 1,
-      chunkIndex: 0,
-      chunkTotal: 3,
-      sessionKey: 'p1:s1',
-      hasMore: false,
-      rows: makeRows('old', 1),
-    });
-    snapshot.handlePayload({
-      generation: 1,
-      chunkIndex: 1,
-      chunkTotal: 3,
-      sessionKey: 'p1:s1',
-      hasMore: false,
-      rows: makeRows('old', 1),
-    });
-    // force 新代次：gen2 首片到达，gen1 收集（已收 2 片）整体作废
-    snapshot.handlePayload({
-      generation: 2,
-      chunkIndex: 0,
-      chunkTotal: 2,
-      sessionKey: 'p1:s1',
-      hasMore: false,
-      rows: makeRows('new', 2),
-    });
-    // gen1 迟到末片：比在途 gen2 旧，丢弃
-    snapshot.handlePayload({
-      generation: 1,
-      chunkIndex: 2,
-      chunkTotal: 3,
-      sessionKey: 'p1:s1',
-      hasMore: false,
-      rows: makeRows('old', 1),
-      scrollIntent: 'stick',
-    });
-    expect(state.rows).toHaveLength(0);
-    expect(RowLogic.render).not.toHaveBeenCalled();
-
-    snapshot.handlePayload({
-      generation: 2,
-      chunkIndex: 1,
-      chunkTotal: 2,
-      sessionKey: 'p1:s1',
-      hasMore: false,
-      rows: makeRows('new-tail', 1),
-      scrollIntent: 'stick',
-    });
-    flushRaf();
-
-    // 只有 gen2 的行：旧代次行不混入（防叠加）
-    expect(state.rows.map(row => row.id)).toEqual([
-      'new-0',
-      'new-1',
-      'new-tail-0',
-    ]);
-    expect(RowLogic.render).toHaveBeenCalledTimes(1);
-  });
-
-  it('T-S2: 已应用代次的迟到分片（未知代次）丢弃', () => {
-    const {snapshot, state} = loadFreshModules();
-
-    snapshot.handlePayload({
-      generation: 5,
-      chunkIndex: 0,
-      chunkTotal: 2,
-      sessionKey: 'p1:s1',
-      hasMore: false,
-      rows: makeRows('a', 1),
-    });
-    snapshot.handlePayload({
-      generation: 5,
-      chunkIndex: 1,
-      chunkTotal: 2,
-      sessionKey: 'p1:s1',
-      hasMore: false,
-      rows: makeRows('b', 1),
-      scrollIntent: 'stick',
-    });
-    flushRaf();
-    expect(state.rows.map(row => row.id)).toEqual(['a-0', 'b-0']);
-
-    // gen5 已应用：其迟到重复片与更旧代次的任何片都丢弃
-    snapshot.handlePayload({
-      generation: 5,
-      chunkIndex: 1,
-      chunkTotal: 2,
-      sessionKey: 'p1:s1',
-      hasMore: false,
-      rows: makeRows('late', 1),
-      scrollIntent: 'stick',
-    });
-    snapshot.handlePayload({
-      generation: 4,
-      chunkIndex: 0,
-      chunkTotal: 1,
-      sessionKey: 'p1:s1',
-      hasMore: false,
-      rows: makeRows('older', 1),
-    });
-    expect(state.rows.map(row => row.id)).toEqual(['a-0', 'b-0']);
-  });
-
-  it('乱序分片丢弃：chunkIndex 跳跃后收集缺口不自愈（等 force 新代次兜底）', () => {
-    const {snapshot, state} = loadFreshModules();
-
-    snapshot.handlePayload({
-      generation: 1,
-      chunkIndex: 0,
-      chunkTotal: 3,
-      sessionKey: 'p1:s1',
-      hasMore: false,
-      rows: makeRows('a', 1),
-    });
-    // 跳过片 1 直达片 2：乱序丢弃
-    snapshot.handlePayload({
-      generation: 1,
-      chunkIndex: 2,
-      chunkTotal: 3,
-      sessionKey: 'p1:s1',
-      hasMore: false,
-      rows: makeRows('c', 1),
-      scrollIntent: 'stick',
-    });
-    expect(state.rows).toHaveLength(0);
-    // 片 1 迟到：收集仍期待片 1？——片 2 已被丢，received 仍为 1，片 1 补到
-    // 后 received=2，但末片（片 2）已丢，永远拼不齐 → 不应用；随后 force
-    // 新代次 gen2 单片直达。
-    snapshot.handlePayload({
-      generation: 1,
-      chunkIndex: 1,
-      chunkTotal: 3,
-      sessionKey: 'p1:s1',
-      hasMore: false,
-      rows: makeRows('b', 1),
-    });
-    expect(state.rows).toHaveLength(0);
-    expect(RowLogic.render).not.toHaveBeenCalled();
-
-    snapshot.handlePayload({
-      generation: 2,
-      chunkIndex: 0,
-      chunkTotal: 1,
-      sessionKey: 'p1:s1',
-      hasMore: false,
-      rows: makeRows('r', 2),
-      scrollIntent: 'stick',
-    });
-    flushRaf();
-    expect(state.rows.map(row => row.id)).toEqual(['r-0', 'r-1']);
-  });
-
-  it('T-S4 前半: 分片期间不 emitScrollSnapshot，末片应用后恰一次', () => {
-    const {snapshot} = loadFreshModules();
-
-    snapshot.handlePayload({
-      generation: 1,
-      chunkIndex: 0,
-      chunkTotal: 2,
-      sessionKey: 'p1:s1',
-      hasMore: false,
-      rows: makeRows('a', 2),
-    });
-    snapshot.handlePayload({
-      generation: 1,
-      chunkIndex: 1,
-      chunkTotal: 2,
-      sessionKey: 'p1:s1',
-      hasMore: false,
-      rows: makeRows('b', 1),
-      scrollIntent: 'stick',
-    });
-    // 末片尚未 flush RAF：scrollSnapshot 也尚未发出
-    expect(scrollSnapshotPostCount()).toBe(0);
-    flushRaf();
-    expect(scrollSnapshotPostCount()).toBe(1);
-  });
-
-  it('T-S4 后半: 分片期间零 scrollSnapshot 且零 stick 写入，末片 stick/emit 行为与旧单包一致', () => {
-    const {snapshot} = loadFreshModules();
-    // fakeScroller.scrollTop 初始 0：stick 判定一旦执行会写 1400，
-    // 分片期间保持 0 即锁死「拼装期不做 stick 判定」。
-    const chunkPayloads = [
-      {generation: 1, chunkIndex: 0, chunkTotal: 3, rows: makeRows('a', 2)},
-      {generation: 1, chunkIndex: 1, chunkTotal: 3, rows: makeRows('b', 2)},
-    ];
-    for (const chunk of chunkPayloads) {
-      snapshot.handlePayload({
-        ...chunk,
-        sessionKey: 'p1:s1',
-        hasMore: false,
-      });
-      expect(scrollSnapshotPostCount()).toBe(0);
-      expect(fakeScroller.scrollTop).toBe(0);
+    function scrollSnapshotPostCount(): number {
+        return (post as jest.Mock).mock.calls.filter(
+            (call: unknown[]) => call[0] === 'scrollSnapshot',
+        ).length;
     }
-    snapshot.handlePayload({
-      generation: 1,
-      chunkIndex: 2,
-      chunkTotal: 3,
-      sessionKey: 'p1:s1',
-      hasMore: false,
-      rows: makeRows('c', 1),
-      scrollIntent: 'stick',
+
+    it('T-S1: 同代次分片按 chunkIndex 拼装，末片到齐才整体应用且与单包等价', () => {
+        const {snapshot, state} = loadFreshModules();
+
+        snapshot.handlePayload({
+            generation: 1,
+            chunkIndex: 0,
+            chunkTotal: 3,
+            sessionKey: 'p1:s1',
+            hasMore: true,
+            rows: makeRows('a', 2),
+        });
+        snapshot.handlePayload({
+            generation: 1,
+            chunkIndex: 1,
+            chunkTotal: 3,
+            sessionKey: 'p1:s1',
+            hasMore: true,
+            rows: makeRows('b', 2),
+        });
+        // 分片期间：不产生中间渲染、rows 基线不动
+        expect(state.rows).toHaveLength(0);
+        expect(RowLogic.render).not.toHaveBeenCalled();
+
+        snapshot.handlePayload({
+            generation: 1,
+            chunkIndex: 2,
+            chunkTotal: 3,
+            sessionKey: 'p1:s1',
+            hasMore: true,
+            rows: makeRows('c', 1),
+            scrollIntent: 'stick',
+        });
+        flushRaf();
+
+        expect(state.rows.map(row => row.id)).toEqual([
+            'a-0',
+            'a-1',
+            'b-0',
+            'b-1',
+            'c-0',
+        ]);
+        expect(state.hasMore).toBe(true);
+        expect(RowLogic.render).toHaveBeenCalledTimes(1);
+
+        // 对照：同数据单包直发（gen2 单片）rows 与分片拼装全等
+        const chunkedRows = state.rows.slice();
+        snapshot.handlePayload({
+            generation: 2,
+            chunkIndex: 0,
+            chunkTotal: 1,
+            sessionKey: 'p1:s1',
+            hasMore: true,
+            rows: [...makeRows('a', 2), ...makeRows('b', 2), ...makeRows('c', 1)],
+            scrollIntent: 'stick',
+        });
+        flushRaf();
+        expect(state.rows).toEqual(chunkedRows);
     });
-    flushRaf();
-    // 末片应用后：一次 stick 到底 + 恰一次 scrollSnapshot
-    expect(fakeScroller.scrollTop).toBe(1400);
-    expect(scrollSnapshotPostCount()).toBe(1);
-    const chunkedPost = (post as jest.Mock).mock.calls.find(
-      (call: unknown[]) => call[0] === 'scrollSnapshot',
-    )![1];
 
-    // 对照：同数据旧单包（gen2 单片）行为全等
-    snapshot.handlePayload({
-      generation: 2,
-      chunkIndex: 0,
-      chunkTotal: 1,
-      sessionKey: 'p1:s1',
-      hasMore: false,
-      rows: [...makeRows('a', 2), ...makeRows('b', 2), ...makeRows('c', 1)],
-      scrollIntent: 'stick',
+    it('T-S2: 分片在途时新代次顶替——旧代次收集作废、迟到旧片丢弃不叠加', () => {
+        const {snapshot, state} = loadFreshModules();
+
+        snapshot.handlePayload({
+            generation: 1,
+            chunkIndex: 0,
+            chunkTotal: 3,
+            sessionKey: 'p1:s1',
+            hasMore: false,
+            rows: makeRows('old', 1),
+        });
+        snapshot.handlePayload({
+            generation: 1,
+            chunkIndex: 1,
+            chunkTotal: 3,
+            sessionKey: 'p1:s1',
+            hasMore: false,
+            rows: makeRows('old', 1),
+        });
+        // force 新代次：gen2 首片到达，gen1 收集（已收 2 片）整体作废
+        snapshot.handlePayload({
+            generation: 2,
+            chunkIndex: 0,
+            chunkTotal: 2,
+            sessionKey: 'p1:s1',
+            hasMore: false,
+            rows: makeRows('new', 2),
+        });
+        // gen1 迟到末片：比在途 gen2 旧，丢弃
+        snapshot.handlePayload({
+            generation: 1,
+            chunkIndex: 2,
+            chunkTotal: 3,
+            sessionKey: 'p1:s1',
+            hasMore: false,
+            rows: makeRows('old', 1),
+            scrollIntent: 'stick',
+        });
+        expect(state.rows).toHaveLength(0);
+        expect(RowLogic.render).not.toHaveBeenCalled();
+
+        snapshot.handlePayload({
+            generation: 2,
+            chunkIndex: 1,
+            chunkTotal: 2,
+            sessionKey: 'p1:s1',
+            hasMore: false,
+            rows: makeRows('new-tail', 1),
+            scrollIntent: 'stick',
+        });
+        flushRaf();
+
+        // 只有 gen2 的行：旧代次行不混入（防叠加）
+        expect(state.rows.map(row => row.id)).toEqual([
+            'new-0',
+            'new-1',
+            'new-tail-0',
+        ]);
+        expect(RowLogic.render).toHaveBeenCalledTimes(1);
     });
-    flushRaf();
-    expect(fakeScroller.scrollTop).toBe(1400);
-    expect(scrollSnapshotPostCount()).toBe(2);
-    const singlePost = (post as jest.Mock).mock.calls
-      .filter((call: unknown[]) => call[0] === 'scrollSnapshot')
-      .map((call: unknown[]) => call[1])[1];
-    expect(singlePost).toEqual(chunkedPost);
-    expect(singlePost).toEqual({
-      schemaVersion: 2,
-      offsetY: 0,
-      nearBottom: true,
-      scrollHeight: 2000,
-      clientHeight: 600,
+
+    it('T-S2: 已应用代次的迟到分片（未知代次）丢弃', () => {
+        const {snapshot, state} = loadFreshModules();
+
+        snapshot.handlePayload({
+            generation: 5,
+            chunkIndex: 0,
+            chunkTotal: 2,
+            sessionKey: 'p1:s1',
+            hasMore: false,
+            rows: makeRows('a', 1),
+        });
+        snapshot.handlePayload({
+            generation: 5,
+            chunkIndex: 1,
+            chunkTotal: 2,
+            sessionKey: 'p1:s1',
+            hasMore: false,
+            rows: makeRows('b', 1),
+            scrollIntent: 'stick',
+        });
+        flushRaf();
+        expect(state.rows.map(row => row.id)).toEqual(['a-0', 'b-0']);
+
+        // gen5 已应用：其迟到重复片与更旧代次的任何片都丢弃
+        snapshot.handlePayload({
+            generation: 5,
+            chunkIndex: 1,
+            chunkTotal: 2,
+            sessionKey: 'p1:s1',
+            hasMore: false,
+            rows: makeRows('late', 1),
+            scrollIntent: 'stick',
+        });
+        snapshot.handlePayload({
+            generation: 4,
+            chunkIndex: 0,
+            chunkTotal: 1,
+            sessionKey: 'p1:s1',
+            hasMore: false,
+            rows: makeRows('older', 1),
+        });
+        expect(state.rows.map(row => row.id)).toEqual(['a-0', 'b-0']);
     });
-  });
 
-  it('web/B-1: 单片应用新代次时作废在途旧代次收集器——迟到旧末片不回退代次', () => {
-    const {snapshot, state} = loadFreshModules();
+    it('乱序分片丢弃：chunkIndex 跳跃后收集缺口不自愈（等 force 新代次兜底）', () => {
+        const {snapshot, state} = loadFreshModules();
 
-    // gen5 收集到 2/3：在途
-    snapshot.handlePayload({
-      generation: 5,
-      chunkIndex: 0,
-      chunkTotal: 3,
-      sessionKey: 'p1:s1',
-      hasMore: false,
-      rows: makeRows('old', 1),
+        snapshot.handlePayload({
+            generation: 1,
+            chunkIndex: 0,
+            chunkTotal: 3,
+            sessionKey: 'p1:s1',
+            hasMore: false,
+            rows: makeRows('a', 1),
+        });
+        // 跳过片 1 直达片 2：乱序丢弃
+        snapshot.handlePayload({
+            generation: 1,
+            chunkIndex: 2,
+            chunkTotal: 3,
+            sessionKey: 'p1:s1',
+            hasMore: false,
+            rows: makeRows('c', 1),
+            scrollIntent: 'stick',
+        });
+        expect(state.rows).toHaveLength(0);
+        // 片 1 迟到：收集仍期待片 1？——片 2 已被丢，received 仍为 1，片 1 补到
+        // 后 received=2，但末片（片 2）已丢，永远拼不齐 → 不应用；随后 force
+        // 新代次 gen2 单片直达。
+        snapshot.handlePayload({
+            generation: 1,
+            chunkIndex: 1,
+            chunkTotal: 3,
+            sessionKey: 'p1:s1',
+            hasMore: false,
+            rows: makeRows('b', 1),
+        });
+        expect(state.rows).toHaveLength(0);
+        expect(RowLogic.render).not.toHaveBeenCalled();
+
+        snapshot.handlePayload({
+            generation: 2,
+            chunkIndex: 0,
+            chunkTotal: 1,
+            sessionKey: 'p1:s1',
+            hasMore: false,
+            rows: makeRows('r', 2),
+            scrollIntent: 'stick',
+        });
+        flushRaf();
+        expect(state.rows.map(row => row.id)).toEqual(['r-0', 'r-1']);
     });
-    snapshot.handlePayload({
-      generation: 5,
-      chunkIndex: 1,
-      chunkTotal: 3,
-      sessionKey: 'p1:s1',
-      hasMore: false,
-      rows: makeRows('old', 1),
+
+    it('T-S4 前半: 分片期间不 emitScrollSnapshot，末片应用后恰一次', () => {
+        const {snapshot} = loadFreshModules();
+
+        snapshot.handlePayload({
+            generation: 1,
+            chunkIndex: 0,
+            chunkTotal: 2,
+            sessionKey: 'p1:s1',
+            hasMore: false,
+            rows: makeRows('a', 2),
+        });
+        snapshot.handlePayload({
+            generation: 1,
+            chunkIndex: 1,
+            chunkTotal: 2,
+            sessionKey: 'p1:s1',
+            hasMore: false,
+            rows: makeRows('b', 1),
+            scrollIntent: 'stick',
+        });
+        // 末片尚未 flush RAF：scrollSnapshot 也尚未发出
+        expect(scrollSnapshotPostCount()).toBe(0);
+        flushRaf();
+        expect(scrollSnapshotPostCount()).toBe(1);
     });
-    // gen6 以单片形态直接应用：在途 gen5 收集器须同步作废
-    snapshot.handlePayload({
-      generation: 6,
-      chunkIndex: 0,
-      chunkTotal: 1,
-      sessionKey: 'p1:s1',
-      hasMore: false,
-      rows: makeRows('n', 2),
-      scrollIntent: 'stick',
+
+    it('T-S4 后半: 分片期间零 scrollSnapshot 且零 stick 写入，末片 stick/emit 行为与旧单包一致', () => {
+        const {snapshot} = loadFreshModules();
+        // fakeScroller.scrollTop 初始 0：stick 判定一旦执行会写 1400，
+        // 分片期间保持 0 即锁死「拼装期不做 stick 判定」。
+        const chunkPayloads = [
+            {generation: 1, chunkIndex: 0, chunkTotal: 3, rows: makeRows('a', 2)},
+            {generation: 1, chunkIndex: 1, chunkTotal: 3, rows: makeRows('b', 2)},
+        ];
+        for (const chunk of chunkPayloads) {
+            snapshot.handlePayload({
+                ...chunk,
+                sessionKey: 'p1:s1',
+                hasMore: false,
+            });
+            expect(scrollSnapshotPostCount()).toBe(0);
+            expect(fakeScroller.scrollTop).toBe(0);
+        }
+        snapshot.handlePayload({
+            generation: 1,
+            chunkIndex: 2,
+            chunkTotal: 3,
+            sessionKey: 'p1:s1',
+            hasMore: false,
+            rows: makeRows('c', 1),
+            scrollIntent: 'stick',
+        });
+        flushRaf();
+        // 末片应用后：一次 stick 到底 + 恰一次 scrollSnapshot
+        expect(fakeScroller.scrollTop).toBe(1400);
+        expect(scrollSnapshotPostCount()).toBe(1);
+        const chunkedPost = (post as jest.Mock).mock.calls.find(
+            (call: unknown[]) => call[0] === 'scrollSnapshot',
+        )![1];
+
+        // 对照：同数据旧单包（gen2 单片）行为全等
+        snapshot.handlePayload({
+            generation: 2,
+            chunkIndex: 0,
+            chunkTotal: 1,
+            sessionKey: 'p1:s1',
+            hasMore: false,
+            rows: [...makeRows('a', 2), ...makeRows('b', 2), ...makeRows('c', 1)],
+            scrollIntent: 'stick',
+        });
+        flushRaf();
+        expect(fakeScroller.scrollTop).toBe(1400);
+        expect(scrollSnapshotPostCount()).toBe(2);
+        const singlePost = (post as jest.Mock).mock.calls
+            .filter((call: unknown[]) => call[0] === 'scrollSnapshot')
+            .map((call: unknown[]) => call[1])[1];
+        expect(singlePost).toEqual(chunkedPost);
+        expect(singlePost).toEqual({
+            schemaVersion: 2,
+            offsetY: 0,
+            nearBottom: true,
+            scrollHeight: 2000,
+            clientHeight: 600,
+        });
     });
-    flushRaf();
-    expect(state.rows.map(row => row.id)).toEqual(['n-0', 'n-1']);
-    expect(RowLogic.render).toHaveBeenCalledTimes(1);
 
-    // gen5 末片迟到：收集器已作废，不拼装、不产生第二次 applySnapshot
-    snapshot.handlePayload({
-      generation: 5,
-      chunkIndex: 2,
-      chunkTotal: 3,
-      sessionKey: 'p1:s1',
-      hasMore: false,
-      rows: makeRows('old', 1),
-      scrollIntent: 'stick',
+    it('web/B-1: 单片应用新代次时作废在途旧代次收集器——迟到旧末片不回退代次', () => {
+        const {snapshot, state} = loadFreshModules();
+
+        // gen5 收集到 2/3：在途
+        snapshot.handlePayload({
+            generation: 5,
+            chunkIndex: 0,
+            chunkTotal: 3,
+            sessionKey: 'p1:s1',
+            hasMore: false,
+            rows: makeRows('old', 1),
+        });
+        snapshot.handlePayload({
+            generation: 5,
+            chunkIndex: 1,
+            chunkTotal: 3,
+            sessionKey: 'p1:s1',
+            hasMore: false,
+            rows: makeRows('old', 1),
+        });
+        // gen6 以单片形态直接应用：在途 gen5 收集器须同步作废
+        snapshot.handlePayload({
+            generation: 6,
+            chunkIndex: 0,
+            chunkTotal: 1,
+            sessionKey: 'p1:s1',
+            hasMore: false,
+            rows: makeRows('n', 2),
+            scrollIntent: 'stick',
+        });
+        flushRaf();
+        expect(state.rows.map(row => row.id)).toEqual(['n-0', 'n-1']);
+        expect(RowLogic.render).toHaveBeenCalledTimes(1);
+
+        // gen5 末片迟到：收集器已作废，不拼装、不产生第二次 applySnapshot
+        snapshot.handlePayload({
+            generation: 5,
+            chunkIndex: 2,
+            chunkTotal: 3,
+            sessionKey: 'p1:s1',
+            hasMore: false,
+            rows: makeRows('old', 1),
+            scrollIntent: 'stick',
+        });
+        flushRaf();
+        expect(state.rows.map(row => row.id)).toEqual(['n-0', 'n-1']);
+        expect(RowLogic.render).toHaveBeenCalledTimes(1);
+        expect(scrollSnapshotPostCount()).toBe(1);
     });
-    flushRaf();
-    expect(state.rows.map(row => row.id)).toEqual(['n-0', 'n-1']);
-    expect(RowLogic.render).toHaveBeenCalledTimes(1);
-    expect(scrollSnapshotPostCount()).toBe(1);
-  });
 
-  it('C-orch-1 web 防御: 分片收集在途 appendTailRows 挂起，末片应用后重放——增量行不丢', () => {
-    const {snapshot, state} = loadFreshModules();
+    it('C-orch-1 web 防御: 分片收集在途 appendTailRows 挂起，末片应用后重放——增量行不丢', () => {
+        const {snapshot, state} = loadFreshModules();
 
-    snapshot.handlePayload({
-      generation: 1,
-      chunkIndex: 0,
-      chunkTotal: 2,
-      sessionKey: 'p1:s1',
-      hasMore: false,
-      rows: makeRows('a', 2),
+        snapshot.handlePayload({
+            generation: 1,
+            chunkIndex: 0,
+            chunkTotal: 2,
+            sessionKey: 'p1:s1',
+            hasMore: false,
+            rows: makeRows('a', 2),
+        });
+        // 分片在途：appendTailRows 到达（协议异常时序——RN 修复后不可达，
+        // 此处钉住 web 侧兜底行为）→ 挂起，不 concat、不渲染。
+        snapshot.applyAppendTailRows({rows: makeRows('inc', 1)});
+        expect(state.rows).toHaveLength(0);
+        expect(RowLogic.render).not.toHaveBeenCalled();
+
+        snapshot.handlePayload({
+            generation: 1,
+            chunkIndex: 1,
+            chunkTotal: 2,
+            sessionKey: 'p1:s1',
+            hasMore: false,
+            rows: makeRows('b', 1),
+            scrollIntent: 'stick',
+        });
+        flushRaf();
+
+        // 末片整体替换后挂起动作按原序重放：增量行恢复，不丢
+        expect(state.rows.map(row => row.id)).toEqual([
+            'a-0',
+            'a-1',
+            'b-0',
+            'inc-0',
+        ]);
+        expect(RowLogic.render).toHaveBeenCalled();
     });
-    // 分片在途：appendTailRows 到达（协议异常时序——RN 修复后不可达，
-    // 此处钉住 web 侧兜底行为）→ 挂起，不 concat、不渲染。
-    snapshot.applyAppendTailRows({rows: makeRows('inc', 1)});
-    expect(state.rows).toHaveLength(0);
-    expect(RowLogic.render).not.toHaveBeenCalled();
 
-    snapshot.handlePayload({
-      generation: 1,
-      chunkIndex: 1,
-      chunkTotal: 2,
-      sessionKey: 'p1:s1',
-      hasMore: false,
-      rows: makeRows('b', 1),
-      scrollIntent: 'stick',
+    it('C-orch-1 web 防御: 挂起队列随收集器被新代次顶替而作废——不跨代次重放', () => {
+        const {snapshot, state} = loadFreshModules();
+
+        snapshot.handlePayload({
+            generation: 1,
+            chunkIndex: 0,
+            chunkTotal: 2,
+            sessionKey: 'p1:s1',
+            hasMore: false,
+            rows: makeRows('a', 1),
+        });
+        snapshot.applyAppendTailRows({rows: makeRows('inc', 1)});
+        // gen2 新代次首片到达：gen1 收集器连同挂起队列作废（新基线为准）
+        snapshot.handlePayload({
+            generation: 2,
+            chunkIndex: 0,
+            chunkTotal: 2,
+            sessionKey: 'p1:s1',
+            hasMore: false,
+            rows: makeRows('n', 1),
+        });
+        snapshot.handlePayload({
+            generation: 2,
+            chunkIndex: 1,
+            chunkTotal: 2,
+            sessionKey: 'p1:s1',
+            hasMore: false,
+            rows: makeRows('n-tail', 1),
+            scrollIntent: 'stick',
+        });
+        flushRaf();
+
+        // 旧代次的挂起增量行不重放（其语义锚定的旧基线已被顶替）
+        expect(state.rows.map(row => row.id)).toEqual(['n-0', 'n-tail-0']);
     });
-    flushRaf();
 
-    // 末片整体替换后挂起动作按原序重放：增量行恢复，不丢
-    expect(state.rows.map(row => row.id)).toEqual([
-      'a-0',
-      'a-1',
-      'b-0',
-      'inc-0',
-    ]);
-    expect(RowLogic.render).toHaveBeenCalled();
-  });
+    it('旧协议载荷（无分片字段）直发 applySnapshot——等价单片行为', () => {
+        const {snapshot, state} = loadFreshModules();
 
-  it('C-orch-1 web 防御: 挂起队列随收集器被新代次顶替而作废——不跨代次重放', () => {
-    const {snapshot, state} = loadFreshModules();
-
-    snapshot.handlePayload({
-      generation: 1,
-      chunkIndex: 0,
-      chunkTotal: 2,
-      sessionKey: 'p1:s1',
-      hasMore: false,
-      rows: makeRows('a', 1),
+        snapshot.handlePayload({
+            sessionKey: 'p1:s1',
+            hasMore: false,
+            rows: makeRows('legacy', 3),
+            scrollIntent: 'stick',
+        });
+        expect(state.rows.map(row => row.id)).toEqual([
+            'legacy-0',
+            'legacy-1',
+            'legacy-2',
+        ]);
+        flushRaf();
+        expect(RowLogic.render).toHaveBeenCalledTimes(1);
     });
-    snapshot.applyAppendTailRows({rows: makeRows('inc', 1)});
-    // gen2 新代次首片到达：gen1 收集器连同挂起队列作废（新基线为准）
-    snapshot.handlePayload({
-      generation: 2,
-      chunkIndex: 0,
-      chunkTotal: 2,
-      sessionKey: 'p1:s1',
-      hasMore: false,
-      rows: makeRows('n', 1),
+
+    it('stream checkpoint：每片 last-wins，末片与流式行同片原子应用；seed 后 reseed body', () => {
+        const helperDoc = createFakeDocument();
+        const scroller = helperDoc.createElement('div');
+        scroller.id = 'scroller';
+        scroller.scrollHeight = 2000;
+        scroller.clientHeight = 600;
+        helperDoc.body.appendChild(scroller);
+        installFakeDocument(helperDoc);
+        const shell = createRowShell(helperDoc, 'st:1', {streaming: true});
+        try {
+            const {snapshot, state} = loadFreshModules();
+            // 首片携带旧 checkpoint（seq 1）：分片期不应用
+            snapshot.handlePayload({
+                generation: 1,
+                chunkIndex: 0,
+                chunkTotal: 2,
+                sessionKey: 'p1:s1',
+                hasMore: false,
+                rows: makeRows('a', 1),
+                stream: {id: 'st:1', seq: 1, status: 'streaming'},
+            });
+            expect(state.streamCheckpoint).toBeNull();
+            // 末片携带新 checkpoint（seq 2）：last-wins + 与流式行同片
+            snapshot.handlePayload({
+                generation: 1,
+                chunkIndex: 1,
+                chunkTotal: 2,
+                sessionKey: 'p1:s1',
+                hasMore: false,
+                rows: [
+                    {
+                        kind: 'message',
+                        id: 'st:1',
+                        role: 'assistant',
+                        status: 'streaming',
+                        text: 'hello',
+                    },
+                ],
+                stream: {id: 'st:1', seq: 2, status: 'streaming'},
+                scrollIntent: 'stick',
+            });
+            expect(state.streamCheckpoint).toEqual({
+                id: 'st:1',
+                seq: 2,
+                status: 'streaming',
+            });
+            flushRaf();
+            // 快照 seed → reseed 把完整正文一次性写进 body
+            expect(shell.textBody.textContent).toBe('hello');
+        } finally {
+            uninstallFakeDocument();
+        }
     });
-    snapshot.handlePayload({
-      generation: 2,
-      chunkIndex: 1,
-      chunkTotal: 2,
-      sessionKey: 'p1:s1',
-      hasMore: false,
-      rows: makeRows('n-tail', 1),
-      scrollIntent: 'stick',
-    });
-    flushRaf();
-
-    // 旧代次的挂起增量行不重放（其语义锚定的旧基线已被顶替）
-    expect(state.rows.map(row => row.id)).toEqual(['n-0', 'n-tail-0']);
-  });
-
-  it('旧协议载荷（无分片字段）直发 applySnapshot——等价单片行为', () => {
-    const {snapshot, state} = loadFreshModules();
-
-    snapshot.handlePayload({
-      sessionKey: 'p1:s1',
-      hasMore: false,
-      rows: makeRows('legacy', 3),
-      scrollIntent: 'stick',
-    });
-    expect(state.rows.map(row => row.id)).toEqual([
-      'legacy-0',
-      'legacy-1',
-      'legacy-2',
-    ]);
-    flushRaf();
-    expect(RowLogic.render).toHaveBeenCalledTimes(1);
-  });
-
-  it('stream checkpoint：每片 last-wins，末片与流式行同片原子应用；seed 后 reseed body', () => {
-    const helperDoc = createFakeDocument();
-    const scroller = helperDoc.createElement('div');
-    scroller.id = 'scroller';
-    scroller.scrollHeight = 2000;
-    scroller.clientHeight = 600;
-    helperDoc.body.appendChild(scroller);
-    installFakeDocument(helperDoc);
-    const shell = createRowShell(helperDoc, 'st:1', {streaming: true});
-    try {
-      const {snapshot, state} = loadFreshModules();
-      // 首片携带旧 checkpoint（seq 1）：分片期不应用
-      snapshot.handlePayload({
-        generation: 1,
-        chunkIndex: 0,
-        chunkTotal: 2,
-        sessionKey: 'p1:s1',
-        hasMore: false,
-        rows: makeRows('a', 1),
-        stream: {id: 'st:1', seq: 1, status: 'streaming'},
-      });
-      expect(state.streamCheckpoint).toBeNull();
-      // 末片携带新 checkpoint（seq 2）：last-wins + 与流式行同片
-      snapshot.handlePayload({
-        generation: 1,
-        chunkIndex: 1,
-        chunkTotal: 2,
-        sessionKey: 'p1:s1',
-        hasMore: false,
-        rows: [
-          {
-            kind: 'message',
-            id: 'st:1',
-            role: 'assistant',
-            status: 'streaming',
-            text: 'hello',
-          },
-        ],
-        stream: {id: 'st:1', seq: 2, status: 'streaming'},
-        scrollIntent: 'stick',
-      });
-      expect(state.streamCheckpoint).toEqual({
-        id: 'st:1',
-        seq: 2,
-        status: 'streaming',
-      });
-      flushRaf();
-      // 快照 seed → reseed 把完整正文一次性写进 body
-      expect(shell.textBody.textContent).toBe('hello');
-    } finally {
-      uninstallFakeDocument();
-    }
-  });
 });

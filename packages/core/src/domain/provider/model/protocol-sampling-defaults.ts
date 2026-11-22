@@ -12,67 +12,67 @@ import type { ModelSamplingParams } from "./model-sampling-params.js";
 
 /** OpenAI-compatible display / budget defaults. */
 export const OPENAI_SAMPLING_DEFAULTS = {
-  temperature: 1,
-  top_p: 1,
-  max_tokens: 16_000,
+    temperature: 1,
+    top_p: 1,
+    max_tokens: 16_000,
 } as const;
 
 /** Anthropic Messages API display defaults. */
 export const ANTHROPIC_SAMPLING_DEFAULTS = {
-  temperature: 1,
-  top_p: 1,
-  top_k: 256,
-  max_tokens: 16_000,
+    temperature: 1,
+    top_p: 1,
+    top_k: 256,
+    max_tokens: 16_000,
 } as const;
 
 /** Gemini generateContent display defaults. */
 export const GEMINI_SAMPLING_DEFAULTS = {
-  temperature: 1,
-  topP: 0.95,
-  topK: 40,
-  maxOutputTokens: 16_000,
+    temperature: 1,
+    topP: 0.95,
+    topK: 40,
+    maxOutputTokens: 16_000,
 } as const;
 
 export const ProtocolSamplingDefaults = {
-  /** Merges saved params over protocol defaults (for forms and max-token display). */
-  mergeSamplingWithDefaults(protocol: LlmProtocolKind, params: ModelSamplingParams | undefined): ModelSamplingParams {
-    switch (protocol) {
-      case "openai":
-        return {
-          protocol: "openai",
-          openai: {
-            ...OPENAI_SAMPLING_DEFAULTS,
-            ...(params?.protocol === "openai" ? params.openai : {}),
-          },
-        };
-      case "anthropic":
-        return {
-          protocol: "anthropic",
-          anthropic: {
-            ...ANTHROPIC_SAMPLING_DEFAULTS,
-            ...(params?.protocol === "anthropic" ? params.anthropic : {}),
-          },
-        };
-      case "gemini":
-        return {
-          protocol: "gemini",
-          gemini: {
-            ...GEMINI_SAMPLING_DEFAULTS,
-            ...(params?.protocol === "gemini" ? params.gemini : {}),
-          },
-        };
-    }
-  },
+    /** Merges saved params over protocol defaults (for forms and max-token display). */
+    mergeSamplingWithDefaults(protocol: LlmProtocolKind, params: ModelSamplingParams | undefined): ModelSamplingParams {
+        switch (protocol) {
+            case "openai":
+                return {
+                    protocol: "openai",
+                    openai: {
+                        ...OPENAI_SAMPLING_DEFAULTS,
+                        ...(params?.protocol === "openai" ? params.openai : {}),
+                    },
+                };
+            case "anthropic":
+                return {
+                    protocol: "anthropic",
+                    anthropic: {
+                        ...ANTHROPIC_SAMPLING_DEFAULTS,
+                        ...(params?.protocol === "anthropic" ? params.anthropic : {}),
+                    },
+                };
+            case "gemini":
+                return {
+                    protocol: "gemini",
+                    gemini: {
+                        ...GEMINI_SAMPLING_DEFAULTS,
+                        ...(params?.protocol === "gemini" ? params.gemini : {}),
+                    },
+                };
+        }
+    },
 
-  /** Output token cap from effective sampling params (for prompt usage %). */
-  maxOutputTokensFromSampling(params: ModelSamplingParams): number | undefined {
-    switch (params.protocol) {
-      case "openai":
-        return params.openai.max_tokens;
-      case "anthropic":
-        return params.anthropic.max_tokens;
-      case "gemini":
-        return params.gemini.maxOutputTokens;
-    }
-  },
+    /** Output token cap from effective sampling params (for prompt usage %). */
+    maxOutputTokensFromSampling(params: ModelSamplingParams): number | undefined {
+        switch (params.protocol) {
+            case "openai":
+                return params.openai.max_tokens;
+            case "anthropic":
+                return params.anthropic.max_tokens;
+            case "gemini":
+                return params.gemini.maxOutputTokens;
+        }
+    },
 } as const;

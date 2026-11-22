@@ -15,25 +15,25 @@ import { coreT } from "./core-i18n.js";
 export type { StoredConfigHealth } from "@novel-master/core/stored-config-validity";
 
 export const STORED_CONFIG_LABELS = {
-  invalidTitle: coreT(CORE_STORED_CONFIG_LABELS.invalidTitle),
-  reasonOutdatedVersion: coreT(CORE_STORED_CONFIG_LABELS.reasonOutdatedVersion),
-  reasonRemovedFeature: coreT(CORE_STORED_CONFIG_LABELS.reasonRemovedFeature),
-  reasonBrokenWire: coreT(CORE_STORED_CONFIG_LABELS.reasonBrokenWire),
-  eventsRestoreAndSave: coreT(CORE_STORED_CONFIG_LABELS.eventsRestoreAndSave),
-  eventsClearAndSave: coreT(CORE_STORED_CONFIG_LABELS.eventsClearAndSave),
-  agentDelete: coreT(CORE_STORED_CONFIG_LABELS.agentDelete),
-  agentOverwriteDefault: coreT(CORE_STORED_CONFIG_LABELS.agentOverwriteDefault),
-  agentBack: coreT(CORE_STORED_CONFIG_LABELS.agentBack),
+    invalidTitle: coreT(CORE_STORED_CONFIG_LABELS.invalidTitle),
+    reasonOutdatedVersion: coreT(CORE_STORED_CONFIG_LABELS.reasonOutdatedVersion),
+    reasonRemovedFeature: coreT(CORE_STORED_CONFIG_LABELS.reasonRemovedFeature),
+    reasonBrokenWire: coreT(CORE_STORED_CONFIG_LABELS.reasonBrokenWire),
+    eventsRestoreAndSave: coreT(CORE_STORED_CONFIG_LABELS.eventsRestoreAndSave),
+    eventsClearAndSave: coreT(CORE_STORED_CONFIG_LABELS.eventsClearAndSave),
+    agentDelete: coreT(CORE_STORED_CONFIG_LABELS.agentDelete),
+    agentOverwriteDefault: coreT(CORE_STORED_CONFIG_LABELS.agentOverwriteDefault),
+    agentBack: coreT(CORE_STORED_CONFIG_LABELS.agentBack),
 } as const;
 
 export const AGENT_LIST_LABELS = {
-  needsRepair: coreT(CORE_AGENT_LIST_LABELS.needsRepair),
-  maxSteps: (n: number): string => coreT(CORE_AGENT_LIST_LABELS.maxSteps(n)),
-  configInvalid: coreT(CORE_AGENT_LIST_LABELS.configInvalid),
+    needsRepair: coreT(CORE_AGENT_LIST_LABELS.needsRepair),
+    maxSteps: (n: number): string => coreT(CORE_AGENT_LIST_LABELS.maxSteps(n)),
+    configInvalid: coreT(CORE_AGENT_LIST_LABELS.configInvalid),
 } as const;
 
 export function storedConfigInvalidReason(code: Parameters<typeof StoredConfigLabels.invalidReason>[0]): string {
-  return coreT(StoredConfigLabels.invalidReason(code));
+    return coreT(StoredConfigLabels.invalidReason(code));
 }
 
 export { DefaultAgentDefinition } from "@novel-master/core/stored-config-validity";

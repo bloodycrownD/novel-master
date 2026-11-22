@@ -11,18 +11,18 @@ const NO_PATH_ATTACHMENT_NAME = "__no_path__";
 
 /** 附件 action 枚举（提示词 `<action name>` / 落库真源）。 */
 const messageAttachmentActionSchema = z.enum([
-  "delete",
-  "write",
-  "edit",
-  "mkdir",
-  "rename",
-  /** 跨目录移动；同目录换名仍用 `rename`。旧跨目录 `rename` 只读兼容。 */
-  "move",
-  "workplaceChange",
-  "userAttach",
-  "annotate",
-  /** `$技能名` 引用：无 path，专用字段 `skillName` 为解析与展示唯一依据。 */
-  "skillAttach",
+    "delete",
+    "write",
+    "edit",
+    "mkdir",
+    "rename",
+    /** 跨目录移动；同目录换名仍用 `rename`。旧跨目录 `rename` 只读兼容。 */
+    "move",
+    "workplaceChange",
+    "userAttach",
+    "annotate",
+    /** `$技能名` 引用：无 path，专用字段 `skillName` 为解析与展示唯一依据。 */
+    "skillAttach",
 ]);
 
 export type MessageAttachmentAction = z.infer<typeof messageAttachmentActionSchema>;
@@ -34,53 +34,53 @@ const DISPLAY_TAG_NAME_RE = /^\w+:\//;
  * 附件对象底座（无 refine，供 `.omit` / composer draft 组合）。
  */
 export const messageAttachmentObjectSchema = z.object({
-  name: z.string().min(1),
-  source: z.enum(["workplace", "attach", "user_ops"]),
-  type: z.enum(["text", "image", "dir"]),
-  /** workplace/attach 落库可长期为 null；发送后均为 action XML。workplace 为历史只读兼容，新数据不再产生。 */
-  content: z.string().nullable(),
-  /** workplace/attach/user_ops 的逻辑 path。workplace 为历史只读兼容，新数据不再产生。 */
-  path: z.string().optional(),
-  /** skillAttach 专用：引用的技能名（该形态无 path，chip 文案以此为准）。 */
-  skillName: z.string().optional(),
-  /** 结构化 action；新写入应必填；历史可缺省。 */
-  action: messageAttachmentActionSchema.optional(),
+    name: z.string().min(1),
+    source: z.enum(["workplace", "attach", "user_ops"]),
+    type: z.enum(["text", "image", "dir"]),
+    /** workplace/attach 落库可长期为 null；发送后均为 action XML。workplace 为历史只读兼容，新数据不再产生。 */
+    content: z.string().nullable(),
+    /** workplace/attach/user_ops 的逻辑 path。workplace 为历史只读兼容，新数据不再产生。 */
+    path: z.string().optional(),
+    /** skillAttach 专用：引用的技能名（该形态无 path，chip 文案以此为准）。 */
+    skillName: z.string().optional(),
+    /** 结构化 action；新写入应必填；历史可缺省。 */
+    action: messageAttachmentActionSchema.optional(),
 }).strict();
 
 /** 单条消息附件（含新写入 name 禁展示 tag / 须等于 storage name 校验）。 */
 export const messageAttachmentSchema = messageAttachmentObjectSchema.superRefine((val, ctx) => {
-  // skillAttach：无 path，跳过 path/name 规则；skillName 必填校验在本分支内做
-  if (val.action === "skillAttach") {
-    if (typeof val.skillName !== "string" || val.skillName === "") {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "error.chat.attachment_skill_name_required",
-        path: ["skillName"],
-      });
+    // skillAttach：无 path，跳过 path/name 规则；skillName 必填校验在本分支内做
+    if (val.action === "skillAttach") {
+        if (typeof val.skillName !== "string" || val.skillName === "") {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "error.chat.attachment_skill_name_required",
+                path: ["skillName"],
+            });
+        }
+        return;
     }
-    return;
-  }
-  // 新写入（带 action）禁止把展示 tag 写入 name
-  if (val.action != null && DISPLAY_TAG_NAME_RE.test(val.name)) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "error.chat.attachment_name_display_tag_forbidden",
-      path: ["name"],
-    });
-  }
-  // 有 action 时 name 须与 storageName(path) 一致
-  if (val.action != null) {
-    const expected = MessageAttachmentSchema.storageName(val.path);
-    if (val.name !== expected) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        // zod message 通道无法携带 {expected} 参数（静态 string）；本分支消费链
-        // 为 parseJson 静默降级与写侧防御，无 UI 直达路径。
-        message: "error.chat.attachment_name_storage_mismatch",
-        path: ["name"],
-      });
+    // 新写入（带 action）禁止把展示 tag 写入 name
+    if (val.action != null && DISPLAY_TAG_NAME_RE.test(val.name)) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "error.chat.attachment_name_display_tag_forbidden",
+            path: ["name"],
+        });
     }
-  }
+    // 有 action 时 name 须与 storageName(path) 一致
+    if (val.action != null) {
+        const expected = MessageAttachmentSchema.storageName(val.path);
+        if (val.name !== expected) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                // zod message 通道无法携带 {expected} 参数（静态 string）；本分支消费链
+                // 为 parseJson 静默降级与写侧防御，无 UI 直达路径。
+                message: "error.chat.attachment_name_storage_mismatch",
+                path: ["name"],
+            });
+        }
+    }
 });
 
 /** 消息附件数组（`attachments_json`）。 */
@@ -89,18 +89,18 @@ export const messageAttachmentsSchema = z.array(messageAttachmentSchema);
 export type MessageAttachment = z.infer<typeof messageAttachmentSchema>;
 
 export const MessageAttachmentSchema = {
-  /**
+    /**
    * 落库 `name`：有非空 path 时与 path 逐字相同；否则 `__no_path__`。
    * UI 永不把 `name` 当 chip 文案真源。
    */
-  storageName(path: string | null | undefined): string {
-    if (path == null || path === "") {
-      return NO_PATH_ATTACHMENT_NAME;
-    }
-    return path;
-  },
+    storageName(path: string | null | undefined): string {
+        if (path == null || path === "") {
+            return NO_PATH_ATTACHMENT_NAME;
+        }
+        return path;
+    },
 
-  /**
+    /**
    * 解析 `attachments_json`；NULL/空/非法 → `null`（无值），整数组逐条降级。
    *
    * 口径（逐条降级，与 `ComposerDraftSchema.parseJson` 对齐）：**一条不合规不牵连其余**；
@@ -112,27 +112,27 @@ export const MessageAttachmentSchema = {
    *
    * nm-style: keep-public — attachments_json 唯一读侧解码入口；逐条降级/空值写 NULL 是 wire 契约。
    */
-  parseJson(raw: string | null | undefined): MessageAttachment[] | null {
-    if (raw == null || raw === "") {
-      return null;
-    }
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      return null;
-    }
-    // 非数组（含标量、对象、JSON null）→ 无粒度可 salv，整体降级
-    if (!Array.isArray(parsed)) {
-      return null;
-    }
-    const kept: MessageAttachment[] = [];
-    for (const item of parsed) {
-      const result = messageAttachmentSchema.safeParse(item);
-      if (result.success) {
-        kept.push(result.data);
-      }
-    }
-    return kept;
-  },
+    parseJson(raw: string | null | undefined): MessageAttachment[] | null {
+        if (raw == null || raw === "") {
+            return null;
+        }
+        let parsed: unknown;
+        try {
+            parsed = JSON.parse(raw);
+        } catch {
+            return null;
+        }
+        // 非数组（含标量、对象、JSON null）→ 无粒度可 salv，整体降级
+        if (!Array.isArray(parsed)) {
+            return null;
+        }
+        const kept: MessageAttachment[] = [];
+        for (const item of parsed) {
+            const result = messageAttachmentSchema.safeParse(item);
+            if (result.success) {
+                kept.push(result.data);
+            }
+        }
+        return kept;
+    },
 } as const;

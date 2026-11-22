@@ -21,51 +21,55 @@ import {rowsViewSlot} from './render/row-logic';
 import {RowWindow} from './render/row-windowing';
 import {BootTranscript} from './boot/boot-transcript';
 import {post} from './bridge';
+import {state} from './state/state';
 import {MermaidFullscreen} from '@web/shared/mermaid-fullscreen/mermaid-fullscreen';
 import {MenuOverlay} from '../ui/menu/MenuOverlay';
 import {RowList} from '../ui/render/RowList';
 
 type TranscriptRuntimeOptions = {
-  /** 是否自绑宿主 message 通道（旧包默认 true；合成包传 false 由入口单次注册）。 */
-  bindChannel?: boolean;
-  /** 是否由本 runtime 上抛 ready（旧包默认 true；合成包传 false 由入口发单条）。 */
-  emitReady?: boolean;
+    /** 是否自绑宿主 message 通道（旧包默认 true；合成包传 false 由入口单次注册）。 */
+    bindChannel?: boolean;
+    /** 是否由本 runtime 上抛 ready（旧包默认 true；合成包传 false 由入口发单条）。 */
+    emitReady?: boolean;
 };
 
 export const Factory = {
-  /**
+    /**
    * 装配 chat-transcript runtime 的全部顶层副作用。
    * 旧包以默认参数调用 → 与拆分前 main.ts 逐行等价（行为零变化）。
    */
-  create: (options: TranscriptRuntimeOptions = {}): void => {
-    const {bindChannel = true, emitReady = true} = options;
+    create: (options: TranscriptRuntimeOptions = {}): void => {
+        const {bindChannel = true, emitReady = true} = options;
 
-    const menuPortal = document.getElementById('menu-portal');
+        const menuPortal = document.getElementById('menu-portal');
 
-    // P0-3 / ISD：注册完整菜单 overlay；关闭时 render(null) 卸载
-    contextMenuViewSlot.register(props => {
-      if (!menuPortal) return;
-      if (!props) {
-        render(null, menuPortal);
-        return;
-      }
-      render(h(MenuOverlay, props), menuPortal);
-    });
+        // P0-3 / ISD：注册完整菜单 overlay；关闭时 render(null) 卸载
+        contextMenuViewSlot.register(props => {
+            if (!menuPortal) return;
+            if (!props) {
+                render(null, menuPortal);
+                return;
+            }
+            render(h(MenuOverlay, props), menuPortal);
+        });
 
-    // P0-3：注册行列表 Preact 实现（消毒 HTML 经 TrustedHtml，见 ui/render）
-    rowsViewSlot.register(() => {
-      const list = document.getElementById('rows');
-      if (!list) return;
-      render(h(RowList, null), list);
-      // 窗口化（Step 7）：渲染后实测窗口行占高 → 收敛平均槽高估算
-      // （窗口未变时内部跳过，流式期高频 renderRows 不产生额外 reflow）。
-      RowWindow.measure();
-    });
+        // P0-3：注册行列表 Preact 实现（消毒 HTML 经 TrustedHtml，见 ui/render）
+        rowsViewSlot.register(() => {
+            const list = document.getElementById('rows');
+            if (!list) return;
+            render(h(RowList, null), list);
+            // 窗口化（Step 7）：渲染后实测窗口行占高 → 收敛平均槽高估算
+            // （窗口未变时内部跳过，流式期高频 renderRows 不产生额外 reflow）。
+            RowWindow.measure();
+        });
 
-    // Mermaid 全屏查看器：模块刈处一行挂接（不进 renderRows 链路）
-    MermaidFullscreen.mountPortal('mermaid-viewer-portal');
-    MermaidFullscreen.attachDelegation(post);
+        // Mermaid 全屏查看器：模块刈处一行挂接（不进 renderRows 链路）；
+        // 关闭按钮文案走首桥 labels（state.labels.ui，宿主 init 下发，缺省回退默认中文）。
+        // ?. 调用：工厂测试 mock MermaidFullscreen 为部分对象（无此方法），生产模块恒有。
+        MermaidFullscreen.setCloseLabelProvider?.(() => state.labels.ui['ui.common.close']);
+        MermaidFullscreen.mountPortal('mermaid-viewer-portal');
+        MermaidFullscreen.attachDelegation(post);
 
-    BootTranscript.start({bindChannel, emitReady});
-  },
+        BootTranscript.start({bindChannel, emitReady});
+    },
 } as const;

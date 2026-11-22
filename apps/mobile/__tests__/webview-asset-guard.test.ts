@@ -25,16 +25,16 @@
 import {existsSync, readFileSync, readdirSync} from 'node:fs';
 import {join} from 'node:path';
 import {
-  TRANSCRIPT_CAPABILITIES,
-  TRANSCRIPT_READY_VERSION,
+    TRANSCRIPT_CAPABILITIES,
+    TRANSCRIPT_READY_VERSION,
 } from '../src/web/chat-transcript/transcript-capabilities';
 
 const BUILD_GRADLE = join(__dirname, '../android/app/build.gradle');
 const BUILD_SCRIPT = join(__dirname, '../scripts/build-webview.mjs');
 const PBXPROJ = join(__dirname, '../ios/NovelMaster.xcodeproj/project.pbxproj');
 const ASSET_URI_SRC = join(
-  __dirname,
-  '../src/webview-host/webview-asset-uri.ts',
+    __dirname,
+    '../src/webview-host/webview-asset-uri.ts',
 );
 
 /**
@@ -45,10 +45,10 @@ const ASSET_URI_SRC = join(
  * composer-input / chat-transcript」四包。
  */
 const EXPECTED_PACKAGES = [
-  'rich-document',
-  'code-editor',
-  'composer-input',
-  'chat-transcript',
+    'rich-document',
+    'code-editor',
+    'composer-input',
+    'chat-transcript',
 ];
 
 /**
@@ -59,10 +59,10 @@ const EXPECTED_PACKAGES = [
  * 把这里的期望同步换成 EXPECTED_PACKAGES 即可。
  */
 const IOS_HISTORY_PACKAGES = [
-  'rich-document',
-  'code-editor',
-  'composer-input',
-  'chat-conversation',
+    'rich-document',
+    'code-editor',
+    'composer-input',
+    'chat-conversation',
 ];
 
 /** iOS 出包阶段名：pbxproj 里那条 shellScript 的就近 name。 */
@@ -70,37 +70,37 @@ const IOS_COPY_PHASE_NAME = 'Copy WebViewDist into App Bundle';
 
 /** 三根产物根目录（退役残留会原样进 APK/IPA）。 */
 const DIST_ROOTS = [
-  join(__dirname, '../webview-dist'),
-  join(__dirname, '../android/app/src/main/assets/webview'),
-  join(__dirname, '../ios/NovelMaster/WebViewDist'),
+    join(__dirname, '../webview-dist'),
+    join(__dirname, '../android/app/src/main/assets/webview'),
+    join(__dirname, '../ios/NovelMaster/WebViewDist'),
 ];
 
 /** 按字节切行后逐行 UTF-8 解码——只让目标行承担解码风险，损坏行不污染全文。 */
 function readLinesByByte(file: string): string[] {
-  const buf = readFileSync(file);
-  const out: string[] = [];
-  let start = 0;
-  for (let i = 0; i < buf.length; i++) {
-    if (buf[i] === 0x0a) {
-      out.push(buf.subarray(start, i).toString('utf8'));
-      start = i + 1;
+    const buf = readFileSync(file);
+    const out: string[] = [];
+    let start = 0;
+    for (let i = 0; i < buf.length; i++) {
+        if (buf[i] === 0x0a) {
+            out.push(buf.subarray(start, i).toString('utf8'));
+            start = i + 1;
+        }
     }
-  }
-  out.push(buf.subarray(start).toString('utf8'));
-  return out;
+    out.push(buf.subarray(start).toString('utf8'));
+    return out;
 }
 
 /** 从 checkWebViewAssets 任务的 doLast 里抠出 packages 数组的元素名。 */
 function parseGradlePackages(lines: string[]): string[] {
-  const taskAt = lines.findIndex(l => l.includes('checkWebViewAssets'));
-  expect(taskAt).toBeGreaterThan(-1);
-  const decl = lines
-    .slice(taskAt, taskAt + 12)
-    .find(l => l.trimStart().startsWith('def packages ='));
-  expect(decl).toBeDefined();
-  const match = decl!.match(/\[([^\]]*)\]/);
-  expect(match).not.toBeNull();
-  return Array.from(match![1].matchAll(/"([^"]+)"/g)).map(m => m[1]);
+    const taskAt = lines.findIndex(l => l.includes('checkWebViewAssets'));
+    expect(taskAt).toBeGreaterThan(-1);
+    const decl = lines
+        .slice(taskAt, taskAt + 12)
+        .find(l => l.trimStart().startsWith('def packages ='));
+    expect(decl).toBeDefined();
+    const match = decl!.match(/\[([^\]]*)\]/);
+    expect(match).not.toBeNull();
+    return Array.from(match![1].matchAll(/"([^"]+)"/g)).map(m => m[1]);
 }
 
 /** 从 build-webview.mjs 的 PACKAGES 抠出 id 列表（真源，防 Gradle 清单漂移）。 */
@@ -120,10 +120,10 @@ function parseBuildScriptPackages(): string[] {
 function readIosCopyScript(): string {
   const src = readFileSync(PBXPROJ, 'utf8');
   const matches = [...src.matchAll(/shellScript = "((?:[^"\\]|\\.)*)"/g)];
-  expect(matches.length).toBeGreaterThan(0);
-  const target = matches.find(m => {
-    const before = src.slice(Math.max(0, m.index - 400), m.index);
-    const names = [...before.matchAll(/name = "([^"]+)"/g)];
+    expect(matches.length).toBeGreaterThan(0);
+    const target = matches.find(m => {
+        const before = src.slice(Math.max(0, m.index - 400), m.index);
+        const names = [...before.matchAll(/name = "([^"]+)"/g)];
     return (
       names.length > 0 && names[names.length - 1]![1] === IOS_COPY_PHASE_NAME
     );

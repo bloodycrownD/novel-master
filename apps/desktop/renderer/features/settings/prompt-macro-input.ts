@@ -4,66 +4,60 @@
 import { ALLOWED_DYNAMIC_ROOT_MACROS } from "@shared/logic/prompt";
 
 type PromptInsertableMacro = {
-  readonly label: string;
-  readonly token: string;
+    readonly label: string;
+    readonly token: string;
 };
 
-export const PROMPT_INSERTABLE_MACROS: readonly PromptInsertableMacro[] =
-  ALLOWED_DYNAMIC_ROOT_MACROS.map((key) => ({
-    label: `$${key}`,
-    token: `{{$${key}}}`,
-  }));
+export const PROMPT_INSERTABLE_MACROS: readonly PromptInsertableMacro[] = ALLOWED_DYNAMIC_ROOT_MACROS.map((key) => ({ label: `$${key}`, token: `{{$${key}}}` }));
 
 const ALLOWED_ROOT_MACRO_KEYS = new Set<string>(ALLOWED_DYNAMIC_ROOT_MACROS);
 
 type WhitelistMacroRange = {
-  readonly start: number;
-  readonly end: number;
-  readonly value: string;
+    readonly start: number;
+    readonly end: number;
+    readonly value: string;
 };
 
 function isWhitelistRootMacroInner(inner: string): boolean {
-  const trimmed = inner.trim();
-  if (!trimmed.startsWith("$")) {
-    return false;
-  }
-  const rest = trimmed.slice(1).trim();
-  if (rest.length === 0 || rest.startsWith(".") || rest.includes(".")) {
-    return false;
-  }
-  return ALLOWED_ROOT_MACRO_KEYS.has(rest);
+    const trimmed = inner.trim();
+    if (!trimmed.startsWith("$")) {
+        return false;
+    }
+    const rest = trimmed.slice(1).trim();
+    if (rest.length === 0 || rest.startsWith(".") || rest.includes(".")) {
+        return false;
+    }
+    return ALLOWED_ROOT_MACRO_KEYS.has(rest);
 }
 
-export function findWhitelistMacroRanges(
-  text: string
-): readonly WhitelistMacroRange[] {
-  const ranges: WhitelistMacroRange[] = [];
-  let index = 0;
-  while (index < text.length) {
-    const open = text.indexOf("{{", index);
-    if (open < 0) {
-      break;
+export function findWhitelistMacroRanges( text: string ): readonly WhitelistMacroRange[] {
+    const ranges: WhitelistMacroRange[] = [];
+    let index = 0;
+    while (index < text.length) {
+        const open = text.indexOf("{{", index);
+        if (open < 0) {
+            break;
+        }
+        const close = text.indexOf("}}", open + 2);
+        if (close < 0) {
+            break;
+        }
+        const value = text.slice(open, close + 2);
+        const inner = text.slice(open + 2, close);
+        if (isWhitelistRootMacroInner(inner)) {
+            ranges.push({ start: open, end: close + 2, value });
+        }
+        index = close + 2;
     }
-    const close = text.indexOf("}}", open + 2);
-    if (close < 0) {
-      break;
-    }
-    const value = text.slice(open, close + 2);
-    const inner = text.slice(open + 2, close);
-    if (isWhitelistRootMacroInner(inner)) {
-      ranges.push({ start: open, end: close + 2, value });
-    }
-    index = close + 2;
-  }
-  return ranges;
+    return ranges;
 }
 
 function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    return s
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
 }
 
 /** 白名单宏着色 HTML；value 仍为纯文本（无 span）。 */
@@ -90,10 +84,7 @@ export function renderPromptMacroHighlightHtml(text: string): string {
  * 单次连续删除若碰到白名单宏区间，整段删掉。
  * @returns 新的纯文本；无需原子删时返回 null
  */
-export function tryAtomicMacroDelete(
-  prevValue: string,
-  changedValue: string
-): string | null {
+export function tryAtomicMacroDelete( prevValue: string, changedValue: string ): string | null {
   if (changedValue.length >= prevValue.length) {
     return null;
   }
@@ -122,14 +113,14 @@ export function tryAtomicMacroDelete(
   return prevValue.slice(0, hitRange.start) + prevValue.slice(hitRange.end);
 }
 
-export function insertTextAtSelection(
-  value: string,
-  selection: { readonly start: number; readonly end: number },
-  insert: string
-): {
+type TextSelection = { readonly start: number; readonly end: number };
+
+type InsertTextAtSelectionResult = {
   readonly next: string;
-  readonly selection: { readonly start: number; readonly end: number };
-} {
+  readonly selection: TextSelection;
+};
+
+export function insertTextAtSelection( value: string, selection: TextSelection, insert: string ): InsertTextAtSelectionResult {
   const start = Math.max(0, Math.min(selection.start, value.length));
   const end = Math.max(start, Math.min(selection.end, value.length));
   const next = value.slice(0, start) + insert + value.slice(end);

@@ -40,291 +40,291 @@ type SearchEngineEntry = SearchConfigPublic['engines'][number];
 const EMPTY_ROWS: readonly SearchEngineEntry[] = [];
 
 export function SearchEnginesScreen() {
-  const {tokens} = useTheme();
-  const {showToast} = useToast();
-  const runtime = useRuntime();
-  const searchStore = SearchConfigStore.get(runtime);
-  const navigation = useNavigation<Nav>();
-  // 屏级 override：自动带 ownerRouteKey，转场期间不泄漏到相邻屏 header。
-  const setStackOverride = useStackOverrideSetter();
-  /** 行菜单当前指向的引擎（undefined = 收起）。 */
-  const [menuEngineId, setMenuEngineId] = useState<string | undefined>();
-  /** 排序写库进行中（互斥连点）。 */
-  const [moving, setMoving] = useState(false);
-  /** 开关写库进行中的引擎 id（互斥连点；用 ref 避免整表 disabled 态闪烁）。 */
-  const togglingRef = useRef<string | undefined>(undefined);
-  /** 待确认删除的自定义实例（undefined = 弹窗收起）。 */
-  const [pendingDelete, setPendingDelete] = useState<string | undefined>();
-  /** 删除写库进行中。 */
-  const [deleting, setDeleting] = useState(false);
-  /** 使用说明弹窗开关（标题栏「?」按钮）。 */
-  const [helpVisible, setHelpVisible] = useState(false);
+    const {tokens} = useTheme();
+    const {showToast} = useToast();
+    const runtime = useRuntime();
+    const searchStore = SearchConfigStore.get(runtime);
+    const navigation = useNavigation<Nav>();
+    // 屏级 override：自动带 ownerRouteKey，转场期间不泄漏到相邻屏 header。
+    const setStackOverride = useStackOverrideSetter();
+    /** 行菜单当前指向的引擎（undefined = 收起）。 */
+    const [menuEngineId, setMenuEngineId] = useState<string | undefined>();
+    /** 排序写库进行中（互斥连点）。 */
+    const [moving, setMoving] = useState(false);
+    /** 开关写库进行中的引擎 id（互斥连点；用 ref 避免整表 disabled 态闪烁）。 */
+    const togglingRef = useRef<string | undefined>(undefined);
+    /** 待确认删除的自定义实例（undefined = 弹窗收起）。 */
+    const [pendingDelete, setPendingDelete] = useState<string | undefined>();
+    /** 删除写库进行中。 */
+    const [deleting, setDeleting] = useState(false);
+    /** 使用说明弹窗开关（标题栏「?」按钮）。 */
+    const [helpVisible, setHelpVisible] = useState(false);
 
-  const dismissAllOverlays = useCallback(() => {
-    setMenuEngineId(undefined);
-    setPendingDelete(undefined);
-    setHelpVisible(false);
-  }, []);
+    const dismissAllOverlays = useCallback(() => {
+        setMenuEngineId(undefined);
+        setPendingDelete(undefined);
+        setHelpVisible(false);
+    }, []);
 
-  useDismissOverlaysOnBlur(dismissAllOverlays);
+    useDismissOverlaysOnBlur(dismissAllOverlays);
 
-  // 标题栏菜单位换「?」帮助按钮（AppHeader 经 stackOverride 消费
-  // menuIcon/onMenu，见 ProviderDetailScreen 标题 override 同一链路）。
-  // 用 useFocusEffect 而非 useEffect：进入详情页再返回时，详情页的 cleanup
-  // 会清空 header 覆盖，列表页须在重新聚焦时重设，否则「?」按钮丢失。
-  const syncHeaderOverride = useCallback(() => {
-    setStackOverride({
-      title: settingsTranslator({key: 'settings.search.list.title.mobile'}),
-      showMenu: true,
-      menuIcon: <HelpIcon color={tokens.text} />,
-      onMenu: () => setHelpVisible(true),
+    // 标题栏菜单位换「?」帮助按钮（AppHeader 经 stackOverride 消费
+    // menuIcon/onMenu，见 ProviderDetailScreen 标题 override 同一链路）。
+    // 用 useFocusEffect 而非 useEffect：进入详情页再返回时，详情页的 cleanup
+    // 会清空 header 覆盖，列表页须在重新聚焦时重设，否则「?」按钮丢失。
+    const syncHeaderOverride = useCallback(() => {
+        setStackOverride({
+            title: settingsTranslator({key: 'settings.search.list.title.mobile'}),
+            showMenu: true,
+            menuIcon: <HelpIcon color={tokens.text} />,
+            onMenu: () => setHelpVisible(true),
+        });
+        return () => setStackOverride(undefined);
+    }, [setStackOverride, tokens.text]);
+    useFocusEffect(syncHeaderOverride);
+
+    const {rows, loading, error, reload, setRows} = useFocusListReload({
+        fetcher: useCallback(async () => {
+            const config = await searchStore.readConfig();
+            // nm-throw: keep — fetcher 槽位契约：读失败进 useFocusListReload 的 error 态（UI 边界展示通道，四期门⑦沿 Result 到这里转码）
+            if (!config.ok) throw config.error;
+            return config.value.engines;
+        }, [searchStore]),
+        fallbackValue: EMPTY_ROWS,
     });
-    return () => setStackOverride(undefined);
-  }, [setStackOverride, tokens.text]);
-  useFocusEffect(syncHeaderOverride);
 
-  const {rows, loading, error, reload, setRows} = useFocusListReload({
-    fetcher: useCallback(async () => {
-      const config = await searchStore.readConfig();
-      // 读失败进 useFocusListReload 的 error 态（UI 边界展示通道，四期门⑦沿 Result 到这里转码）
-      if (!config.ok) throw config.error;
-      return config.value.engines;
-    }, [searchStore]),
-    fallbackValue: EMPTY_ROWS,
-  });
-
-  /** 上移（delta=-1）/ 下移（delta=+1）：交换相邻位后整单写库并重读。 */
-  const moveEngine = async (engineId: string, delta: -1 | 1) => {
-    if (moving) {
-      return;
-    }
-    const order = rows.map(row => row.id);
-    const index = order.indexOf(engineId);
-    const target = index + delta;
-    if (index < 0 || target < 0 || target >= order.length) {
-      return;
-    }
-    [order[index], order[target]] = [order[target], order[index]];
-    setMoving(true);
-    try {
-      await searchStore.setEngineOrder(order);
-      // 重读刷新：顺序与各引擎状态以库内新值为准。
-      await reload({silent: true});
-    } catch (cause) {
-      showToast(ToastMessage.toast(settingsTranslator({key: 'settings.search.toast.order_failed.mobile'}), cause));
-    } finally {
-      setMoving(false);
-    }
-  };
-
-  const menuRow = rows.find(row => row.id === menuEngineId);
-  const menuIndex = menuRow == null ? -1 : rows.indexOf(menuRow);
-  const deleteRow = rows.find(row => row.id === pendingDelete);
-  // 删除确认文案提前拼好：模板串含 CJK 长文案，内联进 JSX 会被 prettier 拆行。
-  let deleteNotice = '';
-  if (pendingDelete != null) {
-    // FIX-23：读模型 name 优先（拍板 5），静态表仅未知 id 兜底。
-    const label = SearchEngineMeta.engineTitle(pendingDelete, deleteRow?.name);
-    deleteNotice = settingsTranslator({key: 'settings.search.detail.delete_notice.mobile', params: {name: label}});
-  }
-
-  return (
-    <View style={[listScreenStyles.root, {backgroundColor: tokens.background}]}>
-      {loading && rows.length === 0 ? (
-        <ActivityIndicator style={listScreenStyles.loader} />
-      ) : error ? (
-        <View style={styles.center}>
-          <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text>
-          <Pressable onPress={() => void reload()}>
-            <Text style={{color: tokens.primary, fontWeight: '600'}}>{settingsTranslator({key: 'settings.search.list.retry.mobile'})}</Text>
-          </Pressable>
-        </View>
-      ) : (
-        <FlatList
-          data={rows}
-          keyExtractor={item => item.id}
-          contentContainerStyle={listScreenStyles.listContent}
-          refreshControl={<RefreshControl refreshing={loading} onRefresh={reload} />}
-          renderItem={({item}) => {
-            const hint = SearchEngineMeta.engineHint(item.id);
-            // 开关本身已表达启停态，副标题只说「还缺什么才能用」。
-            const issues = [
-              ...(item.needsKey && !item.hasKey ? [settingsTranslator({key: 'settings.search.list.issue.key_missing.mobile'})] : []),
-              ...(item.needsBaseUrl ? [settingsTranslator({key: 'settings.search.list.issue.base_url_missing.mobile'})] : []),
-            ];
-            return (
-              <ConfigListCard
-                tokens={tokens}
-                // DDG 是内置兜底引擎（无模板、无凭据、参数说明出厂固定），没有详情页：点击无反应。
-                onPress={() => {
-                  if (item.id === 'duckduckgo') {
-                    return;
-                  }
-                  navigation.navigate('SearchEngineDetail', {
-                    engineId: item.id,
-                  });
-                }}
-                title={SearchEngineMeta.engineTitle(item.id, item.name)}
-                subtitle={issues.length === 0 ? hint : `${hint} · ${issues.join(' · ')}`}
-                trailingMeta={
-                  <View style={styles.rowMeta}>
-                    {item.id === 'duckduckgo' ? (
-                      <BuiltinTag tokens={tokens} />
-                    ) : item.needsKey ? (
-                      <ApiKeyStatusTag status={item.hasKey ? 'set' : 'not set'} tokens={tokens} />
-                    ) : item.needsBaseUrl ? (
-                      <ApiKeyStatusTag status={item.baseUrl == null ? 'not set' : 'set'} tokens={tokens} />
-                    ) : null}
-                    <Switch
-                      value={item.enabled}
-                      onValueChange={async next => {
-                        // 行开关（原 setEnabled 内联，ui-copy/nm-style-1）：乐观翻转 +
-                        // 失败回滚同一行；togglingRef 互斥保证同刻只有一行写库在途。
-                        if (togglingRef.current != null) {
-                          return;
-                        }
-                        togglingRef.current = item.id;
-                        setRows(current => current.map(row => (row.id === item.id ? {...row, enabled: next} : row)));
-                        try {
-                          await searchStore.setEnabled(item.id, next);
-                        } catch (cause) {
-                          setRows(current => current.map(row => (row.id === item.id ? {...row, enabled: !next} : row)));
-                          showToast(ToastMessage.toast(settingsTranslator({key: 'settings.search.toast.toggle_failed.mobile'}), cause));
-                        } finally {
-                          togglingRef.current = undefined;
-                        }
-                      }}
-                      disabled={deleting}
-                      trackColor={{false: tokens.border, true: tokens.primary}}
-                    />
-                  </View>
-                }
-                onMenuPress={() => setMenuEngineId(item.id)}
-              />
-            );
-          }}
-        />
-      )}
-      <View style={[styles.createBar, {borderTopColor: tokens.borderLight}]}>
-        <SecondaryButton
-          tokens={tokens}
-          fullWidth
-          label={settingsTranslator({key: 'settings.search.list.create_custom'})}
-          onPress={() => navigation.navigate('SearchEngineDetail')}
-          disabled={deleting}
-        />
-      </View>
-      <BottomSheetMenu
-        visible={menuEngineId != null}
-        title={menuRow && SearchEngineMeta.engineTitle(menuRow.id, menuRow.name)}
-        items={[
-          {label: settingsTranslator({key: 'settings.search.list.menu.move_up'}), action: 'up', disabled: menuIndex <= 0 || moving},
-          {
-            label: settingsTranslator({key: 'settings.search.list.menu.move_down'}),
-            action: 'down',
-            disabled: menuIndex < 0 || menuIndex >= rows.length - 1 || moving,
-          },
-          ...(menuRow?.isCustom === true
-            ? [
-                {
-                  label: settingsTranslator({key: 'settings.search.list.menu.delete'}),
-                  action: 'delete',
-                  danger: true,
-                  disabled: moving || deleting,
-                },
-              ]
-            : []),
-        ]}
-        onClose={() => setMenuEngineId(undefined)}
-        onSelect={action => {
-          const engineId = menuEngineId;
-          setMenuEngineId(undefined);
-          if (engineId == null) {
+    /** 上移（delta=-1）/ 下移（delta=+1）：交换相邻位后整单写库并重读。 */
+    const moveEngine = async (engineId: string, delta: -1 | 1) => {
+        if (moving) {
             return;
-          }
-          if (action === 'up') {
-            moveEngine(engineId, -1).catch(() => undefined);
-          } else if (action === 'down') {
-            moveEngine(engineId, 1).catch(() => undefined);
-          } else if (action === 'delete') {
-            setPendingDelete(engineId);
-          }
-        }}
-      />
-      {/* 删除确认：自定义实例的模板 / 密钥 / 排序项一并清除，不可撤销。 */}
-      <ModalShell visible={pendingDelete != null} onClose={() => setPendingDelete(undefined)} variant="center" animationType="fade" panelStyle={styles.helpPanel}>
-        <Text style={[styles.helpTitle, {color: tokens.text}]}>{settingsTranslator({key: 'settings.search.detail.delete_title'})}</Text>
-        <Text style={[styles.confirmBody, {color: tokens.textSecondary}]}>{deleteNotice}</Text>
-        <View style={styles.confirmActions}>
-          <View style={styles.confirmAction}>
-            <SecondaryButton tokens={tokens} fullWidth label={settingsTranslator({key: 'settings.search.list.cancel.mobile'})} onPress={() => setPendingDelete(undefined)} disabled={deleting} />
-          </View>
-          <View style={styles.confirmAction}>
-            <SecondaryButton
-              tokens={tokens}
-              fullWidth
-              label={deleting ? settingsTranslator({key: 'settings.search.list.deleting.mobile'}) : settingsTranslator({key: 'settings.search.list.menu.delete'})}
-              onPress={async () => {
-                if (pendingDelete == null || deleting) {
-                  return;
-                }
-                setDeleting(true);
-                try {
-                  // core 同步 prune orderV2 / enabledEngines / baseUrl / SKSP ref。
-                  await searchStore.deleteCustomEngine(pendingDelete);
-                  showToast(settingsTranslator({key: 'settings.search.toast.custom_engine_deleted.mobile'}));
-                  setPendingDelete(undefined);
-                  await reload({silent: true});
-                } catch (cause) {
-                  showToast(ToastMessage.toast(settingsTranslator({key: 'settings.search.toast.delete_failed.mobile'}), cause));
-                } finally {
-                  setDeleting(false);
-                }
-              }}
-              disabled={deleting}
+        }
+        const order = rows.map(row => row.id);
+        const index = order.indexOf(engineId);
+        const target = index + delta;
+        if (index < 0 || target < 0 || target >= order.length) {
+            return;
+        }
+        [order[index], order[target]] = [order[target], order[index]];
+        setMoving(true);
+        try {
+            await searchStore.setEngineOrder(order);
+            // 重读刷新：顺序与各引擎状态以库内新值为准。
+            await reload({silent: true});
+        } catch (cause) {
+            showToast(ToastMessage.toast(settingsTranslator({key: 'settings.search.toast.order_failed.mobile'}), cause));
+        } finally {
+            setMoving(false);
+        }
+    };
+
+    const menuRow = rows.find(row => row.id === menuEngineId);
+    const menuIndex = menuRow == null ? -1 : rows.indexOf(menuRow);
+    const deleteRow = rows.find(row => row.id === pendingDelete);
+    // 删除确认文案提前拼好：模板串含 CJK 长文案，内联进 JSX 会被 prettier 拆行。
+    let deleteNotice = '';
+    if (pendingDelete != null) {
+        // FIX-23：读模型 name 优先（拍板 5），静态表仅未知 id 兜底。
+        const label = SearchEngineMeta.engineTitle(pendingDelete, deleteRow?.name);
+        deleteNotice = settingsTranslator({key: 'settings.search.detail.delete_notice.mobile', params: {name: label}});
+    }
+
+    return (
+        <View style={[listScreenStyles.root, {backgroundColor: tokens.background}]}>
+            {loading && rows.length === 0 ? (
+                <ActivityIndicator style={listScreenStyles.loader} />
+            ) : error ? (
+                <View style={styles.center}>
+                    <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text>
+                    <Pressable onPress={() => void reload()}>
+                        <Text style={{color: tokens.primary, fontWeight: '600'}}>{settingsTranslator({key: 'settings.search.list.retry.mobile'})}</Text>
+                    </Pressable>
+                </View>
+            ) : (
+                <FlatList
+                    data={rows}
+                    keyExtractor={item => item.id}
+                    contentContainerStyle={listScreenStyles.listContent}
+                    refreshControl={<RefreshControl refreshing={loading} onRefresh={reload} />}
+                    renderItem={({item}) => {
+                        const hint = SearchEngineMeta.engineHint(item.id);
+                        // 开关本身已表达启停态，副标题只说「还缺什么才能用」。
+                        const issues = [
+                            ...(item.needsKey && !item.hasKey ? [settingsTranslator({key: 'settings.search.list.issue.key_missing.mobile'})] : []),
+                            ...(item.needsBaseUrl ? [settingsTranslator({key: 'settings.search.list.issue.base_url_missing.mobile'})] : []),
+                        ];
+                        return (
+                            <ConfigListCard
+                                tokens={tokens}
+                                // DDG 是内置兜底引擎（无模板、无凭据、参数说明出厂固定），没有详情页：点击无反应。
+                                onPress={() => {
+                                    if (item.id === 'duckduckgo') {
+                                        return;
+                                    }
+                                    navigation.navigate('SearchEngineDetail', {
+                                        engineId: item.id,
+                                    });
+                                }}
+                                title={SearchEngineMeta.engineTitle(item.id, item.name)}
+                                subtitle={issues.length === 0 ? hint : `${hint} · ${issues.join(' · ')}`}
+                                trailingMeta={
+                                    <View style={styles.rowMeta}>
+                                        {item.id === 'duckduckgo' ? (
+                                            <BuiltinTag tokens={tokens} />
+                                        ) : item.needsKey ? (
+                                            <ApiKeyStatusTag status={item.hasKey ? 'set' : 'not set'} tokens={tokens} />
+                                        ) : item.needsBaseUrl ? (
+                                            <ApiKeyStatusTag status={item.baseUrl == null ? 'not set' : 'set'} tokens={tokens} />
+                                        ) : null}
+                                        <Switch
+                                            value={item.enabled}
+                                            onValueChange={async next => {
+                                                // 行开关（原 setEnabled 内联，ui-copy/nm-style-1）：乐观翻转 +
+                                                // 失败回滚同一行；togglingRef 互斥保证同刻只有一行写库在途。
+                                                if (togglingRef.current != null) {
+                                                    return;
+                                                }
+                                                togglingRef.current = item.id;
+                                                setRows(current => current.map(row => (row.id === item.id ? {...row, enabled: next} : row)));
+                                                try {
+                                                    await searchStore.setEnabled(item.id, next);
+                                                } catch (cause) {
+                                                    setRows(current => current.map(row => (row.id === item.id ? {...row, enabled: !next} : row)));
+                                                    showToast(ToastMessage.toast(settingsTranslator({key: 'settings.search.toast.toggle_failed.mobile'}), cause));
+                                                } finally {
+                                                    togglingRef.current = undefined;
+                                                }
+                                            }}
+                                            disabled={deleting}
+                                            trackColor={{false: tokens.border, true: tokens.primary}}
+                                        />
+                                    </View>
+                                }
+                                onMenuPress={() => setMenuEngineId(item.id)}
+                            />
+                        );
+                    }}
+                />
+            )}
+            <View style={[styles.createBar, {borderTopColor: tokens.borderLight}]}>
+                <SecondaryButton
+                    tokens={tokens}
+                    fullWidth
+                    label={settingsTranslator({key: 'settings.search.list.create_custom'})}
+                    onPress={() => navigation.navigate('SearchEngineDetail')}
+                    disabled={deleting}
+                />
+            </View>
+            <BottomSheetMenu
+                visible={menuEngineId != null}
+                title={menuRow && SearchEngineMeta.engineTitle(menuRow.id, menuRow.name)}
+                items={[
+                    {label: settingsTranslator({key: 'settings.search.list.menu.move_up'}), action: 'up', disabled: menuIndex <= 0 || moving},
+                    {
+                        label: settingsTranslator({key: 'settings.search.list.menu.move_down'}),
+                        action: 'down',
+                        disabled: menuIndex < 0 || menuIndex >= rows.length - 1 || moving,
+                    },
+                    ...(menuRow?.isCustom === true
+                        ? [
+                                {
+                                    label: settingsTranslator({key: 'settings.search.list.menu.delete'}),
+                                    action: 'delete',
+                                    danger: true,
+                                    disabled: moving || deleting,
+                                },
+                            ]
+                        : []),
+                ]}
+                onClose={() => setMenuEngineId(undefined)}
+                onSelect={action => {
+                    const engineId = menuEngineId;
+                    setMenuEngineId(undefined);
+                    if (engineId == null) {
+                        return;
+                    }
+                    if (action === 'up') {
+                        moveEngine(engineId, -1).catch(() => undefined);
+                    } else if (action === 'down') {
+                        moveEngine(engineId, 1).catch(() => undefined);
+                    } else if (action === 'delete') {
+                        setPendingDelete(engineId);
+                    }
+                }}
             />
-          </View>
+            {/* 删除确认：自定义实例的模板 / 密钥 / 排序项一并清除，不可撤销。 */}
+            <ModalShell visible={pendingDelete != null} onClose={() => setPendingDelete(undefined)} variant="center" animationType="fade" panelStyle={styles.helpPanel}>
+                <Text style={[styles.helpTitle, {color: tokens.text}]}>{settingsTranslator({key: 'settings.search.detail.delete_title'})}</Text>
+                <Text style={[styles.confirmBody, {color: tokens.textSecondary}]}>{deleteNotice}</Text>
+                <View style={styles.confirmActions}>
+                    <View style={styles.confirmAction}>
+                        <SecondaryButton tokens={tokens} fullWidth label={settingsTranslator({key: 'settings.search.list.cancel.mobile'})} onPress={() => setPendingDelete(undefined)} disabled={deleting} />
+                    </View>
+                    <View style={styles.confirmAction}>
+                        <SecondaryButton
+                            tokens={tokens}
+                            fullWidth
+                            label={deleting ? settingsTranslator({key: 'settings.search.list.deleting.mobile'}) : settingsTranslator({key: 'settings.search.list.menu.delete'})}
+                            onPress={async () => {
+                                if (pendingDelete == null || deleting) {
+                                    return;
+                                }
+                                setDeleting(true);
+                                try {
+                                    // core 同步 prune orderV2 / enabledEngines / baseUrl / SKSP ref。
+                                    await searchStore.deleteCustomEngine(pendingDelete);
+                                    showToast(settingsTranslator({key: 'settings.search.toast.custom_engine_deleted.mobile'}));
+                                    setPendingDelete(undefined);
+                                    await reload({silent: true});
+                                } catch (cause) {
+                                    showToast(ToastMessage.toast(settingsTranslator({key: 'settings.search.toast.delete_failed.mobile'}), cause));
+                                } finally {
+                                    setDeleting(false);
+                                }
+                            }}
+                            disabled={deleting}
+                        />
+                    </View>
+                </View>
+            </ModalShell>
+            {/* 使用说明弹窗：开关 / 优先级 / 模板 / 测试配额 / 密钥安全，无输入不避键盘。 */}
+            <ModalShell visible={helpVisible} onClose={() => setHelpVisible(false)} variant="center" animationType="fade" panelStyle={styles.helpPanel}>
+                <Text style={[styles.helpTitle, {color: tokens.text}]}>{settingsTranslator({key: 'settings.search.help.title'})}</Text>
+                <HelpSection tokens={tokens} title={settingsTranslator({key: 'settings.search.help.toggle.title'})} body={settingsTranslator({key: 'settings.search.help.toggle.body'})} />
+                <HelpSection tokens={tokens} title={settingsTranslator({key: 'settings.search.help.priority.title'})} body={settingsTranslator({key: 'settings.search.help.priority.body'})} />
+                <HelpSection tokens={tokens} title={settingsTranslator({key: 'settings.search.help.custom_engine.title'})} body={settingsTranslator({key: 'settings.search.help.custom_engine.body.mobile'})} />
+                <HelpSection tokens={tokens} title={settingsTranslator({key: 'settings.search.help.key_security.title'})} body={settingsTranslator({key: 'settings.search.help.key_security.body'})} />
+                <Pressable onPress={() => setHelpVisible(false)} style={[styles.helpCloseRow, {borderTopColor: tokens.border}]}>
+                    <Text style={{color: tokens.primary, fontWeight: '600'}}>{settingsTranslator({key: 'settings.search.help.dismiss'})}</Text>
+                </Pressable>
+            </ModalShell>
         </View>
-      </ModalShell>
-      {/* 使用说明弹窗：开关 / 优先级 / 模板 / 测试配额 / 密钥安全，无输入不避键盘。 */}
-      <ModalShell visible={helpVisible} onClose={() => setHelpVisible(false)} variant="center" animationType="fade" panelStyle={styles.helpPanel}>
-        <Text style={[styles.helpTitle, {color: tokens.text}]}>{settingsTranslator({key: 'settings.search.help.title'})}</Text>
-        <HelpSection tokens={tokens} title={settingsTranslator({key: 'settings.search.help.toggle.title'})} body={settingsTranslator({key: 'settings.search.help.toggle.body'})} />
-        <HelpSection tokens={tokens} title={settingsTranslator({key: 'settings.search.help.priority.title'})} body={settingsTranslator({key: 'settings.search.help.priority.body'})} />
-        <HelpSection tokens={tokens} title={settingsTranslator({key: 'settings.search.help.custom_engine.title'})} body={settingsTranslator({key: 'settings.search.help.custom_engine.body.mobile'})} />
-        <HelpSection tokens={tokens} title={settingsTranslator({key: 'settings.search.help.key_security.title'})} body={settingsTranslator({key: 'settings.search.help.key_security.body'})} />
-        <Pressable onPress={() => setHelpVisible(false)} style={[styles.helpCloseRow, {borderTopColor: tokens.border}]}>
-          <Text style={{color: tokens.primary, fontWeight: '600'}}>{settingsTranslator({key: 'settings.search.help.dismiss'})}</Text>
-        </Pressable>
-      </ModalShell>
-    </View>
-  );
+    );
 }
 
 const styles = StyleSheet.create({
-  center: {alignItems: 'center', gap: 12, padding: 24},
-  error: {textAlign: 'center', lineHeight: 20},
-  helpPanel: {
-    borderRadius: 16,
-    width: '100%',
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 8,
-  },
-  helpTitle: {fontSize: 17, fontWeight: '600', marginBottom: 14},
-  helpCloseRow: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    marginTop: 2,
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  rowMeta: {flexDirection: 'row', alignItems: 'center', gap: 8},
-  createBar: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  confirmBody: {fontSize: 14, lineHeight: 21, marginBottom: 8},
-  confirmActions: {flexDirection: 'row', gap: 12},
-  confirmAction: {flex: 1},
+    center: {alignItems: 'center', gap: 12, padding: 24},
+    error: {textAlign: 'center', lineHeight: 20},
+    helpPanel: {
+        borderRadius: 16,
+        width: '100%',
+        paddingHorizontal: 20,
+        paddingTop: 20,
+        paddingBottom: 8,
+    },
+    helpTitle: {fontSize: 17, fontWeight: '600', marginBottom: 14},
+    helpCloseRow: {
+        borderTopWidth: StyleSheet.hairlineWidth,
+        marginTop: 2,
+        paddingVertical: 10,
+        alignItems: 'center',
+    },
+    rowMeta: {flexDirection: 'row', alignItems: 'center', gap: 8},
+    createBar: {
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderTopWidth: StyleSheet.hairlineWidth,
+    },
+    confirmBody: {fontSize: 14, lineHeight: 21, marginBottom: 8},
+    confirmActions: {flexDirection: 'row', gap: 12},
+    confirmAction: {flex: 1},
 });

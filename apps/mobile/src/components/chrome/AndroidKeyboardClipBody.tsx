@@ -15,24 +15,24 @@ import {useReanimatedKeyboardAnimation} from 'react-native-keyboard-controller';
 import Animated, {useAnimatedStyle} from 'react-native-reanimated';
 
 export function AndroidKeyboardClipBody({
-  children,
+    children,
 }: {
-  children: React.ReactNode;
+    children: React.ReactNode;
 }) {
-  const {height: keyboardHeightSV} = useReanimatedKeyboardAnimation();
-  // hook 返回的 height 是负数（键盘高 300 时值为 -300），取反得到正的键盘高度。
-  const clipStyle = useAnimatedStyle(() => {
-    return {marginBottom: -keyboardHeightSV.value};
-  }, [keyboardHeightSV]);
+    const {height: keyboardHeightSV} = useReanimatedKeyboardAnimation();
+    // hook 返回的 height 是负数（键盘高 300 时值为 -300），取反得到正的键盘高度。
+    const clipStyle = useAnimatedStyle(() => {
+        return {marginBottom: -keyboardHeightSV.value};
+    }, [keyboardHeightSV]);
 
-  return (
-    <Animated.View style={[styles.keyboardClip, clipStyle]}>
-      <View style={styles.keyboardLiftBody}>{children}</View>
-    </Animated.View>
-  );
+    return (
+        <Animated.View style={[styles.keyboardClip, clipStyle]}>
+            <View style={styles.keyboardLiftBody}>{children}</View>
+        </Animated.View>
+    );
 }
 
 const styles = StyleSheet.create({
-  keyboardClip: {flex: 1, minHeight: 0, overflow: 'hidden'},
-  keyboardLiftBody: {flex: 1, minHeight: 0},
+    keyboardClip: {flex: 1, minHeight: 0, overflow: 'hidden'},
+    keyboardLiftBody: {flex: 1, minHeight: 0},
 });

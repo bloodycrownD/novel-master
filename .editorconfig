@@ -1,0 +1,22 @@
+# 全仓风格基线（p29 裁决：缩进统一 4 空格；WebStorm 原生读取本文件，优先级高于 Code Style scheme）
+root = true
+
+[*]
+charset = utf-8
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# TS/TSX：4 空格缩进（模板字符串内容与字符串字面量不受影响——formatter 只动代码空白）
+[*.{ts,tsx}]
+indent_style = space
+indent_size = 4
+
+# 配置类保持 2 空格（package.json / i18n yaml / workflow 定义现状即 2）
+[*.{json,yml,yaml}]
+indent_style = space
+indent_size = 2
+
+[*.md]
+indent_style = space
+indent_size = 2
+trim_trailing_whitespace = false

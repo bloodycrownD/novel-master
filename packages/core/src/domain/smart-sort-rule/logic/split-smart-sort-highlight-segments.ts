@@ -17,8 +17,8 @@
 
 /** One highlight segment: a slice of the tested text + whether it matched. */
 interface SmartSortHighlightSegment {
-  readonly text: string;
-  readonly matched: boolean;
+    readonly text: string;
+    readonly matched: boolean;
 }
 
 /**
@@ -28,32 +28,32 @@ interface SmartSortHighlightSegment {
  * it structurally, so callers can pass match results through directly.
  */
 export interface SmartSortHighlightMatchInput {
-  readonly index: number;
-  readonly text: string;
+    readonly index: number;
+    readonly text: string;
 }
 
 export const SmartSortHighlight = {
-  /**
+    /**
    * 按 matches 的原生偏移把测试文本切成普通段/匹配段交替（GUI 高亮渲染用）。
    *
    * matches 需按出现顺序排列（matchAll 天然有序）；入参用 `{index, text}`
    * 最小结构，各端携带自有 match 形态也能直接复用本切分逻辑。
    */
-  splitSegments(text: string, matches: readonly SmartSortHighlightMatchInput[]): SmartSortHighlightSegment[] {
-    const segments: SmartSortHighlightSegment[] = [];
-    let cursor = 0;
-    for (const m of matches) {
-      if (m.index > cursor) {
-        segments.push({ text: text.slice(cursor, m.index), matched: false });
-      }
-      if (m.text.length > 0) {
-        segments.push({ text: m.text, matched: true });
-      }
-      cursor = Math.max(cursor, m.index + m.text.length);
-    }
-    if (cursor < text.length) {
-      segments.push({ text: text.slice(cursor), matched: false });
-    }
-    return segments;
-  },
+    splitSegments(text: string, matches: readonly SmartSortHighlightMatchInput[]): SmartSortHighlightSegment[] {
+        const segments: SmartSortHighlightSegment[] = [];
+        let cursor = 0;
+        for (const m of matches) {
+            if (m.index > cursor) {
+                segments.push({ text: text.slice(cursor, m.index), matched: false });
+            }
+            if (m.text.length > 0) {
+                segments.push({ text: m.text, matched: true });
+            }
+            cursor = Math.max(cursor, m.index + m.text.length);
+        }
+        if (cursor < text.length) {
+            segments.push({ text: text.slice(cursor), matched: false });
+        }
+        return segments;
+    },
 } as const;

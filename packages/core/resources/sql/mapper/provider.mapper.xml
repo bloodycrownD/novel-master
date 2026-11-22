@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  llm_provider 表的 SQL mapper（schema 见 resources/sql/schema/provider.sql）。
+
+  共用方：domain/provider/repositories/impl/sqlite-provider.repository（5 条 CRUD）
+  与 bootstrap/provider/seed-builtin-providers（1 条幂等 seed）——同一张表同一 namespace。
+  seed 语句 id 取 `seedBuiltin`（对象 BuiltinProviders 的方法名 seed 语义化），
+  与 repo 的 insert 区分：后者是无条件插入，前者按 builtin_key 幂等跳过。
+-->
+<mapper namespace="llm_provider">
+
+  <sql id="selectColumns">id, builtin_key, protocol, base_url, display_name, secret_ref, headers_json, body_params_json, is_builtin, created_at_ms, updated_at_ms</sql>
+
+  <select id="list">
+    SELECT <include ref="selectColumns"/> FROM llm_provider ORDER BY id
+  </select>
+
+  <select id="findById">
+    SELECT <include ref="selectColumns"/> FROM llm_provider WHERE id = #{id}
+  </select>
+
+  <insert id="insert">
+    INSERT INTO llm_provider (<include ref="selectColumns"/>)
+    VALUES ( #{id}, #{builtinKey}, #{protocol}, #{baseUrl}, #{displayName}, #{secretRef}, #{headersJson},
+    #{bodyParamsJson}, #{isBuiltin}, #{createdAtMs}, #{updatedAtMs} )
+  </insert>
+
+  <update id="update">
+    UPDATE llm_provider
+    SET protocol = #{protocol}, base_url = #{baseUrl}, display_name = #{displayName}, secret_ref = #{secretRef},
+    headers_json = #{headersJson}, body_params_json = #{bodyParamsJson}, updated_at_ms = #{updatedAtMs}
+    WHERE id = #{id}
+  </update>
+
+  <delete id="delete">
+    DELETE FROM llm_provider WHERE id = #{id}
+  </delete>
+
+  <!-- 幂等 seed：builtin_key 已存在则跳过，不覆盖用户编辑（secret_ref/headers_json/is_builtin 恒为初值）。 -->
+  <insert id="seedBuiltin">
+    INSERT INTO llm_provider ( id, builtin_key, protocol, base_url, display_name, secret_ref, headers_json, is_builtin,
+    created_at_ms, updated_at_ms ) SELECT #{id}, #{builtinKey}, #{protocol}, #{baseUrl}, #{displayName}, NULL, '{}', 1,
+    #{now}, #{now}
+    WHERE NOT EXISTS (SELECT 1
+    FROM llm_provider
+    WHERE builtin_key = #{builtinKey})
+  </insert>
+
+</mapper>

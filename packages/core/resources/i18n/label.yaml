@@ -1,0 +1,126 @@
+# label 段文案（i18n 按域拆分：文件名 = 顶层段；localeRule 书写规范见 docs/Iterations/i18n-normalization/spec.md §2.6）
+
+# —— zh-CN ——
+zh-CN:
+  # —— agent：存储配置失效面板与列表（invalid_title 与 config_invalid 同文不同语境，分立 key）；custom_attach 是 customAttach 块标签 ——
+  agent:
+    invalid_title: 配置已失效
+    reason_outdated_version: 配置版本过旧，当前应用无法读取
+    reason_removed_feature: 配置含已移除的字段或动作
+    reason_broken_wire: 配置格式损坏，无法解析
+    action_restore_and_save: 恢复默认并保存
+    action_clear_and_save: 清空旧配置并保存默认
+    action_delete: 删除该智能体
+    action_overwrite_default: 用默认模板覆盖并保存
+    action_back: 返回
+    needs_repair: 需修复
+    max_steps: 最大步数 {n}
+    config_invalid: 配置已失效
+    custom_attach: 附加信息
+  # —— attachment：状态 chip 动作二字（write 与 mkdir 同为「创建」，动作不同分立 key）+ chip 模板 ——
+  attachment:
+    action:
+      delete: 删除
+      write: 创建
+      edit: 编辑
+      mkdir: 创建
+      rename: 改名
+      move: 移动
+      workplace_change: 规则
+      annotate: 批注
+    chip: "{action}:{path}"
+    attach_ref: "{path}"
+  # —— chat ——
+  chat:
+    link_not_found: "{path} 不存在"
+  # —— prompt_preview：summaryText / metaText 与预览截断（desktop 由 main 翻译后写 string DTO）——
+  prompt_preview:
+    tool_calls_chars: 工具调用 {calls} 次 · {chars} 字
+    segment_fallback: "{count} 段 · {counts}"
+    empty_text: （无文本）
+    segments: "{count} 段"
+    tool_calls: 工具调用 {count} 次
+    chars: "{count} 字"
+    failed: "{count} 失败"
+    lost: "{count} 丢失"
+    attachments: 附件 {count}
+    truncated_text: "{head}…（截断，全文 {count} 字）"
+    more_items: "…另有 {count} 项"
+    more_fields: "…另有 {count} 个字段"
+  # —— provider：模型设置选项表（THINKING_LEVEL / TOKEN_COUNTER_MODE）——
+  provider:
+    thinking_level:
+      off: 关
+      low: 低
+      medium: 中
+      high: 高
+    token_counter:
+      auto: 自动（按模型名匹配）
+      tiktoken: Tiktoken（OpenAI 等）
+      claude: Claude 分词器
+      gemma: Gemma 分词器
+      llama3: Llama 3 分词器
+      mistral: Mistral 分词器
+  # —— smart_sort：排序元组哨兵显示 ——
+  smart_sort:
+    pinned_min: "(固定最小,)"
+    pinned_max: "(固定最大,)"
+  # —— stream_metrics：指标条（line 与 line_with_rate 分立，速率段不用空串拼）——
+  stream_metrics:
+    running: 生成中
+    last: 上次生成
+    line: 输出 {tokens} tok
+    line_with_rate: 输出 {tokens} tok · {rate} tok/s
+  # —— token_source ——
+  token_source:
+    api: 远程
+  # —— workplace：UI 四态标签（filetree 宏标签进提示词，保持 string 不迁）——
+  workplace:
+    rule_on: 规则·开
+    rule_off: 规则·关
+    inclusion:
+      auto: 跟随
+      show: 展示
+      hide: 隐藏
+    display:
+      hidden: 不展示
+      full: 全内容
+      header: 文件头
+      filename: 文件名
+  # —— transcript：webview 转录渲染层文案（宿主经 init.labels 下发）——
+  transcript:
+    generating: 生成中
+    thinking_header: 思考过程
+    empty: 暂无消息
+    load_older: 加载更早消息
+# —— ui：展示文案（p27 spec §6.2 ui.<screen>.<element>；波 3-1 预立全量骨架，
+# 波 3-2 按分片接线。第 0 片 transcript 原文保留；CSS ::before/::after content 4 处
+# 不走 i18n，豁免登记见 docs/Iterations/p27-backlog/r6-exemptions.md）——
+
+# —— en-US ——
+en-US:
+  agent:
+    max_steps: Max steps {n}
+  workplace:
+    rule_on: Rules · On
+    rule_off: Rules · Off
+  token_source:
+    api: Remote
+  stream_metrics:
+    running: Generating
+    last: Last generation
+    line: Output {tokens} tok
+    line_with_rate: Output {tokens} tok · {rate} tok/s
+  attachment:
+    action:
+      delete: Delete
+    chip: "{action}:{path}"
+    attach_ref: "{path}"
+  transcript:
+    generating: Generating
+    thinking_header: Thinking
+    empty: No messages yet
+    load_older: Load earlier messages
+# —— ui：第 0 片骨架（键与 zh-CN 全量镜像；en 值为直译占位，G6 复核定稿）——
+# —— ui：display texts (p27 spec §6.2; wave 3-1 skeleton, zh-CN.yaml is the source of truth.
+# G6 复核定稿：ui 域 en 全镜像，占位符与 zh 对齐；终稿前由 G6 逐键复核。) ——

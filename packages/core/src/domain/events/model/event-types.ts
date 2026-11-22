@@ -20,45 +20,45 @@ export const EVENT_AGENT_STEP_COMMITTED = "agent.step.committed" as const;
 export const EVENT_SUBAGENT_CHILD_SESSION_CREATED = "subagent.child-session.created" as const;
 
 export interface AgentRunStartedPayload {
-  readonly sessionId: string;
-  readonly projectId: string;
-  readonly runId: string;
+    readonly sessionId: string;
+    readonly projectId: string;
+    readonly runId: string;
 }
 
 export interface AgentRunFinishedPayload {
-  readonly sessionId: string;
-  readonly projectId: string;
-  readonly runId: string;
-  readonly stopReason: string;
-  /** 本次 run 内是否曾突变 session VFS（任意 tool 轮） */
-  readonly vfsMutated?: boolean;
+    readonly sessionId: string;
+    readonly projectId: string;
+    readonly runId: string;
+    readonly stopReason: string;
+    /** 本次 run 内是否曾突变 session VFS（任意 tool 轮） */
+    readonly vfsMutated?: boolean;
 }
 
 export interface AgentRunFailedPayload {
-  readonly sessionId: string;
-  readonly projectId: string;
-  readonly runId: string;
-  readonly error: string;
+    readonly sessionId: string;
+    readonly projectId: string;
+    readonly runId: string;
+    readonly error: string;
 }
 
 export interface AgentStreamTextDeltaPayload {
-  readonly sessionId: string;
-  readonly runId: string;
-  readonly text: string;
+    readonly sessionId: string;
+    readonly runId: string;
+    readonly text: string;
 }
 
 export interface AgentStreamThinkingDeltaPayload {
-  readonly sessionId: string;
-  readonly runId: string;
-  readonly text: string;
+    readonly sessionId: string;
+    readonly runId: string;
+    readonly text: string;
 }
 
 export interface AgentStreamToolUsePayload {
-  readonly sessionId: string;
-  readonly runId: string;
-  readonly id: string;
-  readonly name: string;
-  readonly input: Record<string, unknown>;
+    readonly sessionId: string;
+    readonly runId: string;
+    readonly id: string;
+    readonly name: string;
+    readonly input: Record<string, unknown>;
 }
 
 /**
@@ -70,29 +70,29 @@ export interface AgentStreamToolUsePayload {
  * heuristic 兜底是消费端本地估算，不经事件总线。
  */
 export interface AgentStreamUsagePayload {
-  readonly sessionId: string;
-  readonly runId: string;
-  readonly completionTokens: number;
-  readonly source: "usage";
+    readonly sessionId: string;
+    readonly runId: string;
+    readonly completionTokens: number;
+    readonly source: "usage";
 }
 
 export type AgentStepCommittedPhase = "assistant" | "tool_results";
 
 export interface AgentStepCommittedPayload {
-  readonly sessionId: string;
-  readonly projectId: string;
-  readonly runId: string;
-  readonly phase: AgentStepCommittedPhase;
-  /** 仅 phase === 'assistant' 时存在：本条落库 assistant 消息 id（宿主 DB 接管直接配对用）。 */
-  readonly messageId?: string;
-  /** 仅 phase === 'tool_results' 时存在；本轮是否突变 session VFS */
-  readonly vfsMutated?: boolean;
+    readonly sessionId: string;
+    readonly projectId: string;
+    readonly runId: string;
+    readonly phase: AgentStepCommittedPhase;
+    /** 仅 phase === 'assistant' 时存在：本条落库 assistant 消息 id（宿主 DB 接管直接配对用）。 */
+    readonly messageId?: string;
+    /** 仅 phase === 'tool_results' 时存在；本轮是否突变 session VFS */
+    readonly vfsMutated?: boolean;
 }
 
 export interface SubagentChildSessionCreatedPayload {
-  readonly parentSessionId: string;
-  readonly projectId: string;
-  readonly childSessionId: string;
-  /** 子会话标题（来自 task 工具入参 description 或 prompt 前 40 字）；供 UI 按 title 匹配 pending tool_use。 */
-  readonly title: string;
+    readonly parentSessionId: string;
+    readonly projectId: string;
+    readonly childSessionId: string;
+    /** 子会话标题（来自 task 工具入参 description 或 prompt 前 40 字）；供 UI 按 title 匹配 pending tool_use。 */
+    readonly title: string;
 }

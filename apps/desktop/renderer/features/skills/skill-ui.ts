@@ -4,16 +4,14 @@
  * 会话技能面板（SessionDetailDrawer 内）与设置·技能管理页共用。
  */
 import type { SkillDomainDto, SkillRefDto } from "@shared/ipc-types";
+import { coreT } from "@shared/logic/core-i18n";
 
 /** 域徽标文案：项目副本覆盖同名全局技能时标「项目 · 覆盖全局」。 */
-export function skillDomainLabel(
-  domain: SkillDomainDto,
-  overridden: boolean,
-): string {
-  if (domain === "project") {
-    return overridden ? "项目 · 覆盖全局" : "项目";
-  }
-  return "全局";
+export function skillDomainLabel( domain: SkillDomainDto, overridden: boolean ): string {
+    if (domain === "project") {
+        return overridden ? coreT({key: "ui.skills.domain_tag_overridden"}) : coreT({key: "ui.skills.domain_project"});
+    }
+    return coreT({key: "ui.skills.domain_tag_global"});
 }
 
 /** 新建技能的 SKILL.md 模板：front matter（name/description）+ 辅助文件引导。 */
@@ -25,16 +23,12 @@ export { NewSkillDoc } from "@shared/logic/skills";
 // 经 @shared/logic/skills 再导出，本文件不再持有私有实现。
 
 /** 技能定位（跳详情用）：project 域带 projectId，global 域缺省。 */
-export function toSkillRef(
-  domain: SkillDomainDto,
-  name: string,
-  projectId?: string,
-): SkillRefDto {
-  return {
-    domain,
-    ...(domain === "project" && projectId != null ? { projectId } : {}),
-    name,
-  };
+export function toSkillRef( domain: SkillDomainDto, name: string, projectId?: string ): SkillRefDto {
+    return {
+        domain,
+        ...(domain === "project" && projectId != null ? { projectId } : {}),
+        name,
+    };
 }
 
 /**
@@ -45,13 +39,9 @@ export function toSkillRef(
 export const OPEN_SETTINGS_VIEW_EVENT = "open-settings-view";
 
 export type OpenSettingsViewDetail =
-  | { readonly view: "skillsManage" }
-  | { readonly view: "skillDetail"; readonly skillRef: SkillRefDto };
+    | { readonly view: "skillsManage" }
+    | { readonly view: "skillDetail"; readonly skillRef: SkillRefDto };
 
 export function dispatchOpenSettingsView(detail: OpenSettingsViewDetail): void {
-  window.dispatchEvent(
-    new CustomEvent<OpenSettingsViewDetail>(OPEN_SETTINGS_VIEW_EVENT, {
-      detail,
-    }),
-  );
+    window.dispatchEvent( new CustomEvent<OpenSettingsViewDetail>(OPEN_SETTINGS_VIEW_EVENT, { detail }) );
 }

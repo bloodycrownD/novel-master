@@ -12,7 +12,7 @@ import type { PersistentState } from "./persistent-state.port.js";
 
 /** PersistentState 工厂集合。 */
 export const PersistentStateFactory = {
-  /**
+    /**
    * Creates workspace pointer persistence on `nm-workspace-state`.
    *
    * 会话 KKV（切模型 / 切 Agent 后失效该会话的 API prompt 占用用）由工厂**内部自建**，
@@ -20,9 +20,9 @@ export const PersistentStateFactory = {
    *
    * @param conn - Open connection after {@link NovelMasterBootstrap.bootstrap}
    */
-  create(conn: TdbcConnection): PersistentState {
-    const kkv = createKkvService(conn);
-    const sessionKkv = SessionKkvServiceFactory.create(conn);
-    return new DefaultPersistentState(kkv, sessionKkv);
-  },
+    create(conn: TdbcConnection): PersistentState {
+        const kkv = createKkvService(conn);
+        const sessionKkv = SessionKkvServiceFactory.create(conn);
+        return new DefaultPersistentState(kkv, sessionKkv);
+    },
 } as const;

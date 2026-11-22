@@ -11,8 +11,8 @@ const GLOBAL_TEMPLATE_PREFIX = /\/template(?=\/|$)/g;
 const GLOBAL_META_PREFIX = /\/meta(?=\/|$)/g;
 
 export const KnownPhysicalPrefixes = {
-  /** 移除 message 中的 session/project/global 物理前缀片段（含 meta 两域）。 */
-  strip(message: string): string {
-    return message.replace(SESSION_PHYSICAL_PREFIX, "").replace(PROJECT_TEMPLATE_PREFIX, "").replace(PROJECT_META_PREFIX, "").replace(GLOBAL_TEMPLATE_PREFIX, "").replace(GLOBAL_META_PREFIX, "");
-  },
+    /** 移除 message 中的 session/project/global 物理前缀片段（含 meta 两域）。 */
+    strip(message: string): string {
+        return message.replace(SESSION_PHYSICAL_PREFIX, "").replace(PROJECT_TEMPLATE_PREFIX, "").replace(PROJECT_META_PREFIX, "").replace(GLOBAL_TEMPLATE_PREFIX, "").replace(GLOBAL_META_PREFIX, "");
+    },
 } as const;

@@ -4,302 +4,324 @@
  * @module service/vfs/impl/character-card-import.service
  */
 
-import { LiveHeadRevisionSeeder } from "@/domain/vfs/logic/seed-live-head-revisions.js";
-import { VfsTreeCopy } from "@/domain/vfs/logic/vfs-tree-copy.js";
-import { DeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
-import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import type { MdTree } from "@/domain/character-card/model/character-card.js";
-import { CharacterCardToMdTree } from "@/domain/character-card/logic/character-card-to-md-tree.js";
+import {LiveHeadRevisionSeeder} from "@/domain/vfs/logic/seed-live-head-revisions.js";
+import {VfsTreeCopy} from "@/domain/vfs/logic/vfs-tree-copy.js";
+import {DeferredBlobGc} from "@/domain/vfs/logic/deferred-blob-gc.js";
+import type {VfsEntryRepository} from "@/domain/vfs/repositories/vfs-entry.port.js";
+import {SqliteVfsEntryRepository} from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {SqliteVfsRevisionRepository} from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
+import type {MdTree} from "@/domain/character-card/model/character-card.js";
+import {CharacterCardToMdTree} from "@/domain/character-card/logic/character-card-to-md-tree.js";
 import {
-  CHARACTER_CARD_MAX_FILE_COUNT,
-  CHARACTER_CARD_MAX_INPUT_BYTES,
-  CHARACTER_CARD_MAX_SINGLE_FILE_BYTES,
-  CHARACTER_CARD_MAX_TOTAL_CONTENT_BYTES,
+    CHARACTER_CARD_MAX_FILE_COUNT,
+    CHARACTER_CARD_MAX_INPUT_BYTES,
+    CHARACTER_CARD_MAX_SINGLE_FILE_BYTES,
+    CHARACTER_CARD_MAX_TOTAL_CONTENT_BYTES,
 } from "@/domain/character-card/logic/character-card-limits.js";
-import type { CharacterCardImportOptions, CharacterCardImportService } from "@/domain/vfs/ports/character-card-import.port.js";
-import { AppError, AppErrorOps } from "@/errors/app-error.js";
-import { Result } from "@/errors/either.js";
-import { Encoding } from "@/common/encoding.js";
-import { Concurrency } from "@/common/concurrency.js";
-import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
-import { TdbcTransaction } from "@/infra/tdbc/logic/transaction-helper.js";
-import { ParentDirs } from "@/domain/vfs/logic/ensure-parent-dirs.js";
-import { LogicalPath, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
-import { VFS_ZIP_MAX_ENTRY_PATH_LEN } from "@/domain/vfs/logic/vfs-zip-validate.js";
-import { VfsZipPath } from "@/domain/vfs/logic/vfs-zip-path.js";
-import { BackfillBaselineCheckpoints } from "@/domain/message-checkpoint/logic/backfill-baseline-checkpoints.js";
-import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
-import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
-import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
-import { SessionPromptCaches } from "@/service/session-kkv/logic/clear-session-prompt-caches.js";
-import { VfsImportChunk, ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK } from "@/domain/vfs/logic/vfs-import-chunk.js";
-import { ImportDirRules } from "@/service/vfs/logic/ensure-import-dir-rules.js";
-import type { WorkplaceRepository } from "@/domain/workplace/repositories/workplace.port.js";
-import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
-import { ImportFailure } from "./import-failure.js";
-import { LogFactory } from "@/infra/log/logger.js";
+import type {
+    CharacterCardImportOptions,
+    CharacterCardImportService
+} from "@/domain/vfs/ports/character-card-import.port.js";
+import {AppError, AppErrorOps} from "@/errors/app-error.js";
+import {Result} from "@/errors/either.js";
+import {Encoding} from "@/common/encoding.js";
+import {Concurrency} from "@/common/concurrency.js";
+import type {TdbcConnection} from "@/infra/tdbc/ports/connection.port.js";
+import {TdbcTransaction} from "@/infra/tdbc/logic/transaction-helper.js";
+import {ParentDirs} from "@/domain/vfs/logic/ensure-parent-dirs.js";
+import {LogicalPath, type VfsScope} from "@/domain/vfs/logic/vfs-path-mapper.js";
+import {VFS_ZIP_MAX_ENTRY_PATH_LEN} from "@/domain/vfs/logic/vfs-zip-validate.js";
+import {VfsZipPath} from "@/domain/vfs/logic/vfs-zip-path.js";
+import {BackfillBaselineCheckpoints} from "@/domain/message-checkpoint/logic/backfill-baseline-checkpoints.js";
+import {SqliteMessageRepository} from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
+import {
+    SqliteMessageCheckpointRepository
+} from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import type {SessionKkvService} from "@/service/session-kkv/session-kkv.port.js";
+import {SessionPromptCaches} from "@/service/session-kkv/logic/clear-session-prompt-caches.js";
+import {VfsImportChunk, ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK} from "@/domain/vfs/logic/vfs-import-chunk.js";
+import {ImportDirRules} from "@/service/vfs/logic/ensure-import-dir-rules.js";
+import type {WorkplaceRepository} from "@/domain/workplace/repositories/workplace.port.js";
+import {SqliteWorkplaceRepository} from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
+import {ImportFailure} from "./import-failure.js";
+import {LogFactory} from "@/infra/log/logger.js";
 
 const log = LogFactory.create("vfs.character-card-import");
 const WINDOWS_DRIVE_PATH = /^[a-zA-Z]:[\\/]/;
 
 /** @internal 导入事务回滚单测钩子 */
 export type CharacterCardImportTestHook = {
-  readonly throwOnInsertLogical?: string;
-  /** @internal 在 Phase B deleteVfsPrefix 之前调用 */
-  readonly onBeforeDeletePrefix?: () => void;
-  /**
-   * @internal 替换事务内 workplace repo（T-I5 故障注入：让补规则行语句真失败，
-   * 验证语句级失败不毒化导入事务）。缺省时用 SqliteWorkplaceRepository(tx)。
-   */
-  readonly createWorkplaceRepo?: (conn: TdbcConnection) => WorkplaceRepository;
+    readonly throwOnInsertLogical?: string;
+    /** @internal 在 Phase B deleteVfsPrefix 之前调用 */
+    readonly onBeforeDeletePrefix?: () => void;
+    /**
+     * @internal 替换事务内 workplace repo（T-I5 故障注入：让补规则行语句真失败，
+     * 验证语句级失败不毒化导入事务）。缺省时用 SqliteWorkplaceRepository(tx)。
+     */
+    readonly createWorkplaceRepo?: (conn: TdbcConnection) => WorkplaceRepository;
 };
 
 type DefaultCharacterCardImportServiceOptions = {
-  /** @internal import rollback tests only */
-  readonly testHook?: CharacterCardImportTestHook;
-  /**
-   * session scope 导入完成后，给没有 checkpoint 的 message 补 baseline 快照。
-   * 默认开启；仅对 session scope 生效。
-   */
-  readonly backfillBaseline?: boolean;
-  /**
-   * session scope 导入事务提交后清空提示词缓存三件套用。
-   * 缺省**不清空**——由工厂负责注入；测试可直接构造 Default 验证旧行为或做故障注入。
-   */
-  readonly sessionKkv?: SessionKkvService;
+    /** @internal import rollback tests only */
+    readonly testHook?: CharacterCardImportTestHook;
+    /**
+     * session scope 导入完成后，给没有 checkpoint 的 message 补 baseline 快照。
+     * 默认开启；仅对 session scope 生效。
+     */
+    readonly backfillBaseline?: boolean;
+    /**
+     * session scope 导入事务提交后清空提示词缓存三件套用。
+     * 缺省**不清空**——由工厂负责注入；测试可直接构造 Default 验证旧行为或做故障注入。
+     */
+    readonly sessionKkv?: SessionKkvService;
 };
 
 export class DefaultCharacterCardImportService implements CharacterCardImportService {
-  private readonly testHook?: CharacterCardImportTestHook;
-  private readonly backfillBaseline: boolean;
-  private readonly sessionKkv?: SessionKkvService;
+    private readonly testHook?: CharacterCardImportTestHook;
+    private readonly backfillBaseline: boolean;
+    private readonly sessionKkv?: SessionKkvService;
 
-  constructor(private readonly conn: TdbcConnection, private readonly repo: VfsEntryRepository, options: DefaultCharacterCardImportServiceOptions = {}) {
-    this.testHook = options.testHook;
-    this.backfillBaseline = options.backfillBaseline ?? true;
-    this.sessionKkv = options.sessionKkv;
-  }
-
-  async import(scope: VfsScope, tree: MdTree, options: CharacterCardImportOptions): Promise<Result<void, AppError>> {
-    if (options.confirmed !== true) {
-      return Result.err(new AppError("VFS_CHARACTER_CARD_NOT_CONFIRMED", { detail: "import requires explicit confirmation (CLI --yes or confirm dialog)" }));
+    constructor(private readonly conn: TdbcConnection, private readonly repo: VfsEntryRepository, options: DefaultCharacterCardImportServiceOptions = {}) {
+        this.testHook = options.testHook;
+        this.backfillBaseline = options.backfillBaseline ?? true;
+        this.sessionKkv = options.sessionKkv;
     }
 
-    const directoryPathResult = VfsZipPath.resolveDirectoryPath(options.directoryPath);
-    if (!directoryPathResult.ok) return Result.err(directoryPathResult.error);
-    const directoryPath = directoryPathResult.value;
-    const directoryRow = await this.repo.findByPath(LogicalPath.scopeKey(scope), directoryPath);
-    // 业务 AppError 原形透传（不影响既有语义）。
-    if (!directoryRow.ok) return Result.err(directoryRow.error);
-    if (directoryRow.value != null && directoryRow.value.entryKind === "file") {
-      return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", { detail: `character card target path is a file, not a directory: ${directoryPath}` }));
-    }
-
-    // Phase A + 体积闸门：路径校验、逻辑路径拼装、条目/体积检查一次扫完；
-    // 任何 delete 之前失败，保证零写库。
-    const files = new Map<string, string>();
-    let totalBytes = 0;
-    for (const [relativePath, content] of tree) {
-      if (relativePath.length === 0) {
-        return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", { detail: "empty relative path in md tree" }));
-      }
-      if (relativePath.startsWith("/")) {
-        return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", { detail: `leading slash in md tree path: ${relativePath}` }));
-      }
-      if (relativePath.includes("\\")) {
-        return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", { detail: `backslash in md tree path: ${relativePath}` }));
-      }
-      if (relativePath.length > VFS_ZIP_MAX_ENTRY_PATH_LEN) {
-        return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", { detail: `md tree path exceeds ${VFS_ZIP_MAX_ENTRY_PATH_LEN} characters: ${relativePath}` }));
-      }
-      if (WINDOWS_DRIVE_PATH.test(relativePath)) {
-        return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", { detail: `absolute Windows path in md tree: ${relativePath}` }));
-      }
-      for (const segment of relativePath.split("/")) {
-        if (segment.length === 0) {
-          return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", { detail: `empty segment in md tree path: ${relativePath}` }));
+    async import(scope: VfsScope, tree: MdTree, options: CharacterCardImportOptions): Promise<Result<void, AppError>> {
+        if (!options.confirmed) {
+            return Result.err(new AppError("VFS_CHARACTER_CARD_NOT_CONFIRMED", {detail: "import requires explicit confirmation (CLI --yes or confirm dialog)"}));
         }
-        if (segment === "..") {
-          return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", { detail: `parent segment in md tree path: ${relativePath}` }));
+
+        const directoryPathResult = VfsZipPath.resolveDirectoryPath(options.directoryPath);
+        if (!directoryPathResult.ok) return Result.err(directoryPathResult.error);
+        const directoryPath = directoryPathResult.value;
+        const directoryRow = await this.repo.findByPath(LogicalPath.scopeKey(scope), directoryPath);
+        // 业务 AppError 原形透传（不影响既有语义）。
+        if (!directoryRow.ok) return Result.err(directoryRow.error);
+        if (directoryRow.value != null && directoryRow.value.entryKind === "file") {
+            return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `character card target path is a file, not a directory: ${directoryPath}`}));
         }
-      }
 
-      const logicalResult = VfsZipPath.logicalFromEntryRelativeToDirectory(relativePath, directoryPath);
-      if (!logicalResult.ok) {
-        return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", { detail: logicalResult.error.message }));
-      }
-      const logical = logicalResult.value;
-      const allowed = LogicalPath.validate(scope, logical);
-      if (!allowed.ok) {
-        return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", { detail: `md tree "${relativePath}" → logical "${logical}": ${allowed.error.message}` }));
-      }
-
-      const sizeBytes = Encoding.utf8ByteLength(content);
-      if (sizeBytes > CHARACTER_CARD_MAX_SINGLE_FILE_BYTES) {
-        const singleFile = {
-          descriptor: { key: "error.vfs.character_card_too_large.single_file" as const, params: { logical, size_bytes: sizeBytes, limit_bytes: CHARACTER_CARD_MAX_SINGLE_FILE_BYTES } },
-        };
-        return Result.err(new AppError("VFS_CHARACTER_CARD_TOO_LARGE", singleFile));
-      }
-      totalBytes += sizeBytes;
-      // 超限即失败，避免对后续条目做无谓的编码累计
-      if (totalBytes > CHARACTER_CARD_MAX_TOTAL_CONTENT_BYTES) {
-        const totalContent = {
-          descriptor: { key: "error.vfs.character_card_too_large.total_content" as const, params: { total_bytes: totalBytes, limit_bytes: CHARACTER_CARD_MAX_TOTAL_CONTENT_BYTES } },
-        };
-        return Result.err(new AppError("VFS_CHARACTER_CARD_TOO_LARGE", totalContent));
-      }
-      files.set(logical, content);
-    }
-    if (files.size > CHARACTER_CARD_MAX_FILE_COUNT) {
-      const fileCount = { descriptor: { key: "error.vfs.character_card_too_large.file_count" as const, params: { count: files.size, limit: CHARACTER_CARD_MAX_FILE_COUNT } } };
-      return Result.err(new AppError("VFS_CHARACTER_CARD_TOO_LARGE", fileCount));
-    }
-    const sk = LogicalPath.scopeKey(scope);
-    const fileEntries = [...files];
-
-    // 段 B0（独立短事务）：删旧子树 + 目标目录行。
-    try {
-      await this.conn.transaction(async (tx) => {
-        const repoTx = new SqliteVfsEntryRepository(tx);
-        const revisionTx = new SqliteVfsRevisionRepository(tx);
-        this.testHook?.onBeforeDeletePrefix?.();
-        await VfsTreeCopy.releaseAndDeletePrefix(repoTx, revisionTx, sk, directoryPath);
-        if (directoryPath !== "/") {
-          // 解包走 unwrapOrRollback（事务回调，总纲 §五例外 2）：失败靠抛错回滚。
-          TdbcTransaction.unwrapOrRollback(await ParentDirs.ensure(repoTx, sk, `${directoryPath}/__vfs_card_placeholder`));
-          const existing = TdbcTransaction.unwrapOrRollback(await repoTx.findByPath(sk, directoryPath));
-          if (existing == null) {
-            TdbcTransaction.unwrapOrRollback(await repoTx.insertDirectory(sk, directoryPath));
-          } else if (existing.entryKind !== "directory") {
-            throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", { detail: `character card target path is a file, not a directory: ${directoryPath}` });
-          }
-        }
-      });
-    } catch (error) {
-      // 测试钩子裸 Error（非域注入）维持直抛——测试按 instanceof Error 断言回滚；
-      // AppError 原形进 Result.err（业务失败走返回值通道），其余包成 VFS_IMPORT_FAILED。
-      if (error instanceof Error && error.message === "test import failure") {
-        throw error;
-      }
-      if (AppErrorOps.is(error)) return Result.err(error);
-      return Result.err(ImportFailure.create(error));
-    }
-
-    // 段 B0 提交后收被替换掉的旧内容：sweep 只把旧 blob 的 ref_count 递减到 0
-    // 就停手（CS-06/CS-07 的守卫触发器要求「无 entry 引用」才删行），vfs_entry
-    // 上零触发器补不了这一步 ⇒ 残留只能靠全库 gc。口径对齐 ZIP 导入链与另外
-    // 5 处删除链的既有约定：事务提交后调一次。
-    await DeferredBlobGc.run(this.conn);
-
-    // 段 B1..Bk：每片 ≤200 个文件的独立短事务；补偿挂在**片失败的内层**
-    // （测试钩子直抛分支位于 IMPORT_FAILED 包装之前，只挂外层 catch 会被绕过）。
-    let committedShards = 0;
-    let shardIndex = 0;
-    for (const shard of VfsImportChunk.chunkArray(fileEntries, ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK)) {
-      try {
-        await this.conn.transaction(async (tx) => {
-          const repoTx = new SqliteVfsEntryRepository(tx);
-          const revisionTx = new SqliteVfsRevisionRepository(tx);
-          for (const [logical, content] of shard) {
-            if (this.testHook?.throwOnInsertLogical === logical) {
-              // 测试钩子：故意抛裸 Error 模拟事务内失败，测试按 instanceof Error 断言回滚；这是注入点而非业务错误，不纳入 AppError 口径。
-              // nm-throw: keep — 测试故障注入点：调用方按 "test import failure" 原文案直供抛回（用例断言该 message），非业务错误。
-              throw new Error("test import failure");
+        // Phase A + 体积闸门：路径校验、逻辑路径拼装、条目/体积检查一次扫完；
+        // 任何 delete 之前失败，保证零写库。
+        const files = new Map<string, string>();
+        let totalBytes = 0;
+        for (const [relativePath, content] of tree) {
+            if (relativePath.length === 0) {
+                return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: "empty relative path in md tree"}));
             }
-            // 解包走 unwrapOrRollback（事务回调，总纲 §五例外 2）：失败靠抛错回滚。
-            TdbcTransaction.unwrapOrRollback(await ParentDirs.ensure(repoTx, sk, logical));
-            await LiveHeadRevisionSeeder.insertFileSeeding(repoTx, revisionTx, sk, logical, content);
-          }
-        });
-        committedShards += 1;
-        shardIndex += 1;
-      } catch (error) {
-        // 补偿：把半棵新树清掉，让域回到「目标前缀为空」的可重试态。口径与 ZIP
-        // 侧统一用 `releaseAndDeleteVfsPrefix`（减 live ref + 删 entry + GC 无引用
-        // revision）；裸 `deleteVfsPrefix` 会留下永不回收的孤儿 revision 与 blob。
+            if (relativePath.startsWith("/")) {
+                return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `leading slash in md tree path: ${relativePath}`}));
+            }
+            if (relativePath.includes("\\")) {
+                return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `backslash in md tree path: ${relativePath}`}));
+            }
+            if (relativePath.length > VFS_ZIP_MAX_ENTRY_PATH_LEN) {
+                return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `md tree path exceeds ${VFS_ZIP_MAX_ENTRY_PATH_LEN} characters: ${relativePath}`}));
+            }
+            if (WINDOWS_DRIVE_PATH.test(relativePath)) {
+                return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `absolute Windows path in md tree: ${relativePath}`}));
+            }
+            for (const segment of relativePath.split("/")) {
+                if (segment.length === 0) {
+                    return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `empty segment in md tree path: ${relativePath}`}));
+                }
+                if (segment === "..") {
+                    return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `parent segment in md tree path: ${relativePath}`}));
+                }
+            }
+
+            const logicalResult = VfsZipPath.logicalFromEntryRelativeToDirectory(relativePath, directoryPath);
+            if (!logicalResult.ok) {
+                return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: logicalResult.error.message}));
+            }
+            const logical = logicalResult.value;
+            const allowed = LogicalPath.validate(scope, logical);
+            if (!allowed.ok) {
+                return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `md tree "${relativePath}" → logical "${logical}": ${allowed.error.message}`}));
+            }
+
+            const sizeBytes = Encoding.utf8ByteLength(content);
+            if (sizeBytes > CHARACTER_CARD_MAX_SINGLE_FILE_BYTES) {
+                const singleFile = {
+                    descriptor: {
+                        key: "error.vfs.character_card_too_large.single_file" as const,
+                        params: {logical, size_bytes: sizeBytes, limit_bytes: CHARACTER_CARD_MAX_SINGLE_FILE_BYTES}
+                    },
+                };
+                return Result.err(new AppError("VFS_CHARACTER_CARD_TOO_LARGE", singleFile));
+            }
+            totalBytes += sizeBytes;
+            // 超限即失败，避免对后续条目做无谓的编码累计
+            if (totalBytes > CHARACTER_CARD_MAX_TOTAL_CONTENT_BYTES) {
+                const totalContent = {
+                    descriptor: {
+                        key: "error.vfs.character_card_too_large.total_content" as const,
+                        params: {total_bytes: totalBytes, limit_bytes: CHARACTER_CARD_MAX_TOTAL_CONTENT_BYTES}
+                    },
+                };
+                return Result.err(new AppError("VFS_CHARACTER_CARD_TOO_LARGE", totalContent));
+            }
+            files.set(logical, content);
+        }
+        if (files.size > CHARACTER_CARD_MAX_FILE_COUNT) {
+            const fileCount = {
+                descriptor: {
+                    key: "error.vfs.character_card_too_large.file_count" as const,
+                    params: {count: files.size, limit: CHARACTER_CARD_MAX_FILE_COUNT}
+                }
+            };
+            return Result.err(new AppError("VFS_CHARACTER_CARD_TOO_LARGE", fileCount));
+        }
+        const sk = LogicalPath.scopeKey(scope);
+        const fileEntries = [...files];
+
+        // 段 B0（独立短事务）：删旧子树 + 目标目录行。
         try {
-          await this.conn.transaction(async (tx) => {
-            await VfsTreeCopy.releaseAndDeletePrefix(new SqliteVfsEntryRepository(tx), new SqliteVfsRevisionRepository(tx), sk, directoryPath);
-          });
-        } catch (compensateError) {
-          log.warn("import compensation failed", { error: compensateError });
+            await this.conn.transaction(async (tx) => {
+                const repoTx = new SqliteVfsEntryRepository(tx);
+                const revisionTx = new SqliteVfsRevisionRepository(tx);
+                this.testHook?.onBeforeDeletePrefix?.();
+                await VfsTreeCopy.releaseAndDeletePrefix(repoTx, revisionTx, sk, directoryPath);
+                if (directoryPath !== "/") {
+                    // 解包走 unwrapOrRollback（事务回调，总纲 §五例外 2）：失败靠抛错回滚。
+                    TdbcTransaction.unwrapOrRollback(await ParentDirs.ensure(repoTx, sk, `${directoryPath}/__vfs_card_placeholder`));
+                    const existing = TdbcTransaction.unwrapOrRollback(await repoTx.findByPath(sk, directoryPath));
+                    if (existing == null) {
+                        TdbcTransaction.unwrapOrRollback(await repoTx.insertDirectory(sk, directoryPath));
+                    } else if (existing.entryKind !== "directory") {
+                        // nm-throw: keep — 平台强制 P2：事务回调内抛错驱动整体回滚；外层 catch 把 AppError 原形收进 Result.err。
+                        throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `character card target path is a file, not a directory: ${directoryPath}`});
+                    }
+                }
+            });
+        } catch (error) {
+            // 测试钩子裸 Error（非域注入）维持直抛——测试按 instanceof Error 断言回滚；
+            // AppError 原形进 Result.err（业务失败走返回值通道），其余包成 VFS_IMPORT_FAILED。
+            if (error instanceof Error && error.message === "test import failure") {
+                throw error;
+            }
+            if (AppErrorOps.is(error)) return Result.err(error);
+            return Result.err(ImportFailure.create(error));
         }
-        // 钩子直抛优先于包装与透传（用例断言原始 Error 原形）。
-        if (error instanceof Error && error.message === "test import failure") {
-          throw error;
+
+        // 段 B0 提交后收被替换掉的旧内容：sweep 只把旧 blob 的 ref_count 递减到 0
+        // 就停手（CS-06/CS-07 的守卫触发器要求「无 entry 引用」才删行），vfs_entry
+        // 上零触发器补不了这一步 ⇒ 残留只能靠全库 gc。口径对齐 ZIP 导入链与另外
+        // 5 处删除链的既有约定：事务提交后调一次。
+        await DeferredBlobGc.run(this.conn);
+
+        // 段 B1..Bk：每片 ≤200 个文件的独立短事务；补偿挂在**片失败的内层**
+        // （测试钩子直抛分支位于 IMPORT_FAILED 包装之前，只挂外层 catch 会被绕过）。
+        let committedShards = 0;
+        let shardIndex = 0;
+        for (const shard of VfsImportChunk.chunkArray(fileEntries, ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK)) {
+            try {
+                await this.conn.transaction(async (tx) => {
+                    const repoTx = new SqliteVfsEntryRepository(tx);
+                    const revisionTx = new SqliteVfsRevisionRepository(tx);
+                    for (const [logical, content] of shard) {
+                        if (this.testHook?.throwOnInsertLogical === logical) {
+                            // 测试钩子：故意抛裸 Error 模拟事务内失败，测试按 instanceof Error 断言回滚；这是注入点而非业务错误，不纳入 AppError 口径。
+                            // nm-throw: keep — 测试故障注入点：调用方按 "test import failure" 原文案直供抛回（用例断言该 message），非业务错误。
+                            throw new Error("test import failure");
+                        }
+                        // 解包走 unwrapOrRollback（事务回调，总纲 §五例外 2）：失败靠抛错回滚。
+                        TdbcTransaction.unwrapOrRollback(await ParentDirs.ensure(repoTx, sk, logical));
+                        await LiveHeadRevisionSeeder.insertFileSeeding({ entryRepo: repoTx, revisionRepo: revisionTx, scopeKey: sk, logicalPath: logical, content });
+                    }
+                });
+                committedShards += 1;
+                shardIndex += 1;
+            } catch (error) {
+                // 补偿：把半棵新树清掉，让域回到「目标前缀为空」的可重试态。口径与 ZIP
+                // 侧统一用 `releaseAndDeleteVfsPrefix`（减 live ref + 删 entry + GC 无引用
+                // revision）；裸 `deleteVfsPrefix` 会留下永不回收的孤儿 revision 与 blob。
+                try {
+                    await this.conn.transaction(async (tx) => {
+                        await VfsTreeCopy.releaseAndDeletePrefix(new SqliteVfsEntryRepository(tx), new SqliteVfsRevisionRepository(tx), sk, directoryPath);
+                    });
+                } catch (compensateError) {
+                    log.warn("import compensation failed", {error: compensateError});
+                }
+                // 钩子直抛优先于包装与透传（用例断言原始 Error 原形）。
+                if (error instanceof Error && error.message === "test import failure") {
+                    throw error;
+                }
+                if (AppErrorOps.is(error)) return Result.err(error);
+                return Result.err(ImportFailure.create(error, committedShards, shardIndex + 1));
+            }
+            // 让步只落在片与片之间，绝不落在事务回调内部。
+            await Concurrency.yieldToEventLoop();
         }
-        if (AppErrorOps.is(error)) return Result.err(error);
-        return Result.err(ImportFailure.create(error, committedShards, shardIndex + 1));
-      }
-      // 让步只落在片与片之间，绝不落在事务回调内部。
-      await Concurrency.yieldToEventLoop();
+
+        // 段 R（独立短事务）：补目录规则默认行 —— 必须**晚于全部片提交**
+        // （目录全集靠 `listDirectoryPathsUnderPrefix` 在调用时现扫）。
+        try {
+            await this.conn.transaction(async (tx) => {
+                await ImportDirRules.ensure({
+                    vfsRepo: new SqliteVfsEntryRepository(tx),
+                    // 必须喂**段 R 这条事务**的 tx：在事务回调里用外层 this.conn 会撞
+                    // 驱动层 AsyncMutex 不可重入——那是死锁不是报错。
+                    workplaceRepo: this.testHook?.createWorkplaceRepo ? this.testHook.createWorkplaceRepo(tx) : new SqliteWorkplaceRepository(tx),
+                    scope,
+                    directoryPath,
+                });
+            });
+        } catch (error) {
+            log.warn("import dir rules failed", {error});
+        }
+
+        // 段 C（独立短事务，只装补写语句）：session scope 导入完成后，给没有
+        // checkpoint 的 message 补 baseline 快照，让回滚有正确的基线可对齐。
+        if (this.backfillBaseline && scope.kind === "session") {
+            try {
+                await this.conn.transaction(async (tx) => {
+                    await BackfillBaselineCheckpoints.backfill({
+                        entryRepo: new SqliteVfsEntryRepository(tx),
+                        messageRepo: new SqliteMessageRepository(tx),
+                        checkpointRepo: new SqliteMessageCheckpointRepository(tx),
+                        projectId: scope.projectId,
+                        sessionId: scope.sessionId,
+                    });
+                });
+            } catch (error) {
+                // best-effort：与紧邻的 clearSessionPromptCaches 同一口径，不包进 IMPORT_FAILED。
+                log.warn("baseline checkpoint backfill failed", {error});
+            }
+        }
+
+        // 事务成功提交后再对齐提示词缓存；helper 自吞错（best-effort），不影响导入结果。
+        if (this.sessionKkv && scope.kind === "session") {
+            await SessionPromptCaches.clear(scope.sessionId, this.sessionKkv);
+        }
+        return Result.ok(undefined);
     }
 
-    // 段 R（独立短事务）：补目录规则默认行 —— 必须**晚于全部片提交**
-    // （目录全集靠 `listDirectoryPathsUnderPrefix` 在调用时现扫）。
-    try {
-      await this.conn.transaction(async (tx) => {
-        await ImportDirRules.ensure({
-          vfsRepo: new SqliteVfsEntryRepository(tx),
-          // 必须喂**段 R 这条事务**的 tx：在事务回调里用外层 this.conn 会撞
-          // 驱动层 AsyncMutex 不可重入——那是死锁不是报错。
-          workplaceRepo: this.testHook?.createWorkplaceRepo ? this.testHook.createWorkplaceRepo(tx) : new SqliteWorkplaceRepository(tx),
-          scope,
-          directoryPath,
-        });
-      });
-    } catch (error) {
-      log.warn("import dir rules failed", { error });
+    /**
+     * 便捷：bytes → 解析 → import；confirmed / 体积闸门、解析失败与导入链失败
+     * 全走返回值通道，零写库。
+     */
+    async importFromBytes(scope: VfsScope, bytes: Uint8Array, options: CharacterCardImportOptions): Promise<Result<void, AppError>> {
+        // 解析在 confirmed 门闸之后、delete 之前；解析失败零写库
+        if (!options.confirmed) {
+            return Result.err(new AppError("VFS_CHARACTER_CARD_NOT_CONFIRMED", {detail: "import requires explicit confirmation (CLI --yes or confirm dialog)"}));
+        }
+        // 输入闸门 — 解析之前拦截：巨型输入在解码链上会产生多份全尺寸拷贝
+        // （base64 → latin1 → JSON），这里用纯长度比对直接拒绝，不进解析。
+        if (bytes.length > CHARACTER_CARD_MAX_INPUT_BYTES) {
+            const oversizedInput = {
+                descriptor: {
+                    key: "error.vfs.character_card_too_large.input" as const,
+                    params: {size_bytes: bytes.length, limit_bytes: CHARACTER_CARD_MAX_INPUT_BYTES}
+                }
+            };
+            return Result.err(new AppError("VFS_CHARACTER_CARD_TOO_LARGE", oversizedInput));
+        }
+        const parsed = CharacterCardToMdTree.parse(bytes);
+        if (!parsed.ok) return Result.err(parsed.error);
+        const imported = await this.import(scope, parsed.value, options);
+        if (!imported.ok) return imported;
+        return Result.ok(undefined);
     }
-
-    // 段 C（独立短事务，只装补写语句）：session scope 导入完成后，给没有
-    // checkpoint 的 message 补 baseline 快照，让回滚有正确的基线可对齐。
-    if (this.backfillBaseline && scope.kind === "session") {
-      try {
-        await this.conn.transaction(async (tx) => {
-          await BackfillBaselineCheckpoints.backfill({
-            entryRepo: new SqliteVfsEntryRepository(tx),
-            messageRepo: new SqliteMessageRepository(tx),
-            checkpointRepo: new SqliteMessageCheckpointRepository(tx),
-            projectId: scope.projectId,
-            sessionId: scope.sessionId,
-          });
-        });
-      } catch (error) {
-        // best-effort：与紧邻的 clearSessionPromptCaches 同一口径，不包进 IMPORT_FAILED。
-        log.warn("baseline checkpoint backfill failed", { error });
-      }
-    }
-
-    // 事务成功提交后再对齐提示词缓存；helper 自吞错（best-effort），不影响导入结果。
-    if (this.sessionKkv && scope.kind === "session") {
-      await SessionPromptCaches.clear(scope.sessionId, this.sessionKkv);
-    }
-    return Result.ok(undefined);
-  }
-
-  /**
-   * 便捷：bytes → 解析 → import；confirmed / 体积闸门、解析失败与导入链失败
-   * 全走返回值通道，零写库。
-   */
-  async importFromBytes(scope: VfsScope, bytes: Uint8Array, options: CharacterCardImportOptions): Promise<Result<void, AppError>> {
-    // 解析在 confirmed 门闸之后、delete 之前；解析失败零写库
-    if (options.confirmed !== true) {
-      return Result.err(new AppError("VFS_CHARACTER_CARD_NOT_CONFIRMED", { detail: "import requires explicit confirmation (CLI --yes or confirm dialog)" }));
-    }
-    // 输入闸门 — 解析之前拦截：巨型输入在解码链上会产生多份全尺寸拷贝
-    // （base64 → latin1 → JSON），这里用纯长度比对直接拒绝，不进解析。
-    if (bytes.length > CHARACTER_CARD_MAX_INPUT_BYTES) {
-      const oversizedInput = { descriptor: { key: "error.vfs.character_card_too_large.input" as const, params: { size_bytes: bytes.length, limit_bytes: CHARACTER_CARD_MAX_INPUT_BYTES } } };
-      return Result.err(new AppError("VFS_CHARACTER_CARD_TOO_LARGE", oversizedInput));
-    }
-    const parsed = CharacterCardToMdTree.parse(bytes);
-    if (!parsed.ok) return Result.err(parsed.error);
-    const imported = await this.import(scope, parsed.value, options);
-    if (!imported.ok) return imported;
-    return Result.ok(undefined);
-  }
 }

@@ -9,6 +9,7 @@
  * 例外：断言原语（assert / AssertionError）与 i18n 工厂 + 类型族
  * （createTranslator）按 skill 5.3 豁免保持裸导出。
  */
+export {Arrays} from "./arrays.js";
 export {Coerce} from "./coerce.js";
 export {Guards} from "./guards.js";
 export {Concurrency} from "./concurrency.js";

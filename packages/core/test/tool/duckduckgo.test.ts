@@ -10,30 +10,30 @@ const DDG_USER_AGENT = "Mozilla/5.0 (compatible; novel-master/1.0; +https://gith
 
 /** 构造记录调用参数的 mock fetchFn：回放单个 Response。 */
 function makeFetch(
-  respond: (url: string) => Response,
+    respond: (url: string) => Response,
 ): typeof globalThis.fetch & {
-  readonly calls: ReadonlyArray<{
-    readonly url: string;
-    readonly init: RequestInit;
-  }>;
+    readonly calls: ReadonlyArray<{
+        readonly url: string;
+        readonly init: RequestInit;
+    }>;
 } {
-  const calls: Array<{ url: string; init: RequestInit }> = [];
-  const fn = (async (url: string | URL | Request, init?: RequestInit) => {
-    calls.push({ url: String(url), init: init ?? {} });
-    return respond(String(url));
-  }) as typeof globalThis.fetch & {
-    calls: ReadonlyArray<{ url: string; init: RequestInit }>;
-  };
-  Object.assign(fn, { calls });
-  return fn;
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const fn = (async (url: string | URL | Request, init?: RequestInit) => {
+        calls.push({ url: String(url), init: init ?? {} });
+        return respond(String(url));
+    }) as typeof globalThis.fetch & {
+        calls: ReadonlyArray<{ url: string; init: RequestInit }>;
+    };
+    Object.assign(fn, { calls });
+    return fn;
 }
 
 /** HTML Response 快捷构造。 */
 function htmlOk(html: string): Response {
-  return new Response(html, {
-    status: 200,
-    headers: { "content-type": "text/html" },
-  });
+    return new Response(html, {
+        status: 200,
+        headers: { "content-type": "text/html" },
+    });
 }
 
 /**
@@ -42,7 +42,7 @@ function htmlOk(html: string): Response {
  * result__url 近形类名干扰项。
  */
 function ddgResultsHtml(): string {
-  return `
+    return `
 <html><body>
 <div class="links_wrapper">
 <div class="result results_links results_links_deep web-result">
@@ -71,122 +71,112 @@ function ddgResultsHtml(): string {
 }
 
 function ddgResolved(): ResolvedEngineConfig {
-  return { engine: "duckduckgo" };
+    return { engine: "duckduckgo" };
 }
 
 describe("search 引擎适配器：duckduckgo（T-A6，内置免费兜底）", () => {
-  it("请求形状：GET html 端点 + q 参数 + Accept: text/html + 自报轻客户端 UA，无任何鉴权头", async () => {
-    const fetchFn = makeFetch(() => htmlOk(ddgResultsHtml()));
-    await Duckduckgo.search(ddgResolved(), "唐代科举", {}, fetchFn);
+    it("请求形状：GET html 端点 + q 参数 + Accept: text/html + 自报轻客户端 UA，无任何鉴权头", async () => {
+        const fetchFn = makeFetch(() => htmlOk(ddgResultsHtml()));
+        await Duckduckgo.search({ resolved: ddgResolved(), query: "唐代科举", options: {}, fetch: fetchFn });
 
-    assert.equal(fetchFn.calls.length, 1);
-    const call = fetchFn.calls[0]!;
-    const url = new URL(call.url);
-    assert.equal(url.origin + url.pathname, DDG_SEARCH_URL);
-    assert.equal(url.searchParams.get("q"), "唐代科举");
-    assert.equal(call.init.method, "GET");
-    const headers = new Headers(call.init.headers);
-    assert.equal(headers.get("Accept"), "text/html");
-    assert.equal(headers.get("User-Agent"), DDG_USER_AGENT);
-    assert.match(headers.get("User-Agent") ?? "", /^Mozilla\/5\.0 \(compatible; novel-master\//);
-    assert.equal(headers.get("Authorization"), null);
-    assert.equal(headers.get("X-Subscription-Token"), null);
-  });
+        assert.equal(fetchFn.calls.length, 1);
+        const call = fetchFn.calls[0]!;
+        const url = new URL(call.url);
+        assert.equal(url.origin + url.pathname, DDG_SEARCH_URL);
+        assert.equal(url.searchParams.get("q"), "唐代科举");
+        assert.equal(call.init.method, "GET");
+        const headers = new Headers(call.init.headers);
+        assert.equal(headers.get("Accept"), "text/html");
+        assert.equal(headers.get("User-Agent"), DDG_USER_AGENT);
+        assert.match(headers.get("User-Agent") ?? "", /^Mozilla\/5\.0 \(compatible; novel-master\//);
+        assert.equal(headers.get("Authorization"), null);
+        assert.equal(headers.get("X-Subscription-Token"), null);
+    });
 
-  it("解析：标题/直链 href 实体解码/uddg 重定向解码（嵌套 %26）/snippet 实体解码/广告块跳过/近形类名不误伤", async () => {
-    const fetchFn = makeFetch(() => htmlOk(ddgResultsHtml()));
-    const out = await Duckduckgo.search(ddgResolved(), "q", {}, fetchFn);
-    assert.ok(out.ok, "expected Result.ok");
-    const res = out.value;
+    it("解析：标题/直链 href 实体解码/uddg 重定向解码（嵌套 %26）/snippet 实体解码/广告块跳过/近形类名不误伤", async () => {
+        const fetchFn = makeFetch(() => htmlOk(ddgResultsHtml()));
+        const out = await Duckduckgo.search({ resolved: ddgResolved(), query: "q", options: {}, fetch: fetchFn });
+        assert.ok(out.ok, "expected Result.ok");
+        const res = out.value;
 
-    assert.equal(res.engine, "duckduckgo");
-    // 不产生 answer 字段（v2 已废除 answerPath 机制，SearchResponse 无该字段；DDG 保留解析数组）。
-    assert.equal("answer" in res, false);
-    assert.deepEqual(res.results, [
-      {
-        // 直链 href 的 &amp; 实体解码后为 &；snippet 实体解码。
-        title: "直链标题甲",
-        url: "https://direct.example.com/guide?a=1&b=2",
-        snippet: '摘要甲含 & 符号与 "引号"',
-      },
-      {
-        // uddg 解码：嵌套 %26 解回 &（lang 参数归属真实 URL，rut 是重定向外层参数）；
-        // 标题 &lt;/&gt;、snippet &#x27;/&amp; 实体解码。
-        title: "重定向<标题>乙",
-        url: "https://target.example.org/docs?q=1&lang=zh",
-        snippet: "重定向摘要 '乙' 与 &",
-      },
-      {
-        // 过滤参数已随改造退役：第三块照常入结果，适配器不做域名过滤。
-        title: "第三块标题",
-        url: "https://blocked.example.net/spam",
-        snippet: "第三块摘要",
-      },
-    ]);
-  });
+        assert.equal(res.engine, "duckduckgo");
+        // 不产生 answer 字段（v2 已废除 answerPath 机制，SearchResponse 无该字段；DDG 保留解析数组）。
+        assert.equal("answer" in res, false);
+        assert.deepEqual(res.results, [
+            {
+                // 直链 href 的 &amp; 实体解码后为 &；snippet 实体解码。
+                title: "直链标题甲",
+                url: "https://direct.example.com/guide?a=1&b=2",
+                snippet: '摘要甲含 & 符号与 "引号"',
+            },
+            {
+                // uddg 解码：嵌套 %26 解回 &（lang 参数归属真实 URL，rut 是重定向外层参数）；
+                // 标题 &lt;/&gt;、snippet &#x27;/&amp; 实体解码。
+                title: "重定向<标题>乙",
+                url: "https://target.example.org/docs?q=1&lang=zh",
+                snippet: "重定向摘要 '乙' 与 &",
+            },
+            {
+                // 过滤参数已随改造退役：第三块照常入结果，适配器不做域名过滤。
+                title: "第三块标题",
+                url: "https://blocked.example.net/spam",
+                snippet: "第三块摘要",
+            },
+        ]);
+    });
 
-  it("maxResults 客户端截断（HTML 端点无条数参数，照模板执行器模式）：0→默认 5、2→截 2", async () => {
-    const blocks = Array.from(
-      { length: 6 },
-      (_, i) => `
+    it("maxResults 客户端截断（HTML 端点无条数参数，照模板执行器模式）：0→默认 5、2→截 2", async () => {
+        const blocks = Array.from(
+            { length: 6 },
+            (_, i) => `
 <div class="result results_links results_links_deep web-result">
   <a rel="nofollow" class="result__a" href="https://x${i}.example.com/p${i}">标题${i}</a>
   <a class="result__snippet">摘要${i}</a>
 </div>`
-    ).join("");
-    const fetchFn = makeFetch(() => htmlOk(`<body>${blocks}</body>`));
+        ).join("");
+        const fetchFn = makeFetch(() => htmlOk(`<body>${blocks}</body>`));
 
-    const out2 = await Duckduckgo.search(
-      ddgResolved(),
-      "q",
-      { maxResults: 2 },
-      fetchFn
-    );
-    assert.ok(out2.ok, "expected Result.ok");
-    assert.equal(out2.value.results.length, 2);
-    assert.deepEqual(
-      out2.value.results.map((r) => r.url),
-      ["https://x0.example.com/p0", "https://x1.example.com/p1"]
-    );
+        const out2 = await Duckduckgo.search({ resolved: ddgResolved(), query: "q", options: { maxResults: 2 }, fetch: fetchFn });
+        assert.ok(out2.ok, "expected Result.ok");
+        assert.equal(out2.value.results.length, 2);
+        assert.deepEqual(
+            out2.value.results.map((r) => r.url),
+            ["https://x0.example.com/p0", "https://x1.example.com/p1"]
+        );
 
-    // 0 → 默认 5（normalizeMaxResults 共用 clamp）；6 块全量可解析。
-    const out5 = await Duckduckgo.search(
-      ddgResolved(),
-      "q",
-      { maxResults: 0 },
-      fetchFn
-    );
-    assert.ok(out5.ok, "expected Result.ok");
-    assert.equal(out5.value.results.length, 5);
-  });
+        // 0 → 默认 5（normalizeMaxResults 共用 clamp）；6 块全量可解析。
+        const out5 = await Duckduckgo.search({ resolved: ddgResolved(), query: "q", options: { maxResults: 0 }, fetch: fetchFn });
+        assert.ok(out5.ok, "expected Result.ok");
+        assert.equal(out5.value.results.length, 5);
+    });
 
-  it("解析 0 个可解析结果抛 invalid（无块——反爬/改版页，供串行链感知降级）", async () => {
-    const fetchFn = makeFetch(
-      () => htmlOk("<html><body>no results here</body></html>")
-    );
-    const r = await Duckduckgo.search(ddgResolved(), "q", {}, fetchFn);
-    assert.ok(!r.ok, "expected Result.err");
-    assert.match(r.error.message, /DuckDuckGo returned no parseable results \(invalid response\)/);
-  });
+    it("解析 0 个可解析结果抛 invalid（无块——反爬/改版页，供串行链感知降级）", async () => {
+        const fetchFn = makeFetch(
+            () => htmlOk("<html><body>no results here</body></html>")
+        );
+        const r = await Duckduckgo.search({ resolved: ddgResolved(), query: "q", options: {}, fetch: fetchFn });
+        assert.ok(!r.ok, "expected Result.err");
+        assert.match(r.error.message, /DuckDuckGo returned no parseable results \(invalid response\)/);
+    });
 
-  it("有块但全无有效 title/url（如 uddg 指向非 http 协议）同样抛 invalid", async () => {
-    const html = `
+    it("有块但全无有效 title/url（如 uddg 指向非 http 协议）同样抛 invalid", async () => {
+        const html = `
 <div class="result results_links results_links_deep web-result">
   <a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg=javascript%3Aalert%3A1">无效协议标题</a>
   <a class="result__snippet">摘要</a>
 </div>`;
-    const fetchFn = makeFetch(() => htmlOk(html));
-    const r = await Duckduckgo.search(ddgResolved(), "q", {}, fetchFn);
-    assert.ok(!r.ok, "expected Result.err");
-    assert.match(r.error.message, /no parseable results/);
-  });
+        const fetchFn = makeFetch(() => htmlOk(html));
+        const r = await Duckduckgo.search({ resolved: ddgResolved(), query: "q", options: {}, fetch: fetchFn });
+        assert.ok(!r.ok, "expected Result.err");
+        assert.match(r.error.message, /no parseable results/);
+    });
 
-  it("非 2xx 抛错且文案含 status（统一 SearchEngine.apiErrorMessage 范式）", async () => {
-    const fetchFn = makeFetch(
-      () => new Response("anomaly detected", { status: 403 })
-    );
-    const r = await Duckduckgo.search(ddgResolved(), "q", {}, fetchFn);
-    assert.ok(!r.ok, "expected Result.err");
-    assert.match(r.error.message, /DuckDuckGo API error 403: anomaly detected/);
-  });
+    it("非 2xx 抛错且文案含 status（统一 SearchEngine.apiErrorMessage 范式）", async () => {
+        const fetchFn = makeFetch(
+            () => new Response("anomaly detected", { status: 403 })
+        );
+        const r = await Duckduckgo.search({ resolved: ddgResolved(), query: "q", options: {}, fetch: fetchFn });
+        assert.ok(!r.ok, "expected Result.err");
+        assert.match(r.error.message, /DuckDuckGo API error 403: anomaly detected/);
+    });
 });

@@ -18,162 +18,162 @@ import {coreT} from '@/i18n/core';
 
 /** 待编辑技能定位（跳详情同构）。 */
 export type SkillInfoTarget = {
-  domain: SkillDomain;
-  name: string;
-  projectId?: string;
+    domain: SkillDomain;
+    name: string;
+    projectId?: string;
 };
 
 type Props = {
-  visible: boolean;
-  /** 待编辑技能（含域定位）。 */
-  target: SkillInfoTarget;
-  currentDescription: string | null;
-  onClose: () => void;
-  /** 保存成功；参数为最新技能名（可能已改名，调用方刷新导航状态）。 */
-  onSaved: (name: string) => void;
+    visible: boolean;
+    /** 待编辑技能（含域定位）。 */
+    target: SkillInfoTarget;
+    currentDescription: string | null;
+    onClose: () => void;
+    /** 保存成功；参数为最新技能名（可能已改名，调用方刷新导航状态）。 */
+    onSaved: (name: string) => void;
 };
 
 export function SkillInfoEditModal({visible, target, currentDescription, onClose, onSaved}: Props) {
-  const {tokens} = useTheme();
-  const runtime = useRuntime();
-  const [name, setName] = useState(target.name);
-  const [description, setDescription] = useState(currentDescription ?? '');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | undefined>(undefined);
+    const {tokens} = useTheme();
+    const runtime = useRuntime();
+    const [name, setName] = useState(target.name);
+    const [description, setDescription] = useState(currentDescription ?? '');
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState<string | undefined>(undefined);
 
-  // 每次打开以当前值重置（技能切换/描述外部变更都跟随）
-  useEffect(() => {
+    // 每次打开以当前值重置（技能切换/描述外部变更都跟随）
+    useEffect(() => {
+        if (!visible) {
+            return;
+        }
+        setName(target.name);
+        setDescription(currentDescription ?? '');
+        setError(undefined);
+    }, [visible, target.name, currentDescription]);
+
     if (!visible) {
-      return;
+        return null;
     }
-    setName(target.name);
-    setDescription(currentDescription ?? '');
-    setError(undefined);
-  }, [visible, target.name, currentDescription]);
 
-  if (!visible) {
-    return null;
-  }
+    const builtin = target.domain === 'global' && BUILTIN_SKILL_NAMES.has(target.name);
+    // 判定与提交值统一先 trim（对齐 desktop：首尾空白不算变更、不带空白落盘）
+    const trimmedName = name.trim();
+    const trimmedDesc = description.trim();
+    const nameChanged = !builtin && trimmedName !== target.name;
+    const descChanged = trimmedDesc !== (currentDescription ?? '');
+    // SkillName.validate 的 descriptor 经 coreT 渲染成 string（nameIssue 只做展示与空判定）
+    const nameReason = nameChanged && name.length > 0 ? SkillName.validate(trimmedName) : null;
+    const nameIssue = nameReason == null ? null : coreT(nameReason);
+    const canSubmit = (nameChanged || descChanged) && nameIssue == null && name.length > 0 && !saving;
 
-  const builtin = target.domain === 'global' && BUILTIN_SKILL_NAMES.has(target.name);
-  // 判定与提交值统一先 trim（对齐 desktop：首尾空白不算变更、不带空白落盘）
-  const trimmedName = name.trim();
-  const trimmedDesc = description.trim();
-  const nameChanged = !builtin && trimmedName !== target.name;
-  const descChanged = trimmedDesc !== (currentDescription ?? '');
-  // SkillName.validate 的 descriptor 经 coreT 渲染成 string（nameIssue 只做展示与空判定）
-  const nameReason = nameChanged && name.length > 0 ? SkillName.validate(trimmedName) : null;
-  const nameIssue = nameReason == null ? null : coreT(nameReason);
-  const canSubmit = (nameChanged || descChanged) && nameIssue == null && name.length > 0 && !saving;
+    const handleSave = async () => {
+        if (!canSubmit) {
+            return;
+        }
+        setSaving(true);
+        setError(undefined);
+        try {
+            const targetRef = {
+                domain: target.domain,
+                name: target.name,
+                ...(target.domain === 'project' && target.projectId != null ? {projectId: target.projectId} : {}),
+            };
+            const infoPatch = {...(nameChanged ? {newName: trimmedName} : {}), ...(descChanged ? {description: trimmedDesc} : {})};
+            await runtime.skills().updateSkillInfo(targetRef, infoPatch);
+            onSaved(nameChanged ? trimmedName : target.name);
+            onClose();
+        } catch (err) {
+            setError(err instanceof Error ? err.message : String(err));
+        } finally {
+            setSaving(false);
+        }
+    };
 
-  const handleSave = async () => {
-    if (!canSubmit) {
-      return;
-    }
-    setSaving(true);
-    setError(undefined);
-    try {
-      const targetRef = {
-        domain: target.domain,
-        name: target.name,
-        ...(target.domain === 'project' && target.projectId != null ? {projectId: target.projectId} : {}),
-      };
-      const infoPatch = {...(nameChanged ? {newName: trimmedName} : {}), ...(descChanged ? {description: trimmedDesc} : {})};
-      await runtime.skills().updateSkillInfo(targetRef, infoPatch);
-      onSaved(nameChanged ? trimmedName : target.name);
-      onClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <ModalShell visible={visible} onClose={onClose} variant="bottom" animationType="slide" keyboardAvoid={{kind: 'adaptive', maxHeightRatio: 0.85}} panelStyle={styles.panel}>
-      <Text style={[styles.title, {color: tokens.text}]}>编辑信息</Text>
-      <ScrollView style={styles.form} contentContainerStyle={styles.formContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-        <Text style={[styles.label, {color: tokens.textSecondary}]}>{builtin ? '技能名（内置技能不可改名）' : '技能名'}</Text>
-        <TextInput
-          testID="skill-info-name-input"
-          style={[
-            styles.input,
-            {
-              color: builtin ? tokens.textSecondary : tokens.text,
-              borderColor: nameIssue ? tokens.danger : tokens.border,
-              backgroundColor: tokens.background,
-            },
-          ]}
-          value={name}
-          onChangeText={setName}
-          editable={!builtin}
-          autoCorrect={false}
-        />
-        {nameIssue ? <Text style={[styles.error, {color: tokens.danger}]}>{nameIssue}</Text> : null}
-        <Text style={[styles.label, {color: tokens.textSecondary}]}>描述</Text>
-        <TextInput
-          testID="skill-info-description-input"
-          style={[styles.input, styles.descriptionInput, {color: tokens.text, borderColor: tokens.border, backgroundColor: tokens.background}]}
-          value={description}
-          onChangeText={setDescription}
-          placeholder="进入技能索引，模型据此决定是否使用"
-          placeholderTextColor={tokens.textSecondary}
-          multiline
-        />
-        {error ? <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text> : null}
-      </ScrollView>
-      <View style={styles.foot}>
-        <Pressable onPress={onClose} style={styles.footBtn}>
-          <Text style={{color: tokens.textSecondary}}>取消</Text>
-        </Pressable>
-        <Pressable
-          testID="skill-info-submit"
-          style={[styles.footBtn, {backgroundColor: canSubmit ? tokens.primary : tokens.border}]}
-          disabled={!canSubmit}
-          onPress={() => handleSave().catch(() => undefined)}
-        >
-          {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={{color: '#fff', fontWeight: '600'}}>保存</Text>}
-        </Pressable>
-      </View>
-    </ModalShell>
-  );
+    return (
+        <ModalShell visible={visible} onClose={onClose} variant="bottom" animationType="slide" keyboardAvoid={{kind: 'adaptive', maxHeightRatio: 0.85}} panelStyle={styles.panel}>
+            <Text style={[styles.title, {color: tokens.text}]}>{coreT({key: "ui.skills.edit_info"})}</Text>
+            <ScrollView style={styles.form} contentContainerStyle={styles.formContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                <Text style={[styles.label, {color: tokens.textSecondary}]}>{builtin ? coreT({key: "ui.skills.name_label_builtin_hint"}) : coreT({key: "ui.skills.name_label_plain"})}</Text>
+                <TextInput
+                    testID="skill-info-name-input"
+                    style={[
+                        styles.input,
+                        {
+                            color: builtin ? tokens.textSecondary : tokens.text,
+                            borderColor: nameIssue ? tokens.danger : tokens.border,
+                            backgroundColor: tokens.background,
+                        },
+                    ]}
+                    value={name}
+                    onChangeText={setName}
+                    editable={!builtin}
+                    autoCorrect={false}
+                />
+                {nameIssue ? <Text style={[styles.error, {color: tokens.danger}]}>{nameIssue}</Text> : null}
+                <Text style={[styles.label, {color: tokens.textSecondary}]}>{coreT({key: "ui.common.description"})}</Text>
+                <TextInput
+                    testID="skill-info-description-input"
+                    style={[styles.input, styles.descriptionInput, {color: tokens.text, borderColor: tokens.border, backgroundColor: tokens.background}]}
+                    value={description}
+                    onChangeText={setDescription}
+                    placeholder={coreT({key: "ui.skills.desc_hint"})}
+                    placeholderTextColor={tokens.textSecondary}
+                    multiline
+                />
+                {error ? <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text> : null}
+            </ScrollView>
+            <View style={styles.foot}>
+                <Pressable onPress={onClose} style={styles.footBtn}>
+                    <Text style={{color: tokens.textSecondary}}>{coreT({key: "ui.common.cancel"})}</Text>
+                </Pressable>
+                <Pressable
+                    testID="skill-info-submit"
+                    style={[styles.footBtn, {backgroundColor: canSubmit ? tokens.primary : tokens.border}]}
+                    disabled={!canSubmit}
+                    onPress={() => handleSave().catch(() => undefined)}
+                >
+                    {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={{color: '#fff', fontWeight: '600'}}>{coreT({key: "ui.common.save"})}</Text>}
+                </Pressable>
+            </View>
+        </ModalShell>
+    );
 }
 
 const styles = StyleSheet.create({
-  panel: {
-    padding: 16,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    gap: 8,
-  },
-  form: {flexGrow: 0, flexShrink: 1},
-  formContent: {gap: 8},
-  title: {fontSize: 18, fontWeight: '600'},
-  label: {fontSize: 13, marginTop: 4},
-  input: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 15,
-  },
-  descriptionInput: {
-    minHeight: 72,
-    maxHeight: 140,
-    textAlignVertical: 'top',
-  },
-  error: {fontSize: 12, lineHeight: 16},
-  foot: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 12,
-    marginTop: 8,
-  },
-  footBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-    minWidth: 88,
-    alignItems: 'center',
-  },
+    panel: {
+        padding: 16,
+        borderTopLeftRadius: 16,
+        borderTopRightRadius: 16,
+        gap: 8,
+    },
+    form: {flexGrow: 0, flexShrink: 1},
+    formContent: {gap: 8},
+    title: {fontSize: 18, fontWeight: '600'},
+    label: {fontSize: 13, marginTop: 4},
+    input: {
+        borderWidth: StyleSheet.hairlineWidth,
+        borderRadius: 10,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        fontSize: 15,
+    },
+    descriptionInput: {
+        minHeight: 72,
+        maxHeight: 140,
+        textAlignVertical: 'top',
+    },
+    error: {fontSize: 12, lineHeight: 16},
+    foot: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        gap: 12,
+        marginTop: 8,
+    },
+    footBtn: {
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        borderRadius: 8,
+        minWidth: 88,
+        alignItems: 'center',
+    },
 });

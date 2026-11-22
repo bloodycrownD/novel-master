@@ -4,62 +4,62 @@ import type { ChatMessageData } from "../../../src/domain/chat/model/message.js"
 import {  OrphanToolResults  } from "../../../src/service/prompt/normalize-orphan-tool-results-for-llm.js";
 
 describe("normalizeOrphanToolResultsForLlm", () => {
-  it("converts tool_result to text when assistant tool_use is not visible", () => {
-    const messages: ChatMessageData[] = [
-      {
-        role: "user",
-        content: {
-          blocks: [
+    it("converts tool_result to text when assistant tool_use is not visible", () => {
+        const messages: ChatMessageData[] = [
             {
-              type: "tool_result",
-              toolUseId: "call_1",
-              content: "file body",
+                role: "user",
+                content: {
+                    blocks: [
+                        {
+                            type: "tool_result",
+                            toolUseId: "call_1",
+                            content: "file body",
+                        },
+                    ],
+                },
             },
-          ],
-        },
-      },
-    ];
+        ];
 
-    const out = OrphanToolResults.normalizeForLlm(messages);
-    assert.equal(out.length, 1);
-    assert.equal(out[0]?.content.blocks.length, 1);
-    assert.equal(out[0]?.content.blocks[0]?.type, "text");
-    if (out[0]?.content.blocks[0]?.type === "text") {
-      assert.match(out[0].content.blocks[0].text, /\[tool_result id=call_1\]/);
-      assert.match(out[0].content.blocks[0].text, /file body/);
-    }
-  });
+        const out = OrphanToolResults.normalizeForLlm(messages);
+        assert.equal(out.length, 1);
+        assert.equal(out[0]?.content.blocks.length, 1);
+        assert.equal(out[0]?.content.blocks[0]?.type, "text");
+        if (out[0]?.content.blocks[0]?.type === "text") {
+            assert.match(out[0].content.blocks[0].text, /\[tool_result id=call_1\]/);
+            assert.match(out[0].content.blocks[0].text, /file body/);
+        }
+    });
 
-  it("keeps tool_result when matching tool_use is visible in history", () => {
-    const messages: ChatMessageData[] = [
-      {
-        role: "assistant",
-        content: {
-          blocks: [
+    it("keeps tool_result when matching tool_use is visible in history", () => {
+        const messages: ChatMessageData[] = [
             {
-              type: "tool_use",
-              id: "call_1",
-              name: "read",
-              input: { path: "/a" },
+                role: "assistant",
+                content: {
+                    blocks: [
+                        {
+                            type: "tool_use",
+                            id: "call_1",
+                            name: "read",
+                            input: { path: "/a" },
+                        },
+                    ],
+                },
             },
-          ],
-        },
-      },
-      {
-        role: "user",
-        content: {
-          blocks: [
             {
-              type: "tool_result",
-              toolUseId: "call_1",
-              content: "file body",
+                role: "user",
+                content: {
+                    blocks: [
+                        {
+                            type: "tool_result",
+                            toolUseId: "call_1",
+                            content: "file body",
+                        },
+                    ],
+                },
             },
-          ],
-        },
-      },
-    ];
+        ];
 
-    const out = OrphanToolResults.normalizeForLlm(messages);
-    assert.equal(out[1]?.content.blocks[0]?.type, "tool_result");
-  });
+        const out = OrphanToolResults.normalizeForLlm(messages);
+        assert.equal(out[1]?.content.blocks[0]?.type, "tool_result");
+    });
 });

@@ -14,19 +14,19 @@
  * SKSP env 覆盖判定。
  */
 export const SkspEnvOverride = {
-  /**
+    /**
    * 解析某个环境变量是否构成对 DB 的有效覆盖。
    *
    * @param name 环境变量名（通常是 SkspRefToEnv.toEnvVar 的返回值，调用方负责校验）。
    * @param env  环境变量字典；调用方显式注入，便于测试与 RN/CLI 自定义来源。
    * @returns 非空 env 值；若未设置或仅空白则返回 null。
    */
-  resolve(name: string, env: Record<string, string | undefined>): string | null {
-    const v = env[name];
-    // undefined / 空串 / 仅空白 一律视为不覆盖 DB
-    if (v === undefined || v === "" || v.trim() === "") {
-      return null;
-    }
-    return v;
-  },
+    resolve(name: string, env: Record<string, string | undefined>): string | null {
+        const v = env[name];
+        // undefined / 空串 / 仅空白 一律视为不覆盖 DB
+        if (v === undefined || v === "" || v.trim() === "") {
+            return null;
+        }
+        return v;
+    },
 } as const;

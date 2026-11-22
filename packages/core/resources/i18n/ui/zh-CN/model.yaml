@@ -1,0 +1,239 @@
+  provider:
+    title: 服务商
+    name_label: 服务商名称
+    name_placeholder: 例如 智谱
+    protocol_label: 协议
+    auth_section: 认证
+    status_label: 当前状态
+    api_key_status_prefix: API Key 状态：
+    api_key_keep_hint: 留空则不修改
+    api_key_required_hint: 必填，写入 SKSP 安全存储
+    custom_params_optional: 可选，JSON 对象
+    custom_params_label: 自定义参数
+    custom_params_hint: JSON 对象，原样合并进请求体顶层（可覆盖标准字段）；清空保存即移除
+    custom_params_hint_desktop: 自定义参数（JSON 对象，原样合并进请求体顶层，可覆盖标准字段）
+    custom_params_placeholder: "{\"tool_stream\": true}，清空并保存即移除全部自定义参数"
+    create_done: "已创建服务商：{name}"
+    edit_title: 编辑服务商
+    add_model_title: 添加模型
+    vendor_model_id_label: 厂商模型 ID
+    vendor_model_id_placeholder: 如 gpt-4o
+    model_name_optional_label: 模型名称（可选）
+    model_name_keep_hint: 留空则使用厂商 ID
+    fetch_models_title: 拉取模型
+    fetch_models_hint: 从服务商获取可用模型，勾选后批量添加
+    fetching: 拉取中…
+    filter_models_placeholder: 过滤模型…
+    no_models_fetched: 未拉取到可用模型，请检查 API Key 与 Base URL。
+    no_matching_models: 无匹配模型
+    add_count_confirm: "添加 ({count})"
+    models_added_done: 已添加模型
+    delete_model_title: 删除模型
+    delete_models_confirm: "确定删除选中的 {count} 个模型？"
+    model_renamed_done: 已重命名模型
+    rename_model_title: 重命名模型
+    sampling_badge: 已配采样
+    remote_tag: 远程
+    delete_select_hint: 选择要删除的模型（批量模式下不会进入采样配置）
+    delete_models_select_title: 选择要删除的模型
+    delete_select_title: 选择要删除的服务商
+    delete_select_hint_mobile: 选择要删除的服务商（将同时移除其下所有已保存模型）
+    delete_title: 删除服务商
+    delete_confirm_msg: 将同时移除其下所有已保存模型与采样配置，确定继续？
+    delete_batch_confirm: "将同时移除其下所有已保存模型，确定删除选中的 {count} 个服务商？"
+    deleted_done: 已删除服务商
+    deleted_count_done: "已删除 {count} 个服务商"
+    models_deleted_done: 已删除模型
+    models_deleted_count: "已删除 {count} 个模型"
+    empty_hint: 暂无服务商，点击右上角「添加」创建。
+    empty_hint_desktop: 暂无服务商，点击上方按钮添加。
+    builtin_protocol_hint: 内置服务商不可修改协议。
+    models_meta: "{count} 个模型 · "
+    models_saved_meta: "{count} 个已保存模型"
+    detail_tab_aria: 服务商详情 tab
+    unknown_provider: 未知服务商
+    empty_saved_models: 暂无已保存模型
+    connected: 已连接
+    not_connected: 未连接
+    needs_fix: 需修复
+    # —— 波 3-2a 补键：表单校验与缺参守卫（ProviderForm throw 校验 + 详情页缺 providerId） ——
+    name_baseurl_required: 请填写服务商名称与 baseUrl
+    api_key_required: 请填写 API Key
+    provider_id_missing: 缺少 providerId
+    # —— 波 3c-a 补键：波 3-2 MISS 收尾（M2 表单守卫/分区标题、D3 服务商表单与失效守卫/已保存模型标题） ——
+    connect_section: 连接
+    change_required: 请至少修改一项
+    models_saved_done: 已保存模型
+    config_invalid_copy_blocked: 配置已失效，请先修复后再复制
+    config_invalid_rename_blocked: 配置已失效，请先修复后再重命名
+    name_required: 请填写服务商名称
+    name_empty: 服务商名称不能为空
+    new_title: 新建服务商
+    rename_title: 重命名服务商
+    api_key_label: API Key
+    api_key_new_label: 新 API Key
+    secret_key_label: Secret Access Key
+    path_style_label: Path style（MinIO / 部分 OSS）
+    api_key_sksp_hint: API Key 将通过 SKSP 安全存储
+    # —— 波 3c-c 补键：3c-b D 线新 MISS（服务商/模型 named 删除确认模板） ——
+    delete_confirm_msg_named: "删除服务商「{name}」？"
+    delete_model_confirm_msg_named: "删除模型「{name}」？"
+    custom_engine_create_title: 新建自定义引擎
+  # —— sampling：采样配置（mobile ModelSamplingScreen + desktop ModelSamplingView·SamplingForm） ——
+  sampling:
+    model_name_hint: 用于列表与选择器展示；派生 displayName 为 服务商/模型名称。
+    vendor_id_line: "厂商 ID：{id}"
+    model_name_placeholder_hint: 默认同厂商模型 ID
+    display_name_derived: 展示名称（派生）
+    save_name_label: 保存名称
+    internal_budget_section: 内部预算
+    internal_budget_hint: 上下文窗口与 token 计数方式，不直接映射 HTTP 生成 body。
+    context_limit_label: 上下文上限 (tokens)
+    counting_method_label: 计数方式
+    counter_autos_hint: 自动按模型名匹配分词器族；保存后以本页为准。
+    token_counter_label: Token 计数器
+    generation_section: 生成参数
+    thinking_effort_label: 思考强度
+    temperature_label: 温度
+    max_output_label: 输出最大长度
+    section_hint_plain: 展示协议推荐默认值；保存后以本页为准。
+    # —— 波 3-2a 补键：表单校验与缺参守卫（ModelSamplingScreen 校验 + 缺模型缺 savedModelId） ——
+    name_required: 模型名称不能为空
+    context_limit_positive: 上下文上限须为正整数
+    model_missing: 模型不存在
+    saved_model_id_missing: 缺少 savedModelId
+    # —— 波 3c-a 补键：波 3-2 MISS 收尾（M2/D2 保存与恢复默认两 toast） ——
+    saved_done: 已保存模型设置
+    reset_done: 已恢复默认采样参数
+  # —— chat_config：聊天/工作区配置（mobile ChatConfigScreen + desktop WorkspaceSettingsView） ——
+  chat_config:
+    stream_parent: 父会话流式
+    stream_parent_on: 主对话回复边生成边显示（推荐）
+    stream_parent_off: 主对话回复完成后一次性显示
+    stream_sub: 子会话流式
+    stream_sub_on: 子智能体回复边生成边显示
+    stream_sub_off: 子智能体回复完成后一次性显示
+    thinking_prompt: 思考提示词
+    thinking_prompt_hint: 开启后，模型的思考内容进入后续提示词，关闭则不进入。
+    rich_text: 富文本消息
+    rich_text_on: 用户与助手消息解析 Markdown/HTML
+    rich_text_off: 聊天消息显示为纯文本
+    notifications: 消息通知
+    notifications_on: 进入应用即常驻状态栏保活，生成中显示状态，结束后台提醒
+    notifications_off: 无常驻通知、无提醒（生成行为不受影响）
+    notification_permission: 通知权限
+    perm_granted: 已授权
+    perm_denied: 未授权
+    perm_pending: 申请中…
+    compact_section: 压缩配置
+    compact_hint: 满足 token 比例阈值时自动压缩；隐藏起始深度对自动和手动压缩均生效。
+    hidden_start_depth: 隐藏起始深度
+    auto_compact: 启用自动压缩
+    token_ratio: Token 比例
+    default_section: 默认选择
+    default_hint: 新建会话时使用的工作区默认值，也可在会话底部随时切换。
+    chat_prefs_section: 聊天偏好
+    chat_prefs_hint: 影响消息展示与 LLM 请求行为。达到阈值时触发会话压缩；隐藏起始深度对自动和手动压缩均生效。
+    select_model: 选择模型
+    # —— 波 3-2a 补键：表单校验与开关失败（ChatConfigScreen 数字校验 + 保活/权限开关） ——
+    token_ratio_number: Token 比例需为数字
+    hidden_depth_number: 隐藏起始深度需为数字
+    token_ratio_required: 启用时至少填写 token 比例
+    keepalive_toggle_failed: 常驻保活切换失败
+    permission_request_failed: 通知权限申请失败
+    # —— 波 3c-a 补键：波 3-2 MISS 收尾（M1 聊天配置屏标题） ——
+    title: 聊天配置
+    # —— 波 3c-c 补键：3c-b D 线契约对齐新 MISS（WorkspaceSettingsView 流式开关 desc） ——
+    stream_parent_desc: 主对话的实时输出；关闭后回复完成后一次性显示
+    stream_sub_desc: 子智能体会话的实时输出；关闭后回复完成后一次性显示
+  # —— skills：技能管理/详情/面板/新建/选择（mobile Skills*·NewSkillModal·SkillInfoEditModal·SkillPicker + desktop Skills*·SkillTypeahead + skill-ui·SessionSkillPanel） ——
+  smart_sort:
+    delete_title: 删除规则
+    delete_confirm_named: "确定删除「{name}」？"
+    delete_batch_confirm: "确定删除选中的 {count} 条规则？"
+    delete_rules_done: 已删除规则
+    delete_rules_count: "已删除 {count} 条规则"
+    import_title: 导入规则
+    import_confirm: 导入将替换全部现有规则（含内置规则的启停状态），确定继续？
+    import_confirm_desktop: 导入将清空并替换当前全部规则（含内置规则），确定继续？
+    imported_count: "已导入 {count} 条规则"
+    imported_all: 已导入并替换全部规则
+    exported: 已导出规则
+    exported_yaml: 已导出规则 YAML
+    reset_confirm_mobile: 将重灌全部内置规则（含删除后重建、恢复启用），用户自建规则不受影响。
+    reset_confirm_desktop: 将删除并重灌全部内置规则（自定义规则不受影响），确定继续？
+    reset_done: 已恢复默认规则
+    enable_batch_done: 已启用所选规则
+    disable_batch_done: 已禁用所选规则
+    builtin_delete_block_mobile: 内置规则不可删除，请取消勾选后再删除
+    builtin_delete_block_desktop: 内置规则不可删除，仅可禁用
+    builtin_delete_block_desktop2: 内置规则仅可禁用不可删除
+    batch_select_hint: 选择要操作的规则；内置规则不可删除
+    empty: 暂无规则，点击「新建」创建。
+    builtin_prefix: "内置 · "
+    disabled_tag: 已禁用
+    library_title: 规则库
+    new_rule_title: 新规则
+    unnamed_rule: 未命名规则
+    form_title: 排序规则
+    capture_kind_smart: 智能数字
+    capture_kind_fixed_max: 固定最大
+    capture_kind_fixed_min: 固定最小
+    name_example: 如 中文序号章节
+    name_example_desktop: 如 中文卷章复合
+    regex_label: 正则表达式
+    regex_hint: 支持 /正则/flags 格式，如 /第(\d+)章/i
+    regex_example: "如 /第([0-9〇零一二两三四五六七八九十百千]+)章/i"
+    capture_label: 捕获数字
+    capture_smart_hint: 从捕获组提取序号，中文数字自动转换
+    capture_hint_before: 命中即排在所有序号之前（序章/楔子类）
+    capture_hint_after: 命中即沉底排在所有序号之后（终章/番外类）
+    capture_picker_title: 选择捕获数字方式
+    capture_aria: "捕获数字 {label}"
+    capture_empty: 暂无可选捕获方式
+    desc_hint: 描述这条规则匹配什么，如 匹配 第X章 形式的标题
+    test_hint_mobile: 输入一段文本，点击「测试」后显示全部匹配与每处匹配的提取序号。
+    test_hint_desktop: 输入一段文本，点击「测试」后原文内高亮显示全部匹配段，并给出匹配计数。
+    test_text_label: 测试文本
+    test_text_placeholder: 输入测试文本
+    result_pending: 点击「测试」查看匹配结果
+    no_match_text: （空匹配）
+    no_tuple: 无序号
+    match_count: "共 {count} 处匹配"
+    no_matches: 无匹配
+    help_title: 使用说明
+    help_priority_title: 规则与优先级
+    help_priority_body: 排序时按列表顺序逐条尝试，首个命中的规则生效；行菜单可上移/下移/置顶/置底调整优先级。
+    help_fixed_title: 固定最大/最小
+    help_fixed_body: 命中即取固定序号：固定最小排在所有序号之前（序章/楔子类），固定最大沉底排在所有序号之后（终章/番外类），无需捕获组。
+    help_regex_title: 正则格式
+    help_regex_body: 支持 /正则/flags 字面量（如 /第(\d+)章/i），也可直接输入裸正则（默认无 flags）。
+    list_hint_desktop: 目录选「智能排序」时按本列表从上到下逐条尝试，首条命中规则的捕获组提取序号；可拖拽或用行菜单调整优先级。
+    # —— 波 3-2a 补键：规则编辑校验与列表操作（SmartSortRule* 校验/守卫/失败） ——
+    name_required: 请填写规则名称
+    regex_required: 请填写正则表达式
+    adjust_failed: 调整失败
+    missing_toast: 规则不存在或已删除
+    # —— 波 3c-a 补键：波 3-2 MISS 收尾（M2/D3 编辑器保存/开关/正则校验/帮助段 + D3 恢复默认标题） ——
+    saved_done: 已保存规则
+    enable_label: 启用规则
+    regex_invalid: "正则无效：{detail}"
+    test_text_required: 请输入测试文本
+    reset_title: 恢复默认规则
+    help_smart_title: 智能数字
+    help_smart_body: 从正则捕获组提取序号，中文与阿拉伯数字均可（第十二章→12、第12章→12）；多个捕获组组成复合序号（第X卷第Y章→[X,Y]）。须含至少一个捕获组。
+    # —— 波 3c-c 补键：3c-b D 线契约对齐新 MISS（空态/规则缺失/测试提示/named 删除模板/正则帮助段） ——
+    load_retry_empty: 加载失败，请重试。
+    empty_create_hint: 暂无规则，点击上方按钮创建。
+    rule_missing: 规则不存在或已被删除
+    test_result_pending: 输入测试文本后点击「测试」查看匹配结果。
+    delete_rule_confirm_msg_named: "删除规则「{name}」？"
+    help_regex_syntax: 支持 /正则/flags 格式，如 /第(\d+)章/i；智能数字档须含至少一个捕获组，命中时全部捕获组须可解析为数值（中文数字自动转换），否则尝试下一条规则；固定档命中即排最前/沉底，忽略捕获组。
+    zod_end_depth: 结束深度
+    zod_start_depth: 起始深度
+    zod_flags: 标志
+    zod_group_id: 组 ID
+    zod_rule_id: 规则 ID
+    zod_invalid_input: 无效输入
+    zod_nonneg_or_empty: "{field}须为非负整数或留空"
+  # —— prompt：提示词查看/编辑/轮卡（mobile PromptEditorScreen·RealPromptScreen·prompt-cards + desktop RealPromptPanel·PromptLeafCard） ——

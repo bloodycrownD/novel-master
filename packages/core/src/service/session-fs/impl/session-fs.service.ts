@@ -12,17 +12,17 @@ import type { SessionFsService } from "../session-fs.port.js";
 
 /** Dependencies for {@link DefaultSessionFsService}. */
 interface SessionFsServiceDeps {
-  readonly messageRollback: MessageRollbackService;
+    readonly messageRollback: MessageRollbackService;
 }
 
 /**
  * Thin facade over {@link MessageRollbackService} for cross-app rollback API stability.
  */
 export class DefaultSessionFsService implements SessionFsService {
-  constructor(private readonly deps: SessionFsServiceDeps) {}
+    constructor(private readonly deps: SessionFsServiceDeps) {}
 
-  /** nm-style: keep-public — SessionFsService 端口方法；MessageRollbackService 是唯一实现，这里只做分层门面。 */
-  async rollbackFilesToMessage(sessionId: string, projectId: string, messageId: string, options?: RollbackOptions): Promise<Result<void, AppError>> {
-    return this.deps.messageRollback.rollbackToMessage(sessionId, projectId, messageId, options);
-  }
+    /** nm-style: keep-public — SessionFsService 端口方法；MessageRollbackService 是唯一实现，这里只做分层门面。 */
+    async rollbackFilesToMessage(sessionId: string, projectId: string, messageId: string, options?: RollbackOptions): Promise<Result<void, AppError>> {
+        return this.deps.messageRollback.rollbackToMessage(sessionId, projectId, messageId, options);
+    }
 }

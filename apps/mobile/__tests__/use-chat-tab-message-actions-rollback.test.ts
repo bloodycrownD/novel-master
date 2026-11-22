@@ -5,11 +5,11 @@ import {afterEach, beforeEach, describe, expect, it, jest} from '@jest/globals';
 import React from 'react';
 import TestRenderer, {act} from 'react-test-renderer';
 import {
-  attachmentXmlCodec,
-  chatAnnotateDraftStore,
-  MessageAttachmentSchema,
-  type ChatMessageData,
-  type MessageAttachment,
+    AttachmentXmlCodec,
+    chatAnnotateDraftStore,
+    MessageAttachmentSchema,
+    type ChatMessageData,
+    type MessageAttachment,
 } from '@novel-master/core/chat';
 import {Alert} from 'react-native';
 import {ChatComposerDraft} from '../src/storage/chat-composer-draft';
@@ -22,584 +22,584 @@ const mockShowToast = jest.fn();
 const mockRefreshChatTokenLabel = jest.fn();
 
 jest.mock('@react-native-clipboard/clipboard', () => ({
-  __esModule: true,
-  default: {setString: jest.fn()},
+    __esModule: true,
+    default: {setString: jest.fn()},
 }));
 
 jest.mock('../src/services/message-rollback.service', () => {
-  const legacy = {
-  rollbackToMessage: (...args: unknown[]) => mockRollbackToMessage(...args),
+    const legacy = {
+    rollbackToMessage: (...args: unknown[]) => mockRollbackToMessage(...args),
 };
-  return {...legacy, MessageRollbackService: {rollback: legacy.rollbackToMessage}};
+    return {...legacy, MessageRollbackService: {rollback: legacy.rollbackToMessage}};
 });
 
 jest.mock('react-native', () => ({
-  Alert: {
-    alert: jest.fn(
-      (
-        _title: string,
-        _message: string,
-        buttons: {text: string; onPress?: () => void}[],
-      ) => {
-        buttons.find(b => b.text === '回滚')?.onPress?.();
-      },
-    ),
-  },
+    Alert: {
+        alert: jest.fn(
+            (
+                _title: string,
+                _message: string,
+                buttons: {text: string; onPress?: () => void}[],
+            ) => {
+                buttons.find(b => b.text === '回滚')?.onPress?.();
+            },
+        ),
+    },
 }));
 
 const mockRuntime = {};
 
 function plainUserMessage(
-  text: string,
-  attachments?: ChatMessageData['attachments'],
+    text: string,
+    attachments?: ChatMessageData['attachments'],
 ): ChatMessageData {
-  return {
-    id: 'm-user',
-    sessionId: 's1',
-    seq: 2,
-    role: 'user',
-    content: {blocks: [{type: 'text', text}]},
-    provider: null,
-    raw: null,
-    createdAtMs: 1,
-    hidden: false,
-    ...(attachments != null && attachments.length > 0 ? {attachments} : {}),
-  };
+    return {
+        id: 'm-user',
+        sessionId: 's1',
+        seq: 2,
+        role: 'user',
+        content: {blocks: [{type: 'text', text}]},
+        provider: null,
+        raw: null,
+        createdAtMs: 1,
+        hidden: false,
+        ...(attachments != null && attachments.length > 0 ? {attachments} : {}),
+    };
 }
 
 function assistantMessage(): ChatMessageData {
-  return {
-    id: 'm-asst',
-    sessionId: 's1',
-    seq: 3,
-    role: 'assistant',
-    content: {blocks: [{type: 'text', text: 'reply'}]},
-    provider: null,
-    raw: null,
-    createdAtMs: 2,
-    hidden: false,
-  };
+    return {
+        id: 'm-asst',
+        sessionId: 's1',
+        seq: 3,
+        role: 'assistant',
+        content: {blocks: [{type: 'text', text: 'reply'}]},
+        provider: null,
+        raw: null,
+        createdAtMs: 2,
+        hidden: false,
+    };
 }
 
 function mountActions(chatMessages: ChatMessageData[]) {
-  let api: ReturnType<typeof useChatTabMessageActions> | undefined;
-  function Harness() {
-    api = useChatTabMessageActions({
-      runtime: mockRuntime as any,
-      projectId: 'p1',
-      sessionId: 's1',
-      chatMessages,
-      reloadMessages: mockReloadMessages,
-      setDraftRestoreToken: mockSetDraftRestoreToken,
-      agentRunning: false,
-      resetStreamingDisplay: jest.fn(),
-      showToast: mockShowToast,
-      refreshChatTokenLabel: mockRefreshChatTokenLabel,
-      bumpWorktreeUiToken: jest.fn(),
-      reloadLists: jest.fn(),
-      setCurrentSession: jest.fn(),
-      setChatSubview: jest.fn(),
-      setConversationPanel: jest.fn(),
-      setMessageEditPrompt: jest.fn(),
+    let api: ReturnType<typeof useChatTabMessageActions> | undefined;
+    function Harness() {
+        api = useChatTabMessageActions({
+            runtime: mockRuntime as any,
+            projectId: 'p1',
+            sessionId: 's1',
+            chatMessages,
+            reloadMessages: mockReloadMessages,
+            setDraftRestoreToken: mockSetDraftRestoreToken,
+            agentRunning: false,
+            resetStreamingDisplay: jest.fn(),
+            showToast: mockShowToast,
+            refreshChatTokenLabel: mockRefreshChatTokenLabel,
+            bumpWorktreeUiToken: jest.fn(),
+            reloadLists: jest.fn(),
+            setCurrentSession: jest.fn(),
+            setChatSubview: jest.fn(),
+            setConversationPanel: jest.fn(),
+            setMessageEditPrompt: jest.fn(),
+        });
+        return null;
+    }
+    act(() => {
+        TestRenderer.create(React.createElement(Harness));
     });
-    return null;
-  }
-  act(() => {
-    TestRenderer.create(React.createElement(Harness));
-  });
-  return api!;
+    return api!;
 }
 
 describe('useChatTabMessageActions rollback', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    chatAnnotateDraftStore.resetForTests();
-    mockRollbackToMessage.mockResolvedValue({ok: true, value: undefined});
-    mockReloadMessages.mockResolvedValue([]);
-    mockSetDraftRestoreToken.mockImplementation(
-      (updater: number | ((t: number) => number)) => {
-        if (typeof updater === 'function') {
-          updater(0);
+    beforeEach(() => {
+        jest.clearAllMocks();
+        chatAnnotateDraftStore.resetForTests();
+        mockRollbackToMessage.mockResolvedValue({ok: true, value: undefined});
+        mockReloadMessages.mockResolvedValue([]);
+        mockSetDraftRestoreToken.mockImplementation(
+            (updater: number | ((t: number) => number)) => {
+                if (typeof updater === 'function') {
+                    updater(0);
+                }
+            },
+        );
+    });
+
+    afterEach(() => {
+        chatAnnotateDraftStore.resetForTests();
+    });
+
+    it('T-M1: plain user 确认文案含「及之后」', async () => {
+        const api = mountActions([plainUserMessage('hello')]);
+
+        await act(async () => {
+            api.handleMessageMenuAction(plainUserMessage('hello'), 'rollback');
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+
+        expect(Alert.alert).toHaveBeenCalledWith(
+            '回滚到此消息',
+            expect.stringMatching(/及之后/),
+            expect.any(Array),
+        );
+    });
+
+    it('T-M2/T-TX2: undo_send 成功后写 draft 原文（含 @路径）；无 attach chip', async () => {
+        ChatComposerDraft.writeState('s1', {text: 'old draft', attachments: []});
+        const anchorText = '请看 @/a.md';
+        const attachments = [
+            {
+                name: '/w.md',
+                source: 'workplace' as const,
+                type: 'text' as const,
+                content: null,
+                path: '/w.md',
+            },
+            {
+                name: '/a.md',
+                source: 'attach' as const,
+                type: 'text' as const,
+                content: null,
+                path: '/a.md',
+            },
+        ];
+        const anchor = plainUserMessage(anchorText, attachments);
+        const api = mountActions([anchor]);
+
+        await act(async () => {
+            api.handleMessageMenuAction(anchor, 'rollback');
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+
+        expect(mockRollbackToMessage).toHaveBeenCalled();
+        expect(ChatComposerDraft.readState('s1').text).toBe(anchorText);
+        expect(ChatComposerDraft.readState('s1').text).toContain('@/a.md');
+        const draftAttachments = ChatComposerDraft.readState('s1').attachments ?? [];
+        expect(draftAttachments).toEqual([]);
+        expect(draftAttachments.some(a => a.source === 'attach')).toBe(false);
+        expect(mockSetDraftRestoreToken).toHaveBeenCalled();
+    });
+
+    it('T-CA8: undo_send 恢复不带 tokenRanges（undefined 而非 []），允许下次水化兜底一次', async () => {
+        // 预置旧草稿带区间：恢复必须把它清成「无字段」，不能被旧区间沿用。
+        ChatComposerDraft.writeState('s1', {
+            text: 'old draft',
+            attachments: [],
+            tokenRanges: [{start: 0, end: 3}],
+        });
+        const sessions = {
+            getComposerDraftJson: jest.fn(async () => null),
+            setComposerDraftJson: jest.fn(
+                async (_id: string, _json: string | null) => true,
+            ),
+        };
+        (mockRuntime as Record<string, unknown>).sessions = sessions;
+        try {
+            const anchor = plainUserMessage('继续写 $技能');
+            const api = mountActions([anchor]);
+
+            await act(async () => {
+                api.handleMessageMenuAction(anchor, 'rollback');
+                await Promise.resolve();
+                await Promise.resolve();
+            });
+
+            const draft = ChatComposerDraft.readState('s1');
+            expect(draft.text).toBe('继续写 $技能');
+            // 缓存对象无自有键（不是 tokenRanges: undefined / []）。
+            expect(Object.prototype.hasOwnProperty.call(draft, 'tokenRanges')).toBe(
+                false,
+            );
+
+            // 落库 payload 同样无字段（undefined 原样透传，不臆造 []）。
+            const written = sessions.setComposerDraftJson.mock.calls
+                .map(([, json]) => json)
+                .filter((json): json is string => json != null)
+                .map(json => JSON.parse(json) as Record<string, unknown>)
+                .filter(payload => payload.text === '继续写 $技能');
+            expect(written.length).toBeGreaterThan(0);
+            expect('tokenRanges' in written[0]!).toBe(false);
+        } finally {
+            delete (mockRuntime as Record<string, unknown>).sessions;
         }
-      },
-    );
-  });
-
-  afterEach(() => {
-    chatAnnotateDraftStore.resetForTests();
-  });
-
-  it('T-M1: plain user 确认文案含「及之后」', async () => {
-    const api = mountActions([plainUserMessage('hello')]);
-
-    await act(async () => {
-      api.handleMessageMenuAction(plainUserMessage('hello'), 'rollback');
-      await Promise.resolve();
-      await Promise.resolve();
     });
 
-    expect(Alert.alert).toHaveBeenCalledWith(
-      '回滚到此消息',
-      expect.stringMatching(/及之后/),
-      expect.any(Array),
-    );
-  });
+    it('T-S5: undo_send 成功后 refreshChatTokenLabel 被调用', async () => {
+        const anchor = plainUserMessage('hello');
+        const api = mountActions([anchor]);
 
-  it('T-M2/T-TX2: undo_send 成功后写 draft 原文（含 @路径）；无 attach chip', async () => {
-    ChatComposerDraft.writeState('s1', {text: 'old draft', attachments: []});
-    const anchorText = '请看 @/a.md';
-    const attachments = [
-      {
-        name: '/w.md',
-        source: 'workplace' as const,
-        type: 'text' as const,
-        content: null,
-        path: '/w.md',
-      },
-      {
-        name: '/a.md',
-        source: 'attach' as const,
-        type: 'text' as const,
-        content: null,
-        path: '/a.md',
-      },
-    ];
-    const anchor = plainUserMessage(anchorText, attachments);
-    const api = mountActions([anchor]);
+        await act(async () => {
+            api.handleMessageMenuAction(anchor, 'rollback');
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
 
-    await act(async () => {
-      api.handleMessageMenuAction(anchor, 'rollback');
-      await Promise.resolve();
-      await Promise.resolve();
+        expect(mockRollbackToMessage).toHaveBeenCalled();
+        expect(mockRefreshChatTokenLabel).toHaveBeenCalled();
     });
 
-    expect(mockRollbackToMessage).toHaveBeenCalled();
-    expect(ChatComposerDraft.readState('s1').text).toBe(anchorText);
-    expect(ChatComposerDraft.readState('s1').text).toContain('@/a.md');
-    const draftAttachments = ChatComposerDraft.readState('s1').attachments ?? [];
-    expect(draftAttachments).toEqual([]);
-    expect(draftAttachments.some(a => a.source === 'attach')).toBe(false);
-    expect(mockSetDraftRestoreToken).toHaveBeenCalled();
-  });
+    it('T-TX2: 编辑打开弹窗不污染 Composer draft；仅 undo_send 回填正文', async () => {
+        ChatComposerDraft.writeState('s1', {
+            text: 'keep-me',
+            attachments: [
+                {
+                    name: '/w.md',
+                    source: 'workplace' as const,
+                    type: 'text' as const,
+                    content: null,
+                    path: '/w.md',
+                },
+                {
+                    name: '/old.md',
+                    source: 'attach' as const,
+                    type: 'text' as const,
+                    content: null,
+                    path: '/old.md',
+                },
+            ],
+        });
+        const editText = '请看 @/a.md';
+        const messageAttachments = [
+            {
+                name: '/a.md',
+                source: 'attach' as const,
+                type: 'text' as const,
+                content: null,
+                path: '/a.md',
+            },
+        ];
+        const target = plainUserMessage(editText, messageAttachments);
+        const setMessageEditPrompt = jest.fn();
+        let api: ReturnType<typeof useChatTabMessageActions> | undefined;
+        function Harness() {
+            api = useChatTabMessageActions({
+                runtime: mockRuntime as any,
+                projectId: 'p1',
+                sessionId: 's1',
+                chatMessages: [target],
+                reloadMessages: mockReloadMessages,
+                setDraftRestoreToken: mockSetDraftRestoreToken,
+                agentRunning: false,
+                resetStreamingDisplay: jest.fn(),
+                showToast: mockShowToast,
+                refreshChatTokenLabel: mockRefreshChatTokenLabel,
+                bumpWorktreeUiToken: jest.fn(),
+                reloadLists: jest.fn(),
+                setCurrentSession: jest.fn(),
+                setChatSubview: jest.fn(),
+                setConversationPanel: jest.fn(),
+                setMessageEditPrompt,
+            });
+            return null;
+        }
+        act(() => {
+            TestRenderer.create(React.createElement(Harness));
+        });
 
-  it('T-CA8: undo_send 恢复不带 tokenRanges（undefined 而非 []），允许下次水化兜底一次', async () => {
-    // 预置旧草稿带区间：恢复必须把它清成「无字段」，不能被旧区间沿用。
-    ChatComposerDraft.writeState('s1', {
-      text: 'old draft',
-      attachments: [],
-      tokenRanges: [{start: 0, end: 3}],
-    });
-    const sessions = {
-      getComposerDraftJson: jest.fn(async () => null),
-      setComposerDraftJson: jest.fn(
-        async (_id: string, _json: string | null) => true,
-      ),
-    };
-    (mockRuntime as Record<string, unknown>).sessions = sessions;
-    try {
-      const anchor = plainUserMessage('继续写 $技能');
-      const api = mountActions([anchor]);
+        await act(async () => {
+            api!.handleMessageMenuAction(target, 'edit');
+        });
 
-      await act(async () => {
-        api.handleMessageMenuAction(anchor, 'rollback');
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-
-      const draft = ChatComposerDraft.readState('s1');
-      expect(draft.text).toBe('继续写 $技能');
-      // 缓存对象无自有键（不是 tokenRanges: undefined / []）。
-      expect(Object.prototype.hasOwnProperty.call(draft, 'tokenRanges')).toBe(
-        false,
-      );
-
-      // 落库 payload 同样无字段（undefined 原样透传，不臆造 []）。
-      const written = sessions.setComposerDraftJson.mock.calls
-        .map(([, json]) => json)
-        .filter((json): json is string => json != null)
-        .map(json => JSON.parse(json) as Record<string, unknown>)
-        .filter(payload => payload.text === '继续写 $技能');
-      expect(written.length).toBeGreaterThan(0);
-      expect('tokenRanges' in written[0]!).toBe(false);
-    } finally {
-      delete (mockRuntime as Record<string, unknown>).sessions;
-    }
-  });
-
-  it('T-S5: undo_send 成功后 refreshChatTokenLabel 被调用', async () => {
-    const anchor = plainUserMessage('hello');
-    const api = mountActions([anchor]);
-
-    await act(async () => {
-      api.handleMessageMenuAction(anchor, 'rollback');
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(mockRollbackToMessage).toHaveBeenCalled();
-    expect(mockRefreshChatTokenLabel).toHaveBeenCalled();
-  });
-
-  it('T-TX2: 编辑打开弹窗不污染 Composer draft；仅 undo_send 回填正文', async () => {
-    ChatComposerDraft.writeState('s1', {
-      text: 'keep-me',
-      attachments: [
-        {
-          name: '/w.md',
-          source: 'workplace' as const,
-          type: 'text' as const,
-          content: null,
-          path: '/w.md',
-        },
-        {
-          name: '/old.md',
-          source: 'attach' as const,
-          type: 'text' as const,
-          content: null,
-          path: '/old.md',
-        },
-      ],
-    });
-    const editText = '请看 @/a.md';
-    const messageAttachments = [
-      {
-        name: '/a.md',
-        source: 'attach' as const,
-        type: 'text' as const,
-        content: null,
-        path: '/a.md',
-      },
-    ];
-    const target = plainUserMessage(editText, messageAttachments);
-    const setMessageEditPrompt = jest.fn();
-    let api: ReturnType<typeof useChatTabMessageActions> | undefined;
-    function Harness() {
-      api = useChatTabMessageActions({
-        runtime: mockRuntime as any,
-        projectId: 'p1',
-        sessionId: 's1',
-        chatMessages: [target],
-        reloadMessages: mockReloadMessages,
-        setDraftRestoreToken: mockSetDraftRestoreToken,
-        agentRunning: false,
-        resetStreamingDisplay: jest.fn(),
-        showToast: mockShowToast,
-        refreshChatTokenLabel: mockRefreshChatTokenLabel,
-        bumpWorktreeUiToken: jest.fn(),
-        reloadLists: jest.fn(),
-        setCurrentSession: jest.fn(),
-        setChatSubview: jest.fn(),
-        setConversationPanel: jest.fn(),
-        setMessageEditPrompt,
-      });
-      return null;
-    }
-    act(() => {
-      TestRenderer.create(React.createElement(Harness));
+        expect(setMessageEditPrompt).toHaveBeenCalledWith({
+            messageId: target.id,
+            initialText: editText,
+        });
+        const draft = ChatComposerDraft.readState('s1');
+        expect(draft.text).toBe('keep-me');
+        expect(draft.attachments).toEqual([
+            {
+                name: '/w.md',
+                source: 'workplace',
+                type: 'text',
+                content: null,
+                path: '/w.md',
+            },
+            {
+                name: '/old.md',
+                source: 'attach',
+                type: 'text',
+                content: null,
+                path: '/old.md',
+            },
+        ]);
+        expect(mockSetDraftRestoreToken).not.toHaveBeenCalled();
     });
 
-    await act(async () => {
-      api!.handleMessageMenuAction(target, 'edit');
+    it('T-M3: assistant 回滚不写 draft', async () => {
+        ChatComposerDraft.write('s1', 'unchanged');
+        const api = mountActions([plainUserMessage('u'), assistantMessage()]);
+
+        await act(async () => {
+            api.handleMessageMenuAction(assistantMessage(), 'rollback');
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+
+        expect(mockRollbackToMessage).toHaveBeenCalled();
+        expect(ChatComposerDraft.readState('s1').text).toBe('unchanged');
+        expect(mockSetDraftRestoreToken).not.toHaveBeenCalled();
     });
 
-    expect(setMessageEditPrompt).toHaveBeenCalledWith({
-      messageId: target.id,
-      initialText: editText,
-    });
-    const draft = ChatComposerDraft.readState('s1');
-    expect(draft.text).toBe('keep-me');
-    expect(draft.attachments).toEqual([
-      {
-        name: '/w.md',
-        source: 'workplace',
-        type: 'text',
-        content: null,
-        path: '/w.md',
-      },
-      {
-        name: '/old.md',
-        source: 'attach',
-        type: 'text',
-        content: null,
-        path: '/old.md',
-      },
-    ]);
-    expect(mockSetDraftRestoreToken).not.toHaveBeenCalled();
-  });
+    it('T-UD1: undo_send 含 annotate → store 含 path 草稿 + chip；与未发送并存', async () => {
+        chatAnnotateDraftStore.add('s1', {
+            id: 'unsent-keep',
+            path: '/keep.md',
+            originalText: '未发送原文',
+            userAnnotation: '未发送说明',
+        });
+        const annotateAtt = AttachmentXmlCodec.encodeAnnotateAttachment({
+            id: 'sent-ann',
+            path: '/chapter/a.md',
+            originalText: '选中原文',
+            userAnnotation: '请改短',
+        });
+        const anchor = plainUserMessage('请看批注', [annotateAtt]);
+        const api = mountActions([anchor]);
 
-  it('T-M3: assistant 回滚不写 draft', async () => {
-    ChatComposerDraft.write('s1', 'unchanged');
-    const api = mountActions([plainUserMessage('u'), assistantMessage()]);
+        await act(async () => {
+            api.handleMessageMenuAction(anchor, 'rollback');
+            await Promise.resolve();
+            await Promise.resolve();
+        });
 
-    await act(async () => {
-      api.handleMessageMenuAction(assistantMessage(), 'rollback');
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(mockRollbackToMessage).toHaveBeenCalled();
-    expect(ChatComposerDraft.readState('s1').text).toBe('unchanged');
-    expect(mockSetDraftRestoreToken).not.toHaveBeenCalled();
-  });
-
-  it('T-UD1: undo_send 含 annotate → store 含 path 草稿 + chip；与未发送并存', async () => {
-    chatAnnotateDraftStore.add('s1', {
-      id: 'unsent-keep',
-      path: '/keep.md',
-      originalText: '未发送原文',
-      userAnnotation: '未发送说明',
-    });
-    const annotateAtt = attachmentXmlCodec.encodeAnnotateAttachment({
-      id: 'sent-ann',
-      path: '/chapter/a.md',
-      originalText: '选中原文',
-      userAnnotation: '请改短',
-    });
-    const anchor = plainUserMessage('请看批注', [annotateAtt]);
-    const api = mountActions([anchor]);
-
-    await act(async () => {
-      api.handleMessageMenuAction(anchor, 'rollback');
-      await Promise.resolve();
-      await Promise.resolve();
+        expect(mockRollbackToMessage).toHaveBeenCalled();
+        expect(ChatComposerDraft.readState('s1').text).toBe('请看批注');
+        const drafts = chatAnnotateDraftStore.list('s1');
+        expect(drafts).toHaveLength(2);
+        expect(
+            drafts.some(d => d.id === 'unsent-keep' && d.path === '/keep.md'),
+        ).toBe(true);
+        const restored = drafts.find(d => d.path === '/chapter/a.md');
+        expect(restored).toMatchObject({
+            path: '/chapter/a.md',
+            originalText: '选中原文',
+            userAnnotation: '请改短',
+        });
+        expect(restored?.id).not.toBe('sent-ann');
+        const chips = chatAnnotateDraftStore.chips('s1');
+        expect(
+            chips.some(c => c.path === '/chapter/a.md' && c.action === 'annotate'),
+        ).toBe(true);
+        expect(
+            chips.some(c => c.path === '/keep.md' && c.action === 'annotate'),
+        ).toBe(true);
+        const draftAttachments = ChatComposerDraft.readState('s1').attachments ?? [];
+        expect(draftAttachments.some(a => a.source === 'attach')).toBe(false);
+        expect(
+            draftAttachments.some(
+                a => a.action === 'annotate' && a.path === '/chapter/a.md',
+            ),
+        ).toBe(true);
     });
 
-    expect(mockRollbackToMessage).toHaveBeenCalled();
-    expect(ChatComposerDraft.readState('s1').text).toBe('请看批注');
-    const drafts = chatAnnotateDraftStore.list('s1');
-    expect(drafts).toHaveLength(2);
-    expect(
-      drafts.some(d => d.id === 'unsent-keep' && d.path === '/keep.md'),
-    ).toBe(true);
-    const restored = drafts.find(d => d.path === '/chapter/a.md');
-    expect(restored).toMatchObject({
-      path: '/chapter/a.md',
-      originalText: '选中原文',
-      userAnnotation: '请改短',
-    });
-    expect(restored?.id).not.toBe('sent-ann');
-    const chips = chatAnnotateDraftStore.chips('s1');
-    expect(
-      chips.some(c => c.path === '/chapter/a.md' && c.action === 'annotate'),
-    ).toBe(true);
-    expect(
-      chips.some(c => c.path === '/keep.md' && c.action === 'annotate'),
-    ).toBe(true);
-    const draftAttachments = ChatComposerDraft.readState('s1').attachments ?? [];
-    expect(draftAttachments.some(a => a.source === 'attach')).toBe(false);
-    expect(
-      draftAttachments.some(
-        a => a.action === 'annotate' && a.path === '/chapter/a.md',
-      ),
-    ).toBe(true);
-  });
+    it('T-UD2: undo_send 无 annotate → store 不新增；正文恢复；attachments 仍 []', async () => {
+        ChatComposerDraft.writeState('s1', {text: 'old', attachments: []});
+        const anchor = plainUserMessage('仅正文 @/a.md', [
+            {
+                name: '/a.md',
+                source: 'attach' as const,
+                type: 'text' as const,
+                content: null,
+                path: '/a.md',
+            },
+        ]);
+        const api = mountActions([anchor]);
 
-  it('T-UD2: undo_send 无 annotate → store 不新增；正文恢复；attachments 仍 []', async () => {
-    ChatComposerDraft.writeState('s1', {text: 'old', attachments: []});
-    const anchor = plainUserMessage('仅正文 @/a.md', [
-      {
-        name: '/a.md',
-        source: 'attach' as const,
-        type: 'text' as const,
-        content: null,
-        path: '/a.md',
-      },
-    ]);
-    const api = mountActions([anchor]);
+        await act(async () => {
+            api.handleMessageMenuAction(anchor, 'rollback');
+            await Promise.resolve();
+            await Promise.resolve();
+        });
 
-    await act(async () => {
-      api.handleMessageMenuAction(anchor, 'rollback');
-      await Promise.resolve();
-      await Promise.resolve();
+        expect(ChatComposerDraft.readState('s1').text).toBe('仅正文 @/a.md');
+        expect(chatAnnotateDraftStore.list('s1')).toEqual([]);
+        expect(chatAnnotateDraftStore.chips('s1')).toEqual([]);
+        expect(ChatComposerDraft.readState('s1').attachments ?? []).toEqual([]);
     });
 
-    expect(ChatComposerDraft.readState('s1').text).toBe('仅正文 @/a.md');
-    expect(chatAnnotateDraftStore.list('s1')).toEqual([]);
-    expect(chatAnnotateDraftStore.chips('s1')).toEqual([]);
-    expect(ChatComposerDraft.readState('s1').attachments ?? []).toEqual([]);
-  });
+    it('T-UD3: undo_send 伪 path __message__: / /__message__: → 不写入文件批注 store', async () => {
+        // 手工伪 path（消息批注 builder 已移除；历史防御）
+        const msgAtt: MessageAttachment = {
+            name: '__message__:m-99:d1',
+            source: 'user_ops',
+            type: 'text',
+            content:
+                '<action name="annotate">\n{"path":"__message__:m-99:d1","messageId":"m-99","originalText":"气泡选区","userAnnotation":"批一下"}\n</action>',
+            path: '__message__:m-99:d1',
+            action: 'annotate',
+        };
+        const withSlash: MessageAttachment = {
+            ...msgAtt,
+            path: `/${msgAtt.path}`,
+            name: `/${msgAtt.path}`,
+        };
+        const anchor = plainUserMessage('消息批注 Undo', [msgAtt, withSlash]);
+        const api = mountActions([anchor]);
 
-  it('T-UD3: undo_send 伪 path __message__: / /__message__: → 不写入文件批注 store', async () => {
-    // 手工伪 path（消息批注 builder 已移除；历史防御）
-    const msgAtt: MessageAttachment = {
-      name: '__message__:m-99:d1',
-      source: 'user_ops',
-      type: 'text',
-      content:
-        '<action name="annotate">\n{"path":"__message__:m-99:d1","messageId":"m-99","originalText":"气泡选区","userAnnotation":"批一下"}\n</action>',
-      path: '__message__:m-99:d1',
-      action: 'annotate',
-    };
-    const withSlash: MessageAttachment = {
-      ...msgAtt,
-      path: `/${msgAtt.path}`,
-      name: `/${msgAtt.path}`,
-    };
-    const anchor = plainUserMessage('消息批注 Undo', [msgAtt, withSlash]);
-    const api = mountActions([anchor]);
+        await act(async () => {
+            api.handleMessageMenuAction(anchor, 'rollback');
+            await Promise.resolve();
+            await Promise.resolve();
+        });
 
-    await act(async () => {
-      api.handleMessageMenuAction(anchor, 'rollback');
-      await Promise.resolve();
-      await Promise.resolve();
+        expect(ChatComposerDraft.readState('s1').text).toBe('消息批注 Undo');
+        expect(chatAnnotateDraftStore.list('s1')).toEqual([]);
+        expect(chatAnnotateDraftStore.chips('s1')).toEqual([]);
+        expect(ChatComposerDraft.readState('s1').attachments ?? []).toEqual([]);
     });
 
-    expect(ChatComposerDraft.readState('s1').text).toBe('消息批注 Undo');
-    expect(chatAnnotateDraftStore.list('s1')).toEqual([]);
-    expect(chatAnnotateDraftStore.chips('s1')).toEqual([]);
-    expect(ChatComposerDraft.readState('s1').attachments ?? []).toEqual([]);
-  });
+    it('T-UD4/T-UOL7: undo_send 含历史 user_ops 附件 → 无 user_ops chip；正文恢复', async () => {
+        // 历史消息手改附件（展示兼容保留的 DTO 形状）；ops store 已拆除，验证不映回 chip
+        const opsAtt: MessageAttachment = {
+            name: '/chapter/a.md',
+            source: 'user_ops',
+            type: 'text',
+            content: null,
+            path: '/chapter/a.md',
+            action: 'edit',
+        };
+        const anchor = plainUserMessage('请看手改', [opsAtt]);
+        const api = mountActions([anchor]);
 
-  it('T-UD4/T-UOL7: undo_send 含历史 user_ops 附件 → 无 user_ops chip；正文恢复', async () => {
-    // 历史消息手改附件（展示兼容保留的 DTO 形状）；ops store 已拆除，验证不映回 chip
-    const opsAtt: MessageAttachment = {
-      name: '/chapter/a.md',
-      source: 'user_ops',
-      type: 'text',
-      content: null,
-      path: '/chapter/a.md',
-      action: 'edit',
-    };
-    const anchor = plainUserMessage('请看手改', [opsAtt]);
-    const api = mountActions([anchor]);
+        await act(async () => {
+            api.handleMessageMenuAction(anchor, 'rollback');
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
 
-    await act(async () => {
-      api.handleMessageMenuAction(anchor, 'rollback');
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
+        expect(mockRollbackToMessage).toHaveBeenCalled();
+        expect(ChatComposerDraft.readState('s1').text).toBe('请看手改');
+        const draftAttachments = ChatComposerDraft.readState('s1').attachments ?? [];
+        expect(draftAttachments.some(a => a.source === 'attach')).toBe(false);
+        expect(
+            draftAttachments.some(
+                a => a.source === 'user_ops' && a.action !== 'annotate',
+            ),
+        ).toBe(false);
     });
 
-    expect(mockRollbackToMessage).toHaveBeenCalled();
-    expect(ChatComposerDraft.readState('s1').text).toBe('请看手改');
-    const draftAttachments = ChatComposerDraft.readState('s1').attachments ?? [];
-    expect(draftAttachments.some(a => a.source === 'attach')).toBe(false);
-    expect(
-      draftAttachments.some(
-        a => a.source === 'user_ops' && a.action !== 'annotate',
-      ),
-    ).toBe(false);
-  });
+    it('T-UD5/T-UOL7: rewind 不映回消息手改附件', async () => {
+        const opsAtt: MessageAttachment = {
+            name: '/no.md',
+            source: 'user_ops',
+            type: 'text',
+            content: null,
+            path: '/no.md',
+            action: 'write',
+        };
+        // assistant 锚点 → rewind；即便误带 user_ops 也不映回
+        const asst: ChatMessageData = {
+            ...assistantMessage(),
+            attachments: [opsAtt],
+        };
+        const api = mountActions([plainUserMessage('u'), asst]);
 
-  it('T-UD5/T-UOL7: rewind 不映回消息手改附件', async () => {
-    const opsAtt: MessageAttachment = {
-      name: '/no.md',
-      source: 'user_ops',
-      type: 'text',
-      content: null,
-      path: '/no.md',
-      action: 'write',
-    };
-    // assistant 锚点 → rewind；即便误带 user_ops 也不映回
-    const asst: ChatMessageData = {
-      ...assistantMessage(),
-      attachments: [opsAtt],
-    };
-    const api = mountActions([plainUserMessage('u'), asst]);
+        await act(async () => {
+            api.handleMessageMenuAction(asst, 'rollback');
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
 
-    await act(async () => {
-      api.handleMessageMenuAction(asst, 'rollback');
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
+        expect(mockRollbackToMessage).toHaveBeenCalled();
+        expect(mockSetDraftRestoreToken).not.toHaveBeenCalled();
     });
 
-    expect(mockRollbackToMessage).toHaveBeenCalled();
-    expect(mockSetDraftRestoreToken).not.toHaveBeenCalled();
-  });
+    it('T-UD6/G-1: rewind 前预置 user_ops chip → 上条清除、无非 annotate user_ops chip', async () => {
+        ChatComposerDraft.writeState('s1', {
+            text: 'draft',
+            attachments: [
+                {
+                    name: '/keep.md',
+                    source: 'user_ops',
+                    type: 'text',
+                    content: null,
+                    path: '/keep.md',
+                    action: 'write',
+                },
+            ],
+        });
+        const api = mountActions([plainUserMessage('u'), assistantMessage()]);
 
-  it('T-UD6/G-1: rewind 前预置 user_ops chip → 上条清除、无非 annotate user_ops chip', async () => {
-    ChatComposerDraft.writeState('s1', {
-      text: 'draft',
-      attachments: [
-        {
-          name: '/keep.md',
-          source: 'user_ops',
-          type: 'text',
-          content: null,
-          path: '/keep.md',
-          action: 'write',
-        },
-      ],
-    });
-    const api = mountActions([plainUserMessage('u'), assistantMessage()]);
+        await act(async () => {
+            api.handleMessageMenuAction(assistantMessage(), 'rollback');
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
 
-    await act(async () => {
-      api.handleMessageMenuAction(assistantMessage(), 'rollback');
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(mockRollbackToMessage).toHaveBeenCalled();
-    const draftAttachments = ChatComposerDraft.readState('s1').attachments ?? [];
-    expect(
-      draftAttachments.some(
-        a => a.source === 'user_ops' && a.action !== 'annotate',
-      ),
-    ).toBe(false);
-  });
-
-  it('B1-8-MA5: undo_send 历史非法附件行 → 部分保留；批注仍可反投影', async () => {
-    // 消费链 #2 的观测面：历史消息的 attachments_json 混了一条非法附件
-    // （未知键 → .strict() 拒绝）。旧口径整数组判废 ⇒ ChatMessageData.attachments
-    // 字段整体缺席 ⇒ useChatTabMessageActions 的 `target.attachments ?? []`
-    // 拿到 [] ⇒ 批注恢复不回来。新口径逐条丢弃非法项，合法那条照常在。
-    const annotateAtt = attachmentXmlCodec.encodeAnnotateAttachment({
-      id: 'sent-b18',
-      path: '/chapter/a.md',
-      originalText: '选中原文',
-      userAnnotation: '请改短',
-    });
-    const raw = JSON.stringify([
-      annotateAtt,
-      {
-        name: '/legacy.md',
-        source: 'user_ops',
-        type: 'text',
-        content: null,
-        path: '/legacy.md',
-        legacyUnknownKey: 'x',
-      },
-    ]);
-    const parsedAttachments = MessageAttachmentSchema.parseJson(raw);
-    // 逐条降级：合法那条保序存活，非法那条被丢弃。
-    expect(parsedAttachments).toHaveLength(1);
-    expect(parsedAttachments?.[0]).toMatchObject({
-      action: 'annotate',
-      path: '/chapter/a.md',
+        expect(mockRollbackToMessage).toHaveBeenCalled();
+        const draftAttachments = ChatComposerDraft.readState('s1').attachments ?? [];
+        expect(
+            draftAttachments.some(
+                a => a.source === 'user_ops' && a.action !== 'annotate',
+            ),
+        ).toBe(false);
     });
 
-    const anchor = plainUserMessage('请看历史批注', parsedAttachments ?? undefined);
-    const api = mountActions([anchor]);
+    it('B1-8-MA5: undo_send 历史非法附件行 → 部分保留；批注仍可反投影', async () => {
+        // 消费链 #2 的观测面：历史消息的 attachments_json 混了一条非法附件
+        // （未知键 → .strict() 拒绝）。旧口径整数组判废 ⇒ ChatMessageData.attachments
+        // 字段整体缺席 ⇒ useChatTabMessageActions 的 `target.attachments ?? []`
+        // 拿到 [] ⇒ 批注恢复不回来。新口径逐条丢弃非法项，合法那条照常在。
+        const annotateAtt = AttachmentXmlCodec.encodeAnnotateAttachment({
+            id: 'sent-b18',
+            path: '/chapter/a.md',
+            originalText: '选中原文',
+            userAnnotation: '请改短',
+        });
+        const raw = JSON.stringify([
+            annotateAtt,
+            {
+                name: '/legacy.md',
+                source: 'user_ops',
+                type: 'text',
+                content: null,
+                path: '/legacy.md',
+                legacyUnknownKey: 'x',
+            },
+        ]);
+        const parsedAttachments = MessageAttachmentSchema.parseJson(raw);
+        // 逐条降级：合法那条保序存活，非法那条被丢弃。
+        expect(parsedAttachments).toHaveLength(1);
+        expect(parsedAttachments?.[0]).toMatchObject({
+            action: 'annotate',
+            path: '/chapter/a.md',
+        });
 
-    await act(async () => {
-      api.handleMessageMenuAction(anchor, 'rollback');
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+        const anchor = plainUserMessage('请看历史批注', parsedAttachments ?? undefined);
+        const api = mountActions([anchor]);
 
-    expect(mockRollbackToMessage).toHaveBeenCalled();
-    expect(ChatComposerDraft.readState('s1').text).toBe('请看历史批注');
-    // 批注草稿确实从存活的那条附件反投影回来了（旧口径下这里是 []）。
-    const restored = chatAnnotateDraftStore.list('s1').find(
-      d => d.path === '/chapter/a.md',
-    );
-    expect(restored).toMatchObject({
-      path: '/chapter/a.md',
-      originalText: '选中原文',
-      userAnnotation: '请改短',
+        await act(async () => {
+            api.handleMessageMenuAction(anchor, 'rollback');
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+
+        expect(mockRollbackToMessage).toHaveBeenCalled();
+        expect(ChatComposerDraft.readState('s1').text).toBe('请看历史批注');
+        // 批注草稿确实从存活的那条附件反投影回来了（旧口径下这里是 []）。
+        const restored = chatAnnotateDraftStore.list('s1').find(
+            d => d.path === '/chapter/a.md',
+        );
+        expect(restored).toMatchObject({
+            path: '/chapter/a.md',
+            originalText: '选中原文',
+            userAnnotation: '请改短',
+        });
+        expect(
+            chatAnnotateDraftStore.chips('s1').some(
+                c => c.path === '/chapter/a.md' && c.action === 'annotate',
+            ),
+        ).toBe(true);
+        const draftAttachments = ChatComposerDraft.readState('s1').attachments ?? [];
+        expect(
+            draftAttachments.some(a => a.path === '/legacy.md'),
+        ).toBe(false);
     });
-    expect(
-      chatAnnotateDraftStore.chips('s1').some(
-        c => c.path === '/chapter/a.md' && c.action === 'annotate',
-      ),
-    ).toBe(true);
-    const draftAttachments = ChatComposerDraft.readState('s1').attachments ?? [];
-    expect(
-      draftAttachments.some(a => a.path === '/legacy.md'),
-    ).toBe(false);
-  });
 });

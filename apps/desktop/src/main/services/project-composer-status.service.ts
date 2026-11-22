@@ -6,7 +6,7 @@
 import { chatAnnotateDraftStore, type MessageAttachment } from "@novel-master/core/chat";
 
 export namespace ProjectComposerStatusService {
-  /**
+    /**
    * session 真源 → 状态条 attachments（仅 annotate；App 侧再 ∪ annotate）。
    * 读 main 进程 annotate store；无净 diff preview。
    *
@@ -14,7 +14,7 @@ export namespace ProjectComposerStatusService {
    * 是 core 全局单例），已删除——双端只剩这一行等价实现，下一轮可直接删 wrapper
    * 让调用方取 core store（本轮不动调用点命名，保持「投影口径单一入口」的可读性）。
    */
-  export async function forSession(sessionId: string): Promise<MessageAttachment[]> {
-    return chatAnnotateDraftStore.chips(sessionId);
-  }
+    export async function forSession(sessionId: string): Promise<MessageAttachment[]> {
+        return chatAnnotateDraftStore.chips(sessionId);
+    }
 }

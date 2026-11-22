@@ -2,12 +2,12 @@ import {Text} from '@novel-master/core/common';
 import {TranscriptRichHtml} from '@/components/rich-content/prepare-transcript-rich-html';
 
 function bootEscapeHtml(text: string): string {
-  const decoded = Text.decodeHtmlEntities(text);
-  return decoded
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    const decoded = Text.decodeHtmlEntities(text);
+    return decoded
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
 }
 
 describe('quot display paths', () => {

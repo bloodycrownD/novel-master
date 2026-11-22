@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  vfs_revision 表的 SQL mapper（schema 见 resources/sql/schema/vfs-revision.sql；WITHOUT ROWID）。
+
+  结构约定与 chat-message.mapper.xml 一致：
+  - 语句 id 与 repo 方法同名（camelCase）；一个方法发出多条语句时，主语句取方法名，
+    配角用「方法名 + 语义后缀」（如 repairRefCountFloorSelect / batchRepairRefCountFloorSelect）。
+  - 生成物在 src/infra/sql-template/generated/vfs_revision.mapper.generated.ts，repo 内只留引用。
+  - 前缀扫描经 vfs_entry JOIN 用 (scope_key, path) 圈定范围（JOIN 语句归本 mapper）。
+  - 批量寻址一律按复合 PK (entry_id, version) 而非 rowid：WITHOUT ROWID 与 rowid 表都支持。
+  - 动态 OR 条件 / 批量 IN 清单走 <foreach>；分支标志（positive/negative/hasExcludes）
+    由调用处按原 JS 分支算好传入，test 表达式保持裸标识符（避开标签头里的 > 字符）。
+  - batch 口（conn.batch）的 ? 占位符写死，按位置绑参。
+  - 反斜杠走 JS 模板字面量载体：XML 里写两个反斜杠（ESCAPE '\\'），生成物运行时还原成
+    单字符转义符（与 workplace 系列 mapper 同一约定）。
+-->
+<mapper namespace="vfs_revision">
+
+  <select id="findMaxVersionForEntry">
+    SELECT MAX(version) AS max_version
+    FROM vfs_revision
+    WHERE entry_id = #{entryId}
+  </select>
+
+  <select id="findMaxVersionsForEntries">
+    SELECT entry_id, MAX(version) AS max_version
+    FROM vfs_revision
+    WHERE entry_id IN (<foreach collection="entryIds" item="entryId" separator=", ">#{entryId}</foreach>)
+    GROUP BY entry_id
+  </select>
+
+  <select id="findByEntryAndVersion">
+    SELECT entry_id, version, content_hash, status, mtime_ms
+       FROM vfs_revision
+       WHERE entry_id = #{entryId} AND version = #{version}
+  </select>
+
+  <select id="existsByEntryAndVersion">
+    SELECT 1 AS one FROM vfs_revision
+       WHERE entry_id = #{entryId} AND version = #{version}
+       LIMIT 1
+  </select>
+
+  <select id="findMetaByEntryAndVersion">
+    SELECT status, content_hash FROM vfs_revision
+       WHERE entry_id = #{entryId} AND version = #{version}
+       LIMIT 1
+  </select>
+
+  <!-- 批量指针元数据：(entry_id = ? AND version = ?) OR ... 由 pairs 展开。 -->
+  <select id="findMetasByEntryVersions">
+    SELECT entry_id, version, status, content_hash
+    FROM vfs_revision
+    WHERE <foreach collection="pairs" item="pair" separator=" OR ">(entry_id = #{pair.entryId} AND version = #{pair.version})</foreach>
+  </select>
+
+  <!-- 复合 PK 批量存在性：(entry_id, version) IN ((?,?),...) 由 pairs 展开。 -->
+  <select id="findExistingEntryVersionKeys">
+    SELECT entry_id, version
+    FROM vfs_revision
+    WHERE (entry_id, version) IN (<foreach collection="pairs" item="pair" separator=",">(#{pair.entryId},#{pair.version})</foreach>)
+  </select>
+
+  <!-- 6 个 ? 与列清单顺序一一对应；走 conn.batch，占位符按位置绑定。 -->
+  <insert id="batchAppendWithRefCount">
+    INSERT INTO vfs_revision (entry_id, version, content_hash, status, mtime_ms, ref_count)
+    VALUES (?, ?, ?, ?, ?, ?)
+  </insert>
+
+  <insert id="append">
+    INSERT INTO vfs_revision
+       (entry_id, version, content_hash, status, mtime_ms)
+       VALUES (#{entryId}, #{version}, #{contentHash}, #{status}, #{mtimeMs})
+  </insert>
+
+  <select id="listKeysUnderScope">
+    SELECT r.entry_id AS entry_id, r.version AS version
+       FROM vfs_revision r
+       JOIN vfs_entry e ON e.entry_id = r.entry_id
+       WHERE e.scope_key = #{scopeKey}
+         AND (e.path = #{path} OR e.path LIKE #{pattern} ESCAPE '\\')
+       ORDER BY r.entry_id, r.version
+  </select>
+
+  <select id="listKeysWithRefCountUnderScope">
+    SELECT r.entry_id AS entry_id, r.version AS version, r.ref_count AS ref_count
+       FROM vfs_revision r
+       JOIN vfs_entry e ON e.entry_id = r.entry_id
+       WHERE e.scope_key = #{scopeKey}
+         AND (e.path = #{path} OR e.path LIKE #{pattern} ESCAPE '\\')
+       ORDER BY r.entry_id, r.version
+  </select>
+
+  <delete id="deleteExceptReachable">
+    DELETE FROM vfs_revision WHERE <foreach collection="pairs" item="pair" separator=" OR ">(entry_id = #{pair.entryId} AND version = #{pair.version})</foreach>
+  </delete>
+
+  <update id="adjustRefCount">
+    UPDATE vfs_revision SET ref_count = ref_count + #{delta}
+       WHERE entry_id = #{entryId} AND version = #{version}
+  </update>
+
+  <!-- 通用批量增减：positive/negative 由调用处按 delta 符号算好，absolute 供负向夹逼用。 -->
+  <update id="batchAdjustRefCountWithDelta">
+    UPDATE vfs_revision
+    SET ref_count = ref_count <if test="positive">+ #{delta}</if><if test="negative">- #{absDelta}</if>
+    WHERE (entry_id, version) IN (<foreach collection="pointers" item="pair" separator=",">(#{pair.entryId},#{pair.version})</foreach>)<if test="negative"> AND ref_count &gt;= #{absDelta}</if>
+  </update>
+
+  <select id="repairRefCountFloorSelect">
+    SELECT ref_count FROM vfs_revision
+       WHERE entry_id = #{entryId} AND version = #{version}
+  </select>
+
+  <update id="repairRefCountFloor">
+    UPDATE vfs_revision SET ref_count = #{expected}
+       WHERE entry_id = #{entryId} AND version = #{version}
+  </update>
+
+  <select id="batchRepairRefCountFloorSelect">
+    SELECT entry_id, version, ref_count
+    FROM vfs_revision
+    WHERE (entry_id, version) IN (<foreach collection="pairs" item="pair" separator=",">(#{pair.entryId},#{pair.version})</foreach>)
+  </select>
+
+  <!-- 每条参数是 [expected, entryId, version]；走 conn.batch，占位符按位置绑定。 -->
+  <update id="batchRepairRefCountFloor">
+    UPDATE vfs_revision SET ref_count = ? WHERE entry_id = ? AND version = ?
+  </update>
+
+  <!-- 隔离豁免：hasExcludes 为真时追加 NOT (path = excl OR path LIKE excl/%)，排除前缀下的 revision 不参与 GC。 -->
+  <select id="deleteUnreferencedUnderScopeCount">
+    SELECT COUNT(*) AS n
+    FROM vfs_revision r
+    JOIN vfs_entry e ON e.entry_id = r.entry_id
+    WHERE e.scope_key = #{scopeKey} AND (e.path = #{path} OR e.path LIKE #{pattern} ESCAPE '\\')<if test="hasExcludes"> AND NOT (<foreach collection="excludes" item="excl" separator=" OR ">(e.path = #{excl.path} OR e.path LIKE #{excl.pattern} ESCAPE '\\')</foreach>)</if> AND r.ref_count &lt;= 0
+  </select>
+
+  <!-- 用复合 PK (entry_id, version) 寻址而非 rowid，vfs_revision 可安全切 WITHOUT ROWID。 -->
+  <delete id="deleteUnreferencedUnderScope">
+    DELETE
+    FROM vfs_revision
+    WHERE (entry_id, version) IN ( SELECT r.entry_id, r.version
+    FROM vfs_revision r
+    JOIN vfs_entry e ON e.entry_id = r.entry_id
+    WHERE e.scope_key = #{scopeKey} AND (e.path = #{path} OR e.path LIKE #{pattern} ESCAPE '\\')<if test="hasExcludes"> AND NOT (<foreach collection="excludes" item="excl" separator=" OR ">(e.path = #{excl.path} OR e.path LIKE #{excl.pattern} ESCAPE '\\')</foreach>)</if> AND r.ref_count &lt;= 0 )
+  </delete>
+
+  <!--
+    全局清扫孤儿 revision：删掉 ref_count<=0 且 entry_id 已不在 vfs_entry 的行。
+    不依赖 vfs_entry JOIN（孤儿 revision 的 entry 已删，JOIN 不到），直接按「ref_count<=0
+    且 entry_id 不存在」全表清扫。revision DELETE 触发器会连带维护 vfs_content_blob.ref_count
+    并回收归零 blob，所以这一条 SQL 同时回收 revision 和 blob 两类孤儿。
+    历史：曾与 orphan-revision-gc-v1 migration（一次性回扫存量，v1.4.28 退役）共享同一常量；
+    migration 退役后运行期独占，语义不变。
+  -->
+  <delete id="deleteGlobalOrphans">
+    DELETE
+    FROM vfs_revision
+    WHERE ref_count &lt;= 0 AND entry_id NOT IN (SELECT entry_id
+    FROM vfs_entry)
+  </delete>
+
+</mapper>

@@ -11,8 +11,10 @@
  */
 
 export const ScopePrefix = {
-  /** 转义 LIKE 串里的特殊字符，保证前缀匹配按字面量比较。 */
-  escapeLike(value: string): string {
-    return value.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
-  },
+    /** 转义 LIKE 串里的特殊字符，保证前缀匹配按字面量比较。 */
+    escapeLike(value: string): string {
+        return value.replace(/\\/g, "\\\\")
+            .replace(/%/g, "\\%")
+            .replace(/_/g, "\\_");
+    },
 } as const;

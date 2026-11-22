@@ -13,24 +13,24 @@ import {  AssertionError, assert as invariant  } from "@/common/assert.js";
 import {  AppError, AppErrorOps  } from "@/errors/app-error.js";
 
 describe("common/assert（T-S25）", () => {
-  it("assert(false, msg) 抛 AssertionError，带 [invariant] 前缀且不是 AppError", () => {
-    let thrown: unknown;
-    try {
-      invariant(false, "装配不变量破坏");
-    } catch (error) {
-      thrown = error;
-    }
-    assert.ok(thrown instanceof AssertionError);
-    assert.equal((thrown as Error).name, "AssertionError");
-    assert.equal((thrown as Error).message, "[invariant] 装配不变量破坏");
-    assert.equal(AppErrorOps.is(thrown), false);
-    assert.equal(thrown instanceof AppError, false);
-  });
+    it("assert(false, msg) 抛 AssertionError，带 [invariant] 前缀且不是 AppError", () => {
+        let thrown: unknown;
+        try {
+            invariant(false, "装配不变量破坏");
+        } catch (error) {
+            thrown = error;
+        }
+        assert.ok(thrown instanceof AssertionError);
+        assert.equal((thrown as Error).name, "AssertionError");
+        assert.equal((thrown as Error).message, "[invariant] 装配不变量破坏");
+        assert.equal(AppErrorOps.is(thrown), false);
+        assert.equal(thrown instanceof AppError, false);
+    });
 
-  it("assert 命中时正常返回（类型收窄为 asserts）", () => {
-    let value: string | null = "x";
-    invariant(value != null, "不应触发");
-    // 编译期由 asserts 收窄；运行期只需确认没抛。
-    assert.equal(value, "x");
-  });
+    it("assert 命中时正常返回（类型收窄为 asserts）", () => {
+        let value: string | null = "x";
+        invariant(value != null, "不应触发");
+        // 编译期由 asserts 收窄；运行期只需确认没抛。
+        assert.equal(value, "x");
+    });
 });

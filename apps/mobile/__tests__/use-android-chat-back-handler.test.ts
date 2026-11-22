@@ -2,234 +2,234 @@ import React from 'react';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import {
-  useAndroidChatBackHandler,
-  type AndroidChatBackActions,
-  type AndroidChatBackState,
+    useAndroidChatBackHandler,
+    type AndroidChatBackActions,
+    type AndroidChatBackState,
 } from '@/hooks/useAndroidChatBackHandler';
 
 let capturedHandler: (() => boolean) | undefined;
 const mockRemove = jest.fn();
 
 jest.mock('react-native', () => ({
-  Platform: {OS: 'android'},
-  BackHandler: {
-    addEventListener: jest.fn((_event: string, handler: () => boolean) => {
-      capturedHandler = handler;
-      return {remove: mockRemove};
-    }),
-  },
+    Platform: {OS: 'android'},
+    BackHandler: {
+        addEventListener: jest.fn((_event: string, handler: () => boolean) => {
+            capturedHandler = handler;
+            return {remove: mockRemove};
+        }),
+    },
 }));
 
 jest.mock('@react-navigation/native', () => ({
-  useFocusEffect: (effect: () => void | (() => void)) => {
-    const cleanup = effect();
-    return cleanup;
-  },
+    useFocusEffect: (effect: () => void | (() => void)) => {
+        const cleanup = effect();
+        return cleanup;
+    },
 }));
 
 function defaultState(
-  overrides: Partial<AndroidChatBackState> = {},
+    overrides: Partial<AndroidChatBackState> = {},
 ): AndroidChatBackState {
-  return {
-    chatSubview: 'sessions',
-    conversationPanel: 'chat',
-    sessionListPanel: 'sessions',
-    sessionDrawerOpen: false,
-    messageMenuOpen: false,
-    messageEditOpen: false,
-    modelPickerOpen: false,
-    agentPickerOpen: false,
-    sessionRenameOpen: false,
-    projectDrawerOpen: false,
-    sessionBatchActive: false,
-    ...overrides,
-  };
+    return {
+        chatSubview: 'sessions',
+        conversationPanel: 'chat',
+        sessionListPanel: 'sessions',
+        sessionDrawerOpen: false,
+        messageMenuOpen: false,
+        messageEditOpen: false,
+        modelPickerOpen: false,
+        agentPickerOpen: false,
+        sessionRenameOpen: false,
+        projectDrawerOpen: false,
+        sessionBatchActive: false,
+        ...overrides,
+    };
 }
 
 function defaultActions(
-  overrides: Partial<AndroidChatBackActions> = {},
+    overrides: Partial<AndroidChatBackActions> = {},
 ): AndroidChatBackActions {
-  return {
-    backFromConversation: jest.fn(),
-    showChatPanel: jest.fn(),
-    closeSessionDrawer: jest.fn(),
-    closeMessageMenu: jest.fn(),
-    closeMessageEdit: jest.fn(),
-    closeModelPicker: jest.fn(),
-    closeAgentPicker: jest.fn(),
-    closeSessionRename: jest.fn(),
-    closeProjectDrawer: jest.fn(),
-    exitSessionBatch: jest.fn(),
-    showSessionsPanel: jest.fn(),
-    ...overrides,
-  };
+    return {
+        backFromConversation: jest.fn(),
+        showChatPanel: jest.fn(),
+        closeSessionDrawer: jest.fn(),
+        closeMessageMenu: jest.fn(),
+        closeMessageEdit: jest.fn(),
+        closeModelPicker: jest.fn(),
+        closeAgentPicker: jest.fn(),
+        closeSessionRename: jest.fn(),
+        closeProjectDrawer: jest.fn(),
+        exitSessionBatch: jest.fn(),
+        showSessionsPanel: jest.fn(),
+        ...overrides,
+    };
 }
 
 function TestHost({
-  state,
-  actions,
+    state,
+    actions,
 }: {
-  state: AndroidChatBackState;
-  actions: AndroidChatBackActions;
+    state: AndroidChatBackState;
+    actions: AndroidChatBackActions;
 }) {
-  useAndroidChatBackHandler(state, actions);
-  return null;
+    useAndroidChatBackHandler(state, actions);
+    return null;
 }
 
 describe('useAndroidChatBackHandler', () => {
-  beforeEach(() => {
-    capturedHandler = undefined;
-    mockRemove.mockClear();
-    jest.clearAllMocks();
-  });
-
-  function mountAndGetHandler(
-    state: AndroidChatBackState,
-    actions: AndroidChatBackActions,
-  ): () => boolean {
-    act(() => {
-      TestRenderer.create(React.createElement(TestHost, {state, actions}));
+    beforeEach(() => {
+        capturedHandler = undefined;
+        mockRemove.mockClear();
+        jest.clearAllMocks();
     });
-    expect(capturedHandler).toBeDefined();
-    return capturedHandler!;
-  }
 
-  it('T-B1: conversation chat panel intercepts back and calls backFromConversation', () => {
-    const backFromConversation = jest.fn();
-    const showChatPanel = jest.fn();
-    const handler = mountAndGetHandler(
-      defaultState({chatSubview: 'conversation', conversationPanel: 'chat'}),
-      defaultActions({backFromConversation, showChatPanel}),
-    );
+    function mountAndGetHandler(
+        state: AndroidChatBackState,
+        actions: AndroidChatBackActions,
+    ): () => boolean {
+        act(() => {
+            TestRenderer.create(React.createElement(TestHost, {state, actions}));
+        });
+        expect(capturedHandler).toBeDefined();
+        return capturedHandler!;
+    }
 
-    expect(handler()).toBe(true);
-    expect(backFromConversation).toHaveBeenCalledTimes(1);
-    expect(showChatPanel).not.toHaveBeenCalled();
-  });
+    it('T-B1: conversation chat panel intercepts back and calls backFromConversation', () => {
+        const backFromConversation = jest.fn();
+        const showChatPanel = jest.fn();
+        const handler = mountAndGetHandler(
+            defaultState({chatSubview: 'conversation', conversationPanel: 'chat'}),
+            defaultActions({backFromConversation, showChatPanel}),
+        );
 
-  it('T-B1d: conversation workspace at root returns to chat panel', () => {
-    const backFromConversation = jest.fn();
-    const showChatPanel = jest.fn();
-    const workspaceGoUp = jest.fn();
-    const handler = mountAndGetHandler(
-      defaultState({
-        chatSubview: 'conversation',
-        conversationPanel: 'workspace',
-        workspaceCanGoUp: false,
-      }),
-      defaultActions({backFromConversation, showChatPanel}),
-    );
+        expect(handler()).toBe(true);
+        expect(backFromConversation).toHaveBeenCalledTimes(1);
+        expect(showChatPanel).not.toHaveBeenCalled();
+    });
 
-    expect(handler()).toBe(true);
-    expect(showChatPanel).toHaveBeenCalledTimes(1);
-    expect(workspaceGoUp).not.toHaveBeenCalled();
-    expect(backFromConversation).not.toHaveBeenCalled();
-  });
+    it('T-B1d: conversation workspace at root returns to chat panel', () => {
+        const backFromConversation = jest.fn();
+        const showChatPanel = jest.fn();
+        const workspaceGoUp = jest.fn();
+        const handler = mountAndGetHandler(
+            defaultState({
+                chatSubview: 'conversation',
+                conversationPanel: 'workspace',
+                workspaceCanGoUp: false,
+            }),
+            defaultActions({backFromConversation, showChatPanel}),
+        );
 
-  it('T-B1c: conversation workspace in subdirectory goes up before chat panel', () => {
-    const backFromConversation = jest.fn();
-    const showChatPanel = jest.fn();
-    const workspaceGoUp = jest.fn();
-    const handler = mountAndGetHandler(
-      defaultState({
-        chatSubview: 'conversation',
-        conversationPanel: 'workspace',
-        workspaceCanGoUp: true,
-        workspaceGoUp,
-      }),
-      defaultActions({backFromConversation, showChatPanel}),
-    );
+        expect(handler()).toBe(true);
+        expect(showChatPanel).toHaveBeenCalledTimes(1);
+        expect(workspaceGoUp).not.toHaveBeenCalled();
+        expect(backFromConversation).not.toHaveBeenCalled();
+    });
 
-    expect(handler()).toBe(true);
-    expect(workspaceGoUp).toHaveBeenCalledTimes(1);
-    expect(showChatPanel).not.toHaveBeenCalled();
-    expect(backFromConversation).not.toHaveBeenCalled();
-  });
+    it('T-B1c: conversation workspace in subdirectory goes up before chat panel', () => {
+        const backFromConversation = jest.fn();
+        const showChatPanel = jest.fn();
+        const workspaceGoUp = jest.fn();
+        const handler = mountAndGetHandler(
+            defaultState({
+                chatSubview: 'conversation',
+                conversationPanel: 'workspace',
+                workspaceCanGoUp: true,
+                workspaceGoUp,
+            }),
+            defaultActions({backFromConversation, showChatPanel}),
+        );
 
-  it('T-B2: session list with no overlays returns false', () => {
-    const backFromConversation = jest.fn();
-    const handler = mountAndGetHandler(
-      defaultState({chatSubview: 'sessions'}),
-      defaultActions({backFromConversation}),
-    );
+        expect(handler()).toBe(true);
+        expect(workspaceGoUp).toHaveBeenCalledTimes(1);
+        expect(showChatPanel).not.toHaveBeenCalled();
+        expect(backFromConversation).not.toHaveBeenCalled();
+    });
 
-    expect(handler()).toBe(false);
-    expect(backFromConversation).not.toHaveBeenCalled();
-  });
+    it('T-B2: session list with no overlays returns false', () => {
+        const backFromConversation = jest.fn();
+        const handler = mountAndGetHandler(
+            defaultState({chatSubview: 'sessions'}),
+            defaultActions({backFromConversation}),
+        );
 
-  it('T-B3: session drawer closes first without leaving conversation', () => {
-    const backFromConversation = jest.fn();
-    const closeSessionDrawer = jest.fn();
-    const handler = mountAndGetHandler(
-      defaultState({
-        chatSubview: 'conversation',
-        sessionDrawerOpen: true,
-      }),
-      defaultActions({backFromConversation, closeSessionDrawer}),
-    );
+        expect(handler()).toBe(false);
+        expect(backFromConversation).not.toHaveBeenCalled();
+    });
 
-    expect(handler()).toBe(true);
-    expect(closeSessionDrawer).toHaveBeenCalledTimes(1);
-    expect(backFromConversation).not.toHaveBeenCalled();
-  });
+    it('T-B3: session drawer closes first without leaving conversation', () => {
+        const backFromConversation = jest.fn();
+        const closeSessionDrawer = jest.fn();
+        const handler = mountAndGetHandler(
+            defaultState({
+                chatSubview: 'conversation',
+                sessionDrawerOpen: true,
+            }),
+            defaultActions({backFromConversation, closeSessionDrawer}),
+        );
 
-  it('T-B5: project template panel returns to session list before exiting app', () => {
-    const showSessionsPanel = jest.fn();
-    const handler = mountAndGetHandler(
-      defaultState({sessionListPanel: 'projects'}),
-      defaultActions({showSessionsPanel}),
-    );
+        expect(handler()).toBe(true);
+        expect(closeSessionDrawer).toHaveBeenCalledTimes(1);
+        expect(backFromConversation).not.toHaveBeenCalled();
+    });
 
-    expect(handler()).toBe(true);
-    expect(showSessionsPanel).toHaveBeenCalledTimes(1);
-  });
+    it('T-B5: project template panel returns to session list before exiting app', () => {
+        const showSessionsPanel = jest.fn();
+        const handler = mountAndGetHandler(
+            defaultState({sessionListPanel: 'projects'}),
+            defaultActions({showSessionsPanel}),
+        );
 
-  it('T-B5b: project template panel goes up a directory before returning to session list', () => {
-    const workspaceGoUp = jest.fn();
-    const showSessionsPanel = jest.fn();
-    const handler = mountAndGetHandler(
-      defaultState({
-        sessionListPanel: 'projects',
-        workspaceCanGoUp: true,
-        workspaceGoUp,
-      }),
-      defaultActions({showSessionsPanel}),
-    );
+        expect(handler()).toBe(true);
+        expect(showSessionsPanel).toHaveBeenCalledTimes(1);
+    });
 
-    expect(handler()).toBe(true);
-    expect(workspaceGoUp).toHaveBeenCalledTimes(1);
-    expect(showSessionsPanel).not.toHaveBeenCalled();
-  });
+    it('T-B5b: project template panel goes up a directory before returning to session list', () => {
+        const workspaceGoUp = jest.fn();
+        const showSessionsPanel = jest.fn();
+        const handler = mountAndGetHandler(
+            defaultState({
+                sessionListPanel: 'projects',
+                workspaceCanGoUp: true,
+                workspaceGoUp,
+            }),
+            defaultActions({showSessionsPanel}),
+        );
 
-  it('T-B4: agent picker closes first without leaving conversation', () => {
-    const backFromConversation = jest.fn();
-    const closeAgentPicker = jest.fn();
-    const handler = mountAndGetHandler(
-      defaultState({
-        chatSubview: 'conversation',
-        agentPickerOpen: true,
-      }),
-      defaultActions({backFromConversation, closeAgentPicker}),
-    );
+        expect(handler()).toBe(true);
+        expect(workspaceGoUp).toHaveBeenCalledTimes(1);
+        expect(showSessionsPanel).not.toHaveBeenCalled();
+    });
 
-    expect(handler()).toBe(true);
-    expect(closeAgentPicker).toHaveBeenCalledTimes(1);
-    expect(backFromConversation).not.toHaveBeenCalled();
-  });
+    it('T-B4: agent picker closes first without leaving conversation', () => {
+        const backFromConversation = jest.fn();
+        const closeAgentPicker = jest.fn();
+        const handler = mountAndGetHandler(
+            defaultState({
+                chatSubview: 'conversation',
+                agentPickerOpen: true,
+            }),
+            defaultActions({backFromConversation, closeAgentPicker}),
+        );
 
-  it('T9: web message menu closes first without leaving conversation', () => {
-    const backFromConversation = jest.fn();
-    const closeMessageMenu = jest.fn();
-    const handler = mountAndGetHandler(
-      defaultState({
-        chatSubview: 'conversation',
-        messageMenuOpen: true,
-      }),
-      defaultActions({backFromConversation, closeMessageMenu}),
-    );
+        expect(handler()).toBe(true);
+        expect(closeAgentPicker).toHaveBeenCalledTimes(1);
+        expect(backFromConversation).not.toHaveBeenCalled();
+    });
 
-    expect(handler()).toBe(true);
-    expect(closeMessageMenu).toHaveBeenCalledTimes(1);
-    expect(backFromConversation).not.toHaveBeenCalled();
-  });
+    it('T9: web message menu closes first without leaving conversation', () => {
+        const backFromConversation = jest.fn();
+        const closeMessageMenu = jest.fn();
+        const handler = mountAndGetHandler(
+            defaultState({
+                chatSubview: 'conversation',
+                messageMenuOpen: true,
+            }),
+            defaultActions({backFromConversation, closeMessageMenu}),
+        );
+
+        expect(handler()).toBe(true);
+        expect(closeMessageMenu).toHaveBeenCalledTimes(1);
+        expect(backFromConversation).not.toHaveBeenCalled();
+    });
 });

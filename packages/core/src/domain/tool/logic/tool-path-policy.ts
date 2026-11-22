@@ -37,64 +37,64 @@ const PATH_FIELDS = ["path", "filePath", "from", "to"] as const;
 const PATH_ARRAY_FIELDS = ["fileAttachment"] as const;
 
 export const ToolPathPolicy = {
-  /** 从 tool input 顶层提取所有路径字段（约定字段名见 {@link PATH_FIELDS} / {@link PATH_ARRAY_FIELDS}）。 */
-  extractInputPaths(input: unknown): readonly string[] {
-    if (typeof input !== "object" || input === null) {
-      return [];
-    }
-    const rec = input as Record<string, unknown>;
-    const paths: string[] = [];
-    for (const key of PATH_FIELDS) {
-      const v = rec[key];
-      if (typeof v === "string" && v.length > 0) {
-        paths.push(v);
-      }
-    }
-    for (const key of PATH_ARRAY_FIELDS) {
-      const v = rec[key];
-      if (!Array.isArray(v)) {
-        continue;
-      }
-      for (const item of v) {
-        if (typeof item === "string" && item.length > 0) {
-          paths.push(item);
+    /** 从 tool input 顶层提取所有路径字段（约定字段名见 {@link PATH_FIELDS} / {@link PATH_ARRAY_FIELDS}）。 */
+    extractInputPaths(input: unknown): readonly string[] {
+        if (typeof input !== "object" || input === null) {
+            return [];
         }
-      }
-    }
-    return paths;
-  },
+        const rec = input as Record<string, unknown>;
+        const paths: string[] = [];
+        for (const key of PATH_FIELDS) {
+            const v = rec[key];
+            if (typeof v === "string" && v.length > 0) {
+                paths.push(v);
+            }
+        }
+        for (const key of PATH_ARRAY_FIELDS) {
+            const v = rec[key];
+            if (!Array.isArray(v)) {
+                continue;
+            }
+            for (const item of v) {
+                if (typeof item === "string" && item.length > 0) {
+                    paths.push(item);
+                }
+            }
+        }
+        return paths;
+    },
 
-  /**
+    /**
    * 单条路径是否被 `allowedPaths` 放行。
    *
    * `allowedPaths === undefined` 表示不限制（向后兼容）。
    */
-  isPathAllowed(path: string, allowedPaths?: readonly string[]): boolean {
-    if (allowedPaths === undefined) {
-      return true;
-    }
-    return allowedPaths.some((prefix) => Path.hasPrefix(path, prefix));
-  },
+    isPathAllowed(path: string, allowedPaths?: readonly string[]): boolean {
+        if (allowedPaths === undefined) {
+            return true;
+        }
+        return allowedPaths.some((prefix) => Path.hasPrefix(path, prefix));
+    },
 
-  /**
+    /**
    * 在所有路径里找出第一条越界的；全部放行返回 `null`。
    *
    * 给 `ToolRunner.call()` 用——它只需要知道「是否要拒」以及「拒哪条路径」，
    * 不需要知道每条具体校验过程。
    */
-  findDisallowedPath(paths: readonly string[], allowedPaths?: readonly string[]): string | null {
-    if (allowedPaths === undefined) {
-      return null;
-    }
-    for (const p of paths) {
-      if (!ToolPathPolicy.isPathAllowed(p, allowedPaths)) {
-        return p;
-      }
-    }
-    return null;
-  },
+    findDisallowedPath(paths: readonly string[], allowedPaths?: readonly string[]): string | null {
+        if (allowedPaths === undefined) {
+            return null;
+        }
+        for (const p of paths) {
+            if (!ToolPathPolicy.isPathAllowed(p, allowedPaths)) {
+                return p;
+            }
+        }
+        return null;
+    },
 
-  /**
+    /**
    * 鸭子读 ctx 上的 `allowedPaths` 字段（不强制 ctx 必须是 BuiltinToolContext）。
    *
    * @remarks
@@ -102,32 +102,32 @@ export const ToolPathPolicy = {
    * policy 与具体上下文类型解耦：只要 ctx 长得像 `{ allowedPaths?: string[] }`
    * 就能套上策略。
    */
-  readAllowedPaths(ctx: unknown): readonly string[] | undefined {
-    if (typeof ctx !== "object" || ctx === null) {
-      return undefined;
-    }
-    if (!("allowedPaths" in ctx)) {
-      return undefined;
-    }
-    const v = (ctx as { allowedPaths?: unknown }).allowedPaths;
-    if (v === undefined || v === null) {
-      return undefined;
-    }
-    if (Array.isArray(v)) {
-      return v as readonly string[];
-    }
-    return undefined;
-  },
+    readAllowedPaths(ctx: unknown): readonly string[] | undefined {
+        if (typeof ctx !== "object" || ctx === null) {
+            return undefined;
+        }
+        if (!("allowedPaths" in ctx)) {
+            return undefined;
+        }
+        const v = (ctx as { allowedPaths?: unknown }).allowedPaths;
+        if (v === undefined || v === null) {
+            return undefined;
+        }
+        if (Array.isArray(v)) {
+            return v as readonly string[];
+        }
+        return undefined;
+    },
 
-  /**
+    /**
    * 一次性把策略跑完，返回首个越界路径或 `null`。
    *
    * 这是 `ToolRunner.call()` 实际调的入口——把 input 抽取与 ctx 读取封装在一起，
    * runner 那边只关心结果。
    */
-  check(input: unknown, ctx: unknown): string | null {
-    const allowedPaths = ToolPathPolicy.readAllowedPaths(ctx);
-    const paths = ToolPathPolicy.extractInputPaths(input);
-    return ToolPathPolicy.findDisallowedPath(paths, allowedPaths);
-  },
+    check(input: unknown, ctx: unknown): string | null {
+        const allowedPaths = ToolPathPolicy.readAllowedPaths(ctx);
+        const paths = ToolPathPolicy.extractInputPaths(input);
+        return ToolPathPolicy.findDisallowedPath(paths, allowedPaths);
+    },
 } as const;

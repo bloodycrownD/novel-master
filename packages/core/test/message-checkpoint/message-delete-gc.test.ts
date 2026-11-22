@@ -10,42 +10,42 @@ import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix
 novelMasterTestFixture();
 
 describe("MessageService.delete checkpoint GC", () => {
-  it("removes message checkpoint and GCs tail-only revisions", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
-    const entries = new SqliteVfsEntryRepository(ctx.conn);
-    const revisions = new SqliteVfsRevisionRepository(ctx.conn);
-    const checkpoints = new SqliteMessageCheckpointRepository(ctx.conn);
+    it("removes message checkpoint and GCs tail-only revisions", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
+        const entries = new SqliteVfsEntryRepository(ctx.conn);
+        const revisions = new SqliteVfsRevisionRepository(ctx.conn);
+        const checkpoints = new SqliteMessageCheckpointRepository(ctx.conn);
 
-    const assistant = unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "write" }],
-    }));
-    await svfs.write("/gc-delete.md", "v1", { versionCheck: false });
-    const v1 = unwrap(await svfs.read("/gc-delete.md")).version;
-    await svfs.write("/gc-delete.md", "v2", { versionCheck: false });
-    const v2 = unwrap(await svfs.read("/gc-delete.md")).version;
-    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant.id));
+        const assistant = unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "write" }],
+        }));
+        await svfs.write("/gc-delete.md", "v1", { versionCheck: false });
+        const v1 = unwrap(await svfs.read("/gc-delete.md")).version;
+        await svfs.write("/gc-delete.md", "v2", { versionCheck: false });
+        const v2 = unwrap(await svfs.read("/gc-delete.md")).version;
+        unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant.id));
 
-    const scope = {
-      kind: "session" as const,
-      projectId: project.id,
-      sessionId: session.id,
-    };
-    const sk = LogicalPath.scopeKey(scope);
-    const entry = unwrap(await entries.findByPath(sk, "/gc-delete.md"));
-    assert.ok(entry != null);
+        const scope = {
+            kind: "session" as const,
+            projectId: project.id,
+            sessionId: session.id,
+        };
+        const sk = LogicalPath.scopeKey(scope);
+        const entry = unwrap(await entries.findByPath(sk, "/gc-delete.md"));
+        assert.ok(entry != null);
 
-    unwrap(await ctx.messages.delete(assistant.id));
+        unwrap(await ctx.messages.delete(assistant.id));
 
-    assert.equal(unwrap(await svfs.read("/gc-delete.md")).content, "v2");
-    assert.equal(await checkpoints.hasCheckpoint(session.id, assistant.id), false);
-    const keys = await revisions.listKeysUnderScope(sk, "/");
-    assert.ok(keys.some((k) => k.entryId === entry.entryId && k.version === v2));
-    assert.equal(
-      keys.some((k) => k.entryId === entry.entryId && k.version === v1),
-      false,
-    );
-  });
+        assert.equal(unwrap(await svfs.read("/gc-delete.md")).content, "v2");
+        assert.equal(await checkpoints.hasCheckpoint(session.id, assistant.id), false);
+        const keys = await revisions.listKeysUnderScope(sk, "/");
+        assert.ok(keys.some((k) => k.entryId === entry.entryId && k.version === v2));
+        assert.equal(
+            keys.some((k) => k.entryId === entry.entryId && k.version === v1),
+            false,
+        );
+    });
 });

@@ -27,208 +27,224 @@ import {  unwrap  } from "../helpers/result-unwrap.js";
 novelMasterTestFixture();
 
 describe("T-GC1: orphan revision + blob GC（findings 发现 14）", () => {
-  it("删全部文件后，RevisionGc.sweepSession 清掉孤儿 active revision 与 blob", async () => {
-    const ctx = getNovelMasterTestContext();
-    const suffix = testIsolationSuffix();
-    const project = await ctx.projects.create(`P-orphan-${suffix}`);
-    const session = await ctx.sessions.create(project.id);
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    const revRepo = new SqliteVfsRevisionRepository(ctx.conn);
+    it("删全部文件后，RevisionGc.sweepSession 清掉孤儿 active revision 与 blob", async () => {
+        const ctx = getNovelMasterTestContext();
+        const suffix = testIsolationSuffix();
+        const project = await ctx.projects.create(`P-orphan-${suffix}`);
+        const session = await ctx.sessions.create(project.id);
+        const vfs = ctx.sessionVfs(project.id, session.id);
+        const revRepo = new SqliteVfsRevisionRepository(ctx.conn);
 
-    // 造 10 文件 × 2 版：每个文件 v1（ref_count=0，有 content_hash）+ v2（live head）。
-    // 每条 active revision 内容不同，确保 blob 一对一（不共享），方便断言 blob 全清。
-    const totalFiles = 10;
-    for (let i = 0; i < totalFiles; i++) {
-      await vfs.write(`/orphan/file-${i}.txt`, `body-v1-${i}`, {
-        versionCheck: false,
-      });
-      await vfs.write(`/orphan/file-${i}.txt`, `body-v2-${i}`, {
-        versionCheck: false,
-      });
-    }
+        // 造 10 文件 × 2 版：每个文件 v1（ref_count=0，有 content_hash）+ v2（live head）。
+        // 每条 active revision 内容不同，确保 blob 一对一（不共享），方便断言 blob 全清。
+        const totalFiles = 10;
+        for (let i = 0; i < totalFiles; i++) {
+            await vfs.write(`/orphan/file-${i}.txt`, `body-v1-${i}`, {
+                versionCheck: false,
+            });
+            await vfs.write(`/orphan/file-${i}.txt`, `body-v2-${i}`, {
+                versionCheck: false,
+            });
+        }
 
-    const beforeActiveRev = await ctx.conn.query<{ cnt: number }>(
-      `SELECT COUNT(*) AS cnt FROM vfs_revision WHERE status='active' AND content_hash IS NOT NULL
-       AND entry_id IN (SELECT entry_id FROM vfs_entry WHERE scope_key = ?)`,
-      [`session:${project.id}:${session.id}`],
-    );
-    const beforeBlob = await ctx.conn.query<{ cnt: number }>(
-      // 按 body-v1/v2 前缀限定：内置技能种子（agent-config）也占 1 个 blob
-      `SELECT COUNT(*) AS cnt FROM vfs_content_blob
-       WHERE content_hash IN (SELECT content_hash FROM vfs_revision
-         WHERE entry_id IN (SELECT entry_id FROM vfs_entry WHERE scope_key = ?))`,
-      [`session:${project.id}:${session.id}`],
-    );
-    // 10 文件 × 2 版 active = 20 条；20 个不同内容 = 20 个 blob。
-    // revision 计数按 session scope 过滤：bootstrap 会无条件种入内置技能
-    // （global:meta 的 agent-config/SKILL.md，v1.5.2 起），全局计数会多 1 条。
-    assert.equal(
-      Number(beforeActiveRev[0]!.cnt),
-      totalFiles * 2,
-      "造数据后 session scope 应有 20 条 active+有hash revision",
-    );
-    assert.equal(
-      Number(beforeBlob[0]!.cnt),
-      totalFiles * 2,
-      "造数据后 session scope 相关 blob 应有 20 个",
-    );
+        const beforeActiveRev = await ctx.conn.query<{ cnt: number }>(
+            `SELECT COUNT(*) AS cnt
+    FROM vfs_revision
+    WHERE status='active' AND content_hash IS NOT NULL AND entry_id IN (SELECT entry_id
+    FROM vfs_entry
+    WHERE scope_key = ?)`,
+            [`session:${project.id}:${session.id}`],
+        );
+        const beforeBlob = await ctx.conn.query<{ cnt: number }>(
+            // 按 body-v1/v2 前缀限定：内置技能种子（agent-config）也占 1 个 blob
+            `SELECT COUNT(*) AS cnt
+    FROM vfs_content_blob
+    WHERE content_hash IN (SELECT content_hash
+    FROM vfs_revision
+    WHERE entry_id IN (SELECT entry_id
+    FROM vfs_entry
+    WHERE scope_key = ?))`,
+            [`session:${project.id}:${session.id}`],
+        );
+        // 10 文件 × 2 版 active = 20 条；20 个不同内容 = 20 个 blob。
+        // revision 计数按 session scope 过滤：bootstrap 会无条件种入内置技能
+        // （global:meta 的 agent-config/SKILL.md，v1.5.2 起），全局计数会多 1 条。
+        assert.equal(
+            Number(beforeActiveRev[0]!.cnt),
+            totalFiles * 2,
+            "造数据后 session scope 应有 20 条 active+有hash revision",
+        );
+        assert.equal(
+            Number(beforeBlob[0]!.cnt),
+            totalFiles * 2,
+            "造数据后 session scope 相关 blob 应有 20 个",
+        );
 
-    // 删掉全部文件：entry 被删，旧版 active revision 成为 JOIN 孤儿。
-    for (let i = 0; i < totalFiles; i++) {
-      await vfs.delete(`/orphan/file-${i}.txt`);
-    }
+        // 删掉全部文件：entry 被删，旧版 active revision 成为 JOIN 孤儿。
+        for (let i = 0; i < totalFiles; i++) {
+            await vfs.delete(`/orphan/file-${i}.txt`);
+        }
 
-    // 确认 session scope 下不再有 file entry（目录 entry 可能残留，不是本用例关注点）。
-    const afterDeleteFiles = await ctx.conn.query<{ cnt: number }>(
-      `SELECT COUNT(*) AS cnt FROM vfs_entry WHERE scope_key = ? AND entry_kind = 'file'`,
-      [`session:${project.id}:${session.id}`],
-    );
-    assert.equal(
-      Number(afterDeleteFiles[0]!.cnt),
-      0,
-      "删全部文件后 session scope 下不应再有 file entry",
-    );
+        // 确认 session scope 下不再有 file entry（目录 entry 可能残留，不是本用例关注点）。
+        const afterDeleteFiles = await ctx.conn.query<{ cnt: number }>(
+            `SELECT COUNT(*) AS cnt FROM vfs_entry WHERE scope_key = ? AND entry_kind = 'file'`,
+            [`session:${project.id}:${session.id}`],
+        );
+        assert.equal(
+            Number(afterDeleteFiles[0]!.cnt),
+            0,
+            "删全部文件后 session scope 下不应再有 file entry",
+        );
 
-    // 跑 revision GC：path-scoped 扫不到（entry 已删），靠 deleteGlobalOrphans 兜底。
-    const swept = await RevisionGc.sweepSession(revRepo, project.id, session.id);
+        // 跑 revision GC：path-scoped 扫不到（entry 已删），靠 deleteGlobalOrphans 兜底。
+        const swept = await RevisionGc.sweepSession(revRepo, project.id, session.id);
 
-    // 触发器已连带回收归零 blob，再跑一次延期 blob GC 兜底（应无残留可清）。
-    const gcBlobs = await DeferredBlobGc.run(ctx.conn);
+        // 触发器已连带回收归零 blob，再跑一次延期 blob GC 兜底（应无残留可清）。
+        const gcBlobs = await DeferredBlobGc.run(ctx.conn);
 
-    const afterActiveRev = await ctx.conn.query<{ cnt: number }>(
-      `SELECT COUNT(*) AS cnt FROM vfs_revision WHERE status='active' AND content_hash IS NOT NULL
-       AND entry_id IN (SELECT entry_id FROM vfs_entry WHERE scope_key = ?)`,
-      [`session:${project.id}:${session.id}`],
-    );
-    const afterBlob = await ctx.conn.query<{ cnt: number }>(
-      `SELECT COUNT(*) AS cnt FROM vfs_content_blob
-       WHERE content_hash IN (SELECT content_hash FROM vfs_revision
-         WHERE entry_id IN (SELECT entry_id FROM vfs_entry WHERE scope_key = ?))`,
-      [`session:${project.id}:${session.id}`],
-    );
+        const afterActiveRev = await ctx.conn.query<{ cnt: number }>(
+            `SELECT COUNT(*) AS cnt
+    FROM vfs_revision
+    WHERE status='active' AND content_hash IS NOT NULL AND entry_id IN (SELECT entry_id
+    FROM vfs_entry
+    WHERE scope_key = ?)`,
+            [`session:${project.id}:${session.id}`],
+        );
+        const afterBlob = await ctx.conn.query<{ cnt: number }>(
+            `SELECT COUNT(*) AS cnt
+    FROM vfs_content_blob
+    WHERE content_hash IN (SELECT content_hash
+    FROM vfs_revision
+    WHERE entry_id IN (SELECT entry_id
+    FROM vfs_entry
+    WHERE scope_key = ?))`,
+            [`session:${project.id}:${session.id}`],
+        );
 
-    // swept 应包含全部 20 条 active 孤儿 revision（v1 旧版 + v2 旧 head，ref_count 均归 0）。
-    assert.ok(
-      swept >= totalFiles * 2,
-      `RevisionGc.sweepSession 应清掉至少 ${totalFiles * 2} 条 revision（含全局孤儿），实际 ${swept}`,
-    );
-    // 核心断言：有 content_hash 的 active revision 全清（之前的 20 条 JOIN 孤儿不再残留）。
-    assert.equal(
-      Number(afterActiveRev[0]!.cnt),
-      0,
-      "GC 后有 content_hash 的 active revision 应为 0（孤儿全清）",
-    );
-    // blob 全清（revision DELETE 触发器连带回收；仅计 session scope 相关 blob）。
-    assert.equal(
-      Number(afterBlob[0]!.cnt),
-      0,
-      "GC 后 session scope 相关 blob 应为 0（trigger 连带删）",
-    );
-    // 延期 GC 兜底应无残留可清。
-    assert.equal(
-      gcBlobs,
-      0,
-      "revision GC 已连带回收 blob，延期 blob GC 应无残留",
-    );
-  });
+        // swept 应包含全部 20 条 active 孤儿 revision（v1 旧版 + v2 旧 head，ref_count 均归 0）。
+        assert.ok(
+            swept >= totalFiles * 2,
+            `RevisionGc.sweepSession 应清掉至少 ${totalFiles * 2} 条 revision（含全局孤儿），实际 ${swept}`,
+        );
+        // 核心断言：有 content_hash 的 active revision 全清（之前的 20 条 JOIN 孤儿不再残留）。
+        assert.equal(
+            Number(afterActiveRev[0]!.cnt),
+            0,
+            "GC 后有 content_hash 的 active revision 应为 0（孤儿全清）",
+        );
+        // blob 全清（revision DELETE 触发器连带回收；仅计 session scope 相关 blob）。
+        assert.equal(
+            Number(afterBlob[0]!.cnt),
+            0,
+            "GC 后 session scope 相关 blob 应为 0（trigger 连带删）",
+        );
+        // 延期 GC 兜底应无残留可清。
+        assert.equal(
+            gcBlobs,
+            0,
+            "revision GC 已连带回收 blob，延期 blob GC 应无残留",
+        );
+    });
 
-  it("部分删：删 5 个文件后，被删的孤儿 revision 清掉、存活的 5 个不受影响", async () => {
-    const ctx = getNovelMasterTestContext();
-    const suffix = testIsolationSuffix();
-    const project = await ctx.projects.create(`P-orphan-partial-${suffix}`);
-    const session = await ctx.sessions.create(project.id);
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    const revRepo = new SqliteVfsRevisionRepository(ctx.conn);
+    it("部分删：删 5 个文件后，被删的孤儿 revision 清掉、存活的 5 个不受影响", async () => {
+        const ctx = getNovelMasterTestContext();
+        const suffix = testIsolationSuffix();
+        const project = await ctx.projects.create(`P-orphan-partial-${suffix}`);
+        const session = await ctx.sessions.create(project.id);
+        const vfs = ctx.sessionVfs(project.id, session.id);
+        const revRepo = new SqliteVfsRevisionRepository(ctx.conn);
 
-    // 造 10 个单版本文件（每个只有一个 head revision，ref_count>0，不是 orphan）。
-    // 单版本避免双版本里旧版 ref_count=0 被 path-scoped 扫掉，干扰「存活不变」断言。
-    const totalFiles = 10;
-    const deleteCount = 5;
-    for (let i = 0; i < totalFiles; i++) {
-      await vfs.write(`/orphan-partial/file-${i}.txt`, `body-${i}`, {
-        versionCheck: false,
-      });
-    }
-    // 只删前 5 个：这些文件的 active revision 会成为 JOIN 孤儿（entry 已删、ref_count<=0）。
-    for (let i = 0; i < deleteCount; i++) {
-      await vfs.delete(`/orphan-partial/file-${i}.txt`);
-    }
+        // 造 10 个单版本文件（每个只有一个 head revision，ref_count>0，不是 orphan）。
+        // 单版本避免双版本里旧版 ref_count=0 被 path-scoped 扫掉，干扰「存活不变」断言。
+        const totalFiles = 10;
+        const deleteCount = 5;
+        for (let i = 0; i < totalFiles; i++) {
+            await vfs.write(`/orphan-partial/file-${i}.txt`, `body-${i}`, {
+                versionCheck: false,
+            });
+        }
+        // 只删前 5 个：这些文件的 active revision 会成为 JOIN 孤儿（entry 已删、ref_count<=0）。
+        for (let i = 0; i < deleteCount; i++) {
+            await vfs.delete(`/orphan-partial/file-${i}.txt`);
+        }
 
-    const swept = await RevisionGc.sweepSession(revRepo, project.id, session.id);
-    await DeferredBlobGc.run(ctx.conn);
+        const swept = await RevisionGc.sweepSession(revRepo, project.id, session.id);
+        await DeferredBlobGc.run(ctx.conn);
 
-    // 被删的 5 个文件的 active revision（有 content_hash）应被全清。
-    const orphanActiveRev = await ctx.conn.query<{ cnt: number }>(
-      `SELECT COUNT(*) AS cnt FROM vfs_revision
-       WHERE status = 'active' AND content_hash IS NOT NULL
-         AND entry_id NOT IN (SELECT entry_id FROM vfs_entry)`,
-    );
-    assert.equal(
-      Number(orphanActiveRev[0]!.cnt),
-      0,
-      "部分删后，被删文件的有 hash active 孤儿 revision 应全清",
-    );
-    assert.ok(
-      swept >= deleteCount,
-      `部分删后 sweep 应清掉至少 ${deleteCount} 条被删文件的 revision，实际 ${swept}`,
-    );
+        // 被删的 5 个文件的 active revision（有 content_hash）应被全清。
+        const orphanActiveRev = await ctx.conn.query<{ cnt: number }>(
+            `SELECT COUNT(*) AS cnt
+    FROM vfs_revision
+    WHERE status = 'active' AND content_hash IS NOT NULL AND entry_id NOT IN (SELECT entry_id
+    FROM vfs_entry)`,
+        );
+        assert.equal(
+            Number(orphanActiveRev[0]!.cnt),
+            0,
+            "部分删后，被删文件的有 hash active 孤儿 revision 应全清",
+        );
+        assert.ok(
+            swept >= deleteCount,
+            `部分删后 sweep 应清掉至少 ${deleteCount} 条被删文件的 revision，实际 ${swept}`,
+        );
 
-    // 存活的 5 个文件不受影响：entry 还在、内容还能读。
-    const survivorFiles = await ctx.conn.query<{ cnt: number }>(
-      `SELECT COUNT(*) AS cnt FROM vfs_entry
-       WHERE scope_key = ? AND entry_kind = 'file'`,
-      [`session:${project.id}:${session.id}`],
-    );
-    assert.equal(
-      Number(survivorFiles[0]!.cnt),
-      totalFiles - deleteCount,
-      "应保留 5 个存活文件 entry",
-    );
-    for (let i = deleteCount; i < totalFiles; i++) {
-      const content = unwrap(await vfs.read(`/orphan-partial/file-${i}.txt`));
-      assert.equal(
-        content.content,
-        `body-${i}`,
-        `存活文件 file-${i}.txt 内容应不变`,
-      );
-    }
-  });
+        // 存活的 5 个文件不受影响：entry 还在、内容还能读。
+        const survivorFiles = await ctx.conn.query<{ cnt: number }>(
+            `SELECT COUNT(*) AS cnt
+    FROM vfs_entry
+    WHERE scope_key = ? AND entry_kind = 'file'`,
+            [`session:${project.id}:${session.id}`],
+        );
+        assert.equal(
+            Number(survivorFiles[0]!.cnt),
+            totalFiles - deleteCount,
+            "应保留 5 个存活文件 entry",
+        );
+        for (let i = deleteCount; i < totalFiles; i++) {
+            const content = unwrap(await vfs.read(`/orphan-partial/file-${i}.txt`));
+            assert.equal(
+                content.content,
+                `body-${i}`,
+                `存活文件 file-${i}.txt 内容应不变`,
+            );
+        }
+    });
 
-  it("无孤儿：全部存活时跑 sweep，返回 0 且 revision 行数不变", async () => {
-    const ctx = getNovelMasterTestContext();
-    const suffix = testIsolationSuffix();
-    const project = await ctx.projects.create(`P-orphan-none-${suffix}`);
-    const session = await ctx.sessions.create(project.id);
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    const revRepo = new SqliteVfsRevisionRepository(ctx.conn);
+    it("无孤儿：全部存活时跑 sweep，返回 0 且 revision 行数不变", async () => {
+        const ctx = getNovelMasterTestContext();
+        const suffix = testIsolationSuffix();
+        const project = await ctx.projects.create(`P-orphan-none-${suffix}`);
+        const session = await ctx.sessions.create(project.id);
+        const vfs = ctx.sessionVfs(project.id, session.id);
+        const revRepo = new SqliteVfsRevisionRepository(ctx.conn);
 
-    // 造 10 个单版本文件，都不删 → 没有任何 ref_count<=0 的 revision，也没有孤儿。
-    const totalFiles = 10;
-    for (let i = 0; i < totalFiles; i++) {
-      await vfs.write(`/orphan-none/file-${i}.txt`, `body-${i}`, {
-        versionCheck: false,
-      });
-    }
+        // 造 10 个单版本文件，都不删 → 没有任何 ref_count<=0 的 revision，也没有孤儿。
+        const totalFiles = 10;
+        for (let i = 0; i < totalFiles; i++) {
+            await vfs.write(`/orphan-none/file-${i}.txt`, `body-${i}`, {
+                versionCheck: false,
+            });
+        }
 
-    const beforeRev = await ctx.conn.query<{ cnt: number }>(
-      `SELECT COUNT(*) AS cnt FROM vfs_revision WHERE status = 'active'`,
-    );
-    const revisionsBefore = Number(beforeRev[0]!.cnt);
+        const beforeRev = await ctx.conn.query<{ cnt: number }>(
+            `SELECT COUNT(*) AS cnt FROM vfs_revision WHERE status = 'active'`,
+        );
+        const revisionsBefore = Number(beforeRev[0]!.cnt);
 
-    const swept = await RevisionGc.sweepSession(revRepo, project.id, session.id);
+        const swept = await RevisionGc.sweepSession(revRepo, project.id, session.id);
 
-    assert.equal(
-      swept,
-      0,
-      "无孤儿时 sweep 应返回 0（所有 active revision ref_count>0，不在清扫范围）",
-    );
-    const afterRev = await ctx.conn.query<{ cnt: number }>(
-      `SELECT COUNT(*) AS cnt FROM vfs_revision WHERE status = 'active'`,
-    );
-    assert.equal(
-      Number(afterRev[0]!.cnt),
-      revisionsBefore,
-      "无孤儿时 active revision 行数不应变化",
-    );
-  });
+        assert.equal(
+            swept,
+            0,
+            "无孤儿时 sweep 应返回 0（所有 active revision ref_count>0，不在清扫范围）",
+        );
+        const afterRev = await ctx.conn.query<{ cnt: number }>(
+            `SELECT COUNT(*) AS cnt FROM vfs_revision WHERE status = 'active'`,
+        );
+        assert.equal(
+            Number(afterRev[0]!.cnt),
+            revisionsBefore,
+            "无孤儿时 active revision 行数不应变化",
+        );
+    });
 });

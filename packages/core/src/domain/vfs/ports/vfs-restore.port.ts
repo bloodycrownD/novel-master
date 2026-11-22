@@ -13,15 +13,15 @@ import type { VfsReadResult } from "./vfs-service.port.js";
 
 /** Subset of {@link VfsService} used by message-checkpoint restore logic. */
 export interface VfsRestorePort {
-  mkdir(path: string): Promise<Result<void, AppError>>;
-  read(path: string): Promise<Result<VfsReadResult, AppError>>;
-  write(path: string, content: string): Promise<Result<{ version: number }, AppError>>;
-  delete(path: string): Promise<Result<void, AppError>>;
+    mkdir(path: string): Promise<Result<void, AppError>>;
+    read(path: string): Promise<Result<VfsReadResult, AppError>>;
+    write(path: string, content: string): Promise<Result<{ version: number }, AppError>>;
+    delete(path: string): Promise<Result<void, AppError>>;
 
-  /**
+    /**
    * 将 live head 拨回指定 version（不 append、不 bump）。
    *
    * @remarks restore-path 走 resetHead 语义替代 write 注水。
    */
-  resetHeadToVersion(path: string, version: number): Promise<Result<void, AppError>>;
+    resetHeadToVersion(path: string, version: number): Promise<Result<void, AppError>>;
 }

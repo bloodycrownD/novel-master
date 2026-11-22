@@ -11,19 +11,19 @@ import type { AbortReason } from "@/errors/outcome.js";
 
 /** 进程内取消注册表。 */
 export interface AbortRegistry {
-  /** 无条件登记；同一 key 再次 register 会覆盖前一条记录（既有 AgentAbortRegistry 语义）。 */
-  register(key: string, scope: AbortScope): void;
-  /** 原子 claim：key 已存在返回 false 且不覆盖。 */
-  registerIfAbsent(key: string, scope: AbortScope): boolean;
-  /** 与 {@link registerIfAbsent} 同一语义（spec §二沿用 `tryRegister` 命名）。 */
-  tryRegister(key: string, scope: AbortScope): boolean;
-  /** 默认 `"user-stop"`；key 不存在静默 no-op，记录保留到 `unregister`。 */
-  abort(key: string, reason?: AbortReason): void;
-  /** 只移除同一实例（引用比对），防误删新 scope。 */
-  unregister(key: string, scope: AbortScope): void;
-  has(key: string): boolean;
-  /** 应用退出用：中断全部登记项，但不改变登记表。 */
-  abortAll(reason: AbortReason): void;
-  get(key: string): AbortScope | undefined;
-  entries(): IterableIterator<[string, AbortScope]>;
+    /** 无条件登记；同一 key 再次 register 会覆盖前一条记录（既有 AgentAbortRegistry 语义）。 */
+    register(key: string, scope: AbortScope): void;
+    /** 原子 claim：key 已存在返回 false 且不覆盖。 */
+    registerIfAbsent(key: string, scope: AbortScope): boolean;
+    /** 与 {@link registerIfAbsent} 同一语义（spec §二沿用 `tryRegister` 命名）。 */
+    tryRegister(key: string, scope: AbortScope): boolean;
+    /** 默认 `"user-stop"`；key 不存在静默 no-op，记录保留到 `unregister`。 */
+    abort(key: string, reason?: AbortReason): void;
+    /** 只移除同一实例（引用比对），防误删新 scope。 */
+    unregister(key: string, scope: AbortScope): void;
+    has(key: string): boolean;
+    /** 应用退出用：中断全部登记项，但不改变登记表。 */
+    abortAll(reason: AbortReason): void;
+    get(key: string): AbortScope | undefined;
+    entries(): IterableIterator<[string, AbortScope]>;
 }

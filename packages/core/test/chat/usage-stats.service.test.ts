@@ -48,1851 +48,1915 @@ novelMasterTestFixture();
 // 整文件共享一条库：每个用例前清空账本表、消息表与模型配置表隔离数据
 //（llm_saved_model 外键引用 llm_provider，先删子表）。
 beforeEach(async () => {
-  const ctx = getNovelMasterTestContext();
-  await ctx.conn.execute("DELETE FROM usage_record");
-  await ctx.conn.execute("DELETE FROM chat_message");
-  await ctx.conn.execute("DELETE FROM llm_saved_model");
-  await ctx.conn.execute("DELETE FROM llm_provider");
-  // 工具调用数缓存域随用例清（共享库隔离；缓存语义用例必须从 miss 起步）。
-  await ctx.conn.execute(
-    "DELETE FROM session_kkv_entry WHERE domain = 'usage_stats'"
-  );
+    const ctx = getNovelMasterTestContext();
+    await ctx.conn.execute("DELETE FROM usage_record");
+    await ctx.conn.execute("DELETE FROM chat_message");
+    await ctx.conn.execute("DELETE FROM llm_saved_model");
+    await ctx.conn.execute("DELETE FROM llm_provider");
+    // 工具调用数缓存域随用例清（共享库隔离；缓存语义用例必须从 miss 起步）。
+    await ctx.conn.execute(
+        "DELETE FROM session_kkv_entry WHERE domain = 'usage_stats'"
+    );
 });
 
 /** 本地今日 0 点（ms）。 */
 function localDayStart(ms: number): number {
-  const d = new Date(ms);
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    const d = new Date(ms);
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 }
 
 /** 以本地日为基点加天数（DST 日差由 Date 构造器保证正确）。 */
 function localAddDays(ms: number, days: number): number {
-  const d = new Date(ms);
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + days).getTime();
+    const d = new Date(ms);
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate() + days).getTime();
 }
 
 /** 本地日期格式化为 `YYYY-MM-DD`。 */
 function fmtLocalDay(ms: number): string {
-  const d = new Date(ms);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const d = new Date(ms);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 /** 构造 {fromDay, toDay} 闭区间（入参为本地毫秒时间戳，格式化为本地日期）。 */
 function dayRange(fromMs: number, toMs: number): UsageStatsRange {
-  return { fromDay: fmtLocalDay(fromMs), toDay: fmtLocalDay(toMs) };
+    return { fromDay: fmtLocalDay(fromMs), toDay: fmtLocalDay(toMs) };
 }
 
 const MIN = 60 * 1000;
 const HOUR = 60 * MIN;
 
 interface MsgSeed {
-  createdAtMs: number;
-  role?: string;
-  provider?: string | null;
-  providerId?: string | null;
-  modelName?: string | null;
-  hidden?: boolean;
-  /** 自定义 content 块（tool_use 计数用例）；缺省为单 text 块。 */
-  blocks?: ChatMessageData["content"]["blocks"];
-  usage?: {
-    prompt?: number;
-    completion?: number;
-    total?: number;
-    cacheRead?: number;
-    cacheCreation?: number;
-    firstTokenMs?: number;
-    durationMs?: number;
-  };
+    createdAtMs: number;
+    role?: string;
+    provider?: string | null;
+    providerId?: string | null;
+    modelName?: string | null;
+    hidden?: boolean;
+    /** 自定义 content 块（tool_use 计数用例）；缺省为单 text 块。 */
+    blocks?: ChatMessageData["content"]["blocks"];
+    usage?: {
+        prompt?: number;
+        completion?: number;
+        total?: number;
+        cacheRead?: number;
+        cacheCreation?: number;
+        firstTokenMs?: number;
+        durationMs?: number;
+    };
 }
 
 async function seedSession() {
-  const ctx = getNovelMasterTestContext();
-  const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-  const session = unwrap(await ctx.sessions.create(project.id, "usage-stats"));
-  return { ctx, project, session };
+    const ctx = getNovelMasterTestContext();
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "usage-stats"));
+    return { ctx, project, session };
 }
 
 /** 直接走 repo.insert 落一条时间戳/模型/usage 完全受控的消息，返回消息 id。 */
 async function seedMsg(
-  ctx: ReturnType<typeof getNovelMasterTestContext>,
-  sessionId: string,
-  seq: number,
-  seed: MsgSeed
+    ctx: ReturnType<typeof getNovelMasterTestContext>,
+    sessionId: string,
+    seq: number,
+    seed: MsgSeed
 ): Promise<string> {
-  const u = seed.usage;
-  const usage =
-    u == null
-      ? undefined
-      : {
-          ...(u.prompt != null ? { promptTokens: u.prompt } : {}),
-          ...(u.completion != null ? { completionTokens: u.completion } : {}),
-          ...(u.total != null ? { totalTokens: u.total } : {}),
-          ...(u.cacheRead != null ? { cacheReadTokens: u.cacheRead } : {}),
-          ...(u.cacheCreation != null
-            ? { cacheCreationTokens: u.cacheCreation }
-            : {}),
-          ...(u.firstTokenMs != null ? { firstTokenMs: u.firstTokenMs } : {}),
-          ...(u.durationMs != null ? { durationMs: u.durationMs } : {}),
-        };
-  const message: ChatMessageData = {
-    id: randomUUID(),
-    sessionId,
-    seq,
-    role: seed.role ?? "assistant",
-    content:
-      seed.blocks != null
-        ? { blocks: seed.blocks }
-        : TextBlocks.of("usage-stats-seed"),
-    provider: seed.provider ?? null,
-    providerId: seed.providerId ?? null,
-    modelName: seed.modelName ?? null,
-    raw: null,
-    createdAtMs: seed.createdAtMs,
-    hidden: seed.hidden ?? false,
-    ...(usage != null ? { usage } : {}),
-  };
-  await new SqliteMessageRepository(ctx.conn).insert(message);
-  // 账本行同步 seed：统计读口打 usage_record（v20 起唯一数据源），seed 走与
-  // 生产记账点同一构建/写入链（UsageRecord.buildFromMessage +
-  // SqliteUsageRecordRepository），保证测试数据形态与落库形态逐列一致；
-  // user 行 / 无 usage 行 / 只有耗时无 token 真值的行同样不入账本。
-  const usageRecord = UsageRecord.buildFromMessage(message);
-  if (usageRecord != null) {
-    await new SqliteUsageRecordRepository(ctx.conn).insert(usageRecord);
-  }
-  return message.id;
+    const u = seed.usage;
+    const usage =
+        u == null
+            ? undefined
+            : {
+                    ...(u.prompt != null ? { promptTokens: u.prompt } : {}),
+                    ...(u.completion != null ? { completionTokens: u.completion } : {}),
+                    ...(u.total != null ? { totalTokens: u.total } : {}),
+                    ...(u.cacheRead != null ? { cacheReadTokens: u.cacheRead } : {}),
+                    ...(u.cacheCreation != null
+                        ? { cacheCreationTokens: u.cacheCreation }
+                        : {}),
+                    ...(u.firstTokenMs != null ? { firstTokenMs: u.firstTokenMs } : {}),
+                    ...(u.durationMs != null ? { durationMs: u.durationMs } : {}),
+                };
+    const message: ChatMessageData = {
+        id: randomUUID(),
+        sessionId,
+        seq,
+        role: seed.role ?? "assistant",
+        content:
+            seed.blocks != null
+                ? { blocks: seed.blocks }
+                : TextBlocks.of("usage-stats-seed"),
+        provider: seed.provider ?? null,
+        providerId: seed.providerId ?? null,
+        modelName: seed.modelName ?? null,
+        raw: null,
+        createdAtMs: seed.createdAtMs,
+        hidden: seed.hidden ?? false,
+        ...(usage != null ? { usage } : {}),
+    };
+    await new SqliteMessageRepository(ctx.conn).insert(message);
+    // 账本行同步 seed：统计读口打 usage_record（v20 起唯一数据源），seed 走与
+    // 生产记账点同一构建/写入链（UsageRecord.buildFromMessage +
+    // SqliteUsageRecordRepository），保证测试数据形态与落库形态逐列一致；
+    // user 行 / 无 usage 行 / 只有耗时无 token 真值的行同样不入账本。
+    const usageRecord = UsageRecord.buildFromMessage(message);
+    if (usageRecord != null) {
+        await new SqliteUsageRecordRepository(ctx.conn).insert(usageRecord);
+    }
+    return message.id;
 }
 
 describe("usage stats service (T-S5)", () => {
-  it("T-C2: 本地时区天边界：本地 00:30 入当日桶、昨日 23:30 入前一日桶；闭区间双端含", async () => {
-    const { ctx, session } = await seedSession();
-    const today0 = localDayStart(Date.now());
-    const yesterday0 = localAddDays(today0, -1);
-    // 昨日 23:30 与今日 00:30（本地钟点），任何时区下都分别落在昨天/今天的桶；
-    // 今日 23:30 验证闭区间右端：toDay 当天深夜仍计入 toDay 桶。
-    await seedMsg(ctx, session.id, 1, {
-      createdAtMs: today0 - 30 * MIN,
-      usage: { prompt: 10, total: 10 },
-    });
-    await seedMsg(ctx, session.id, 2, {
-      createdAtMs: today0 + 30 * MIN,
-      usage: { prompt: 20, total: 20 },
-    });
-    await seedMsg(ctx, session.id, 3, {
-      createdAtMs: today0 + 23 * HOUR + 30 * MIN,
-      usage: { prompt: 40, total: 40 },
-    });
+    it("T-C2: 本地时区天边界：本地 00:30 入当日桶、昨日 23:30 入前一日桶；闭区间双端含", async () => {
+        const { ctx, session } = await seedSession();
+        const today0 = localDayStart(Date.now());
+        const yesterday0 = localAddDays(today0, -1);
+        // 昨日 23:30 与今日 00:30（本地钟点），任何时区下都分别落在昨天/今天的桶；
+        // 今日 23:30 验证闭区间右端：toDay 当天深夜仍计入 toDay 桶。
+        await seedMsg(ctx, session.id, 1, {
+            createdAtMs: today0 - 30 * MIN,
+            usage: { prompt: 10, total: 10 },
+        });
+        await seedMsg(ctx, session.id, 2, {
+            createdAtMs: today0 + 30 * MIN,
+            usage: { prompt: 20, total: 20 },
+        });
+        await seedMsg(ctx, session.id, 3, {
+            createdAtMs: today0 + 23 * HOUR + 30 * MIN,
+            usage: { prompt: 40, total: 40 },
+        });
 
-    const svc = new DefaultUsageStatsService(ctx.conn);
-    const buckets = unwrap(await svc.getDailyBuckets({
-      range: dayRange(yesterday0, today0),
-    }));
-    const todayBucket = buckets.find((b) => b.bucketStartMs === today0);
-    const yesterdayBucket = buckets.find((b) => b.bucketStartMs === yesterday0);
-    assert.ok(todayBucket, "应存在本地今日 0 点起算的桶");
-    assert.ok(yesterdayBucket, "应存在本地昨日 0 点起算的桶");
-    assert.equal(todayBucket!.calls, 2);
-    assert.equal(todayBucket!.promptTokens, 60);
-    assert.equal(yesterdayBucket!.calls, 1);
-    assert.equal(yesterdayBucket!.promptTokens, 10);
-    // 闭区间右端不含次日：次日 0 点后的消息不入桶（换算为 [D 0点, D+1 0点)）。
-    await seedMsg(ctx, session.id, 4, {
-      createdAtMs: localAddDays(today0, 1) + 30 * MIN,
-      usage: { prompt: 99, total: 99 },
-    });
-    const again = unwrap(await svc.getDailyBuckets({
-      range: dayRange(yesterday0, today0),
-    }));
-    const todayAgain = again.find((b) => b.bucketStartMs === today0);
-    assert.equal(again.length, 2);
-    assert.equal(todayAgain!.calls, 2);
-  });
-
-  it("hourly 24 桶且桶边界按本地时区（整点入本桶不入前桶）", async () => {
-    const { ctx, session } = await seedSession();
-    const today0 = localDayStart(Date.now());
-    // 本地 00:00 整点 → 0 点桶；本地 01:30 → 1 点桶。
-    await seedMsg(ctx, session.id, 1, {
-      createdAtMs: today0,
-      usage: { prompt: 7, total: 7 },
-    });
-    await seedMsg(ctx, session.id, 2, {
-      createdAtMs: today0 + 90 * MIN,
-      usage: { prompt: 11, total: 11 },
+        const svc = new DefaultUsageStatsService(ctx.conn);
+        const buckets = unwrap(await svc.getDailyBuckets({
+            range: dayRange(yesterday0, today0),
+        }));
+        const todayBucket = buckets.find((b) => b.bucketStartMs === today0);
+        const yesterdayBucket = buckets.find((b) => b.bucketStartMs === yesterday0);
+        assert.ok(todayBucket, "应存在本地今日 0 点起算的桶");
+        assert.ok(yesterdayBucket, "应存在本地昨日 0 点起算的桶");
+        assert.equal(todayBucket!.calls, 2);
+        assert.equal(todayBucket!.promptTokens, 60);
+        assert.equal(yesterdayBucket!.calls, 1);
+        assert.equal(yesterdayBucket!.promptTokens, 10);
+        // 闭区间右端不含次日：次日 0 点后的消息不入桶（换算为 [D 0点, D+1 0点)）。
+        await seedMsg(ctx, session.id, 4, {
+            createdAtMs: localAddDays(today0, 1) + 30 * MIN,
+            usage: { prompt: 99, total: 99 },
+        });
+        const again = unwrap(await svc.getDailyBuckets({
+            range: dayRange(yesterday0, today0),
+        }));
+        const todayAgain = again.find((b) => b.bucketStartMs === today0);
+        assert.equal(again.length, 2);
+        assert.equal(todayAgain!.calls, 2);
     });
 
-    const svc = new DefaultUsageStatsService(ctx.conn);
-    const hourly = unwrap(await svc.getHourlyBuckets(fmtLocalDay(today0), {}));
-    assert.equal(hourly.length, 24);
-    assert.equal(hourly[0]!.bucketStartMs, today0);
-    assert.equal(hourly[0]!.calls, 1);
-    assert.equal(hourly[0]!.promptTokens, 7);
-    assert.equal(hourly[1]!.calls, 1);
-    assert.equal(hourly[1]!.promptTokens, 11);
-    assert.equal(hourly[2]!.calls, 0);
-  });
+    it("hourly 24 桶且桶边界按本地时区（整点入本桶不入前桶）", async () => {
+        const { ctx, session } = await seedSession();
+        const today0 = localDayStart(Date.now());
+        // 本地 00:00 整点 → 0 点桶；本地 01:30 → 1 点桶。
+        await seedMsg(ctx, session.id, 1, {
+            createdAtMs: today0,
+            usage: { prompt: 7, total: 7 },
+        });
+        await seedMsg(ctx, session.id, 2, {
+            createdAtMs: today0 + 90 * MIN,
+            usage: { prompt: 11, total: 11 },
+        });
 
-  it("hidden 行与子会话行计入总和，NULL usage 行与 user 行不计（AC-2）", async () => {
-    const { ctx, project, session } = await seedSession();
-    const today0 = localDayStart(Date.now());
-    // 子会话：造一个 parent_session_id 非空的 session。
-    const childSession = unwrap(await ctx.sessions.create(
-      project.id,
-      "usage-stats-child"
-    ));
-    await ctx.conn.execute(
-      `UPDATE chat_session SET parent_session_id = ? WHERE id = ?`,
-      [session.id, childSession.id]
-    );
-
-    await seedMsg(ctx, session.id, 1, {
-      createdAtMs: today0 + 10 * MIN,
-      hidden: true,
-      usage: { prompt: 100, completion: 50, total: 150 },
-    });
-    await seedMsg(ctx, childSession.id, 1, {
-      createdAtMs: today0 + 20 * MIN,
-      usage: { prompt: 30, completion: 20, total: 50 },
-    });
-    // NULL usage 行（abort）与 user 行都不应计入。
-    await seedMsg(ctx, session.id, 2, { createdAtMs: today0 + 30 * MIN });
-    await seedMsg(ctx, session.id, 3, {
-      createdAtMs: today0 + 40 * MIN,
-      role: "user",
-      usage: { prompt: 999, total: 999 },
+        const svc = new DefaultUsageStatsService(ctx.conn);
+        const hourly = unwrap(await svc.getHourlyBuckets(fmtLocalDay(today0), {}));
+        assert.equal(hourly.length, 24);
+        assert.equal(hourly[0]!.bucketStartMs, today0);
+        assert.equal(hourly[0]!.calls, 1);
+        assert.equal(hourly[0]!.promptTokens, 7);
+        assert.equal(hourly[1]!.calls, 1);
+        assert.equal(hourly[1]!.promptTokens, 11);
+        assert.equal(hourly[2]!.calls, 0);
     });
 
-    const svc = new DefaultUsageStatsService(ctx.conn);
-    const summary = unwrap(await svc.getSummary({
-      range: dayRange(today0, today0),
-    }));
-    assert.equal(summary.calls, 2);
-    assert.equal(summary.promptTokens, 130);
-    assert.equal(summary.completionTokens, 70);
-    assert.equal(summary.totalTokens, 200);
-  });
+    it("hidden 行与子会话行计入总和，NULL usage 行与 user 行不计（AC-2）", async () => {
+        const { ctx, project, session } = await seedSession();
+        const today0 = localDayStart(Date.now());
+        // 子会话：造一个 parent_session_id 非空的 session。
+        const childSession = unwrap(await ctx.sessions.create(
+            project.id,
+            "usage-stats-child"
+        ));
+        await ctx.conn.execute(
+            `UPDATE chat_session SET parent_session_id = ? WHERE id = ?`,
+            [session.id, childSession.id]
+        );
 
-  it("命中率分母口径：anthropic 加法项、openai 纯 prompt、无 cache 行不入分母", async () => {
-    const { ctx, session } = await seedSession();
-    const today0 = localDayStart(Date.now());
-    await seedMsg(ctx, session.id, 1, {
-      createdAtMs: today0 + 10 * MIN,
-      provider: "anthropic",
-      usage: { prompt: 100, cacheRead: 2048, cacheCreation: 512 },
-    });
-    await seedMsg(ctx, session.id, 2, {
-      createdAtMs: today0 + 20 * MIN,
-      provider: "openai",
-      usage: { prompt: 200, cacheRead: 50 },
-    });
-    // cache 两列全 NULL：不入分母（缺失行不拉低命中率）。
-    await seedMsg(ctx, session.id, 3, {
-      createdAtMs: today0 + 30 * MIN,
-      provider: "openai",
-      usage: { prompt: 999 },
-    });
+        await seedMsg(ctx, session.id, 1, {
+            createdAtMs: today0 + 10 * MIN,
+            hidden: true,
+            usage: { prompt: 100, completion: 50, total: 150 },
+        });
+        await seedMsg(ctx, childSession.id, 1, {
+            createdAtMs: today0 + 20 * MIN,
+            usage: { prompt: 30, completion: 20, total: 50 },
+        });
+        // NULL usage 行（abort）与 user 行都不应计入。
+        await seedMsg(ctx, session.id, 2, { createdAtMs: today0 + 30 * MIN });
+        await seedMsg(ctx, session.id, 3, {
+            createdAtMs: today0 + 40 * MIN,
+            role: "user",
+            usage: { prompt: 999, total: 999 },
+        });
 
-    const svc = new DefaultUsageStatsService(ctx.conn);
-    const filter = { range: dayRange(today0, today0) };
-    const summary = unwrap(await svc.getSummary(filter));
-    // anthropic: 100 + 2048 + 512 = 2660；openai: 200（cached 已含 prompt 内）。
-    assert.equal(summary.billedInputTokens, 2660 + 200);
-    assert.equal(summary.cacheReadTokens, 2048 + 50);
-    assert.equal(summary.cacheCreationTokens, 512);
-
-    // 桶同样携带命中率原料（展示层算比率）。
-    const buckets = unwrap(await svc.getDailyBuckets(filter));
-    const todayBucket = buckets.find((b) => b.bucketStartMs === today0);
-    assert.ok(todayBucket);
-    assert.equal(todayBucket!.billedInputTokens, 2660 + 200);
-    assert.equal(todayBucket!.cacheReadTokens, 2048 + 50);
-  });
-
-  it("「其他」桶：NULL 与非配置模型归并，配置模型独立", async () => {
-    const { ctx, session } = await seedSession();
-    const today0 = localDayStart(Date.now());
-    // 同一已记录服务商下三种模型名：未记录（null）、非配置模型
-    // （中转站标注名/已下线）、配置模型各一条。（providerId 为 null 的
-    // 历史行不在此测——它们不走模型分桶，见 G-2 合并用例。）
-    await seedMsg(ctx, session.id, 1, {
-      createdAtMs: today0 + 10 * MIN,
-      providerId: "stats-other-provider",
-      modelName: null,
-      usage: { prompt: 10, total: 10 },
-    });
-    await seedMsg(ctx, session.id, 2, {
-      createdAtMs: today0 + 20 * MIN,
-      providerId: "stats-other-provider",
-      modelName: "[3]gemini-legacy",
-      usage: { prompt: 20, total: 20 },
-    });
-    await seedMsg(ctx, session.id, 3, {
-      createdAtMs: today0 + 30 * MIN,
-      providerId: "stats-other-provider",
-      modelName: "model-a",
-      usage: { prompt: 30, total: 5 },
-    });
-    // 服务商配置：仅 model-a 在已保存模型集合内。
-    const ts = String(Date.now());
-    await ctx.conn.execute(
-      `INSERT INTO llm_provider (id, protocol, base_url, display_name, headers_json, is_builtin, created_at_ms, updated_at_ms)
-       VALUES ('stats-other-provider', 'openai', 'https://example.com', 'Stats Other Provider', '{}', 0, ${ts}, ${ts})`
-    );
-    await ctx.conn.execute(
-      `INSERT INTO llm_saved_model (id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms)
-       VALUES ('som-1', 'stats-other-provider', 'model-a', 'model-a', '{}', ${ts}, ${ts})`
-    );
-
-    const svc = new DefaultUsageStatsService(ctx.conn);
-    const filter = { range: dayRange(today0, today0) };
-    // 非配置行与 null 行归并成一个「其他」行（用量相加），配置模型独立成行。
-    const breakdown = unwrap(await svc.getModelBreakdown(filter));
-    assert.equal(breakdown.length, 2);
-    const other = breakdown.find((r) => r.modelName === null);
-    const modelA = breakdown.find((r) => r.modelName === "model-a");
-    assert.ok(other, "breakdown 应含归并后的「其他」行");
-    assert.ok(!breakdown.some((r) => r.modelName === "[3]gemini-legacy"));
-    assert.ok(modelA);
-    assert.equal(other!.calls, 2);
-    assert.equal(other!.promptTokens, 30);
-    assert.equal(other!.totalTokens, 30);
-    assert.equal(modelA!.calls, 1);
-    // 归并后仍按用量降序：「其他」30 在 model-a 5 之前。
-    assert.equal(breakdown[0]!.modelName, null);
-
-    // model: null → 只查「其他」桶（NULL + 非配置），不含配置模型行。
-    const summaryNull = unwrap(await svc.getSummary({ ...filter, model: null }));
-    assert.equal(summaryNull.calls, 2);
-    assert.equal(summaryNull.promptTokens, 30);
-  });
-
-  it("无任何 saved model 时「其他」桶 = 全部行", async () => {
-    const { ctx, session } = await seedSession();
-    const today0 = localDayStart(Date.now());
-    // beforeEach 已清空 llm_saved_model：所有非 NULL 模型均不在配置集合内。
-    await seedMsg(ctx, session.id, 1, {
-      createdAtMs: today0 + 10 * MIN,
-      modelName: "model-a",
-      usage: { prompt: 10, total: 10 },
-    });
-    await seedMsg(ctx, session.id, 2, {
-      createdAtMs: today0 + 20 * MIN,
-      modelName: "model-b",
-      usage: { prompt: 20, total: 20 },
-    });
-    await seedMsg(ctx, session.id, 3, {
-      createdAtMs: today0 + 30 * MIN,
-      modelName: null,
-      usage: { prompt: 5, total: 5 },
+        const svc = new DefaultUsageStatsService(ctx.conn);
+        const summary = unwrap(await svc.getSummary({
+            range: dayRange(today0, today0),
+        }));
+        assert.equal(summary.calls, 2);
+        assert.equal(summary.promptTokens, 130);
+        assert.equal(summary.completionTokens, 70);
+        assert.equal(summary.totalTokens, 200);
     });
 
-    const svc = new DefaultUsageStatsService(ctx.conn);
-    const filter = { range: dayRange(today0, today0) };
-    const summaryNull = unwrap(await svc.getSummary({ ...filter, model: null }));
-    assert.equal(summaryNull.calls, 3);
-    assert.equal(summaryNull.promptTokens, 35);
+    it("命中率分母口径：anthropic 加法项、openai 纯 prompt、无 cache 行不入分母", async () => {
+        const { ctx, session } = await seedSession();
+        const today0 = localDayStart(Date.now());
+        await seedMsg(ctx, session.id, 1, {
+            createdAtMs: today0 + 10 * MIN,
+            provider: "anthropic",
+            usage: { prompt: 100, cacheRead: 2048, cacheCreation: 512 },
+        });
+        await seedMsg(ctx, session.id, 2, {
+            createdAtMs: today0 + 20 * MIN,
+            provider: "openai",
+            usage: { prompt: 200, cacheRead: 50 },
+        });
+        // cache 两列全 NULL：不入分母（缺失行不拉低命中率）。
+        await seedMsg(ctx, session.id, 3, {
+            createdAtMs: today0 + 30 * MIN,
+            provider: "openai",
+            usage: { prompt: 999 },
+        });
 
-    const breakdown = unwrap(await svc.getModelBreakdown(filter));
-    assert.equal(breakdown.length, 1);
-    assert.equal(breakdown[0]!.modelName, null);
-    assert.equal(breakdown[0]!.calls, 3);
-    assert.equal(breakdown[0]!.totalTokens, 35);
-  });
+        const svc = new DefaultUsageStatsService(ctx.conn);
+        const filter = { range: dayRange(today0, today0) };
+        const summary = unwrap(await svc.getSummary(filter));
+        // anthropic: 100 + 2048 + 512 = 2660；openai: 200（cached 已含 prompt 内）。
+        assert.equal(summary.billedInputTokens, 2660 + 200);
+        assert.equal(summary.cacheReadTokens, 2048 + 50);
+        assert.equal(summary.cacheCreationTokens, 512);
 
-  it("模型 × 时间组合过滤", async () => {
-    const { ctx, session } = await seedSession();
-    const today0 = localDayStart(Date.now());
-    const yesterday0 = localAddDays(today0, -1);
-    await seedMsg(ctx, session.id, 1, {
-      createdAtMs: today0 + 10 * MIN,
-      modelName: "model-a",
-      usage: { prompt: 10, total: 10 },
-    });
-    await seedMsg(ctx, session.id, 2, {
-      createdAtMs: yesterday0 + 10 * MIN,
-      modelName: "model-b",
-      usage: { prompt: 20, total: 20 },
-    });
-
-    const svc = new DefaultUsageStatsService(ctx.conn);
-    const todayOnly = dayRange(today0, today0);
-    const yesterdayOnly = dayRange(yesterday0, yesterday0);
-
-    const aToday = unwrap(await svc.getSummary({ range: todayOnly, model: "model-a" }));
-    assert.equal(aToday.calls, 1);
-    assert.equal(aToday.promptTokens, 10);
-
-    const aYesterday = unwrap(await svc.getSummary({
-      range: yesterdayOnly,
-      model: "model-a",
-    }));
-    assert.equal(aYesterday.calls, 0);
-
-    const bYesterday = unwrap(await svc.getSummary({
-      range: yesterdayOnly,
-      model: "model-b",
-    }));
-    assert.equal(bYesterday.calls, 1);
-    assert.equal(bYesterday.promptTokens, 20);
-  });
-
-  it("T-C5: 删除项回归——summary 无 today 字段；超长区间（401 天）不再受 366 上限限制", async () => {
-    const { ctx, session } = await seedSession();
-    const today0 = localDayStart(Date.now());
-    await seedMsg(ctx, session.id, 1, {
-      createdAtMs: today0 + 10 * MIN,
-      usage: { prompt: 5, total: 5 },
+        // 桶同样携带命中率原料（展示层算比率）。
+        const buckets = unwrap(await svc.getDailyBuckets(filter));
+        const todayBucket = buckets.find((b) => b.bucketStartMs === today0);
+        assert.ok(todayBucket);
+        assert.equal(todayBucket!.billedInputTokens, 2660 + 200);
+        assert.equal(todayBucket!.cacheReadTokens, 2048 + 50);
     });
 
-    const svc = new DefaultUsageStatsService(ctx.conn);
-    const range = dayRange(localAddDays(today0, -400), today0);
-    const summary = unwrap(await svc.getSummary({ range }));
-    assert.ok(!("today" in summary), "summary 不应再有 today 字段");
-    // 类型层负向钉子（A-1）：直接访问已删字段必报编译错，由 @ts-expect-error
-    // 吸收；反之若有人把 today 加回 summary 类型、或把 kind 形态加回
-    // UsageStatsRange，指令变为 unused 同样炸编译——双向钉死。不写
-    // `as { today?: number }` 断言：可选属性目标总能被 as 合法转换，
-    // 那样表达式本身无错、钉子会被 unused 吹掉。（dayRange 返回类型显式
-    // 标注为 UsageStatsRange，钉子绑定类型定义而非推断字面量。）
-    // @ts-expect-error 已删除字段：summary 不再有 today
-    void summary.today;
-    // @ts-expect-error UsageStatsRange 为 {fromDay, toDay}，无 kind 形态
-    void range.kind;
-    assert.equal(summary.calls, 1);
-    // 401 个日历日（D-400 … D）每天一桶：366 天上限已删，不再抛错。
-    const buckets = unwrap(await svc.getDailyBuckets({ range }));
-    assert.equal(buckets.length, 401);
-  });
+    it("「其他」桶：NULL 与非配置模型归并，配置模型独立", async () => {
+        const { ctx, session } = await seedSession();
+        const today0 = localDayStart(Date.now());
+        // 同一已记录服务商下三种模型名：未记录（null）、非配置模型
+        // （中转站标注名/已下线）、配置模型各一条。（providerId 为 null 的
+        // 历史行不在此测——它们不走模型分桶，见 G-2 合并用例。）
+        await seedMsg(ctx, session.id, 1, {
+            createdAtMs: today0 + 10 * MIN,
+            providerId: "stats-other-provider",
+            modelName: null,
+            usage: { prompt: 10, total: 10 },
+        });
+        await seedMsg(ctx, session.id, 2, {
+            createdAtMs: today0 + 20 * MIN,
+            providerId: "stats-other-provider",
+            modelName: "[3]gemini-legacy",
+            usage: { prompt: 20, total: 20 },
+        });
+        await seedMsg(ctx, session.id, 3, {
+            createdAtMs: today0 + 30 * MIN,
+            providerId: "stats-other-provider",
+            modelName: "model-a",
+            usage: { prompt: 30, total: 5 },
+        });
+        // 服务商配置：仅 model-a 在已保存模型集合内。
+        const ts = String(Date.now());
+        await ctx.conn.execute(
+            `INSERT INTO llm_provider (id, protocol, base_url, display_name, headers_json, is_builtin, created_at_ms, updated_at_ms)
+    VALUES ('stats-other-provider', 'openai', 'https://example.com', 'Stats Other Provider', '{}', 0, ${ts}, ${ts})`
+        );
+        await ctx.conn.execute(
+            `INSERT INTO llm_saved_model (id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms)
+    VALUES ('som-1', 'stats-other-provider', 'model-a', 'model-a', '{}', ${ts}, ${ts})`
+        );
 
-  it("T-C4: range 缺省语义——聚合/流水全历史，daily 缺 range 抛 CHAT_INVALID_ARGUMENT", async () => {
-    const { ctx, session } = await seedSession();
-    const today0 = localDayStart(Date.now());
-    const yesterday0 = localAddDays(today0, -1);
-    await seedMsg(ctx, session.id, 1, {
-      createdAtMs: yesterday0 + 10 * MIN,
-      modelName: "model-a",
-      usage: { prompt: 20, total: 20 },
-    });
-    await seedMsg(ctx, session.id, 2, {
-      createdAtMs: today0 + 10 * MIN,
-      modelName: "model-a",
-      usage: { prompt: 10, total: 10 },
-    });
+        const svc = new DefaultUsageStatsService(ctx.conn);
+        const filter = { range: dayRange(today0, today0) };
+        // 非配置行与 null 行归并成一个「其他」行（用量相加），配置模型独立成行。
+        const breakdown = unwrap(await svc.getModelBreakdown(filter));
+        assert.equal(breakdown.length, 2);
+        const other = breakdown.find((r) => r.modelName === null);
+        const modelA = breakdown.find((r) => r.modelName === "model-a");
+        assert.ok(other, "breakdown 应含归并后的「其他」行");
+        assert.ok(!breakdown.some((r) => r.modelName === "[3]gemini-legacy"));
+        assert.ok(modelA);
+        assert.equal(other!.calls, 2);
+        assert.equal(other!.promptTokens, 30);
+        assert.equal(other!.totalTokens, 30);
+        assert.equal(modelA!.calls, 1);
+        // 归并后仍按用量降序：「其他」30 在 model-a 5 之前。
+        assert.equal(breakdown[0]!.modelName, null);
 
-    const svc = new DefaultUsageStatsService(ctx.conn);
-    // getSummary / getModelBreakdown：缺 range = 全历史（两天都算）。
-    const summary = unwrap(await svc.getSummary({ model: "model-a" }));
-    assert.equal(summary.calls, 2);
-    assert.equal(summary.totalTokens, 30);
-    const breakdown = unwrap(await svc.getModelBreakdown({}));
-    assert.equal(breakdown.length, 1);
-    assert.equal(breakdown[0]!.totalTokens, 30);
-
-    // listRequestUsage：缺 range = 全历史，total 与行集均不含时间谓词。
-    const page = unwrap(await svc.listRequestUsage({}, { offset: 0, limit: 10 }));
-    assert.equal(page.total, 2);
-    assert.equal(page.rows.length, 2);
-
-    // getDailyBuckets：缺 range 抛错（日桶序列需要界）。
-    await rejectsErr(svc.getDailyBuckets({}), isChatInvalidArgument);
-  });
-
-  it("listModels 来自服务商配置的已保存模型，不从历史消息 distinct", async () => {
-    const { ctx, session } = await seedSession();
-    const now = Date.now();
-    // 历史消息里存在 model-legacy（已下线）与未记录行——不应出现在选项里。
-    await seedMsg(ctx, session.id, 1, {
-      createdAtMs: now,
-      modelName: "model-legacy",
-      usage: { prompt: 1 },
-    });
-    await seedMsg(ctx, session.id, 2, {
-      createdAtMs: now,
-      modelName: null,
-      usage: { prompt: 3 },
-    });
-    // 服务商配置：model-b、model-a（同模型两个服务商，去重后一个）。
-    const ts = String(now);
-    await ctx.conn.execute(
-      `INSERT INTO llm_provider (id, protocol, base_url, display_name, headers_json, is_builtin, created_at_ms, updated_at_ms)
-       VALUES ('stats-provider', 'openai', 'https://example.com', 'Stats Provider', '{}', 0, ${ts}, ${ts})`
-    );
-    const insertModel = `INSERT INTO llm_saved_model (id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms)
-       VALUES (?, 'stats-provider', ?, ?, '{}', ${ts}, ${ts})`;
-    await ctx.conn.execute(insertModel, ["sm-1", "model-b", "model-b"]);
-    await ctx.conn.execute(insertModel, ["sm-2", "model-a", "model-a"]);
-    await ctx.conn.execute(insertModel, ["sm-3", "model-b", "model-b"]);
-
-    const svc = new DefaultUsageStatsService(ctx.conn);
-    assert.deepEqual(await svc.listModels(), ["model-a", "model-b"]);
-  });
-
-  it("T-C3: 7 天区间恰 7 桶（首尾含）；中间无数据日为零值桶", async () => {
-    const { ctx, session } = await seedSession();
-    const today0 = localDayStart(Date.now());
-    const dMinus3 = localAddDays(today0, -3);
-    // 仅 D-3 与今天有数据，其余 5 天空（今日 00:30 归今天桶）。
-    await seedMsg(ctx, session.id, 1, {
-      createdAtMs: dMinus3 + 12 * HOUR,
-      usage: { prompt: 30, total: 30 },
-    });
-    await seedMsg(ctx, session.id, 2, {
-      createdAtMs: today0 + 30 * MIN,
-      usage: { prompt: 10, total: 10 },
+        // model: null → 只查「其他」桶（NULL + 非配置），不含配置模型行。
+        const summaryNull = unwrap(await svc.getSummary({ ...filter, model: null }));
+        assert.equal(summaryNull.calls, 2);
+        assert.equal(summaryNull.promptTokens, 30);
     });
 
-    const svc = new DefaultUsageStatsService(ctx.conn);
-    // 近 7 天 = {D-6, D} 闭区间：7 桶，首桶 D-6、末桶今天，双端含。
-    const buckets = unwrap(await svc.getDailyBuckets({
-      range: dayRange(localAddDays(today0, -6), today0),
-    }));
-    assert.equal(buckets.length, 7);
-    assert.equal(buckets[0]!.bucketStartMs, localAddDays(today0, -6));
-    assert.equal(buckets[6]!.bucketStartMs, today0);
-    // D-3 桶与今天桶有数据。
-    const mid = buckets[3]!;
-    assert.equal(mid.bucketStartMs, dMinus3);
-    assert.equal(mid.calls, 1);
-    assert.equal(mid.promptTokens, 30);
-    assert.equal(buckets[6]!.calls, 1);
-    assert.equal(buckets[6]!.promptTokens, 10);
-    // 其余 5 天无数据：零值桶（计数 0、双均值 null）。
-    for (const [i, b] of buckets.entries()) {
-      if (i === 3 || i === 6) continue;
-      assert.equal(b.calls, 0, `桶 ${i} 应为零值桶`);
-      assert.equal(b.promptTokens, 0, `桶 ${i} prompt 应为零`);
-      assert.equal(b.avgFirstTokenMs, null, `桶 ${i} TTFT 应为 null`);
-      assert.equal(b.avgTokensPerSecond, null, `桶 ${i} 速率应为 null`);
-    }
-  });
+    it("无任何 saved model 时「其他」桶 = 全部行", async () => {
+        const { ctx, session } = await seedSession();
+        const today0 = localDayStart(Date.now());
+        // beforeEach 已清空 llm_saved_model：所有非 NULL 模型均不在配置集合内。
+        await seedMsg(ctx, session.id, 1, {
+            createdAtMs: today0 + 10 * MIN,
+            modelName: "model-a",
+            usage: { prompt: 10, total: 10 },
+        });
+        await seedMsg(ctx, session.id, 2, {
+            createdAtMs: today0 + 20 * MIN,
+            modelName: "model-b",
+            usage: { prompt: 20, total: 20 },
+        });
+        await seedMsg(ctx, session.id, 3, {
+            createdAtMs: today0 + 30 * MIN,
+            modelName: null,
+            usage: { prompt: 5, total: 5 },
+        });
 
-  it("T-C1: 日期区间校验：非法格式、溢出日期（02-30）、fromDay 晚于 toDay 均抛错", async () => {
-    const { ctx } = await seedSession();
-    const svc = new DefaultUsageStatsService(ctx.conn);
-    await rejectsErr(
-      svc.getSummary({
-        range: { fromDay: "2026/03/08", toDay: "2026-03-10" },
-      }),
-      isChatInvalidArgument
-    );
-    await rejectsErr(
-      svc.getSummary({
-        range: { fromDay: "2026-03-08", toDay: "not-a-date" },
-      }),
-      isChatInvalidArgument
-    );
-    await rejectsErr(
-      svc.getSummary({
-        range: { fromDay: "2026-02-30", toDay: "2026-03-10" },
-      }),
-      isChatInvalidArgument
-    );
-    await rejectsErr(
-      svc.getDailyBuckets({
-        range: { fromDay: "2026-03-10", toDay: "2026-03-08" },
-      }),
-      isChatInvalidArgument
-    );
-  });
+        const svc = new DefaultUsageStatsService(ctx.conn);
+        const filter = { range: dayRange(today0, today0) };
+        const summaryNull = unwrap(await svc.getSummary({ ...filter, model: null }));
+        assert.equal(summaryNull.calls, 3);
+        assert.equal(summaryNull.promptTokens, 35);
 
-  it("hourly 对非法日期字符串抛错", async () => {
-    const { ctx } = await seedSession();
-    const svc = new DefaultUsageStatsService(ctx.conn);
-    await rejectsErr(
-      svc.getHourlyBuckets("2026-02-30", {}),
-      isChatInvalidArgument
-    );
-    await rejectsErr(
-      svc.getHourlyBuckets("not-a-date", {}),
-      isChatInvalidArgument
-    );
-  });
-
-  it("B-1: cache_read_tokens = 0 的行计入命中率分母（显式 0 ≠ 缺席）", async () => {
-    const { ctx, session } = await seedSession();
-    const today0 = localDayStart(Date.now());
-    // OpenAI 渠道常态：cached_tokens 显式为 0（上报的「未命中」，非未上报）。
-    await seedMsg(ctx, session.id, 1, {
-      createdAtMs: today0 + 10 * MIN,
-      provider: "openai",
-      usage: { prompt: 100, total: 100, cacheRead: 0 },
-    });
-    // 对照：无 cache 字段的行不入分母（PRD 口径）。
-    await seedMsg(ctx, session.id, 2, {
-      createdAtMs: today0 + 20 * MIN,
-      provider: "openai",
-      usage: { prompt: 50, total: 50 },
+        const breakdown = unwrap(await svc.getModelBreakdown(filter));
+        assert.equal(breakdown.length, 1);
+        assert.equal(breakdown[0]!.modelName, null);
+        assert.equal(breakdown[0]!.calls, 3);
+        assert.equal(breakdown[0]!.totalTokens, 35);
     });
 
-    const svc = new DefaultUsageStatsService(ctx.conn);
-    const summary = unwrap(await svc.getSummary({
-      range: dayRange(today0, today0),
-    }));
-    assert.equal(summary.calls, 2);
-    assert.equal(summary.cacheReadTokens, 0);
-    // 0 值行入分母、无 cache 行不入：分母 = 100 而非 0，命中率不被抬高。
-    assert.equal(summary.billedInputTokens, 100);
-  });
+    it("模型 × 时间组合过滤", async () => {
+        const { ctx, session } = await seedSession();
+        const today0 = localDayStart(Date.now());
+        const yesterday0 = localAddDays(today0, -1);
+        await seedMsg(ctx, session.id, 1, {
+            createdAtMs: today0 + 10 * MIN,
+            modelName: "model-a",
+            usage: { prompt: 10, total: 10 },
+        });
+        await seedMsg(ctx, session.id, 2, {
+            createdAtMs: yesterday0 + 10 * MIN,
+            modelName: "model-b",
+            usage: { prompt: 20, total: 20 },
+        });
 
-  it("G-1: getModelBreakdown × model:null → 非 null 行全归并成一行", async () => {
-    const { ctx, session } = await seedSession();
-    const today0 = localDayStart(Date.now());
-    await seedMsg(ctx, session.id, 1, {
-      createdAtMs: today0 + 10 * MIN,
-      modelName: null,
-      usage: { prompt: 30, total: 30 },
-    });
-    await seedMsg(ctx, session.id, 2, {
-      createdAtMs: today0 + 20 * MIN,
-      modelName: "model-b",
-      usage: { prompt: 20, total: 20 },
-    });
-    await seedMsg(ctx, session.id, 3, {
-      createdAtMs: today0 + 30 * MIN,
-      modelName: "model-a",
-      usage: { prompt: 10, total: 10 },
-    });
-    // 服务商配置：仅 model-a 在已保存模型集合内。
-    const ts = String(Date.now());
-    await ctx.conn.execute(
-      `INSERT INTO llm_provider (id, protocol, base_url, display_name, headers_json, is_builtin, created_at_ms, updated_at_ms)
-       VALUES ('stats-null-model-provider', 'openai', 'https://example.com', 'Stats Null Model Provider', '{}', 0, ${ts}, ${ts})`
-    );
-    await ctx.conn.execute(
-      `INSERT INTO llm_saved_model (id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms)
-       VALUES ('som-null-1', 'stats-null-model-provider', 'model-a', 'model-a', '{}', ${ts}, ${ts})`
-    );
+        const svc = new DefaultUsageStatsService(ctx.conn);
+        const todayOnly = dayRange(today0, today0);
+        const yesterdayOnly = dayRange(yesterday0, yesterday0);
 
-    const svc = new DefaultUsageStatsService(ctx.conn);
-    // model: null = 「其他模型」筛选：NULL 行与非配置模型（model-b）行全部归并成一行。
-    const breakdown = unwrap(await svc.getModelBreakdown({
-      range: dayRange(today0, today0),
-      model: null,
-    }));
-    assert.equal(breakdown.length, 1);
-    const row = breakdown[0]!;
-    assert.equal(row.modelName, null);
-    assert.equal(row.calls, 2);
-    assert.equal(row.promptTokens, 50);
-    assert.equal(row.totalTokens, 50);
-  });
+        const aToday = unwrap(await svc.getSummary({ range: todayOnly, model: "model-a" }));
+        assert.equal(aToday.calls, 1);
+        assert.equal(aToday.promptTokens, 10);
 
-  it("G-1b: provider×model 维度——同名模型跨服务商分列，providerId 筛选与 null 其他桶", async () => {
-    const { ctx, session } = await seedSession();
-    const today0 = localDayStart(Date.now());
-    // 同名 model-a 分属两个服务商；另一条为未记录服务商（provider_id NULL）
-    // 的历史行——无论模型名是否在配置集合，都归入未记录单行（见 G-2）。
-    await seedMsg(ctx, session.id, 1, {
-      createdAtMs: today0 + 10 * MIN,
-      providerId: "stats-px",
-      modelName: "model-a",
-      usage: { prompt: 40, total: 40 },
-    });
-    await seedMsg(ctx, session.id, 2, {
-      createdAtMs: today0 + 20 * MIN,
-      providerId: "stats-py",
-      modelName: "model-a",
-      usage: { prompt: 25, total: 25 },
-    });
-    await seedMsg(ctx, session.id, 3, {
-      createdAtMs: today0 + 30 * MIN,
-      providerId: null,
-      modelName: "model-legacy",
-      usage: { prompt: 10, total: 10 },
-    });
-    const ts = String(Date.now());
-    for (const pid of ["stats-px", "stats-py"]) {
-      await ctx.conn.execute(
-        `INSERT INTO llm_provider (id, protocol, base_url, display_name, headers_json, is_builtin, created_at_ms, updated_at_ms)
-         VALUES ('${pid}', 'openai', 'https://example.com', '${pid}', '{}', 0, ${ts}, ${ts})`
-      );
-    }
-    await ctx.conn.execute(
-      `INSERT INTO llm_saved_model (id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms)
-       VALUES ('som-pm-1', 'stats-px', 'model-a', 'model-a', '{}', ${ts}, ${ts})`
-    );
+        const aYesterday = unwrap(await svc.getSummary({
+            range: yesterdayOnly,
+            model: "model-a",
+        }));
+        assert.equal(aYesterday.calls, 0);
 
-    const svc = new DefaultUsageStatsService(ctx.conn);
-    const range = dayRange(today0, today0);
-    // 无筛选：三行分列（同名模型按服务商拆开；未记录行独立）。
-    const breakdown = unwrap(await svc.getModelBreakdown({ range }));
-    assert.equal(breakdown.length, 3);
-    const px = breakdown.find(
-      (r) => r.providerId === "stats-px" && r.modelName === "model-a"
-    );
-    const py = breakdown.find(
-      (r) => r.providerId === "stats-py" && r.modelName === "model-a"
-    );
-    const unlogged = breakdown.find(
-      (r) => r.providerId === null && r.modelName === null
-    );
-    assert.ok(
-      px && py && unlogged,
-      `breakdown 应三行分列，实际 ${JSON.stringify(breakdown)}`
-    );
-    assert.equal(px!.totalTokens, 40);
-    assert.equal(py!.totalTokens, 25);
-    assert.equal(unlogged!.totalTokens, 10);
-
-    // providerId 筛选：只看 stats-py。
-    const filtered = unwrap(await svc.getModelBreakdown({
-      range,
-      providerId: "stats-py",
-    }));
-    assert.equal(filtered.length, 1);
-    assert.equal(filtered[0]!.providerId, "stats-py");
-    assert.equal(filtered[0]!.totalTokens, 25);
-
-    // providerId:null → 只剩未记录的历史行。
-    const nullFiltered = unwrap(await svc.getModelBreakdown({
-      range,
-      providerId: null,
-    }));
-    assert.equal(nullFiltered.length, 1);
-    assert.equal(nullFiltered[0]!.providerId, null);
-    assert.equal(nullFiltered[0]!.totalTokens, 10);
-  });
-
-  it("G-2: 未记录服务商历史行不按模型分桶——不同模型合并为单行", async () => {
-    const { ctx, session } = await seedSession();
-    const today0 = localDayStart(Date.now());
-    // 三行：两条未记录历史行模型名各不相同（model-a 在配置集合内、
-    // model-legacy 不在——分桶与否都该合并），另有一条已记录服务商的
-    // model-a 对照行，验证其余 provider 的归并逻辑不变。
-    await seedMsg(ctx, session.id, 1, {
-      createdAtMs: today0 + 10 * MIN,
-      providerId: null,
-      modelName: "model-a",
-      usage: { prompt: 30, total: 30 },
-    });
-    await seedMsg(ctx, session.id, 2, {
-      createdAtMs: today0 + 20 * MIN,
-      providerId: null,
-      modelName: "model-legacy",
-      usage: { prompt: 20, total: 20 },
-    });
-    await seedMsg(ctx, session.id, 3, {
-      createdAtMs: today0 + 30 * MIN,
-      providerId: "stats-g2-p1",
-      modelName: "model-a",
-      usage: { prompt: 10, total: 10 },
-    });
-    const ts = String(Date.now());
-    await ctx.conn.execute(
-      `INSERT INTO llm_provider (id, protocol, base_url, display_name, headers_json, is_builtin, created_at_ms, updated_at_ms)
-       VALUES ('stats-g2-p1', 'openai', 'https://example.com', 'G2 P1', '{}', 0, ${ts}, ${ts})`
-    );
-    await ctx.conn.execute(
-      `INSERT INTO llm_saved_model (id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms)
-       VALUES ('som-g2-1', 'stats-g2-p1', 'model-a', 'model-a', '{}', ${ts}, ${ts})`
-    );
-
-    const svc = new DefaultUsageStatsService(ctx.conn);
-    const range = dayRange(today0, today0);
-    // 无筛选：两条未记录历史行（含配置模型 model-a）合并为单行
-    // （modelName null、用量相加），已记录服务商的 model-a 照旧独立成行。
-    const breakdown = unwrap(await svc.getModelBreakdown({ range }));
-    assert.equal(breakdown.length, 2);
-    const merged = breakdown.find(
-      (r) => r.providerId === null && r.modelName === null
-    );
-    const logged = breakdown.find(
-      (r) => r.providerId === "stats-g2-p1" && r.modelName === "model-a"
-    );
-    assert.ok(
-      merged && logged,
-      `breakdown 应为未记录单行 + 配置模型独立行，实际 ${JSON.stringify(breakdown)}`
-    );
-    assert.equal(merged!.calls, 2);
-    assert.equal(merged!.promptTokens, 50);
-    assert.equal(merged!.totalTokens, 50);
-    assert.equal(logged!.totalTokens, 10);
-
-    // filter.model 指定时 SQL 先按 model_name 过滤再归并：未记录的
-    // model-a 行仍并入合并行（至多一行），不因模型名在配置集内而分列。
-    const byModel = unwrap(await svc.getModelBreakdown({ range, model: "model-a" }));
-    assert.equal(byModel.length, 2);
-    const mergedByModel = byModel.find(
-      (r) => r.providerId === null && r.modelName === null
-    );
-    assert.ok(mergedByModel);
-    assert.equal(mergedByModel!.calls, 1);
-    assert.equal(mergedByModel!.totalTokens, 30);
-
-    // providerId:null 筛选：未记录行合并后至多一行。
-    const nullOnly = unwrap(await svc.getModelBreakdown({ range, providerId: null }));
-    assert.equal(nullOnly.length, 1);
-    assert.equal(nullOnly[0]!.modelName, null);
-    assert.equal(nullOnly[0]!.totalTokens, 50);
-  });
-
-  it("CR-2: providerId:null（model 不筛）筛出未记录存量行，归并后为单行", async () => {
-    const { ctx, session } = await seedSession();
-    const today0 = localDayStart(Date.now());
-    // 两行：已记录服务商 × 已配置模型，以及未记录服务商（provider_id NULL）
-    // × 已配置模型——后者是旧「其他模型」口径（model:null）筛不中的存量行，
-    // mobile 方案 A 的 provider 维度语义必须能筛出；筛出后不按模型分桶，
-    // 归并输出单行（modelName: null，与 G-2 同口径）。
-    await seedMsg(ctx, session.id, 1, {
-      createdAtMs: today0 + 10 * MIN,
-      providerId: "stats-cr2-p1",
-      modelName: "model-a",
-      usage: { prompt: 40, total: 40 },
-    });
-    await seedMsg(ctx, session.id, 2, {
-      createdAtMs: today0 + 20 * MIN,
-      providerId: null,
-      modelName: "model-a",
-      usage: { prompt: 10, total: 10 },
-    });
-    const ts = String(Date.now());
-    await ctx.conn.execute(
-      `INSERT INTO llm_provider (id, protocol, base_url, display_name, headers_json, is_builtin, created_at_ms, updated_at_ms)
-       VALUES ('stats-cr2-p1', 'openai', 'https://example.com', 'CR2 P1', '{}', 0, ${ts}, ${ts})`
-    );
-    // model-a 进入已保存模型集合（全局 distinct，不分服务商）。
-    await ctx.conn.execute(
-      `INSERT INTO llm_saved_model (id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms)
-       VALUES ('som-cr2-1', 'stats-cr2-p1', 'model-a', 'model-a', '{}', ${ts}, ${ts})`
-    );
-
-    const svc = new DefaultUsageStatsService(ctx.conn);
-    const range = dayRange(today0, today0);
-    // 旧口径佐证：model-a 在配置集内，model:null 的 NOT IN 子句筛不中未记录行。
-    const legacyStyle = unwrap(await svc.getModelBreakdown({
-      range,
-      model: null,
-      providerId: null,
-    }));
-    assert.equal(legacyStyle.length, 0);
-    // 方案 A：model: undefined（不加模型子句）+ providerId: null
-    // （provider_id IS NULL）→ 未记录 × 已配置模型的行可被筛出，
-    // 输出侧合并为单行（modelName: null）。
-    const breakdown = unwrap(await svc.getModelBreakdown({
-      range,
-      model: undefined,
-      providerId: null,
-    }));
-    assert.equal(breakdown.length, 1);
-    assert.equal(breakdown[0]!.providerId, null);
-    assert.equal(breakdown[0]!.modelName, null);
-    assert.equal(breakdown[0]!.totalTokens, 10);
-  });
-
-  it("CR-2: model:null + providerId:P 可筛出「P × 未配置模型」存量行", async () => {
-    const { ctx, session } = await seedSession();
-    const today0 = localDayStart(Date.now());
-    // 三行：P 的未配置模型（目标行）、P 的已配置模型（被 NOT IN 子句排除）、
-    // 未记录服务商的同名未配置模型（被 provider 子句排除）。
-    await seedMsg(ctx, session.id, 1, {
-      createdAtMs: today0 + 10 * MIN,
-      providerId: "stats-cr2-p2",
-      modelName: "model-legacy",
-      usage: { prompt: 40, total: 40 },
-    });
-    await seedMsg(ctx, session.id, 2, {
-      createdAtMs: today0 + 20 * MIN,
-      providerId: "stats-cr2-p2",
-      modelName: "model-cfg",
-      usage: { prompt: 25, total: 25 },
-    });
-    await seedMsg(ctx, session.id, 3, {
-      createdAtMs: today0 + 30 * MIN,
-      providerId: null,
-      modelName: "model-legacy",
-      usage: { prompt: 10, total: 10 },
-    });
-    const ts = String(Date.now());
-    await ctx.conn.execute(
-      `INSERT INTO llm_provider (id, protocol, base_url, display_name, headers_json, is_builtin, created_at_ms, updated_at_ms)
-       VALUES ('stats-cr2-p2', 'openai', 'https://example.com', 'CR2 P2', '{}', 0, ${ts}, ${ts})`
-    );
-    // 配置集内只放 model-cfg：model-legacy 成为「未配置模型」。
-    await ctx.conn.execute(
-      `INSERT INTO llm_saved_model (id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms)
-       VALUES ('som-cr2-2', 'stats-cr2-p2', 'model-cfg', 'model-cfg', '{}', ${ts}, ${ts})`
-    );
-
-    const svc = new DefaultUsageStatsService(ctx.conn);
-    const breakdown = unwrap(await svc.getModelBreakdown({
-      range: dayRange(today0, today0),
-      model: null,
-      providerId: "stats-cr2-p2",
-    }));
-    // 只剩「P × 未配置模型」一行：provider 子句挡掉未记录行，
-    // NOT IN 子句挡掉 P 的已配置模型行；model-legacy 不在配置集，
-    // 输出侧按展示口径归并为 modelName: null（用量仍在）。
-    assert.equal(breakdown.length, 1);
-    assert.equal(breakdown[0]!.providerId, "stats-cr2-p2");
-    assert.equal(breakdown[0]!.modelName, null);
-    assert.equal(breakdown[0]!.totalTokens, 40);
-  });
-
-  it("T-C6: DST 切换日按挂钟日归桶（春季拨快 2026-03-08 / 秋季拨慢 2026-11-01 NYC）", async () => {
-    const { ctx, session } = await seedSession();
-    // 春季拨快日：02 点不存在，03:10 与当日深夜 23:30 都归挂钟日 03-08；
-    // 次日 00:30 归 03-09。
-    await seedMsg(ctx, session.id, 1, {
-      createdAtMs: new Date(2026, 2, 8, 3, 10).getTime(),
-      usage: { prompt: 7, total: 7 },
-    });
-    await seedMsg(ctx, session.id, 2, {
-      createdAtMs: new Date(2026, 2, 8, 23, 30).getTime(),
-      usage: { prompt: 11, total: 11 },
-    });
-    await seedMsg(ctx, session.id, 3, {
-      createdAtMs: new Date(2026, 2, 9, 0, 30).getTime(),
-      usage: { prompt: 13, total: 13 },
-    });
-    // 秋季拨慢日：EDT 01:10（Date 构造器取第一次出现）与 EST 01:10
-    //（UTC 06:10）都是挂钟 11-01。
-    await seedMsg(ctx, session.id, 4, {
-      createdAtMs: new Date(2026, 10, 1, 1, 10).getTime(),
-      usage: { prompt: 1, total: 1 },
-    });
-    await seedMsg(ctx, session.id, 5, {
-      createdAtMs: Date.UTC(2026, 10, 1, 6, 10),
-      usage: { prompt: 2, total: 2 },
+        const bYesterday = unwrap(await svc.getSummary({
+            range: yesterdayOnly,
+            model: "model-b",
+        }));
+        assert.equal(bYesterday.calls, 1);
+        assert.equal(bYesterday.promptTokens, 20);
     });
 
-    const svc = new DefaultUsageStatsService(ctx.conn);
-    const spring = unwrap(await svc.getDailyBuckets({
-      range: { fromDay: "2026-03-07", toDay: "2026-03-09" },
-    }));
-    assert.equal(spring.length, 3, "春季拨快日桶数仍按挂钟日计 3 天");
-    const d0308 = spring.find(
-      (b) => fmtLocalDay(b.bucketStartMs) === "2026-03-08"
-    );
-    assert.ok(d0308);
-    assert.equal(d0308.calls, 2);
-    assert.equal(d0308.promptTokens, 18);
+    it("T-C5: 删除项回归——summary 无 today 字段；超长区间（401 天）不再受 366 上限限制", async () => {
+        const { ctx, session } = await seedSession();
+        const today0 = localDayStart(Date.now());
+        await seedMsg(ctx, session.id, 1, {
+            createdAtMs: today0 + 10 * MIN,
+            usage: { prompt: 5, total: 5 },
+        });
 
-    const fall = unwrap(await svc.getDailyBuckets({
-      range: { fromDay: "2026-10-31", toDay: "2026-11-02" },
-    }));
-    assert.equal(fall.length, 3, "秋季拨慢日桶数仍按挂钟日计 3 天");
-    const d1101 = fall.find(
-      (b) => fmtLocalDay(b.bucketStartMs) === "2026-11-01"
-    );
-    assert.ok(d1101);
-    assert.equal(d1101.calls, 2);
-    assert.equal(d1101.promptTokens, 3);
-  });
-
-  it("G-2 DST: 春季拨快日（2026-03-08 NYC）缺失钟点出空桶、桶数仍 24", async () => {
-    const { ctx, session } = await seedSession();
-    // 02:00 不存在（拨快到 03:00）；seed 一条 03:10 的消息。
-    await seedMsg(ctx, session.id, 1, {
-      createdAtMs: new Date(2026, 2, 8, 3, 10).getTime(),
-      usage: { prompt: 7, total: 7 },
+        const svc = new DefaultUsageStatsService(ctx.conn);
+        const range = dayRange(localAddDays(today0, -400), today0);
+        const summary = unwrap(await svc.getSummary({ range }));
+        assert.ok(!("today" in summary), "summary 不应再有 today 字段");
+        // 类型层负向钉子（A-1）：直接访问已删字段必报编译错，由 @ts-expect-error
+        // 吸收；反之若有人把 today 加回 summary 类型、或把 kind 形态加回
+        // UsageStatsRange，指令变为 unused 同样炸编译——双向钉死。不写
+        // `as { today?: number }` 断言：可选属性目标总能被 as 合法转换，
+        // 那样表达式本身无错、钉子会被 unused 吹掉。（dayRange 返回类型显式
+        // 标注为 UsageStatsRange，钉子绑定类型定义而非推断字面量。）
+        // @ts-expect-error 已删除字段：summary 不再有 today
+        void summary.today;
+        // @ts-expect-error UsageStatsRange 为 {fromDay, toDay}，无 kind 形态
+        void range.kind;
+        assert.equal(summary.calls, 1);
+        // 401 个日历日（D-400 … D）每天一桶：366 天上限已删，不再抛错。
+        const buckets = unwrap(await svc.getDailyBuckets({ range }));
+        assert.equal(buckets.length, 401);
     });
 
-    const svc = new DefaultUsageStatsService(ctx.conn);
-    const buckets = unwrap(await svc.getHourlyBuckets("2026-03-08", {}));
-    assert.equal(buckets.length, 24);
-    // 缺失钟点（本地 2 点）退化为零值空桶，bucketStartMs 与下一桶重合
-    //（Date 构造器把不存在的 02:00 折叠到 03:00）。
-    assert.equal(buckets[2]!.calls, 0);
-    assert.equal(buckets[2]!.bucketStartMs, buckets[3]!.bucketStartMs);
-    // 03 点桶含 seed 的 03:10 消息。
-    assert.equal(buckets[3]!.calls, 1);
-    assert.equal(buckets[3]!.promptTokens, 7);
-  });
+    it("T-C4: range 缺省语义——聚合/流水全历史，daily 缺 range 抛 CHAT_INVALID_ARGUMENT", async () => {
+        const { ctx, session } = await seedSession();
+        const today0 = localDayStart(Date.now());
+        const yesterday0 = localAddDays(today0, -1);
+        await seedMsg(ctx, session.id, 1, {
+            createdAtMs: yesterday0 + 10 * MIN,
+            modelName: "model-a",
+            usage: { prompt: 20, total: 20 },
+        });
+        await seedMsg(ctx, session.id, 2, {
+            createdAtMs: today0 + 10 * MIN,
+            modelName: "model-a",
+            usage: { prompt: 10, total: 10 },
+        });
 
-  it("G-2 DST: 秋季拨慢日（2026-11-01 NYC）重复钟点桶加宽（25 小时天）", async () => {
-    const { ctx, session } = await seedSession();
-    // 两次本地 01:10：EDT 一次（05:10 UTC，Date 构造器取第一次出现）与 EST 一次（06:10 UTC）。
-    await seedMsg(ctx, session.id, 1, {
-      createdAtMs: new Date(2026, 10, 1, 1, 10).getTime(),
-      usage: { prompt: 1, total: 1 },
-    });
-    await seedMsg(ctx, session.id, 2, {
-      createdAtMs: Date.UTC(2026, 10, 1, 6, 10),
-      usage: { prompt: 2, total: 2 },
+        const svc = new DefaultUsageStatsService(ctx.conn);
+        // getSummary / getModelBreakdown：缺 range = 全历史（两天都算）。
+        const summary = unwrap(await svc.getSummary({ model: "model-a" }));
+        assert.equal(summary.calls, 2);
+        assert.equal(summary.totalTokens, 30);
+        const breakdown = unwrap(await svc.getModelBreakdown({}));
+        assert.equal(breakdown.length, 1);
+        assert.equal(breakdown[0]!.totalTokens, 30);
+
+        // listRequestUsage：缺 range = 全历史，total 与行集均不含时间谓词。
+        const page = unwrap(await svc.listRequestUsage({}, { offset: 0, limit: 10 }));
+        assert.equal(page.total, 2);
+        assert.equal(page.rows.length, 2);
+
+        // getDailyBuckets：缺 range 抛错（日桶序列需要界）。
+        await rejectsErr(svc.getDailyBuckets({}), isChatInvalidArgument);
     });
 
-    const svc = new DefaultUsageStatsService(ctx.conn);
-    const buckets = unwrap(await svc.getHourlyBuckets("2026-11-01", {}));
-    assert.equal(buckets.length, 24);
-    // 重复钟点（本地 1 点）桶加宽：1 点桶（01:00 EDT 起）到 2 点桶（02:00 EST 起）跨 2 小时。
-    assert.equal(
-      buckets[2]!.bucketStartMs - buckets[1]!.bucketStartMs,
-      2 * HOUR
-    );
-    assert.equal(buckets[1]!.bucketStartMs - buckets[0]!.bucketStartMs, HOUR);
-    // 两个 01:10 实例都落在加宽的 1 点桶里。
-    assert.equal(buckets[1]!.calls, 2);
-    assert.equal(buckets[1]!.promptTokens, 3);
-  });
+    it("listModels 来自服务商配置的已保存模型，不从历史消息 distinct", async () => {
+        const { ctx, session } = await seedSession();
+        const now = Date.now();
+        // 历史消息里存在 model-legacy（已下线）与未记录行——不应出现在选项里。
+        await seedMsg(ctx, session.id, 1, {
+            createdAtMs: now,
+            modelName: "model-legacy",
+            usage: { prompt: 1 },
+        });
+        await seedMsg(ctx, session.id, 2, {
+            createdAtMs: now,
+            modelName: null,
+            usage: { prompt: 3 },
+        });
+        // 服务商配置：model-b、model-a（同模型两个服务商，去重后一个）。
+        const ts = String(now);
+        await ctx.conn.execute(
+            `INSERT INTO llm_provider (id, protocol, base_url, display_name, headers_json, is_builtin, created_at_ms, updated_at_ms)
+    VALUES ('stats-provider', 'openai', 'https://example.com', 'Stats Provider', '{}', 0, ${ts}, ${ts})`
+        );
+        const insertModel = `INSERT INTO llm_saved_model (id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms)
+    VALUES (?, 'stats-provider', ?, ?, '{}', ${ts}, ${ts})`;
+        await ctx.conn.execute(insertModel, ["sm-1", "model-b", "model-b"]);
+        await ctx.conn.execute(insertModel, ["sm-2", "model-a", "model-a"]);
+        await ctx.conn.execute(insertModel, ["sm-3", "model-b", "model-b"]);
+
+        const svc = new DefaultUsageStatsService(ctx.conn);
+        assert.deepEqual(await svc.listModels(), ["model-a", "model-b"]);
+    });
+
+    it("T-C3: 7 天区间恰 7 桶（首尾含）；中间无数据日为零值桶", async () => {
+        const { ctx, session } = await seedSession();
+        const today0 = localDayStart(Date.now());
+        const dMinus3 = localAddDays(today0, -3);
+        // 仅 D-3 与今天有数据，其余 5 天空（今日 00:30 归今天桶）。
+        await seedMsg(ctx, session.id, 1, {
+            createdAtMs: dMinus3 + 12 * HOUR,
+            usage: { prompt: 30, total: 30 },
+        });
+        await seedMsg(ctx, session.id, 2, {
+            createdAtMs: today0 + 30 * MIN,
+            usage: { prompt: 10, total: 10 },
+        });
+
+        const svc = new DefaultUsageStatsService(ctx.conn);
+        // 近 7 天 = {D-6, D} 闭区间：7 桶，首桶 D-6、末桶今天，双端含。
+        const buckets = unwrap(await svc.getDailyBuckets({
+            range: dayRange(localAddDays(today0, -6), today0),
+        }));
+        assert.equal(buckets.length, 7);
+        assert.equal(buckets[0]!.bucketStartMs, localAddDays(today0, -6));
+        assert.equal(buckets[6]!.bucketStartMs, today0);
+        // D-3 桶与今天桶有数据。
+        const mid = buckets[3]!;
+        assert.equal(mid.bucketStartMs, dMinus3);
+        assert.equal(mid.calls, 1);
+        assert.equal(mid.promptTokens, 30);
+        assert.equal(buckets[6]!.calls, 1);
+        assert.equal(buckets[6]!.promptTokens, 10);
+        // 其余 5 天无数据：零值桶（计数 0、双均值 null）。
+        for (const [i, b] of buckets.entries()) {
+            if (i === 3 || i === 6) continue;
+            assert.equal(b.calls, 0, `桶 ${i} 应为零值桶`);
+            assert.equal(b.promptTokens, 0, `桶 ${i} prompt 应为零`);
+            assert.equal(b.avgFirstTokenMs, null, `桶 ${i} TTFT 应为 null`);
+            assert.equal(b.avgTokensPerSecond, null, `桶 ${i} 速率应为 null`);
+        }
+    });
+
+    it("T-C1: 日期区间校验：非法格式、溢出日期（02-30）、fromDay 晚于 toDay 均抛错", async () => {
+        const { ctx } = await seedSession();
+        const svc = new DefaultUsageStatsService(ctx.conn);
+        await rejectsErr(
+            svc.getSummary({
+                range: { fromDay: "2026/03/08", toDay: "2026-03-10" },
+            }),
+            isChatInvalidArgument
+        );
+        await rejectsErr(
+            svc.getSummary({
+                range: { fromDay: "2026-03-08", toDay: "not-a-date" },
+            }),
+            isChatInvalidArgument
+        );
+        await rejectsErr(
+            svc.getSummary({
+                range: { fromDay: "2026-02-30", toDay: "2026-03-10" },
+            }),
+            isChatInvalidArgument
+        );
+        await rejectsErr(
+            svc.getDailyBuckets({
+                range: { fromDay: "2026-03-10", toDay: "2026-03-08" },
+            }),
+            isChatInvalidArgument
+        );
+    });
+
+    it("hourly 对非法日期字符串抛错", async () => {
+        const { ctx } = await seedSession();
+        const svc = new DefaultUsageStatsService(ctx.conn);
+        await rejectsErr(
+            svc.getHourlyBuckets("2026-02-30", {}),
+            isChatInvalidArgument
+        );
+        await rejectsErr(
+            svc.getHourlyBuckets("not-a-date", {}),
+            isChatInvalidArgument
+        );
+    });
+
+    it("B-1: cache_read_tokens = 0 的行计入命中率分母（显式 0 ≠ 缺席）", async () => {
+        const { ctx, session } = await seedSession();
+        const today0 = localDayStart(Date.now());
+        // OpenAI 渠道常态：cached_tokens 显式为 0（上报的「未命中」，非未上报）。
+        await seedMsg(ctx, session.id, 1, {
+            createdAtMs: today0 + 10 * MIN,
+            provider: "openai",
+            usage: { prompt: 100, total: 100, cacheRead: 0 },
+        });
+        // 对照：无 cache 字段的行不入分母（PRD 口径）。
+        await seedMsg(ctx, session.id, 2, {
+            createdAtMs: today0 + 20 * MIN,
+            provider: "openai",
+            usage: { prompt: 50, total: 50 },
+        });
+
+        const svc = new DefaultUsageStatsService(ctx.conn);
+        const summary = unwrap(await svc.getSummary({
+            range: dayRange(today0, today0),
+        }));
+        assert.equal(summary.calls, 2);
+        assert.equal(summary.cacheReadTokens, 0);
+        // 0 值行入分母、无 cache 行不入：分母 = 100 而非 0，命中率不被抬高。
+        assert.equal(summary.billedInputTokens, 100);
+    });
+
+    it("G-1: getModelBreakdown × model:null → 非 null 行全归并成一行", async () => {
+        const { ctx, session } = await seedSession();
+        const today0 = localDayStart(Date.now());
+        await seedMsg(ctx, session.id, 1, {
+            createdAtMs: today0 + 10 * MIN,
+            modelName: null,
+            usage: { prompt: 30, total: 30 },
+        });
+        await seedMsg(ctx, session.id, 2, {
+            createdAtMs: today0 + 20 * MIN,
+            modelName: "model-b",
+            usage: { prompt: 20, total: 20 },
+        });
+        await seedMsg(ctx, session.id, 3, {
+            createdAtMs: today0 + 30 * MIN,
+            modelName: "model-a",
+            usage: { prompt: 10, total: 10 },
+        });
+        // 服务商配置：仅 model-a 在已保存模型集合内。
+        const ts = String(Date.now());
+        await ctx.conn.execute(
+            `INSERT INTO llm_provider (id, protocol, base_url, display_name, headers_json, is_builtin, created_at_ms, updated_at_ms)
+    VALUES ('stats-null-model-provider', 'openai', 'https://example.com', 'Stats Null Model Provider', '{}', 0, ${ts}, ${ts})`
+        );
+        await ctx.conn.execute(
+            `INSERT INTO llm_saved_model (id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms)
+    VALUES ('som-null-1', 'stats-null-model-provider', 'model-a', 'model-a', '{}', ${ts}, ${ts})`
+        );
+
+        const svc = new DefaultUsageStatsService(ctx.conn);
+        // model: null = 「其他模型」筛选：NULL 行与非配置模型（model-b）行全部归并成一行。
+        const breakdown = unwrap(await svc.getModelBreakdown({
+            range: dayRange(today0, today0),
+            model: null,
+        }));
+        assert.equal(breakdown.length, 1);
+        const row = breakdown[0]!;
+        assert.equal(row.modelName, null);
+        assert.equal(row.calls, 2);
+        assert.equal(row.promptTokens, 50);
+        assert.equal(row.totalTokens, 50);
+    });
+
+    it("G-1b: provider×model 维度——同名模型跨服务商分列，providerId 筛选与 null 其他桶", async () => {
+        const { ctx, session } = await seedSession();
+        const today0 = localDayStart(Date.now());
+        // 同名 model-a 分属两个服务商；另一条为未记录服务商（provider_id NULL）
+        // 的历史行——无论模型名是否在配置集合，都归入未记录单行（见 G-2）。
+        await seedMsg(ctx, session.id, 1, {
+            createdAtMs: today0 + 10 * MIN,
+            providerId: "stats-px",
+            modelName: "model-a",
+            usage: { prompt: 40, total: 40 },
+        });
+        await seedMsg(ctx, session.id, 2, {
+            createdAtMs: today0 + 20 * MIN,
+            providerId: "stats-py",
+            modelName: "model-a",
+            usage: { prompt: 25, total: 25 },
+        });
+        await seedMsg(ctx, session.id, 3, {
+            createdAtMs: today0 + 30 * MIN,
+            providerId: null,
+            modelName: "model-legacy",
+            usage: { prompt: 10, total: 10 },
+        });
+        const ts = String(Date.now());
+        for (const pid of ["stats-px", "stats-py"]) {
+            await ctx.conn.execute(
+                `INSERT INTO llm_provider (id, protocol, base_url, display_name, headers_json, is_builtin, created_at_ms, updated_at_ms)
+    VALUES ('${pid}', 'openai', 'https://example.com', '${pid}', '{}', 0, ${ts}, ${ts})`
+            );
+        }
+        await ctx.conn.execute(
+            `INSERT INTO llm_saved_model (id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms)
+    VALUES ('som-pm-1', 'stats-px', 'model-a', 'model-a', '{}', ${ts}, ${ts})`
+        );
+
+        const svc = new DefaultUsageStatsService(ctx.conn);
+        const range = dayRange(today0, today0);
+        // 无筛选：三行分列（同名模型按服务商拆开；未记录行独立）。
+        const breakdown = unwrap(await svc.getModelBreakdown({ range }));
+        assert.equal(breakdown.length, 3);
+        const px = breakdown.find(
+            (r) => r.providerId === "stats-px" && r.modelName === "model-a"
+        );
+        const py = breakdown.find(
+            (r) => r.providerId === "stats-py" && r.modelName === "model-a"
+        );
+        const unlogged = breakdown.find(
+            (r) => r.providerId === null && r.modelName === null
+        );
+        assert.ok(
+            px && py && unlogged,
+            `breakdown 应三行分列，实际 ${JSON.stringify(breakdown)}`
+        );
+        assert.equal(px!.totalTokens, 40);
+        assert.equal(py!.totalTokens, 25);
+        assert.equal(unlogged!.totalTokens, 10);
+
+        // providerId 筛选：只看 stats-py。
+        const filtered = unwrap(await svc.getModelBreakdown({
+            range,
+            providerId: "stats-py",
+        }));
+        assert.equal(filtered.length, 1);
+        assert.equal(filtered[0]!.providerId, "stats-py");
+        assert.equal(filtered[0]!.totalTokens, 25);
+
+        // providerId:null → 只剩未记录的历史行。
+        const nullFiltered = unwrap(await svc.getModelBreakdown({
+            range,
+            providerId: null,
+        }));
+        assert.equal(nullFiltered.length, 1);
+        assert.equal(nullFiltered[0]!.providerId, null);
+        assert.equal(nullFiltered[0]!.totalTokens, 10);
+    });
+
+    it("G-2: 未记录服务商历史行不按模型分桶——不同模型合并为单行", async () => {
+        const { ctx, session } = await seedSession();
+        const today0 = localDayStart(Date.now());
+        // 三行：两条未记录历史行模型名各不相同（model-a 在配置集合内、
+        // model-legacy 不在——分桶与否都该合并），另有一条已记录服务商的
+        // model-a 对照行，验证其余 provider 的归并逻辑不变。
+        await seedMsg(ctx, session.id, 1, {
+            createdAtMs: today0 + 10 * MIN,
+            providerId: null,
+            modelName: "model-a",
+            usage: { prompt: 30, total: 30 },
+        });
+        await seedMsg(ctx, session.id, 2, {
+            createdAtMs: today0 + 20 * MIN,
+            providerId: null,
+            modelName: "model-legacy",
+            usage: { prompt: 20, total: 20 },
+        });
+        await seedMsg(ctx, session.id, 3, {
+            createdAtMs: today0 + 30 * MIN,
+            providerId: "stats-g2-p1",
+            modelName: "model-a",
+            usage: { prompt: 10, total: 10 },
+        });
+        const ts = String(Date.now());
+        await ctx.conn.execute(
+            `INSERT INTO llm_provider (id, protocol, base_url, display_name, headers_json, is_builtin, created_at_ms, updated_at_ms)
+    VALUES ('stats-g2-p1', 'openai', 'https://example.com', 'G2 P1', '{}', 0, ${ts}, ${ts})`
+        );
+        await ctx.conn.execute(
+            `INSERT INTO llm_saved_model (id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms)
+    VALUES ('som-g2-1', 'stats-g2-p1', 'model-a', 'model-a', '{}', ${ts}, ${ts})`
+        );
+
+        const svc = new DefaultUsageStatsService(ctx.conn);
+        const range = dayRange(today0, today0);
+        // 无筛选：两条未记录历史行（含配置模型 model-a）合并为单行
+        // （modelName null、用量相加），已记录服务商的 model-a 照旧独立成行。
+        const breakdown = unwrap(await svc.getModelBreakdown({ range }));
+        assert.equal(breakdown.length, 2);
+        const merged = breakdown.find(
+            (r) => r.providerId === null && r.modelName === null
+        );
+        const logged = breakdown.find(
+            (r) => r.providerId === "stats-g2-p1" && r.modelName === "model-a"
+        );
+        assert.ok(
+            merged && logged,
+            `breakdown 应为未记录单行 + 配置模型独立行，实际 ${JSON.stringify(breakdown)}`
+        );
+        assert.equal(merged!.calls, 2);
+        assert.equal(merged!.promptTokens, 50);
+        assert.equal(merged!.totalTokens, 50);
+        assert.equal(logged!.totalTokens, 10);
+
+        // filter.model 指定时 SQL 先按 model_name 过滤再归并：未记录的
+        // model-a 行仍并入合并行（至多一行），不因模型名在配置集内而分列。
+        const byModel = unwrap(await svc.getModelBreakdown({ range, model: "model-a" }));
+        assert.equal(byModel.length, 2);
+        const mergedByModel = byModel.find(
+            (r) => r.providerId === null && r.modelName === null
+        );
+        assert.ok(mergedByModel);
+        assert.equal(mergedByModel!.calls, 1);
+        assert.equal(mergedByModel!.totalTokens, 30);
+
+        // providerId:null 筛选：未记录行合并后至多一行。
+        const nullOnly = unwrap(await svc.getModelBreakdown({ range, providerId: null }));
+        assert.equal(nullOnly.length, 1);
+        assert.equal(nullOnly[0]!.modelName, null);
+        assert.equal(nullOnly[0]!.totalTokens, 50);
+    });
+
+    it("CR-2: providerId:null（model 不筛）筛出未记录存量行，归并后为单行", async () => {
+        const { ctx, session } = await seedSession();
+        const today0 = localDayStart(Date.now());
+        // 两行：已记录服务商 × 已配置模型，以及未记录服务商（provider_id NULL）
+        // × 已配置模型——后者是旧「其他模型」口径（model:null）筛不中的存量行，
+        // mobile 方案 A 的 provider 维度语义必须能筛出；筛出后不按模型分桶，
+        // 归并输出单行（modelName: null，与 G-2 同口径）。
+        await seedMsg(ctx, session.id, 1, {
+            createdAtMs: today0 + 10 * MIN,
+            providerId: "stats-cr2-p1",
+            modelName: "model-a",
+            usage: { prompt: 40, total: 40 },
+        });
+        await seedMsg(ctx, session.id, 2, {
+            createdAtMs: today0 + 20 * MIN,
+            providerId: null,
+            modelName: "model-a",
+            usage: { prompt: 10, total: 10 },
+        });
+        const ts = String(Date.now());
+        await ctx.conn.execute(
+            `INSERT INTO llm_provider (id, protocol, base_url, display_name, headers_json, is_builtin, created_at_ms, updated_at_ms)
+    VALUES ('stats-cr2-p1', 'openai', 'https://example.com', 'CR2 P1', '{}', 0, ${ts}, ${ts})`
+        );
+        // model-a 进入已保存模型集合（全局 distinct，不分服务商）。
+        await ctx.conn.execute(
+            `INSERT INTO llm_saved_model (id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms)
+    VALUES ('som-cr2-1', 'stats-cr2-p1', 'model-a', 'model-a', '{}', ${ts}, ${ts})`
+        );
+
+        const svc = new DefaultUsageStatsService(ctx.conn);
+        const range = dayRange(today0, today0);
+        // 旧口径佐证：model-a 在配置集内，model:null 的 NOT IN 子句筛不中未记录行。
+        const legacyStyle = unwrap(await svc.getModelBreakdown({
+            range,
+            model: null,
+            providerId: null,
+        }));
+        assert.equal(legacyStyle.length, 0);
+        // 方案 A：model: undefined（不加模型子句）+ providerId: null
+        // （provider_id IS NULL）→ 未记录 × 已配置模型的行可被筛出，
+        // 输出侧合并为单行（modelName: null）。
+        const breakdown = unwrap(await svc.getModelBreakdown({
+            range,
+            model: undefined,
+            providerId: null,
+        }));
+        assert.equal(breakdown.length, 1);
+        assert.equal(breakdown[0]!.providerId, null);
+        assert.equal(breakdown[0]!.modelName, null);
+        assert.equal(breakdown[0]!.totalTokens, 10);
+    });
+
+    it("CR-2: model:null + providerId:P 可筛出「P × 未配置模型」存量行", async () => {
+        const { ctx, session } = await seedSession();
+        const today0 = localDayStart(Date.now());
+        // 三行：P 的未配置模型（目标行）、P 的已配置模型（被 NOT IN 子句排除）、
+        // 未记录服务商的同名未配置模型（被 provider 子句排除）。
+        await seedMsg(ctx, session.id, 1, {
+            createdAtMs: today0 + 10 * MIN,
+            providerId: "stats-cr2-p2",
+            modelName: "model-legacy",
+            usage: { prompt: 40, total: 40 },
+        });
+        await seedMsg(ctx, session.id, 2, {
+            createdAtMs: today0 + 20 * MIN,
+            providerId: "stats-cr2-p2",
+            modelName: "model-cfg",
+            usage: { prompt: 25, total: 25 },
+        });
+        await seedMsg(ctx, session.id, 3, {
+            createdAtMs: today0 + 30 * MIN,
+            providerId: null,
+            modelName: "model-legacy",
+            usage: { prompt: 10, total: 10 },
+        });
+        const ts = String(Date.now());
+        await ctx.conn.execute(
+            `INSERT INTO llm_provider (id, protocol, base_url, display_name, headers_json, is_builtin, created_at_ms, updated_at_ms)
+    VALUES ('stats-cr2-p2', 'openai', 'https://example.com', 'CR2 P2', '{}', 0, ${ts}, ${ts})`
+        );
+        // 配置集内只放 model-cfg：model-legacy 成为「未配置模型」。
+        await ctx.conn.execute(
+            `INSERT INTO llm_saved_model (id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms)
+    VALUES ('som-cr2-2', 'stats-cr2-p2', 'model-cfg', 'model-cfg', '{}', ${ts}, ${ts})`
+        );
+
+        const svc = new DefaultUsageStatsService(ctx.conn);
+        const breakdown = unwrap(await svc.getModelBreakdown({
+            range: dayRange(today0, today0),
+            model: null,
+            providerId: "stats-cr2-p2",
+        }));
+        // 只剩「P × 未配置模型」一行：provider 子句挡掉未记录行，
+        // NOT IN 子句挡掉 P 的已配置模型行；model-legacy 不在配置集，
+        // 输出侧按展示口径归并为 modelName: null（用量仍在）。
+        assert.equal(breakdown.length, 1);
+        assert.equal(breakdown[0]!.providerId, "stats-cr2-p2");
+        assert.equal(breakdown[0]!.modelName, null);
+        assert.equal(breakdown[0]!.totalTokens, 40);
+    });
+
+    it("T-C6: DST 切换日按挂钟日归桶（春季拨快 2026-03-08 / 秋季拨慢 2026-11-01 NYC）", async () => {
+        const { ctx, session } = await seedSession();
+        // 春季拨快日：02 点不存在，03:10 与当日深夜 23:30 都归挂钟日 03-08；
+        // 次日 00:30 归 03-09。
+        await seedMsg(ctx, session.id, 1, {
+            createdAtMs: new Date(2026, 2, 8, 3, 10).getTime(),
+            usage: { prompt: 7, total: 7 },
+        });
+        await seedMsg(ctx, session.id, 2, {
+            createdAtMs: new Date(2026, 2, 8, 23, 30).getTime(),
+            usage: { prompt: 11, total: 11 },
+        });
+        await seedMsg(ctx, session.id, 3, {
+            createdAtMs: new Date(2026, 2, 9, 0, 30).getTime(),
+            usage: { prompt: 13, total: 13 },
+        });
+        // 秋季拨慢日：EDT 01:10（Date 构造器取第一次出现）与 EST 01:10
+        //（UTC 06:10）都是挂钟 11-01。
+        await seedMsg(ctx, session.id, 4, {
+            createdAtMs: new Date(2026, 10, 1, 1, 10).getTime(),
+            usage: { prompt: 1, total: 1 },
+        });
+        await seedMsg(ctx, session.id, 5, {
+            createdAtMs: Date.UTC(2026, 10, 1, 6, 10),
+            usage: { prompt: 2, total: 2 },
+        });
+
+        const svc = new DefaultUsageStatsService(ctx.conn);
+        const spring = unwrap(await svc.getDailyBuckets({
+            range: { fromDay: "2026-03-07", toDay: "2026-03-09" },
+        }));
+        assert.equal(spring.length, 3, "春季拨快日桶数仍按挂钟日计 3 天");
+        const d0308 = spring.find(
+            (b) => fmtLocalDay(b.bucketStartMs) === "2026-03-08"
+        );
+        assert.ok(d0308);
+        assert.equal(d0308.calls, 2);
+        assert.equal(d0308.promptTokens, 18);
+
+        const fall = unwrap(await svc.getDailyBuckets({
+            range: { fromDay: "2026-10-31", toDay: "2026-11-02" },
+        }));
+        assert.equal(fall.length, 3, "秋季拨慢日桶数仍按挂钟日计 3 天");
+        const d1101 = fall.find(
+            (b) => fmtLocalDay(b.bucketStartMs) === "2026-11-01"
+        );
+        assert.ok(d1101);
+        assert.equal(d1101.calls, 2);
+        assert.equal(d1101.promptTokens, 3);
+    });
+
+    it("G-2 DST: 春季拨快日（2026-03-08 NYC）缺失钟点出空桶、桶数仍 24", async () => {
+        const { ctx, session } = await seedSession();
+        // 02:00 不存在（拨快到 03:00）；seed 一条 03:10 的消息。
+        await seedMsg(ctx, session.id, 1, {
+            createdAtMs: new Date(2026, 2, 8, 3, 10).getTime(),
+            usage: { prompt: 7, total: 7 },
+        });
+
+        const svc = new DefaultUsageStatsService(ctx.conn);
+        const buckets = unwrap(await svc.getHourlyBuckets("2026-03-08", {}));
+        assert.equal(buckets.length, 24);
+        // 缺失钟点（本地 2 点）退化为零值空桶，bucketStartMs 与下一桶重合
+        //（Date 构造器把不存在的 02:00 折叠到 03:00）。
+        assert.equal(buckets[2]!.calls, 0);
+        assert.equal(buckets[2]!.bucketStartMs, buckets[3]!.bucketStartMs);
+        // 03 点桶含 seed 的 03:10 消息。
+        assert.equal(buckets[3]!.calls, 1);
+        assert.equal(buckets[3]!.promptTokens, 7);
+    });
+
+    it("G-2 DST: 秋季拨慢日（2026-11-01 NYC）重复钟点桶加宽（25 小时天）", async () => {
+        const { ctx, session } = await seedSession();
+        // 两次本地 01:10：EDT 一次（05:10 UTC，Date 构造器取第一次出现）与 EST 一次（06:10 UTC）。
+        await seedMsg(ctx, session.id, 1, {
+            createdAtMs: new Date(2026, 10, 1, 1, 10).getTime(),
+            usage: { prompt: 1, total: 1 },
+        });
+        await seedMsg(ctx, session.id, 2, {
+            createdAtMs: Date.UTC(2026, 10, 1, 6, 10),
+            usage: { prompt: 2, total: 2 },
+        });
+
+        const svc = new DefaultUsageStatsService(ctx.conn);
+        const buckets = unwrap(await svc.getHourlyBuckets("2026-11-01", {}));
+        assert.equal(buckets.length, 24);
+        // 重复钟点（本地 1 点）桶加宽：1 点桶（01:00 EDT 起）到 2 点桶（02:00 EST 起）跨 2 小时。
+        assert.equal(
+            buckets[2]!.bucketStartMs - buckets[1]!.bucketStartMs,
+            2 * HOUR
+        );
+        assert.equal(buckets[1]!.bucketStartMs - buckets[0]!.bucketStartMs, HOUR);
+        // 两个 01:10 实例都落在加宽的 1 点桶里。
+        assert.equal(buckets[1]!.calls, 2);
+        assert.equal(buckets[1]!.promptTokens, 3);
+    });
 });
 
 describe("usage stats service 速率/TTFT 聚合（T-US2/3/4）", () => {
-  it("聚合速率口径：加权 SUM/SUM，NULL 与零分母行不入；avgFirstTokenMs 含非流式行（T-US2）", async () => {
-    const { ctx, session } = await seedSession();
-    const today0 = localDayStart(Date.now());
-    // 行 1：有效行（流式）—— completion 900，生成时长 3500-500=3000ms → 900/3 = 300 tok/s
-    await seedMsg(ctx, session.id, 1, {
-      createdAtMs: today0 + 10 * MIN,
-      usage: {
-        prompt: 100,
-        completion: 900,
-        total: 1000,
-        firstTokenMs: 500,
-        durationMs: 3500,
-      },
-    });
-    // 行 2：非流式行（first=duration）—— 入 TTFT 均值，不入速率分母
-    await seedMsg(ctx, session.id, 2, {
-      createdAtMs: today0 + 11 * MIN,
-      usage: {
-        prompt: 50,
-        completion: 100,
-        total: 150,
-        firstTokenMs: 2000,
-        durationMs: 2000,
-      },
-    });
-    // 行 3：旧数据（耗时全 NULL）—— 不入任何新指标
-    await seedMsg(ctx, session.id, 3, {
-      createdAtMs: today0 + 12 * MIN,
-      usage: { prompt: 30, completion: 60, total: 90 },
+    it("聚合速率口径：加权 SUM/SUM，NULL 与零分母行不入；avgFirstTokenMs 含非流式行（T-US2）", async () => {
+        const { ctx, session } = await seedSession();
+        const today0 = localDayStart(Date.now());
+        // 行 1：有效行（流式）—— completion 900，生成时长 3500-500=3000ms → 900/3 = 300 tok/s
+        await seedMsg(ctx, session.id, 1, {
+            createdAtMs: today0 + 10 * MIN,
+            usage: {
+                prompt: 100,
+                completion: 900,
+                total: 1000,
+                firstTokenMs: 500,
+                durationMs: 3500,
+            },
+        });
+        // 行 2：非流式行（first=duration）—— 入 TTFT 均值，不入速率分母
+        await seedMsg(ctx, session.id, 2, {
+            createdAtMs: today0 + 11 * MIN,
+            usage: {
+                prompt: 50,
+                completion: 100,
+                total: 150,
+                firstTokenMs: 2000,
+                durationMs: 2000,
+            },
+        });
+        // 行 3：旧数据（耗时全 NULL）—— 不入任何新指标
+        await seedMsg(ctx, session.id, 3, {
+            createdAtMs: today0 + 12 * MIN,
+            usage: { prompt: 30, completion: 60, total: 90 },
+        });
+
+        const svc = new DefaultUsageStatsService(ctx.conn);
+        const summary = unwrap(await svc.getSummary({
+            range: dayRange(today0, today0),
+        }));
+        // 速率 = 900 / (3500-500)/1000 = 300 tok/s（仅有效行）
+        assert.equal(summary.avgTokensPerSecond, 300);
+        // TTFT 均值 = AVG(500, 2000) = 1250（NULL 行忽略，非流式行计入）
+        assert.equal(summary.avgFirstTokenMs, 1250);
+        // token 各汇总值不受新指标影响（三行全计）
+        assert.equal(summary.calls, 3);
+        assert.equal(summary.promptTokens, 180);
+        assert.equal(summary.completionTokens, 1060);
+        assert.equal(summary.totalTokens, 1240);
     });
 
-    const svc = new DefaultUsageStatsService(ctx.conn);
-    const summary = unwrap(await svc.getSummary({
-      range: dayRange(today0, today0),
-    }));
-    // 速率 = 900 / (3500-500)/1000 = 300 tok/s（仅有效行）
-    assert.equal(summary.avgTokensPerSecond, 300);
-    // TTFT 均值 = AVG(500, 2000) = 1250（NULL 行忽略，非流式行计入）
-    assert.equal(summary.avgFirstTokenMs, 1250);
-    // token 各汇总值不受新指标影响（三行全计）
-    assert.equal(summary.calls, 3);
-    assert.equal(summary.promptTokens, 180);
-    assert.equal(summary.completionTokens, 1060);
-    assert.equal(summary.totalTokens, 1240);
-  });
+    it("全为存量 NULL 行时两新指标返回 null，token 汇总不变（T-US3）", async () => {
+        const { ctx, session } = await seedSession();
+        const today0 = localDayStart(Date.now());
+        await seedMsg(ctx, session.id, 1, {
+            createdAtMs: today0 + 10 * MIN,
+            usage: { prompt: 100, completion: 200, total: 300 },
+        });
+        await seedMsg(ctx, session.id, 2, {
+            createdAtMs: today0 + 11 * MIN,
+            usage: { prompt: 10, completion: 20, total: 30 },
+        });
 
-  it("全为存量 NULL 行时两新指标返回 null，token 汇总不变（T-US3）", async () => {
-    const { ctx, session } = await seedSession();
-    const today0 = localDayStart(Date.now());
-    await seedMsg(ctx, session.id, 1, {
-      createdAtMs: today0 + 10 * MIN,
-      usage: { prompt: 100, completion: 200, total: 300 },
-    });
-    await seedMsg(ctx, session.id, 2, {
-      createdAtMs: today0 + 11 * MIN,
-      usage: { prompt: 10, completion: 20, total: 30 },
+        const svc = new DefaultUsageStatsService(ctx.conn);
+        const summary = unwrap(await svc.getSummary({
+            range: dayRange(today0, today0),
+        }));
+        assert.equal(summary.avgFirstTokenMs, null);
+        assert.equal(summary.avgTokensPerSecond, null);
+        assert.equal(summary.calls, 2);
+        assert.equal(summary.totalTokens, 330);
     });
 
-    const svc = new DefaultUsageStatsService(ctx.conn);
-    const summary = unwrap(await svc.getSummary({
-      range: dayRange(today0, today0),
-    }));
-    assert.equal(summary.avgFirstTokenMs, null);
-    assert.equal(summary.avgTokensPerSecond, null);
-    assert.equal(summary.calls, 2);
-    assert.equal(summary.totalTokens, 330);
-  });
+    it("daily/hourly 桶的新指标随桶正确切分，空桶为零值 + 双 null（T-US4）", async () => {
+        const { ctx, session } = await seedSession();
+        const today0 = localDayStart(Date.now());
+        const yesterday0 = localAddDays(today0, -1);
+        // 今天：有效行 → 600/(4000-1000)/1000*1000... 计算：completion 600，生成 3000ms → 200 tok/s
+        await seedMsg(ctx, session.id, 1, {
+            createdAtMs: today0 + 14 * HOUR,
+            usage: {
+                prompt: 80,
+                completion: 600,
+                total: 680,
+                firstTokenMs: 1000,
+                durationMs: 4000,
+            },
+        });
+        // 昨天：另一条有效行 → completion 300，生成 1500ms → 200 tok/s；TTFT 300
+        await seedMsg(ctx, session.id, 2, {
+            createdAtMs: yesterday0 + 9 * HOUR,
+            usage: {
+                prompt: 40,
+                completion: 300,
+                total: 340,
+                firstTokenMs: 300,
+                durationMs: 1800,
+            },
+        });
 
-  it("daily/hourly 桶的新指标随桶正确切分，空桶为零值 + 双 null（T-US4）", async () => {
-    const { ctx, session } = await seedSession();
-    const today0 = localDayStart(Date.now());
-    const yesterday0 = localAddDays(today0, -1);
-    // 今天：有效行 → 600/(4000-1000)/1000*1000... 计算：completion 600，生成 3000ms → 200 tok/s
-    await seedMsg(ctx, session.id, 1, {
-      createdAtMs: today0 + 14 * HOUR,
-      usage: {
-        prompt: 80,
-        completion: 600,
-        total: 680,
-        firstTokenMs: 1000,
-        durationMs: 4000,
-      },
+        const svc = new DefaultUsageStatsService(ctx.conn);
+        const daily = unwrap(await svc.getDailyBuckets({
+            range: dayRange(yesterday0, today0),
+        }));
+        assert.equal(daily.length, 2);
+        const todayBucket = daily.find((b) => b.bucketStartMs === today0);
+        const yesterdayBucket = daily.find((b) => b.bucketStartMs === yesterday0);
+        assert.ok(todayBucket);
+        assert.ok(yesterdayBucket);
+        assert.equal(todayBucket!.avgTokensPerSecond, 200);
+        assert.equal(todayBucket!.avgFirstTokenMs, 1000);
+        assert.equal(yesterdayBucket!.avgTokensPerSecond, 200);
+        assert.equal(yesterdayBucket!.avgFirstTokenMs, 300);
+
+        // hourly：今天 14 点桶有效，其余 23 个空桶 calls=0 + 双 null
+        const hourly = unwrap(await svc.getHourlyBuckets(fmtLocalDay(today0), {}));
+        assert.equal(hourly.length, 24);
+        const hour14 = hourly.find((b) => b.bucketStartMs === today0 + 14 * HOUR);
+        assert.ok(hour14);
+        assert.equal(hour14!.calls, 1);
+        assert.equal(hour14!.avgTokensPerSecond, 200);
+        assert.equal(hour14!.avgFirstTokenMs, 1000);
+        for (const [i, b] of hourly.entries()) {
+            if (b.bucketStartMs === today0 + 14 * HOUR) {
+                continue;
+            }
+            assert.equal(b.calls, 0, `桶 ${i} 应为空`);
+            assert.equal(b.avgFirstTokenMs, null, `桶 ${i} TTFT 应为 null`);
+            assert.equal(b.avgTokensPerSecond, null, `桶 ${i} 速率应为 null`);
+        }
     });
-    // 昨天：另一条有效行 → completion 300，生成 1500ms → 200 tok/s；TTFT 300
-    await seedMsg(ctx, session.id, 2, {
-      createdAtMs: yesterday0 + 9 * HOUR,
-      usage: {
-        prompt: 40,
-        completion: 300,
-        total: 340,
-        firstTokenMs: 300,
-        durationMs: 1800,
-      },
+
+    it("T-C7: listRequestUsage 无 range 全量分页：时间倒序、total 不含时间谓词、模型筛选仍生效", async () => {
+        const { ctx, session } = await seedSession();
+        // seed 已保存模型 model-a：「其他」桶口径 = null 或不在配置集内
+        const ts = String(Date.now());
+        await ctx.conn.execute(
+            `INSERT INTO llm_provider (id, protocol, base_url, display_name, headers_json, is_builtin, created_at_ms, updated_at_ms)
+    VALUES ('reqlog-provider', 'openai', 'https://example.com', 'reqlog-p', '{}', 0, ${ts}, ${ts})`
+        );
+        await ctx.conn.execute(
+            `INSERT INTO llm_saved_model (id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms)
+    VALUES ('som-reqlog-1', 'reqlog-provider', 'model-a', 'model-a', '{}', ${ts}, ${ts})`
+        );
+        const svc = new DefaultUsageStatsService(ctx.conn);
+        const now = Date.now();
+        // 5 条 usage 行（时间递增 seed）+ 1 条无 usage 行（不入流水）
+        for (let i = 0; i < 5; i++) {
+            await seedMsg(ctx, session.id, i + 1, {
+                createdAtMs: now - (5 - i) * 60_000,
+                modelName: i === 0 ? null : "model-a",
+                // providerId 三态 seed：i=0 与 i=4 记为 'P'（P 档内同时覆盖
+                // modelName null 与 model-a 两态），其余行与下方无 usage 行、
+                // 2020 老消息保持 null（未记录历史行档）。
+                providerId: i === 0 || i === 4 ? "P" : null,
+                usage: {
+                    prompt: 100 + i,
+                    completion: 10 + i,
+                    total: 110 + 2 * i,
+                    firstTokenMs: 200,
+                    durationMs: 2000,
+                },
+            });
+        }
+        await seedMsg(ctx, session.id, 9, {
+            createdAtMs: now,
+            modelName: "model-a",
+            usage: null,
+        });
+        // 远早于任何窗口的老消息：无 range 的全量口径应计入 total。
+        await seedMsg(ctx, session.id, 10, {
+            createdAtMs: new Date(2020, 0, 1).getTime(),
+            modelName: "model-a",
+            usage: { prompt: 1, completion: 1, total: 2 },
+        });
+        const page1 = unwrap(await svc.listRequestUsage({}, { offset: 0, limit: 3 }));
+        assert.equal(page1.total, 6);
+        assert.equal(page1.rows.length, 3);
+        // 时间倒序：最新在前
+        assert.ok(page1.rows[0]!.createdAtMs >= page1.rows[1]!.createdAtMs);
+        assert.equal(page1.rows[0]!.completionTokens, 14);
+        const page2 = unwrap(await svc.listRequestUsage({}, { offset: 3, limit: 3 }));
+        assert.equal(page2.rows.length, 3);
+        assert.ok(page2.rows[0]!.createdAtMs >= page2.rows[1]!.createdAtMs);
+        // 越界页空
+        const page3 = unwrap(await svc.listRequestUsage({}, { offset: 9, limit: 3 }));
+        assert.equal(page3.rows.length, 0);
+        // 模型筛选：只 model-a（排除 null 行）→ 5 条
+        const filtered = unwrap(await svc.listRequestUsage(
+            { model: "model-a" },
+            { offset: 0, limit: 50 }
+        ));
+        assert.equal(filtered.total, 5);
+        for (const row of filtered.rows) {
+            assert.equal(row.modelName, "model-a");
+        }
+        // 「其他」桶（null model）→ 1 条
+        const others = unwrap(await svc.listRequestUsage(
+            { model: null },
+            { offset: 0, limit: 50 }
+        ));
+        assert.equal(others.total, 1);
+        assert.equal(others.rows[0]!.modelName, null);
+        // providerId 筛选三态（G-1）：'P' 档与 null 档互补，缺省档已由上述
+        // 无 filter 断言覆盖（total=6）。流水行契约（UsageStatsRequestRow）
+        // 不回传 providerId，行集身份用行指纹断言：P 档恰为 i=0 / i=4 两行
+        // （completionTokens 10/14，modelName 分别为 null / model-a）；
+        // null 档只含 provider_id IS NULL 的历史行（i=1..3 与 2020 老消息），
+        // 不得混入 P 行。seed 错标（如 P 行漏标）时 total 互补性即红。
+        const pFiltered = unwrap(await svc.listRequestUsage(
+            { providerId: "P" },
+            { offset: 0, limit: 50 }
+        ));
+        assert.equal(pFiltered.total, 2);
+        const pCompletions = pFiltered.rows
+            .map((row) => row.completionTokens)
+            .sort((a, b) => a - b);
+        assert.deepEqual(pCompletions, [10, 14]);
+        // 配对指纹：modelName null ↔ completion 10，model-a ↔ completion 14。
+        for (const row of pFiltered.rows) {
+            assert.equal(
+                row.completionTokens,
+                row.modelName === null ? 10 : 14
+            );
+        }
+        const nullFiltered = unwrap(await svc.listRequestUsage(
+            { providerId: null },
+            { offset: 0, limit: 50 }
+        ));
+        assert.equal(nullFiltered.total, 4);
+        const nullCompletions = nullFiltered.rows
+            .map((row) => row.completionTokens)
+            .sort((a, b) => a - b);
+        assert.deepEqual(nullCompletions, [1, 11, 12, 13]);
+        // 非法 limit 拒收
+        await rejectsErr(
+            () => svc.listRequestUsage({}, { offset: 0, limit: 0 }),
+            (e: unknown) => isChatInvalidArgument(e) && (e as {messageKey?: string}).messageKey === "error.usage.invalid_page_limit"
+        );
     });
 
-    const svc = new DefaultUsageStatsService(ctx.conn);
-    const daily = unwrap(await svc.getDailyBuckets({
-      range: dayRange(yesterday0, today0),
-    }));
-    assert.equal(daily.length, 2);
-    const todayBucket = daily.find((b) => b.bucketStartMs === today0);
-    const yesterdayBucket = daily.find((b) => b.bucketStartMs === yesterday0);
-    assert.ok(todayBucket);
-    assert.ok(yesterdayBucket);
-    assert.equal(todayBucket!.avgTokensPerSecond, 200);
-    assert.equal(todayBucket!.avgFirstTokenMs, 1000);
-    assert.equal(yesterdayBucket!.avgTokensPerSecond, 200);
-    assert.equal(yesterdayBucket!.avgFirstTokenMs, 300);
-
-    // hourly：今天 14 点桶有效，其余 23 个空桶 calls=0 + 双 null
-    const hourly = unwrap(await svc.getHourlyBuckets(fmtLocalDay(today0), {}));
-    assert.equal(hourly.length, 24);
-    const hour14 = hourly.find((b) => b.bucketStartMs === today0 + 14 * HOUR);
-    assert.ok(hour14);
-    assert.equal(hour14!.calls, 1);
-    assert.equal(hour14!.avgTokensPerSecond, 200);
-    assert.equal(hour14!.avgFirstTokenMs, 1000);
-    for (const [i, b] of hourly.entries()) {
-      if (b.bucketStartMs === today0 + 14 * HOUR) {
-        continue;
-      }
-      assert.equal(b.calls, 0, `桶 ${i} 应为空`);
-      assert.equal(b.avgFirstTokenMs, null, `桶 ${i} TTFT 应为 null`);
-      assert.equal(b.avgTokensPerSecond, null, `桶 ${i} 速率应为 null`);
-    }
-  });
-
-  it("T-C7: listRequestUsage 无 range 全量分页：时间倒序、total 不含时间谓词、模型筛选仍生效", async () => {
-    const { ctx, session } = await seedSession();
-    // seed 已保存模型 model-a：「其他」桶口径 = null 或不在配置集内
-    const ts = String(Date.now());
-    await ctx.conn.execute(
-      `INSERT INTO llm_provider (id, protocol, base_url, display_name, headers_json, is_builtin, created_at_ms, updated_at_ms)
-       VALUES ('reqlog-provider', 'openai', 'https://example.com', 'reqlog-p', '{}', 0, ${ts}, ${ts})`
-    );
-    await ctx.conn.execute(
-      `INSERT INTO llm_saved_model (id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms)
-       VALUES ('som-reqlog-1', 'reqlog-provider', 'model-a', 'model-a', '{}', ${ts}, ${ts})`
-    );
-    const svc = new DefaultUsageStatsService(ctx.conn);
-    const now = Date.now();
-    // 5 条 usage 行（时间递增 seed）+ 1 条无 usage 行（不入流水）
-    for (let i = 0; i < 5; i++) {
-      await seedMsg(ctx, session.id, i + 1, {
-        createdAtMs: now - (5 - i) * 60_000,
-        modelName: i === 0 ? null : "model-a",
-        // providerId 三态 seed：i=0 与 i=4 记为 'P'（P 档内同时覆盖
-        // modelName null 与 model-a 两态），其余行与下方无 usage 行、
-        // 2020 老消息保持 null（未记录历史行档）。
-        providerId: i === 0 || i === 4 ? "P" : null,
-        usage: {
-          prompt: 100 + i,
-          completion: 10 + i,
-          total: 110 + 2 * i,
-          firstTokenMs: 200,
-          durationMs: 2000,
-        },
-      });
-    }
-    await seedMsg(ctx, session.id, 9, {
-      createdAtMs: now,
-      modelName: "model-a",
-      usage: null,
+    it("listRequestUsage 分页 offset 非有限数值（NaN/±Infinity）拒收，不触达 SQL（B-2）", async () => {
+        const { ctx } = await seedSession();
+        const svc = new DefaultUsageStatsService(ctx.conn);
+        for (const offset of [
+            Number.NaN,
+            Number.POSITIVE_INFINITY,
+            Number.NEGATIVE_INFINITY,
+        ]) {
+            await rejectsErr(
+                () => svc.listRequestUsage({}, { offset, limit: 10 }),
+                (e: unknown) => isChatInvalidArgument(e) && (e as {messageKey?: string}).messageKey === "error.usage.invalid_page_offset"
+            );
+        }
     });
-    // 远早于任何窗口的老消息：无 range 的全量口径应计入 total。
-    await seedMsg(ctx, session.id, 10, {
-      createdAtMs: new Date(2020, 0, 1).getTime(),
-      modelName: "model-a",
-      usage: { prompt: 1, completion: 1, total: 2 },
-    });
-    const page1 = unwrap(await svc.listRequestUsage({}, { offset: 0, limit: 3 }));
-    assert.equal(page1.total, 6);
-    assert.equal(page1.rows.length, 3);
-    // 时间倒序：最新在前
-    assert.ok(page1.rows[0]!.createdAtMs >= page1.rows[1]!.createdAtMs);
-    assert.equal(page1.rows[0]!.completionTokens, 14);
-    const page2 = unwrap(await svc.listRequestUsage({}, { offset: 3, limit: 3 }));
-    assert.equal(page2.rows.length, 3);
-    assert.ok(page2.rows[0]!.createdAtMs >= page2.rows[1]!.createdAtMs);
-    // 越界页空
-    const page3 = unwrap(await svc.listRequestUsage({}, { offset: 9, limit: 3 }));
-    assert.equal(page3.rows.length, 0);
-    // 模型筛选：只 model-a（排除 null 行）→ 5 条
-    const filtered = unwrap(await svc.listRequestUsage(
-      { model: "model-a" },
-      { offset: 0, limit: 50 }
-    ));
-    assert.equal(filtered.total, 5);
-    for (const row of filtered.rows) {
-      assert.equal(row.modelName, "model-a");
-    }
-    // 「其他」桶（null model）→ 1 条
-    const others = unwrap(await svc.listRequestUsage(
-      { model: null },
-      { offset: 0, limit: 50 }
-    ));
-    assert.equal(others.total, 1);
-    assert.equal(others.rows[0]!.modelName, null);
-    // providerId 筛选三态（G-1）：'P' 档与 null 档互补，缺省档已由上述
-    // 无 filter 断言覆盖（total=6）。流水行契约（UsageStatsRequestRow）
-    // 不回传 providerId，行集身份用行指纹断言：P 档恰为 i=0 / i=4 两行
-    // （completionTokens 10/14，modelName 分别为 null / model-a）；
-    // null 档只含 provider_id IS NULL 的历史行（i=1..3 与 2020 老消息），
-    // 不得混入 P 行。seed 错标（如 P 行漏标）时 total 互补性即红。
-    const pFiltered = unwrap(await svc.listRequestUsage(
-      { providerId: "P" },
-      { offset: 0, limit: 50 }
-    ));
-    assert.equal(pFiltered.total, 2);
-    const pCompletions = pFiltered.rows
-      .map((row) => row.completionTokens)
-      .sort((a, b) => a - b);
-    assert.deepEqual(pCompletions, [10, 14]);
-    // 配对指纹：modelName null ↔ completion 10，model-a ↔ completion 14。
-    for (const row of pFiltered.rows) {
-      assert.equal(
-        row.completionTokens,
-        row.modelName === null ? 10 : 14
-      );
-    }
-    const nullFiltered = unwrap(await svc.listRequestUsage(
-      { providerId: null },
-      { offset: 0, limit: 50 }
-    ));
-    assert.equal(nullFiltered.total, 4);
-    const nullCompletions = nullFiltered.rows
-      .map((row) => row.completionTokens)
-      .sort((a, b) => a - b);
-    assert.deepEqual(nullCompletions, [1, 11, 12, 13]);
-    // 非法 limit 拒收
-    await rejectsErr(
-      () => svc.listRequestUsage({}, { offset: 0, limit: 0 }),
-      (e: unknown) => isChatInvalidArgument(e) && (e as {messageKey?: string}).messageKey === "error.usage.invalid_page_limit"
-    );
-  });
-
-  it("listRequestUsage 分页 offset 非有限数值（NaN/±Infinity）拒收，不触达 SQL（B-2）", async () => {
-    const { ctx } = await seedSession();
-    const svc = new DefaultUsageStatsService(ctx.conn);
-    for (const offset of [
-      Number.NaN,
-      Number.POSITIVE_INFINITY,
-      Number.NEGATIVE_INFINITY,
-    ]) {
-      await rejectsErr(
-        () => svc.listRequestUsage({}, { offset, limit: 10 }),
-        (e: unknown) => isChatInvalidArgument(e) && (e as {messageKey?: string}).messageKey === "error.usage.invalid_page_offset"
-      );
-    }
-  });
 });
 
 describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-sheet）", () => {
-  /** tool_use 块工厂（toolUseCount 用例的 content 构造）。 */
-  function toolUseBlock(id: string) {
-    return { type: "tool_use" as const, id, name: "read", input: {} };
-  }
-
-  it("T-MD1: 多协议聚合——anthropic 双 cache 列 / openai 仅 cache_read / 无 cache 行不入 billed 分母；hidden 行计入累计", async () => {
-    const { ctx, project, session } = await seedSession();
-    // 对照会话：session 谓词界定，他 session 的行不计入本会话累计。
-    const otherSession = unwrap(await ctx.sessions.create(project.id, "md-other"));
-    const now = Date.now();
-
-    // seq 1 anthropic：billed = 100 + 2048 + 512 = 2660。
-    await seedMsg(ctx, session.id, 1, {
-      createdAtMs: now - 30_000,
-      provider: "anthropic",
-      modelName: "claude-x",
-      usage: {
-        prompt: 100,
-        completion: 40,
-        total: 140,
-        cacheRead: 2048,
-        cacheCreation: 512,
-      },
-    });
-    // seq 2 hidden anthropic：hidden 行计入累计（口径脚注「累计含隐藏消息」）。
-    await seedMsg(ctx, session.id, 2, {
-      createdAtMs: now - 20_000,
-      hidden: true,
-      provider: "anthropic",
-      usage: { prompt: 10, completion: 5, total: 15, cacheRead: 100 },
-    });
-    // seq 3 openai：仅 cache_read（openai prompt 已含 cached，billed = 200）。
-    await seedMsg(ctx, session.id, 3, {
-      createdAtMs: now - 10_000,
-      provider: "openai",
-      modelName: "gpt-x",
-      usage: { prompt: 200, completion: 60, total: 260, cacheRead: 50 },
-    });
-    // seq 4 openai 无 cache 行：不入 billed 分母（缺失行不拉低命中率）。
-    await seedMsg(ctx, session.id, 4, {
-      createdAtMs: now,
-      provider: "openai",
-      usage: { prompt: 999, completion: 1, total: 1000 },
-    });
-    // seq 5 user 行（带 usage 也不计）与 seq 6 无 usage 行（abort）不入累计。
-    await seedMsg(ctx, session.id, 5, {
-      createdAtMs: now,
-      role: "user",
-      usage: { prompt: 999, total: 999 },
-    });
-    await seedMsg(ctx, session.id, 6, { createdAtMs: now });
-    // 他会话的 anthropic 行：金额再大也不入本会话。
-    await seedMsg(ctx, otherSession.id, 1, {
-      createdAtMs: now,
-      provider: "anthropic",
-      usage: { prompt: 5000, completion: 5000, cacheRead: 1, cacheCreation: 1 },
-    });
-
-    const svc = new DefaultUsageStatsService(ctx.conn);
-    const detail = unwrap(await svc.getSessionUsageDetail(session.id));
-    // 会话累计输入/输出（totals）已移除（2026-09-29 拍板：含 hidden 的累计
-    // 对用户无意义）——这里只锁最近行与计数行；usage 谓词的聚合口径由
-    // getSummary/getModelBreakdown 套件另行锁定。
-    // 最近行：seq 最大且 usage 非空 → seq 4（seq 5 是 user、seq 6 无 usage）。
-    assert.equal(detail.last!.seq, 4);
-    assert.equal(detail.last!.provider, "openai");
-    assert.equal(detail.last!.modelName, null);
-    assert.equal(detail.last!.promptTokens, 999);
-    assert.equal(detail.last!.cacheReadTokens, null);
-    assert.equal(detail.last!.cacheCreationTokens, null);
-    assert.equal(detail.last!.atMs, now);
-    // 可见消息数：6 条里 hidden 1 条 → 5；本用例无 tool_use 块。
-    assert.equal(detail.visibleMessageCount, 5);
-    assert.equal(detail.toolUseCount, 0);
-  });
-
-  it("T-MD1: 最近行跳过末尾 usage 空行（abort）——取 seq 更小但 usage 非空那条", async () => {
-    const { ctx, session } = await seedSession();
-    const now = Date.now();
-    await seedMsg(ctx, session.id, 1, {
-      createdAtMs: now - 2000,
-      provider: "anthropic",
-      modelName: "claude-x",
-      usage: { prompt: 30, completion: 3, total: 33 },
-    });
-    // seq 2/3 均为 usage 空行（比如连续 abort）：最近行应回落 seq 1。
-    await seedMsg(ctx, session.id, 2, { createdAtMs: now - 1000 });
-    await seedMsg(ctx, session.id, 3, { createdAtMs: now });
-
-    const svc = new DefaultUsageStatsService(ctx.conn);
-    const detail = unwrap(await svc.getSessionUsageDetail(session.id));
-    assert.equal(detail.last!.seq, 1);
-    assert.equal(detail.last!.modelName, "claude-x");
-  });
-
-  it("T-MD2: 空会话 → last 为 null、visibleMessageCount=0、toolUseCount=0（miss 现算 0 并落缓存）", async () => {
-    const { ctx, project } = await seedSession();
-    const empty = unwrap(await ctx.sessions.create(project.id, "md-empty"));
-    const svc = new DefaultUsageStatsService(ctx.conn);
-    const detail = unwrap(await svc.getSessionUsageDetail(empty.id));
-    assert.equal(detail.last, null);
-    assert.equal(detail.visibleMessageCount, 0);
-    assert.equal(detail.toolUseCount, 0);
-    const cached = await ctx.conn.query<{ n: number }>(
-      `SELECT COUNT(*) AS n FROM session_kkv_entry
-       WHERE session_id = ? AND domain = 'usage_stats' AND key = 'toolUseCount'`,
-      [empty.id]
-    );
-    assert.equal(Number(cached[0]?.n ?? 0), 1);
-  });
-
-  it("T-MD3: 工具调用数走会话 KKV 缓存——miss 现算（含 hidden/明文直插行）→ 命中直读 → 失效重算", async () => {
-    const { ctx, session } = await seedSession();
-    const now = Date.now();
-    // repository 正常写入的 assistant 行带 2 个 tool_use。
-    await seedMsg(ctx, session.id, 1, {
-      createdAtMs: now - 3000,
-      blocks: [
-        { type: "text", text: "call" },
-        toolUseBlock("t1"),
-        toolUseBlock("t2"),
-      ],
-      usage: { prompt: 10, completion: 4, total: 14 },
-    });
-    // 明文直插行（e2e fixture 形态）：content_json 带 1 个 tool_use。
-    await ctx.conn.execute(
-      `INSERT INTO chat_message (
-         id, session_id, seq, role, content_json, created_at_ms, hidden
-       ) VALUES (?, ?, 2, 'assistant', ?, ?, 0)`,
-      [
-        randomUUID(),
-        session.id,
-        JSON.stringify({
-          blocks: [
-            { type: "text", text: "legacy" },
-            {
-              type: "tool_use",
-              id: "tu-l1",
-              name: "write",
-              input: { path: "/a.md", content: "x" },
-            },
-          ],
-        }),
-        now,
-      ]
-    );
-
-    const svc = new DefaultUsageStatsService(ctx.conn);
-    // ① miss：现算 2（repo 行）+ 1（明文直插行）= 3，并回填缓存。
-    const first = unwrap(await svc.getSessionUsageDetail(session.id));
-    assert.equal(first.toolUseCount, 3);
-    assert.equal(first.visibleMessageCount, 2);
-    const cacheRows = await ctx.conn.query<{ value: string }>(
-      `SELECT value FROM session_kkv_entry
-       WHERE session_id = ? AND domain = 'usage_stats' AND key = 'toolUseCount'`,
-      [session.id]
-    );
-    assert.equal(cacheRows[0]?.value, "3");
-
-    // ② 命中：绕过失效直接删一条消息行，读数仍走缓存（陈旧是缓存语义的
-    // 一部分，失效责任在挂点——本用例锁定「命中不再现算」）。
-    await ctx.conn.execute(
-      `DELETE FROM chat_message WHERE session_id = ? AND seq = 2`,
-      [session.id]
-    );
-    const second = unwrap(await svc.getSessionUsageDetail(session.id));
-    assert.equal(second.toolUseCount, 3);
-
-    // ③ 失效：service.append 落一条含 tool_use 的 assistant 行 → 缓存删 →
-    // 下次读 miss 现算出新值。追加 2 个 tool_use（现算 2 + 2 = 4，异于陈旧
-    // 缓存 3——值可区分，断言有牙）。
-    const { ChatServiceFactory } = await import(
-      "../../src/service/chat/chat-service-factory.js"
-    );
-    const messages = ChatServiceFactory.createMessage(ctx.conn);
-    unwrap(await messages.append(session.id, "assistant", {
-      blocks: [
-        { type: "text", text: "more" },
-        toolUseBlock("t9"),
-        toolUseBlock("t10"),
-      ],
-    }));
-    const third = unwrap(await svc.getSessionUsageDetail(session.id));
-    assert.equal(third.toolUseCount, 4);
-
-    // ④ 纯文本追加（无 tool_use）不失效：追加后立刻查缓存行仍在（若被
-    // 失效此刻应为 0 行；下次读数若走 miss 会回填同值，值断言无法区分，
-    // 故以「行存在性」为观测面）。
-    unwrap(await messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "plain" }],
-    }));
-    const afterPlain = await ctx.conn.query<{ n: number }>(
-      `SELECT COUNT(*) AS n FROM session_kkv_entry
-       WHERE session_id = ? AND domain = 'usage_stats' AND key = 'toolUseCount'`,
-      [session.id]
-    );
-    assert.equal(Number(afterPlain[0]?.n ?? 0), 1);
-  });
-
-  it("T-MD2: 可见消息数剔 hidden（不筛角色）；工具计数只数 assistant 的 tool_use 块且含 hidden 行", async () => {
-    const { ctx, session } = await seedSession();
-    const now = Date.now();
-    // user 文本行（计入可见数）。
-    await seedMsg(ctx, session.id, 1, {
-      createdAtMs: now - 5000,
-      role: "user",
-      usage: undefined,
-    });
-    // assistant 带 2 个 tool_use 块。
-    await seedMsg(ctx, session.id, 2, {
-      createdAtMs: now - 4000,
-      blocks: [
-        { type: "text", text: "call tools" },
-        toolUseBlock("t1"),
-        toolUseBlock("t2"),
-      ],
-      usage: { prompt: 10, completion: 4, total: 14 },
-    });
-    // user 回 tool_result（不是 tool_use，不计数）。
-    await seedMsg(ctx, session.id, 3, {
-      createdAtMs: now - 3000,
-      role: "user",
-      blocks: [
-        {
-          type: "tool_result",
-          toolUseId: "t1",
-          content: "ok",
-        },
-      ],
-    });
-    // hidden 的 assistant 带 1 个 tool_use：不计可见数、计入工具调用数。
-    await seedMsg(ctx, session.id, 4, {
-      createdAtMs: now - 2000,
-      hidden: true,
-      blocks: [toolUseBlock("t3")],
-      usage: { prompt: 5, completion: 2, total: 7 },
-    });
-
-    const svc = new DefaultUsageStatsService(ctx.conn);
-    const detail = unwrap(await svc.getSessionUsageDetail(session.id));
-    // 可见数：4 条里 hidden 1 条 → 3（user 行照计——只剔 hidden 不筛角色）。
-    assert.equal(detail.visibleMessageCount, 3);
-    // 工具计数：2（可见 assistant）+ 1（hidden assistant）= 3；tool_result 不数。
-    assert.equal(detail.toolUseCount, 3);
-  });
-
-  it("空 sessionId 抛 CHAT_INVALID_ARGUMENT（不触达 SQL）", async () => {
-    const { ctx } = await seedSession();
-    const svc = new DefaultUsageStatsService(ctx.conn);
-    await rejectsErr(
-      () => svc.getSessionUsageDetail(""),
-      isChatInvalidArgument
-    );
-  });
-
-  it("失效矩阵：delete/updateContent/truncateAfter 失效、hide/show 不失效（cr-fix-spec-r2 s3/G-2）", async () => {
-    const { ctx, session } = await seedSession();
-    const { ChatServiceFactory } = await import(
-      "../../src/service/chat/chat-service-factory.js"
-    );
-    const messages = ChatServiceFactory.createMessage(ctx.conn);
-    const svc = new DefaultUsageStatsService(ctx.conn);
-    const now = Date.now();
-
-    // 布局：seq1 assistant 带 2 个 tool_use、seq2 assistant 带 1 个、
-    // seq3 assistant 纯文本（后作 updateContent 的对象）。
-    const seq1 = await seedMsg(ctx, session.id, 1, {
-      createdAtMs: now - 3000,
-      blocks: [{ type: "text", text: "a" }, toolUseBlock("t1"), toolUseBlock("t2")],
-    });
-    const seq2 = await seedMsg(ctx, session.id, 2, {
-      createdAtMs: now - 2000,
-      blocks: [{ type: "text", text: "b" }, toolUseBlock("t3")],
-    });
-    const seq3 = await seedMsg(ctx, session.id, 3, {
-      createdAtMs: now - 1000,
-      blocks: [{ type: "text", text: "plain" }],
-    });
-
-    // 预热缓存（miss 现算 3 → 回填）。
-    assert.equal((unwrap(await svc.getSessionUsageDetail(session.id))).toolUseCount, 3);
-
-    // hide/show：可见性变化不改含 hidden 口径的计数 → 缓存不失效（读数
-    // 仍是缓存值；若失效会触发现算——值相同无法区分，故以「缓存行值
-    // 不变」+ 下一步 delete 的对照来锁）。
-    unwrap(await messages.hide(seq2));
-    unwrap(await messages.show(seq2));
-    const afterVisibility = await ctx.conn.query<{ value: string }>(
-      `SELECT value FROM session_kkv_entry
-       WHERE session_id = ? AND domain = 'usage_stats' AND key = 'toolUseCount'`,
-      [session.id]
-    );
-    assert.equal(afterVisibility[0]?.value, "3", "hide/show 不得失效缓存");
-
-    // delete：删掉 seq2（1 个 tool_use）→ 失效 → 重算 2。
-    unwrap(await messages.delete(seq2));
-    assert.equal(
-      (unwrap(await svc.getSessionUsageDetail(session.id))).toolUseCount,
-      2,
-      "delete 后应失效重算"
-    );
-
-    // updateContent：把 seq3 改成带 1 个 tool_use → 失效 → 重算 3。
-    unwrap(await messages.updateContent(seq3, {
-      blocks: [{ type: "text", text: "edited" }, toolUseBlock("t9")],
-    }));
-    assert.equal(
-      (unwrap(await svc.getSessionUsageDetail(session.id))).toolUseCount,
-      3,
-      "updateContent 后应失效重算"
-    );
-
-    // truncateAfter：截掉 seq3（含 1 个 tool_use）→ 失效 → 重算 2。
-    // 锚 seq1（seq2 已被本用例前段删除，不能再当锚）。
-    unwrap(await messages.truncateAfter(session.id, seq1));
-    assert.equal(
-      (unwrap(await svc.getSessionUsageDetail(session.id))).toolUseCount,
-      2,
-      "truncateAfter 后应失效重算"
-    );
-  });
-
-  it("坏行按 0 计不抛：content_json 非法的 assistant 行现算按 0 计；KKV 脏值（非数字）当 miss 重算回填（cr-fix-spec-r2 s3/G-2）", async () => {
-    const { ctx, session } = await seedSession();
-    const now = Date.now();
-    // 明文行 1 个 tool_use + 坏行（content_json 非法 JSON，按 0 计不抛）。
-    await seedMsg(ctx, session.id, 1, {
-      createdAtMs: now - 1000,
-      blocks: [{ type: "text", text: "a" }, toolUseBlock("t1")],
-    });
-    await ctx.conn.execute(
-      `INSERT INTO chat_message (
-         id, session_id, seq, role, content_json, created_at_ms, hidden
-       ) VALUES (?, ?, 2, 'assistant', ?, ?, 0)`,
-      [randomUUID(), session.id, "{not-json", now]
-    );
-
-    const svc = new DefaultUsageStatsService(ctx.conn);
-    const detail = unwrap(await svc.getSessionUsageDetail(session.id));
-    // 明文行 1；坏行按 0 计（不抛——弹窗不该被单条历史坏行打挂）。
-    assert.equal(detail.toolUseCount, 1);
-
-    // 脏缓存值（非数字串）：当 miss 重算并覆盖回填。
-    await ctx.conn.execute(
-      `INSERT OR REPLACE INTO session_kkv_entry (session_id, domain, key, value)
-       VALUES (?, 'usage_stats', 'toolUseCount', 'abc')`,
-      [session.id]
-    );
-    const dirty = unwrap(await svc.getSessionUsageDetail(session.id));
-    assert.equal(dirty.toolUseCount, 1, "脏值当 miss 重算");
-    const after = await ctx.conn.query<{ value: string }>(
-      `SELECT value FROM session_kkv_entry
-       WHERE session_id = ? AND domain = 'usage_stats' AND key = 'toolUseCount'`,
-      [session.id]
-    );
-    assert.equal(after[0]?.value, "1", "重算值应覆盖脏值");
-  });
-
-  it("回填前复核（s3/B-1）：现算期间发生失效（哨兵）→ 放弃回填，下次读重算回填", async () => {
-    const { ctx, session } = await seedSession();
-    const now = Date.now();
-    // 布局：seq1/seq2 各带 1 个 tool_use（现算结果 2）。
-    await seedMsg(ctx, session.id, 1, {
-      createdAtMs: now - 2000,
-      blocks: [{ type: "text", text: "a" }, toolUseBlock("t1")],
-    });
-    await seedMsg(ctx, session.id, 2, {
-      createdAtMs: now - 1000,
-      blocks: [{ type: "text", text: "b" }, toolUseBlock("t2")],
-    });
-    const svc = new DefaultUsageStatsService(ctx.conn);
-
-    // 拦截 assistant 投影 SELECT（现算起点），返回后立刻写哨兵——模拟
-    // 现算的数百毫秒里另一路径发生失效（此时 miss 所见原值是 null）。
-    const originalQuery = ctx.conn.query.bind(ctx.conn);
-    const originalExecute = ctx.conn.execute.bind(ctx.conn);
-    let armed = true;
-    (ctx.conn as unknown as { query: typeof ctx.conn.query }).query = async (
-      sql: string,
-      params?: readonly unknown[]
-    ) => {
-      const rows = await originalQuery(sql, params);
-      if (
-        armed &&
-        typeof sql === "string" &&
-        sql.includes("role = 'assistant'")
-      ) {
-        armed = false;
-        await originalExecute(
-          `INSERT OR REPLACE INTO session_kkv_entry (session_id, domain, key, value)
-           VALUES (?, 'usage_stats', 'toolUseCount', '')`,
-          [session.id]
-        );
-      }
-      return rows;
-    };
-
-    try {
-      const first = unwrap(await svc.getSessionUsageDetail(session.id));
-      // 本次返回值已出：现算结果 2，不受回填拦截影响。
-      assert.equal(first.toolUseCount, 2);
-      const cacheAfter = await originalQuery<{ value: string }>(
-        `SELECT value FROM session_kkv_entry
-         WHERE session_id = ? AND domain = 'usage_stats' AND key = 'toolUseCount'`,
-        [session.id]
-      );
-      assert.equal(
-        cacheAfter[0]?.value,
-        "",
-        "回填被复核拦截，缓存仍是哨兵（未被陈旧值覆盖）"
-      );
-
-      // 下次读：哨兵当 miss 重算（原值=哨兵、无人再动 → 复核通过）正常
-      // 回填——终轮抽检 B 裁决的无死循环回归锁。
-      const second = unwrap(await svc.getSessionUsageDetail(session.id));
-      assert.equal(second.toolUseCount, 2);
-      const cacheFinal = await originalQuery<{ value: string }>(
-        `SELECT value FROM session_kkv_entry
-         WHERE session_id = ? AND domain = 'usage_stats' AND key = 'toolUseCount'`,
-        [session.id]
-      );
-      assert.equal(cacheFinal[0]?.value, "2", "哨兵场景正常回填不循环");
-    } finally {
-      // 共享连接：用完还原 query 包装，不带伤传给后续用例。
-      (ctx.conn as unknown as { query: typeof ctx.conn.query }).query =
-        originalQuery;
+    /** tool_use 块工厂（toolUseCount 用例的 content 构造）。 */
+    function toolUseBlock(id: string) {
+        return { type: "tool_use" as const, id, name: "read", input: {} };
     }
-  });
 
-  it("账本回归（核心）：删除会话（物理硬删消息）后 summary/daily/modelBreakdown/流水数字逐字段不变", async () => {
-    const { ctx, session } = await seedSession();
-    const today0 = localDayStart(Date.now());
-    await seedMsg(ctx, session.id, 1, {
-      createdAtMs: today0 + 10 * MIN,
-      provider: "anthropic",
-      providerId: "prov-1",
-      modelName: "claude-sonnet-4",
-      usage: {
-        prompt: 100,
-        completion: 50,
-        total: 150,
-        cacheRead: 30,
-        cacheCreation: 10,
-        firstTokenMs: 100,
-        durationMs: 1100,
-      },
+    it("T-MD1: 多协议聚合——anthropic 双 cache 列 / openai 仅 cache_read / 无 cache 行不入 billed 分母；hidden 行计入累计", async () => {
+        const { ctx, project, session } = await seedSession();
+        // 对照会话：session 谓词界定，他 session 的行不计入本会话累计。
+        const otherSession = unwrap(await ctx.sessions.create(project.id, "md-other"));
+        const now = Date.now();
+
+        // seq 1 anthropic：billed = 100 + 2048 + 512 = 2660。
+        await seedMsg(ctx, session.id, 1, {
+            createdAtMs: now - 30_000,
+            provider: "anthropic",
+            modelName: "claude-x",
+            usage: {
+                prompt: 100,
+                completion: 40,
+                total: 140,
+                cacheRead: 2048,
+                cacheCreation: 512,
+            },
+        });
+        // seq 2 hidden anthropic：hidden 行计入累计（口径脚注「累计含隐藏消息」）。
+        await seedMsg(ctx, session.id, 2, {
+            createdAtMs: now - 20_000,
+            hidden: true,
+            provider: "anthropic",
+            usage: { prompt: 10, completion: 5, total: 15, cacheRead: 100 },
+        });
+        // seq 3 openai：仅 cache_read（openai prompt 已含 cached，billed = 200）。
+        await seedMsg(ctx, session.id, 3, {
+            createdAtMs: now - 10_000,
+            provider: "openai",
+            modelName: "gpt-x",
+            usage: { prompt: 200, completion: 60, total: 260, cacheRead: 50 },
+        });
+        // seq 4 openai 无 cache 行：不入 billed 分母（缺失行不拉低命中率）。
+        await seedMsg(ctx, session.id, 4, {
+            createdAtMs: now,
+            provider: "openai",
+            usage: { prompt: 999, completion: 1, total: 1000 },
+        });
+        // seq 5 user 行（带 usage 也不计）与 seq 6 无 usage 行（abort）不入累计。
+        await seedMsg(ctx, session.id, 5, {
+            createdAtMs: now,
+            role: "user",
+            usage: { prompt: 999, total: 999 },
+        });
+        await seedMsg(ctx, session.id, 6, { createdAtMs: now });
+        // 他会话的 anthropic 行：金额再大也不入本会话。
+        await seedMsg(ctx, otherSession.id, 1, {
+            createdAtMs: now,
+            provider: "anthropic",
+            usage: { prompt: 5000, completion: 5000, cacheRead: 1, cacheCreation: 1 },
+        });
+
+        const svc = new DefaultUsageStatsService(ctx.conn);
+        const detail = unwrap(await svc.getSessionUsageDetail(session.id));
+        // 会话累计输入/输出（totals）已移除（2026-09-29 拍板：含 hidden 的累计
+        // 对用户无意义）——这里只锁最近行与计数行；usage 谓词的聚合口径由
+        // getSummary/getModelBreakdown 套件另行锁定。
+        // 最近行：seq 最大且 usage 非空 → seq 4（seq 5 是 user、seq 6 无 usage）。
+        assert.equal(detail.last!.seq, 4);
+        assert.equal(detail.last!.provider, "openai");
+        assert.equal(detail.last!.modelName, null);
+        assert.equal(detail.last!.promptTokens, 999);
+        assert.equal(detail.last!.cacheReadTokens, null);
+        assert.equal(detail.last!.cacheCreationTokens, null);
+        assert.equal(detail.last!.atMs, now);
+        // 可见消息数：6 条里 hidden 1 条 → 5；本用例无 tool_use 块。
+        assert.equal(detail.visibleMessageCount, 5);
+        assert.equal(detail.toolUseCount, 0);
     });
-    await seedMsg(ctx, session.id, 2, {
-      createdAtMs: today0 + 20 * MIN,
-      provider: "openai",
-      providerId: "prov-2",
-      modelName: "gpt-5",
-      usage: {
-        prompt: 20,
-        completion: 10,
-        total: 30,
-        firstTokenMs: 50,
-        durationMs: 550,
-      },
+
+    it("T-MD1: 最近行跳过末尾 usage 空行（abort）——取 seq 更小但 usage 非空那条", async () => {
+        const { ctx, session } = await seedSession();
+        const now = Date.now();
+        await seedMsg(ctx, session.id, 1, {
+            createdAtMs: now - 2000,
+            provider: "anthropic",
+            modelName: "claude-x",
+            usage: { prompt: 30, completion: 3, total: 33 },
+        });
+        // seq 2/3 均为 usage 空行（比如连续 abort）：最近行应回落 seq 1。
+        await seedMsg(ctx, session.id, 2, { createdAtMs: now - 1000 });
+        await seedMsg(ctx, session.id, 3, { createdAtMs: now });
+
+        const svc = new DefaultUsageStatsService(ctx.conn);
+        const detail = unwrap(await svc.getSessionUsageDetail(session.id));
+        assert.equal(detail.last!.seq, 1);
+        assert.equal(detail.last!.modelName, "claude-x");
     });
-    const svc = new DefaultUsageStatsService(ctx.conn);
-    const filter = { range: dayRange(today0, today0) };
-    const beforeSummary = unwrap(await svc.getSummary(filter));
-    const beforeDaily = unwrap(await svc.getDailyBuckets(filter));
-    const beforeModels = unwrap(await svc.getModelBreakdown(filter));
-    const beforePage = unwrap(await svc.listRequestUsage(filter, {
-      offset: 0,
-      limit: 50,
-    }));
-    assert.equal(beforeSummary.calls, 2);
-    assert.equal(beforeSummary.totalTokens, 180);
-    assert.equal(beforePage.total, 2);
 
-    // 物理硬删会话：chat_message 行全清；usage_record 无外键无级联，删除链不碰它。
-    unwrap(await ctx.sessions.delete(session.id));
-    const remaining = await ctx.conn.query<{ n: number }>(
-      `SELECT COUNT(*) AS n FROM chat_message WHERE session_id = ?`,
-      [session.id]
-    );
-    assert.equal(Number(remaining[0]?.n ?? 0), 0, "前置：消息确已物理删除");
-
-    assert.deepEqual(unwrap(await svc.getSummary(filter)), beforeSummary, "summary 逐字段不变");
-    assert.deepEqual(unwrap(await svc.getDailyBuckets(filter)), beforeDaily, "日桶不变");
-    assert.deepEqual(unwrap(await svc.getModelBreakdown(filter)), beforeModels, "模型维度不变");
-    const afterPage = unwrap(await svc.listRequestUsage(filter, {
-      offset: 0,
-      limit: 50,
-    }));
-    assert.equal(afterPage.total, beforePage.total, "流水计数不变");
-    assert.deepEqual(afterPage.rows, beforePage.rows, "流水行逐字段不变");
-    // 会话维度：最近请求读账本（不随会话删除消失）；可见消息数属内容侧，随删归零。
-    const detail = unwrap(await svc.getSessionUsageDetail(session.id));
-    assert.equal(detail.last?.atMs, today0 + 20 * MIN, "最近请求仍可读（账本行）");
-    assert.equal(detail.last?.promptTokens, 20);
-    assert.equal(detail.last?.completionTokens, 10);
-    assert.equal(detail.visibleMessageCount, 0, "可见消息数属内容侧，随删除归零");
-  });
-
-  it("账本回归：删单条消息 / 回滚截尾（truncateAfter）后统计数字不变", async () => {
-    const { ctx, session } = await seedSession();
-    const today0 = localDayStart(Date.now());
-    const msg1 = await seedMsg(ctx, session.id, 1, {
-      createdAtMs: today0 + 10 * MIN,
-      usage: { prompt: 100, completion: 50, total: 150 },
+    it("T-MD2: 空会话 → last 为 null、visibleMessageCount=0、toolUseCount=0（miss 现算 0 并落缓存）", async () => {
+        const { ctx, project } = await seedSession();
+        const empty = unwrap(await ctx.sessions.create(project.id, "md-empty"));
+        const svc = new DefaultUsageStatsService(ctx.conn);
+        const detail = unwrap(await svc.getSessionUsageDetail(empty.id));
+        assert.equal(detail.last, null);
+        assert.equal(detail.visibleMessageCount, 0);
+        assert.equal(detail.toolUseCount, 0);
+        const cached = await ctx.conn.query<{ n: number }>(
+            `SELECT COUNT(*) AS n
+    FROM session_kkv_entry
+    WHERE session_id = ? AND domain = 'usage_stats' AND key = 'toolUseCount'`,
+            [empty.id]
+        );
+        assert.equal(Number(cached[0]?.n ?? 0), 1);
     });
-    const msg2 = await seedMsg(ctx, session.id, 2, {
-      createdAtMs: today0 + 20 * MIN,
-      usage: { prompt: 20, completion: 10, total: 30 },
+
+    it("T-MD3: 工具调用数走会话 KKV 缓存——miss 现算（含 hidden/明文直插行）→ 命中直读 → 失效重算", async () => {
+        const { ctx, session } = await seedSession();
+        const now = Date.now();
+        // repository 正常写入的 assistant 行带 2 个 tool_use。
+        await seedMsg(ctx, session.id, 1, {
+            createdAtMs: now - 3000,
+            blocks: [
+                { type: "text", text: "call" },
+                toolUseBlock("t1"),
+                toolUseBlock("t2"),
+            ],
+            usage: { prompt: 10, completion: 4, total: 14 },
+        });
+        // 明文直插行（e2e fixture 形态）：content_json 带 1 个 tool_use。
+        await ctx.conn.execute(
+            `INSERT INTO chat_message ( id, session_id, seq, role, content_json, created_at_ms, hidden )
+    VALUES (?, ?, 2, 'assistant', ?, ?, 0)`,
+            [
+                randomUUID(),
+                session.id,
+                JSON.stringify({
+                    blocks: [
+                        { type: "text", text: "legacy" },
+                        {
+                            type: "tool_use",
+                            id: "tu-l1",
+                            name: "write",
+                            input: { path: "/a.md", content: "x" },
+                        },
+                    ],
+                }),
+                now,
+            ]
+        );
+
+        const svc = new DefaultUsageStatsService(ctx.conn);
+        // ① miss：现算 2（repo 行）+ 1（明文直插行）= 3，并回填缓存。
+        const first = unwrap(await svc.getSessionUsageDetail(session.id));
+        assert.equal(first.toolUseCount, 3);
+        assert.equal(first.visibleMessageCount, 2);
+        const cacheRows = await ctx.conn.query<{ value: string }>(
+            `SELECT value
+    FROM session_kkv_entry
+    WHERE session_id = ? AND domain = 'usage_stats' AND key = 'toolUseCount'`,
+            [session.id]
+        );
+        assert.equal(cacheRows[0]?.value, "3");
+
+        // ② 命中：绕过失效直接删一条消息行，读数仍走缓存（陈旧是缓存语义的
+        // 一部分，失效责任在挂点——本用例锁定「命中不再现算」）。
+        await ctx.conn.execute(
+            `DELETE FROM chat_message WHERE session_id = ? AND seq = 2`,
+            [session.id]
+        );
+        const second = unwrap(await svc.getSessionUsageDetail(session.id));
+        assert.equal(second.toolUseCount, 3);
+
+        // ③ 失效：service.append 落一条含 tool_use 的 assistant 行 → 缓存删 →
+        // 下次读 miss 现算出新值。追加 2 个 tool_use（现算 2 + 2 = 4，异于陈旧
+        // 缓存 3——值可区分，断言有牙）。
+        const { ChatServiceFactory } = await import(
+            "../../src/service/chat/chat-service-factory.js"
+        );
+        const messages = ChatServiceFactory.createMessage(ctx.conn);
+        unwrap(await messages.append(session.id, "assistant", {
+            blocks: [
+                { type: "text", text: "more" },
+                toolUseBlock("t9"),
+                toolUseBlock("t10"),
+            ],
+        }));
+        const third = unwrap(await svc.getSessionUsageDetail(session.id));
+        assert.equal(third.toolUseCount, 4);
+
+        // ④ 纯文本追加（无 tool_use）不失效：追加后立刻查缓存行仍在（若被
+        // 失效此刻应为 0 行；下次读数若走 miss 会回填同值，值断言无法区分，
+        // 故以「行存在性」为观测面）。
+        unwrap(await messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "plain" }],
+        }));
+        const afterPlain = await ctx.conn.query<{ n: number }>(
+            `SELECT COUNT(*) AS n
+    FROM session_kkv_entry
+    WHERE session_id = ? AND domain = 'usage_stats' AND key = 'toolUseCount'`,
+            [session.id]
+        );
+        assert.equal(Number(afterPlain[0]?.n ?? 0), 1);
     });
-    await seedMsg(ctx, session.id, 3, {
-      createdAtMs: today0 + 30 * MIN,
-      usage: { prompt: 5, completion: 5, total: 10 },
+
+    it("T-MD2: 可见消息数剔 hidden（不筛角色）；工具计数只数 assistant 的 tool_use 块且含 hidden 行", async () => {
+        const { ctx, session } = await seedSession();
+        const now = Date.now();
+        // user 文本行（计入可见数）。
+        await seedMsg(ctx, session.id, 1, {
+            createdAtMs: now - 5000,
+            role: "user",
+            usage: undefined,
+        });
+        // assistant 带 2 个 tool_use 块。
+        await seedMsg(ctx, session.id, 2, {
+            createdAtMs: now - 4000,
+            blocks: [
+                { type: "text", text: "call tools" },
+                toolUseBlock("t1"),
+                toolUseBlock("t2"),
+            ],
+            usage: { prompt: 10, completion: 4, total: 14 },
+        });
+        // user 回 tool_result（不是 tool_use，不计数）。
+        await seedMsg(ctx, session.id, 3, {
+            createdAtMs: now - 3000,
+            role: "user",
+            blocks: [
+                {
+                    type: "tool_result",
+                    toolUseId: "t1",
+                    content: "ok",
+                },
+            ],
+        });
+        // hidden 的 assistant 带 1 个 tool_use：不计可见数、计入工具调用数。
+        await seedMsg(ctx, session.id, 4, {
+            createdAtMs: now - 2000,
+            hidden: true,
+            blocks: [toolUseBlock("t3")],
+            usage: { prompt: 5, completion: 2, total: 7 },
+        });
+
+        const svc = new DefaultUsageStatsService(ctx.conn);
+        const detail = unwrap(await svc.getSessionUsageDetail(session.id));
+        // 可见数：4 条里 hidden 1 条 → 3（user 行照计——只剔 hidden 不筛角色）。
+        assert.equal(detail.visibleMessageCount, 3);
+        // 工具计数：2（可见 assistant）+ 1（hidden assistant）= 3；tool_result 不数。
+        assert.equal(detail.toolUseCount, 3);
     });
-    const svc = new DefaultUsageStatsService(ctx.conn);
-    const filter = { range: dayRange(today0, today0) };
-    const before = unwrap(await svc.getSummary(filter));
-    assert.equal(before.calls, 3);
-    assert.equal(before.totalTokens, 190);
 
-    const { ChatServiceFactory } = await import(
-      "../../src/service/chat/chat-service-factory.js"
-    );
-    const messages = ChatServiceFactory.createMessage(ctx.conn);
-    // 删单条消息：内容消失，账本行保留。
-    unwrap(await messages.delete(msg2));
-    assert.deepEqual(unwrap(await svc.getSummary(filter)), before, "删单条消息后统计不变");
-    // 回滚截尾：锚 seq1，截掉其后全部（此时 seq2 已删、seq3 被截）。
-    unwrap(await messages.truncateAfter(session.id, msg1));
-    assert.deepEqual(unwrap(await svc.getSummary(filter)), before, "回滚截尾后统计不变");
-  });
+    it("空 sessionId 抛 CHAT_INVALID_ARGUMENT（不触达 SQL）", async () => {
+        const { ctx } = await seedSession();
+        const svc = new DefaultUsageStatsService(ctx.conn);
+        await rejectsErr(
+            () => svc.getSessionUsageDetail(""),
+            isChatInvalidArgument
+        );
+    });
 
-  it("记账点写入：append 带 token 真值的 assistant 消息 → usage_record 出一行（快照列 + 与消息同 seq/时刻）", async () => {
-    const { ctx, session } = await seedSession();
-    const { ChatServiceFactory } = await import(
-      "../../src/service/chat/chat-service-factory.js"
-    );
-    const messages = ChatServiceFactory.createMessage(ctx.conn);
-    const appended = unwrap(await messages.append(
-      session.id,
-      "assistant",
-      TextBlocks.of("hello"),
-      {
-        provider: "anthropic",
-        providerId: "prov-1",
-        modelName: "claude-sonnet-4",
-        usage: {
-          promptTokens: 100,
-          completionTokens: 50,
-          totalTokens: 150,
-          cacheReadTokens: 30,
-          cacheCreationTokens: 10,
-          firstTokenMs: 120,
-          durationMs: 900,
-        },
-      }
-    ));
+    it("失效矩阵：delete/updateContent/truncateAfter 失效、hide/show 不失效（cr-fix-spec-r2 s3/G-2）", async () => {
+        const { ctx, session } = await seedSession();
+        const { ChatServiceFactory } = await import(
+            "../../src/service/chat/chat-service-factory.js"
+        );
+        const messages = ChatServiceFactory.createMessage(ctx.conn);
+        const svc = new DefaultUsageStatsService(ctx.conn);
+        const now = Date.now();
 
-    const rows = await ctx.conn.query<Record<string, unknown>>(
-      `SELECT session_id, message_seq, provider, provider_id, model_name,
-              prompt_tokens, completion_tokens, total_tokens,
-              cache_read_tokens, cache_creation_tokens,
-              first_token_ms, duration_ms, created_at_ms
-       FROM usage_record`
-    );
-    assert.equal(rows.length, 1);
-    const row = rows[0]!;
-    assert.equal(String(row.session_id), session.id);
-    assert.equal(Number(row.message_seq), appended.seq);
-    assert.equal(String(row.provider), "anthropic");
-    assert.equal(String(row.provider_id), "prov-1");
-    assert.equal(String(row.model_name), "claude-sonnet-4");
-    assert.equal(Number(row.prompt_tokens), 100);
-    assert.equal(Number(row.completion_tokens), 50);
-    assert.equal(Number(row.total_tokens), 150);
-    assert.equal(Number(row.cache_read_tokens), 30);
-    assert.equal(Number(row.cache_creation_tokens), 10);
-    assert.equal(Number(row.first_token_ms), 120);
-    assert.equal(Number(row.duration_ms), 900);
-    assert.equal(Number(row.created_at_ms), appended.createdAtMs);
+        // 布局：seq1 assistant 带 2 个 tool_use、seq2 assistant 带 1 个、
+        // seq3 assistant 纯文本（后作 updateContent 的对象）。
+        const seq1 = await seedMsg(ctx, session.id, 1, {
+            createdAtMs: now - 3000,
+            blocks: [{ type: "text", text: "a" }, toolUseBlock("t1"), toolUseBlock("t2")],
+        });
+        const seq2 = await seedMsg(ctx, session.id, 2, {
+            createdAtMs: now - 2000,
+            blocks: [{ type: "text", text: "b" }, toolUseBlock("t3")],
+        });
+        const seq3 = await seedMsg(ctx, session.id, 3, {
+            createdAtMs: now - 1000,
+            blocks: [{ type: "text", text: "plain" }],
+        });
 
-    // chat_message 统计列照写不停写（上下文占用 chip / session_run_state 链依赖）。
-    const msgRow = await ctx.conn.query<{ prompt_tokens: number }>(
-      `SELECT prompt_tokens FROM chat_message WHERE id = ?`,
-      [appended.id]
-    );
-    assert.equal(Number(msgRow[0]?.prompt_tokens), 100);
+        // 预热缓存（miss 现算 3 → 回填）。
+        assert.equal((unwrap(await svc.getSessionUsageDetail(session.id))).toolUseCount, 3);
 
-    // 不入账本的三类：无 usage 的 assistant、带 usage 的 user、只有耗时无 token 真值。
-    unwrap(await messages.append(session.id, "assistant", TextBlocks.of("no usage")));
-    unwrap(await messages.append(session.id, "user", TextBlocks.of("user with usage"), {
-      usage: { promptTokens: 7, completionTokens: 3 },
-    }));
-    unwrap(await messages.append(session.id, "assistant", TextBlocks.of("timing only"), {
-      usage: { firstTokenMs: 5, durationMs: 10 },
-    }));
-    const count = await ctx.conn.query<{ n: number }>(
-      `SELECT COUNT(*) AS n FROM usage_record`
-    );
-    assert.equal(Number(count[0]?.n ?? 0), 1, "仅 token 真值 assistant 行入账本");
-  });
+        // hide/show：可见性变化不改含 hidden 口径的计数 → 缓存不失效（读数
+        // 仍是缓存值；若失效会触发现算——值相同无法区分，故以「缓存行值
+        // 不变」+ 下一步 delete 的对照来锁）。
+        unwrap(await messages.hide(seq2));
+        unwrap(await messages.show(seq2));
+        const afterVisibility = await ctx.conn.query<{ value: string }>(
+            `SELECT value
+    FROM session_kkv_entry
+    WHERE session_id = ? AND domain = 'usage_stats' AND key = 'toolUseCount'`,
+            [session.id]
+        );
+        assert.equal(afterVisibility[0]?.value, "3", "hide/show 不得失效缓存");
+
+        // delete：删掉 seq2（1 个 tool_use）→ 失效 → 重算 2。
+        unwrap(await messages.delete(seq2));
+        assert.equal(
+            (unwrap(await svc.getSessionUsageDetail(session.id))).toolUseCount,
+            2,
+            "delete 后应失效重算"
+        );
+
+        // updateContent：把 seq3 改成带 1 个 tool_use → 失效 → 重算 3。
+        unwrap(await messages.updateContent(seq3, {
+            blocks: [{ type: "text", text: "edited" }, toolUseBlock("t9")],
+        }));
+        assert.equal(
+            (unwrap(await svc.getSessionUsageDetail(session.id))).toolUseCount,
+            3,
+            "updateContent 后应失效重算"
+        );
+
+        // truncateAfter：截掉 seq3（含 1 个 tool_use）→ 失效 → 重算 2。
+        // 锚 seq1（seq2 已被本用例前段删除，不能再当锚）。
+        unwrap(await messages.truncateAfter(session.id, seq1));
+        assert.equal(
+            (unwrap(await svc.getSessionUsageDetail(session.id))).toolUseCount,
+            2,
+            "truncateAfter 后应失效重算"
+        );
+    });
+
+    it("坏行按 0 计不抛：content_json 非法的 assistant 行现算按 0 计；KKV 脏值（非数字）当 miss 重算回填（cr-fix-spec-r2 s3/G-2）", async () => {
+        const { ctx, session } = await seedSession();
+        const now = Date.now();
+        // 明文行 1 个 tool_use + 坏行（content_json 非法 JSON，按 0 计不抛）。
+        await seedMsg(ctx, session.id, 1, {
+            createdAtMs: now - 1000,
+            blocks: [{ type: "text", text: "a" }, toolUseBlock("t1")],
+        });
+        await ctx.conn.execute(
+            `INSERT INTO chat_message ( id, session_id, seq, role, content_json, created_at_ms, hidden )
+    VALUES (?, ?, 2, 'assistant', ?, ?, 0)`,
+            [randomUUID(), session.id, "{not-json", now]
+        );
+
+        const svc = new DefaultUsageStatsService(ctx.conn);
+        const detail = unwrap(await svc.getSessionUsageDetail(session.id));
+        // 明文行 1；坏行按 0 计（不抛——弹窗不该被单条历史坏行打挂）。
+        assert.equal(detail.toolUseCount, 1);
+
+        // 脏缓存值（非数字串）：当 miss 重算并覆盖回填。
+        await ctx.conn.execute(
+            `INSERT OR REPLACE INTO session_kkv_entry (session_id, domain, key, value)
+    VALUES (?, 'usage_stats', 'toolUseCount', 'abc')`,
+            [session.id]
+        );
+        const dirty = unwrap(await svc.getSessionUsageDetail(session.id));
+        assert.equal(dirty.toolUseCount, 1, "脏值当 miss 重算");
+        const after = await ctx.conn.query<{ value: string }>(
+            `SELECT value
+    FROM session_kkv_entry
+    WHERE session_id = ? AND domain = 'usage_stats' AND key = 'toolUseCount'`,
+            [session.id]
+        );
+        assert.equal(after[0]?.value, "1", "重算值应覆盖脏值");
+    });
+
+    it("回填前复核（s3/B-1）：现算期间发生失效（哨兵）→ 放弃回填，下次读重算回填", async () => {
+        const { ctx, session } = await seedSession();
+        const now = Date.now();
+        // 布局：seq1/seq2 各带 1 个 tool_use（现算结果 2）。
+        await seedMsg(ctx, session.id, 1, {
+            createdAtMs: now - 2000,
+            blocks: [{ type: "text", text: "a" }, toolUseBlock("t1")],
+        });
+        await seedMsg(ctx, session.id, 2, {
+            createdAtMs: now - 1000,
+            blocks: [{ type: "text", text: "b" }, toolUseBlock("t2")],
+        });
+        const svc = new DefaultUsageStatsService(ctx.conn);
+
+        // 拦截 assistant 投影 SELECT（现算起点），返回后立刻写哨兵——模拟
+        // 现算的数百毫秒里另一路径发生失效（此时 miss 所见原值是 null）。
+        const originalQuery = ctx.conn.query.bind(ctx.conn);
+        const originalExecute = ctx.conn.execute.bind(ctx.conn);
+        let armed = true;
+        (ctx.conn as unknown as { query: typeof ctx.conn.query }).query = async (
+            sql: string,
+            params?: readonly unknown[]
+        ) => {
+            const rows = await originalQuery(sql, params);
+            if (
+                armed &&
+                typeof sql === "string" &&
+                sql.includes("role = 'assistant'")
+            ) {
+                armed = false;
+                await originalExecute(
+                    `INSERT OR REPLACE INTO session_kkv_entry (session_id, domain, key, value)
+    VALUES (?, 'usage_stats', 'toolUseCount', '')`,
+                    [session.id]
+                );
+            }
+            return rows;
+        };
+
+        try {
+            const first = unwrap(await svc.getSessionUsageDetail(session.id));
+            // 本次返回值已出：现算结果 2，不受回填拦截影响。
+            assert.equal(first.toolUseCount, 2);
+            const cacheAfter = await originalQuery<{ value: string }>(
+                `SELECT value
+    FROM session_kkv_entry
+    WHERE session_id = ? AND domain = 'usage_stats' AND key = 'toolUseCount'`,
+                [session.id]
+            );
+            assert.equal(
+                cacheAfter[0]?.value,
+                "",
+                "回填被复核拦截，缓存仍是哨兵（未被陈旧值覆盖）"
+            );
+
+            // 下次读：哨兵当 miss 重算（原值=哨兵、无人再动 → 复核通过）正常
+            // 回填——终轮抽检 B 裁决的无死循环回归锁。
+            const second = unwrap(await svc.getSessionUsageDetail(session.id));
+            assert.equal(second.toolUseCount, 2);
+            const cacheFinal = await originalQuery<{ value: string }>(
+                `SELECT value
+    FROM session_kkv_entry
+    WHERE session_id = ? AND domain = 'usage_stats' AND key = 'toolUseCount'`,
+                [session.id]
+            );
+            assert.equal(cacheFinal[0]?.value, "2", "哨兵场景正常回填不循环");
+        } finally {
+            // 共享连接：用完还原 query 包装，不带伤传给后续用例。
+            (ctx.conn as unknown as { query: typeof ctx.conn.query }).query =
+                originalQuery;
+        }
+    });
+
+    it("账本回归（核心）：删除会话（物理硬删消息）后 summary/daily/modelBreakdown/流水数字逐字段不变", async () => {
+        const { ctx, session } = await seedSession();
+        const today0 = localDayStart(Date.now());
+        await seedMsg(ctx, session.id, 1, {
+            createdAtMs: today0 + 10 * MIN,
+            provider: "anthropic",
+            providerId: "prov-1",
+            modelName: "claude-sonnet-4",
+            usage: {
+                prompt: 100,
+                completion: 50,
+                total: 150,
+                cacheRead: 30,
+                cacheCreation: 10,
+                firstTokenMs: 100,
+                durationMs: 1100,
+            },
+        });
+        await seedMsg(ctx, session.id, 2, {
+            createdAtMs: today0 + 20 * MIN,
+            provider: "openai",
+            providerId: "prov-2",
+            modelName: "gpt-5",
+            usage: {
+                prompt: 20,
+                completion: 10,
+                total: 30,
+                firstTokenMs: 50,
+                durationMs: 550,
+            },
+        });
+        const svc = new DefaultUsageStatsService(ctx.conn);
+        const filter = { range: dayRange(today0, today0) };
+        const beforeSummary = unwrap(await svc.getSummary(filter));
+        const beforeDaily = unwrap(await svc.getDailyBuckets(filter));
+        const beforeModels = unwrap(await svc.getModelBreakdown(filter));
+        const beforePage = unwrap(await svc.listRequestUsage(filter, {
+            offset: 0,
+            limit: 50,
+        }));
+        assert.equal(beforeSummary.calls, 2);
+        assert.equal(beforeSummary.totalTokens, 180);
+        assert.equal(beforePage.total, 2);
+
+        // 物理硬删会话：chat_message 行全清；usage_record 无外键无级联，删除链不碰它。
+        unwrap(await ctx.sessions.delete(session.id));
+        const remaining = await ctx.conn.query<{ n: number }>(
+            `SELECT COUNT(*) AS n FROM chat_message WHERE session_id = ?`,
+            [session.id]
+        );
+        assert.equal(Number(remaining[0]?.n ?? 0), 0, "前置：消息确已物理删除");
+
+        assert.deepEqual(unwrap(await svc.getSummary(filter)), beforeSummary, "summary 逐字段不变");
+        assert.deepEqual(unwrap(await svc.getDailyBuckets(filter)), beforeDaily, "日桶不变");
+        assert.deepEqual(unwrap(await svc.getModelBreakdown(filter)), beforeModels, "模型维度不变");
+        const afterPage = unwrap(await svc.listRequestUsage(filter, {
+            offset: 0,
+            limit: 50,
+        }));
+        assert.equal(afterPage.total, beforePage.total, "流水计数不变");
+        assert.deepEqual(afterPage.rows, beforePage.rows, "流水行逐字段不变");
+        // 会话维度：最近请求读账本（不随会话删除消失）；可见消息数属内容侧，随删归零。
+        const detail = unwrap(await svc.getSessionUsageDetail(session.id));
+        assert.equal(detail.last?.atMs, today0 + 20 * MIN, "最近请求仍可读（账本行）");
+        assert.equal(detail.last?.promptTokens, 20);
+        assert.equal(detail.last?.completionTokens, 10);
+        assert.equal(detail.visibleMessageCount, 0, "可见消息数属内容侧，随删除归零");
+    });
+
+    it("账本回归：删单条消息 / 回滚截尾（truncateAfter）后统计数字不变", async () => {
+        const { ctx, session } = await seedSession();
+        const today0 = localDayStart(Date.now());
+        const msg1 = await seedMsg(ctx, session.id, 1, {
+            createdAtMs: today0 + 10 * MIN,
+            usage: { prompt: 100, completion: 50, total: 150 },
+        });
+        const msg2 = await seedMsg(ctx, session.id, 2, {
+            createdAtMs: today0 + 20 * MIN,
+            usage: { prompt: 20, completion: 10, total: 30 },
+        });
+        await seedMsg(ctx, session.id, 3, {
+            createdAtMs: today0 + 30 * MIN,
+            usage: { prompt: 5, completion: 5, total: 10 },
+        });
+        const svc = new DefaultUsageStatsService(ctx.conn);
+        const filter = { range: dayRange(today0, today0) };
+        const before = unwrap(await svc.getSummary(filter));
+        assert.equal(before.calls, 3);
+        assert.equal(before.totalTokens, 190);
+
+        const { ChatServiceFactory } = await import(
+            "../../src/service/chat/chat-service-factory.js"
+        );
+        const messages = ChatServiceFactory.createMessage(ctx.conn);
+        // 删单条消息：内容消失，账本行保留。
+        unwrap(await messages.delete(msg2));
+        assert.deepEqual(unwrap(await svc.getSummary(filter)), before, "删单条消息后统计不变");
+        // 回滚截尾：锚 seq1，截掉其后全部（此时 seq2 已删、seq3 被截）。
+        unwrap(await messages.truncateAfter(session.id, msg1));
+        assert.deepEqual(unwrap(await svc.getSummary(filter)), before, "回滚截尾后统计不变");
+    });
+
+    it("记账点写入：append 带 token 真值的 assistant 消息 → usage_record 出一行（快照列 + 与消息同 seq/时刻）", async () => {
+        const { ctx, session } = await seedSession();
+        const { ChatServiceFactory } = await import(
+            "../../src/service/chat/chat-service-factory.js"
+        );
+        const messages = ChatServiceFactory.createMessage(ctx.conn);
+        const appended = unwrap(await messages.append(
+            session.id,
+            "assistant",
+            TextBlocks.of("hello"),
+            {
+                provider: "anthropic",
+                providerId: "prov-1",
+                modelName: "claude-sonnet-4",
+                usage: {
+                    promptTokens: 100,
+                    completionTokens: 50,
+                    totalTokens: 150,
+                    cacheReadTokens: 30,
+                    cacheCreationTokens: 10,
+                    firstTokenMs: 120,
+                    durationMs: 900,
+                },
+            }
+        ));
+
+        const rows = await ctx.conn.query<Record<string, unknown>>(
+            `SELECT session_id, message_seq, provider, provider_id, model_name, prompt_tokens, completion_tokens, total_tokens,
+    cache_read_tokens, cache_creation_tokens, first_token_ms, duration_ms, created_at_ms
+    FROM usage_record`
+        );
+        assert.equal(rows.length, 1);
+        const row = rows[0]!;
+        assert.equal(String(row.session_id), session.id);
+        assert.equal(Number(row.message_seq), appended.seq);
+        assert.equal(String(row.provider), "anthropic");
+        assert.equal(String(row.provider_id), "prov-1");
+        assert.equal(String(row.model_name), "claude-sonnet-4");
+        assert.equal(Number(row.prompt_tokens), 100);
+        assert.equal(Number(row.completion_tokens), 50);
+        assert.equal(Number(row.total_tokens), 150);
+        assert.equal(Number(row.cache_read_tokens), 30);
+        assert.equal(Number(row.cache_creation_tokens), 10);
+        assert.equal(Number(row.first_token_ms), 120);
+        assert.equal(Number(row.duration_ms), 900);
+        assert.equal(Number(row.created_at_ms), appended.createdAtMs);
+
+        // chat_message 统计列照写不停写（上下文占用 chip / session_run_state 链依赖）。
+        const msgRow = await ctx.conn.query<{ prompt_tokens: number }>(
+            `SELECT prompt_tokens FROM chat_message WHERE id = ?`,
+            [appended.id]
+        );
+        assert.equal(Number(msgRow[0]?.prompt_tokens), 100);
+
+        // 不入账本的三类：无 usage 的 assistant、带 usage 的 user、只有耗时无 token 真值。
+        unwrap(await messages.append(session.id, "assistant", TextBlocks.of("no usage")));
+        unwrap(await messages.append(session.id, "user", TextBlocks.of("user with usage"), {
+            usage: { promptTokens: 7, completionTokens: 3 },
+        }));
+        unwrap(await messages.append(session.id, "assistant", TextBlocks.of("timing only"), {
+            usage: { firstTokenMs: 5, durationMs: 10 },
+        }));
+        const count = await ctx.conn.query<{ n: number }>(
+            `SELECT COUNT(*) AS n FROM usage_record`
+        );
+        assert.equal(Number(count[0]?.n ?? 0), 1, "仅 token 真值 assistant 行入账本");
+    });
+});
+
+describe("usage stats service 动态筛选 `<if>` 片段（R4 迁移回归）", () => {
+    /** 建数据面：4 行账本（3 行界内 + 1 行次日界外）+ provider/saved-model 配置。 */
+    async function seedFilterFixture(): Promise<{ ctx: ReturnType<typeof getNovelMasterTestContext>; today0: number }> {
+        const { ctx, session } = await seedSession();
+        const today0 = localDayStart(Date.now());
+        // A：配置模型 × 已记录服务商（唯一可被 string×string 命中）。
+        await seedMsg(ctx, session.id, 1, { createdAtMs: today0 + 10 * MIN, providerId: "r4-provider", modelName: "model-a", usage: { prompt: 10, total: 10 } });
+        // B：未配置模型（「其他」桶模型侧）。
+        await seedMsg(ctx, session.id, 2, { createdAtMs: today0 + 20 * MIN, providerId: "r4-provider", modelName: "[3]legacy", usage: { prompt: 20, total: 20 } });
+        // C：provider_id IS NULL 的未记录服务商历史行（「其他」桶服务商侧）。
+        await seedMsg(ctx, session.id, 3, { createdAtMs: today0 + 30 * MIN, providerId: null, modelName: "model-a", usage: { prompt: 30, total: 30 } });
+        // E：彻底未记录行（provider 与 model 双 null），「其他」桶两条件同时命中。
+        await seedMsg(ctx, session.id, 5, { createdAtMs: today0 + 40 * MIN, providerId: null, modelName: null, usage: { prompt: 50, total: 50 } });
+        // D：次日界外行（时间半开区间验证）。
+        await seedMsg(ctx, session.id, 4, { createdAtMs: today0 + 25 * HOUR, providerId: "r4-provider", modelName: "model-a", usage: { prompt: 40, total: 40 } });
+        const ts = String(Date.now());
+        await ctx.conn.execute(
+            `INSERT INTO llm_provider (id, protocol, base_url, display_name, headers_json, is_builtin, created_at_ms, updated_at_ms)
+    VALUES ('r4-provider', 'openai', 'https://example.com', 'R4 Provider', '{}', 0, ${ts}, ${ts})`
+        );
+        await ctx.conn.execute(
+            `INSERT INTO llm_saved_model (id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms)
+    VALUES ('r4-som-1', 'r4-provider', 'model-a', 'model-a', '{}', ${ts}, ${ts})`
+        );
+        return { ctx, today0 };
+    }
+
+    it("filter 三态分派：undefined 全部 / null 其他桶 / string 指定；单条件与双条件组合", async () => {
+        const { ctx, today0 } = await seedFilterFixture();
+        const svc = new DefaultUsageStatsService(ctx.conn);
+        const filter = { range: dayRange(today0, today0) };
+
+        // undefined × undefined：全部界内行（A/B/C/E）。
+        assert.equal(unwrap(await svc.getSummary({ ...filter, model: undefined, providerId: undefined })).calls, 4);
+        // string × string：双条件只命中 A。
+        assert.equal(unwrap(await svc.getSummary({ ...filter, model: "model-a", providerId: "r4-provider" })).calls, 1);
+        // 单条件 null：模型侧「其他」桶 = 未配置/未记录模型行（B/E），已配置的 A/C 被排除。
+        assert.equal(unwrap(await svc.getSummary({ ...filter, model: null, providerId: undefined })).calls, 2);
+        // 单条件 null：服务商侧「其他」桶 = provider_id IS NULL 行（C/E）。
+        assert.equal(unwrap(await svc.getSummary({ ...filter, model: undefined, providerId: null })).calls, 2);
+        // 全 null：两条件交集 = 双未记录行（E；B 的 provider 非 NULL、C 的模型在配置集合内，均被排除）。
+        assert.equal(unwrap(await svc.getSummary({ ...filter, model: null, providerId: null })).calls, 1);
+        // 行集与 COUNT 同用 where 片段（listRequestUsage）：total 与 rows 数一致。
+        const page = unwrap(await svc.listRequestUsage({ ...filter, model: null, providerId: null }, { limit: 50, offset: 0 }));
+        assert.equal(page.total, 1);
+        assert.equal(page.rows.length, 1);
+    });
+
+    it("时间谓词半开区间 [fromMs, toMs)：上界压线不入；range 缺省全历史", async () => {
+        const { ctx, today0 } = await seedFilterFixture();
+        const svc = new DefaultUsageStatsService(ctx.conn);
+        // 有界：D（次日 +1h）在 [today0, 次日 0 点) 之外，只有 A/B/C/E 入。
+        assert.equal(unwrap(await svc.getSummary({ range: dayRange(today0, today0), model: undefined, providerId: undefined })).calls, 4);
+        // 无 range：全历史，D 也入。
+        assert.equal(unwrap(await svc.getSummary({ model: undefined, providerId: undefined })).calls, 5);
+        // hourly 的 24 桶按本地钟点构造边界：D 在次日凌晨，当日各桶不含它。
+        const hourly = unwrap(await svc.getHourlyBuckets(fmtLocalDay(today0), { model: undefined, providerId: undefined }));
+        assert.equal(hourly.reduce((sum, b) => sum + b.calls, 0), 4, "hourly 当日桶不含次日界外行");
+    });
 });
 
 /** 错误用户可见文案：带 messageKey 时经 tCore 渲染（G1-G3 descriptor 契约），否则回退 message。 */
 function renderError(error: unknown): string {
-  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
-  return textOf(error);
+    const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
+    return textOf(error);
 }
 
 /** 含 cause 链（ToolError 包装 AppError 时 messageKey 在 cause 上）。 */
 function textOf(error: unknown): string {
-  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
-  if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
-  if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
-  return e.message;
+    const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
+    if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
+    if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
+    return e.message;
 }

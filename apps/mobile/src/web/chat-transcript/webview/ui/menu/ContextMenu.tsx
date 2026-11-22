@@ -5,21 +5,21 @@
 import type {MenuItem} from '../../runtime/state/state';
 
 type ContextMenuProps = {
-  messageId: string;
-  items: MenuItem[];
+    messageId: string;
+    items: MenuItem[];
 };
 
 export function ContextMenu({messageId, items}: ContextMenuProps) {
-  return items.map(item => (
-    <button
-      type="button"
-      key={item.action}
-      className={'menu-item' + (item.danger ? ' danger' : '')}
-      data-action="menu-action"
-      data-message-id={messageId}
-      data-menu-action={item.action}
-    >
-      {item.label}
-    </button>
-  ));
+    return items.map(item => (
+        <button
+            type="button"
+            key={item.action}
+            className={'menu-item' + (item.danger ? ' danger' : '')}
+            data-action="menu-action"
+            data-message-id={messageId}
+            data-menu-action={item.action}
+        >
+            {item.label}
+        </button>
+    ));
 }

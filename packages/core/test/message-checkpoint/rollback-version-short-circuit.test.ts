@@ -19,306 +19,306 @@ novelMasterTestFixture();
 
 /** 若被调用则测试失败，用于断言未触发正文解压。 */
 function createNoGetContentStore(): VfsContentStore {
-  return {
-    put: async (plain: string) => `hash-${plain.length}`,
-    get: async () => {
-      throw new Error("exists 检测不应解压正文");
-    },
-    gc: async () => 0,
-    ensureBlob: async () => undefined,
-    size: async () => 0,
-  };
+    return {
+        put: async (plain: string) => `hash-${plain.length}`,
+        get: async () => {
+            throw new Error("exists 检测不应解压正文");
+        },
+        gc: async () => 0,
+        ensureBlob: async () => undefined,
+        size: async () => 0,
+    };
 }
 
 describe("rollback version short-circuit", () => {
-  it("existsByEntryAndVersion：有行即 true，且不解压 blob", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const scope = {
-      kind: "session" as const,
-      projectId: project.id,
-      sessionId: session.id,
-    };
-    const physical = LogicalPath.toPhysical(scope, "/blob-only.md");
-    const revisions = new SqliteVfsRevisionRepository(ctx.conn, createNoGetContentStore());
-
-    // need to get entryId first; append now requires entryId
-    const { SqliteVfsEntryRepository } = await import("../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js");
-    const entries = new SqliteVfsEntryRepository(ctx.conn);
-    await entries.insert(LogicalPath.scopeKey(scope), "/blob-only.md", "seed");
-    const entry = unwrap(await entries.findByPath(LogicalPath.scopeKey(scope), "/blob-only.md"));
-    assert.ok(entry != null);
-
-    unwrap(await revisions.append({
-      entryId: entry.entryId,
-      version: 3,
-      content: null,
-      contentHash: "deadbeef",
-      status: "active",
-      mtimeMs: Date.now(),
-    }));
-
-    assert.equal(await revisions.existsByEntryAndVersion(entry.entryId, 3), true);
-    assert.equal(await revisions.existsByEntryAndVersion(entry.entryId, 2), false);
-  });
-
-  it("MissingRevisions.findPointers：用批量 findMetasByEntryVersions 而非 findByEntryAndVersion", async () => {
-    const scope = {
-      kind: "session" as const,
-      projectId: "p1",
-      sessionId: "s1",
-    };
-    let findCalls = 0;
-    let batchCalls = 0;
-    const entryId = 1;
-    const revisionRepo: VfsRevisionRepository = {
-      findByEntryAndVersion: async () => {
-        findCalls++;
-        return null;
-      },
-      existsByEntryAndVersion: async () => {
-        throw new Error("不应逐条 exists");
-      },
-      findMetaByEntryAndVersion: async () => null,
-      findMetasByEntryVersions: async (pairs) => {
-        batchCalls++;
-        return new Map([[RevisionPairKey.build(entryId, pairs[0]!.version), { status: "active", contentHash: null }]]);
-      },
-      findMaxVersionForEntry: async () => null,
-      append: async () => undefined,
-      listKeysUnderScope: async () => [],
-      deleteExceptReachable: async () => 0,
-      adjustRefCount: async () => undefined,
-      batchAdjustRefCount: async () => undefined,
-      repairRefCountFloor: async () => false,
-      deleteUnreferencedUnderScope: async () => 0,
-    };
-    const entryRepo: VfsEntryRepository = {
-      findByPath: async () => Result.ok({ entryId, path: "/a.md", version: 1, content: "", mtimeMs: 0, scopeKey: "session:p1:s1" }),
-      findContentHash: async () => null,
-      findContentHashesByPaths: async () => new Map(),
-      list: async () => [],
-      insert: async () => ({ version: 1 }),
-      insertWithContentHash: async () => ({ version: 1 }),
-      insertAtVersion: async () => ({ version: 1 }),
-      insertDirectory: async () => undefined,
-      update: async () => ({ version: 1 }),
-      updateWithContentHash: async () => ({ version: 1 }),
-      setHeadContentHash: async () => undefined,
-      delete: async () => undefined,
-      listAllPaths: async () => [],
-      listDirectoryPathsUnderPrefix: async () => [],
-      listDirectoryMetaUnderPrefix: async () => [],
-      listEntriesUnderPrefix: async () => [],
-      listFileMetaUnderPrefix: async () => [],
-      listFileHeadsUnderPrefix: async () => [],
-      scanContents: async () => [],
-      renamePathInScope: async () => undefined,
-      renamePrefixInScope: async () => undefined,
-    };
-
-    const missing = unwrap(await MissingRevisions.findPointers({ revisionRepo, entryRepo }, { scope, targetTree: new Map([["/a.md", 1]]), pathsToReconcile: ["/a.md"] }));
-
-    assert.deepEqual(missing, []);
-    assert.equal(batchCalls, 1);
-    assert.equal(findCalls, 0);
-  });
-
-  it("RestorePath.restoreToRevision：head version 相等时跳过 find 与 write", async () => {
-    let findCalls = 0;
-    let writeCalls = 0;
-    const entryId = 1;
-    const revisionRepo: VfsRevisionRepository = {
-      findByEntryAndVersion: async () => {
-        findCalls++;
-        return {
-          entryId,
-          version: 2,
-          content: "should-not-read",
-          status: "active",
-          mtimeMs: 0,
+    it("existsByEntryAndVersion：有行即 true，且不解压 blob", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const scope = {
+            kind: "session" as const,
+            projectId: project.id,
+            sessionId: session.id,
         };
-      },
-      existsByEntryAndVersion: async () => true,
-      findMetaByEntryAndVersion: async () => {
-        findCalls++;
-        return { status: "active", contentHash: "x" };
-      },
-      findMetasByEntryVersions: async () => new Map(),
-      findMaxVersionForEntry: async () => 2,
-      append: async () => undefined,
-      listKeysUnderScope: async () => [],
-      deleteExceptReachable: async () => 0,
-      adjustRefCount: async () => undefined,
-      batchAdjustRefCount: async () => undefined,
-      repairRefCountFloor: async () => false,
-      deleteUnreferencedUnderScope: async () => 0,
-    };
-    const vfs: VfsRestorePort = {
-      write: async () => {
-        writeCalls++;
-      },
-      delete: async () => undefined,
-      mkdir: async () => undefined,
-      resetHeadToVersion: async () => undefined,
-    };
-    const scope = {
-      kind: "session" as const,
-      projectId: "p1",
-      sessionId: "s1",
-    };
-    const liveHeadByPath = new Map([["/same.md", 2]]);
-    const entryRepo: VfsEntryRepository = {
-      findByPath: async () => Result.ok({ entryId, path: "/x", version: 2, content: "", mtimeMs: 0, scopeKey: "session:p1:s1" }),
-      findContentHash: async () => null,
-      findContentHashesByPaths: async () => new Map(),
-      list: async () => [],
-      insert: async () => ({ version: 1 }),
-      insertWithContentHash: async () => ({ version: 1 }),
-      insertAtVersion: async () => ({ version: 1 }),
-      insertDirectory: async () => undefined,
-      update: async () => ({ version: 1 }),
-      updateWithContentHash: async () => ({ version: 1 }),
-      setHeadContentHash: async () => undefined,
-      delete: async () => undefined,
-      listAllPaths: async () => [],
-      listDirectoryPathsUnderPrefix: async () => [],
-      listDirectoryMetaUnderPrefix: async () => [],
-      listEntriesUnderPrefix: async () => [],
-      listFileMetaUnderPrefix: async () => [],
-      listFileHeadsUnderPrefix: async () => [],
-      scanContents: async () => [],
-      renamePathInScope: async () => undefined,
-      renamePrefixInScope: async () => undefined,
-    };
+        const physical = LogicalPath.toPhysical(scope, "/blob-only.md");
+        const revisions = new SqliteVfsRevisionRepository(ctx.conn, createNoGetContentStore());
 
-    const result = await RestorePath.restoreToRevision({ vfs, revisionRepo, entryRepo }, { scope, logicalPath: "/same.md", version: 2, liveHeadByPath });
+        // need to get entryId first; append now requires entryId
+        const { SqliteVfsEntryRepository } = await import("../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js");
+        const entries = new SqliteVfsEntryRepository(ctx.conn);
+        await entries.insert(LogicalPath.scopeKey(scope), "/blob-only.md", "seed");
+        const entry = unwrap(await entries.findByPath(LogicalPath.scopeKey(scope), "/blob-only.md"));
+        assert.ok(entry != null);
 
-    assert.equal(result.ok, true);
-    if (!result.ok) return;
-    assert.equal(result.value, "skipped_same_version");
-    assert.equal(findCalls, 0);
-    assert.equal(writeCalls, 0);
-  });
+        unwrap(await revisions.append({
+            entryId: entry.entryId,
+            version: 3,
+            content: null,
+            contentHash: "deadbeef",
+            status: "active",
+            mtimeMs: Date.now(),
+        }));
 
-  it("RestorePath.restoreToRevision：version 不等但 content_hash 相同则跳过解压与 write", async () => {
-    let findFullCalls = 0;
-    let findMetaCalls = 0;
-    let writeCalls = 0;
-    const entryId = 1;
-    const revisionRepo: VfsRevisionRepository = {
-      findByEntryAndVersion: async () => {
-        findFullCalls++;
-        return {
-          entryId,
-          version: 1,
-          content: "should-not-read",
-          status: "active",
-          mtimeMs: 0,
+        assert.equal(await revisions.existsByEntryAndVersion(entry.entryId, 3), true);
+        assert.equal(await revisions.existsByEntryAndVersion(entry.entryId, 2), false);
+    });
+
+    it("MissingRevisions.findPointers：用批量 findMetasByEntryVersions 而非 findByEntryAndVersion", async () => {
+        const scope = {
+            kind: "session" as const,
+            projectId: "p1",
+            sessionId: "s1",
         };
-      },
-      existsByEntryAndVersion: async () => true,
-      findMetaByEntryAndVersion: async () => {
-        findMetaCalls++;
-        return { status: "active", contentHash: "same-hash" };
-      },
-      findMetasByEntryVersions: async () => new Map(),
-      findMaxVersionForEntry: async () => 3,
-      append: async () => undefined,
-      listKeysUnderScope: async () => [],
-      deleteExceptReachable: async () => 0,
-      adjustRefCount: async () => undefined,
-      batchAdjustRefCount: async () => undefined,
-      repairRefCountFloor: async () => false,
-      deleteUnreferencedUnderScope: async () => 0,
-    };
-    const entryRepo = {
-      findContentHash: async () => Result.ok("same-hash"),
-      findContentHashesByPaths: async () => new Map(),
-      findByPath: async () => Result.ok({ entryId }),
-    } as unknown as VfsEntryRepository;
-    const vfs: VfsRestorePort = {
-      write: async () => {
-        writeCalls++;
-      },
-      delete: async () => undefined,
-      mkdir: async () => undefined,
-      resetHeadToVersion: async () => undefined,
-    };
-    const scope = {
-      kind: "session" as const,
-      projectId: "p1",
-      sessionId: "s1",
-    };
-    // live head 高于锚点（T-RB1），但正文 hash 已与目标 revision 一致
-    const liveHeadByPath = new Map([["/hash-same.md", 3]]);
+        let findCalls = 0;
+        let batchCalls = 0;
+        const entryId = 1;
+        const revisionRepo: VfsRevisionRepository = {
+            findByEntryAndVersion: async () => {
+                findCalls++;
+                return null;
+            },
+            existsByEntryAndVersion: async () => {
+                throw new Error("不应逐条 exists");
+            },
+            findMetaByEntryAndVersion: async () => null,
+            findMetasByEntryVersions: async (pairs) => {
+                batchCalls++;
+                return new Map([[RevisionPairKey.build(entryId, pairs[0]!.version), { status: "active", contentHash: null }]]);
+            },
+            findMaxVersionForEntry: async () => null,
+            append: async () => undefined,
+            listKeysUnderScope: async () => [],
+            deleteExceptReachable: async () => 0,
+            adjustRefCount: async () => undefined,
+            batchAdjustRefCount: async () => undefined,
+            repairRefCountFloor: async () => false,
+            deleteUnreferencedUnderScope: async () => 0,
+        };
+        const entryRepo: VfsEntryRepository = {
+            findByPath: async () => Result.ok({ entryId, path: "/a.md", version: 1, content: "", mtimeMs: 0, scopeKey: "session:p1:s1" }),
+            findContentHash: async () => null,
+            findContentHashesByPaths: async () => new Map(),
+            list: async () => [],
+            insert: async () => ({ version: 1 }),
+            insertWithContentHash: async () => ({ version: 1 }),
+            insertAtVersion: async () => ({ version: 1 }),
+            insertDirectory: async () => undefined,
+            update: async () => ({ version: 1 }),
+            updateWithContentHash: async () => ({ version: 1 }),
+            setHeadContentHash: async () => undefined,
+            delete: async () => undefined,
+            listAllPaths: async () => [],
+            listDirectoryPathsUnderPrefix: async () => [],
+            listDirectoryMetaUnderPrefix: async () => [],
+            listEntriesUnderPrefix: async () => [],
+            listFileMetaUnderPrefix: async () => [],
+            listFileHeadsUnderPrefix: async () => [],
+            scanContents: async () => [],
+            renamePathInScope: async () => undefined,
+            renamePrefixInScope: async () => undefined,
+        };
 
-    const result = await RestorePath.restoreToRevision({ vfs, revisionRepo, entryRepo }, { scope, logicalPath: "/hash-same.md", version: 1, liveHeadByPath });
+        const missing = unwrap(await MissingRevisions.findPointers({ revisionRepo, entryRepo }, { scope, targetTree: new Map([["/a.md", 1]]), pathsToReconcile: ["/a.md"] }));
 
-    assert.equal(result.ok, true);
-    if (!result.ok) return;
-    assert.equal(result.value, "skipped_same_content_hash");
-    assert.equal(findMetaCalls, 1);
-    assert.equal(findFullCalls, 0);
-    assert.equal(writeCalls, 0);
-  });
+        assert.deepEqual(missing, []);
+        assert.equal(batchCalls, 1);
+        assert.equal(findCalls, 0);
+    });
 
-  it("RestorePath.restoreToRevision：head version 不等且正文不同时仍执行 restore", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
-    const revisions = new SqliteVfsRevisionRepository(ctx.conn);
-    const { SqliteVfsEntryRepository } = await import("../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js");
-    const entries = new SqliteVfsEntryRepository(ctx.conn);
-    const scope = {
-      kind: "session" as const,
-      projectId: project.id,
-      sessionId: session.id,
-    };
+    it("RestorePath.restoreToRevision：head version 相等时跳过 find 与 write", async () => {
+        let findCalls = 0;
+        let writeCalls = 0;
+        const entryId = 1;
+        const revisionRepo: VfsRevisionRepository = {
+            findByEntryAndVersion: async () => {
+                findCalls++;
+                return {
+                    entryId,
+                    version: 2,
+                    content: "should-not-read",
+                    status: "active",
+                    mtimeMs: 0,
+                };
+            },
+            existsByEntryAndVersion: async () => true,
+            findMetaByEntryAndVersion: async () => {
+                findCalls++;
+                return { status: "active", contentHash: "x" };
+            },
+            findMetasByEntryVersions: async () => new Map(),
+            findMaxVersionForEntry: async () => 2,
+            append: async () => undefined,
+            listKeysUnderScope: async () => [],
+            deleteExceptReachable: async () => 0,
+            adjustRefCount: async () => undefined,
+            batchAdjustRefCount: async () => undefined,
+            repairRefCountFloor: async () => false,
+            deleteUnreferencedUnderScope: async () => 0,
+        };
+        const vfs: VfsRestorePort = {
+            write: async () => {
+                writeCalls++;
+            },
+            delete: async () => undefined,
+            mkdir: async () => undefined,
+            resetHeadToVersion: async () => undefined,
+        };
+        const scope = {
+            kind: "session" as const,
+            projectId: "p1",
+            sessionId: "s1",
+        };
+        const liveHeadByPath = new Map([["/same.md", 2]]);
+        const entryRepo: VfsEntryRepository = {
+            findByPath: async () => Result.ok({ entryId, path: "/x", version: 2, content: "", mtimeMs: 0, scopeKey: "session:p1:s1" }),
+            findContentHash: async () => null,
+            findContentHashesByPaths: async () => new Map(),
+            list: async () => [],
+            insert: async () => ({ version: 1 }),
+            insertWithContentHash: async () => ({ version: 1 }),
+            insertAtVersion: async () => ({ version: 1 }),
+            insertDirectory: async () => undefined,
+            update: async () => ({ version: 1 }),
+            updateWithContentHash: async () => ({ version: 1 }),
+            setHeadContentHash: async () => undefined,
+            delete: async () => undefined,
+            listAllPaths: async () => [],
+            listDirectoryPathsUnderPrefix: async () => [],
+            listDirectoryMetaUnderPrefix: async () => [],
+            listEntriesUnderPrefix: async () => [],
+            listFileMetaUnderPrefix: async () => [],
+            listFileHeadsUnderPrefix: async () => [],
+            scanContents: async () => [],
+            renamePathInScope: async () => undefined,
+            renamePrefixInScope: async () => undefined,
+        };
 
-    await svfs.write("/delta.md", "anchor", { versionCheck: false });
-    const anchorVersion = unwrap(await svfs.read("/delta.md")).version;
-    await svfs.write("/delta.md", "tail", { versionCheck: false });
-    const liveHeadByPath = new Map([["/delta.md", unwrap(await svfs.read("/delta.md")).version]]);
+        const result = await RestorePath.restoreToRevision({ vfs, revisionRepo, entryRepo }, { scope, logicalPath: "/same.md", version: 2, liveHeadByPath });
 
-    const result = await RestorePath.restoreToRevision({ vfs: svfs, revisionRepo: revisions, entryRepo: entries }, { scope, logicalPath: "/delta.md", version: anchorVersion, liveHeadByPath });
+        assert.equal(result.ok, true);
+        if (!result.ok) return;
+        assert.equal(result.value, "skipped_same_version");
+        assert.equal(findCalls, 0);
+        assert.equal(writeCalls, 0);
+    });
 
-    assert.equal(result.ok, true);
-    if (!result.ok) return;
-    assert.equal(result.value, "restored");
-    assert.equal(unwrap(await svfs.read("/delta.md")).content, "anchor");
-  });
+    it("RestorePath.restoreToRevision：version 不等但 content_hash 相同则跳过解压与 write", async () => {
+        let findFullCalls = 0;
+        let findMetaCalls = 0;
+        let writeCalls = 0;
+        const entryId = 1;
+        const revisionRepo: VfsRevisionRepository = {
+            findByEntryAndVersion: async () => {
+                findFullCalls++;
+                return {
+                    entryId,
+                    version: 1,
+                    content: "should-not-read",
+                    status: "active",
+                    mtimeMs: 0,
+                };
+            },
+            existsByEntryAndVersion: async () => true,
+            findMetaByEntryAndVersion: async () => {
+                findMetaCalls++;
+                return { status: "active", contentHash: "same-hash" };
+            },
+            findMetasByEntryVersions: async () => new Map(),
+            findMaxVersionForEntry: async () => 3,
+            append: async () => undefined,
+            listKeysUnderScope: async () => [],
+            deleteExceptReachable: async () => 0,
+            adjustRefCount: async () => undefined,
+            batchAdjustRefCount: async () => undefined,
+            repairRefCountFloor: async () => false,
+            deleteUnreferencedUnderScope: async () => 0,
+        };
+        const entryRepo = {
+            findContentHash: async () => Result.ok("same-hash"),
+            findContentHashesByPaths: async () => new Map(),
+            findByPath: async () => Result.ok({ entryId }),
+        } as unknown as VfsEntryRepository;
+        const vfs: VfsRestorePort = {
+            write: async () => {
+                writeCalls++;
+            },
+            delete: async () => undefined,
+            mkdir: async () => undefined,
+            resetHeadToVersion: async () => undefined,
+        };
+        const scope = {
+            kind: "session" as const,
+            projectId: "p1",
+            sessionId: "s1",
+        };
+        // live head 高于锚点（T-RB1），但正文 hash 已与目标 revision 一致
+        const liveHeadByPath = new Map([["/hash-same.md", 3]]);
 
-  it("RB-SC1：head 与 checkpoint 同 version 时回滚截断消息且正文不变", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
+        const result = await RestorePath.restoreToRevision({ vfs, revisionRepo, entryRepo }, { scope, logicalPath: "/hash-same.md", version: 1, liveHeadByPath });
 
-    await svfs.write("/stable.md", "keep-me", { versionCheck: false });
-    const headVersion = unwrap(await svfs.read("/stable.md")).version;
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("u1")));
-    const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "a1" }],
-    }));
-    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
+        assert.equal(result.ok, true);
+        if (!result.ok) return;
+        assert.equal(result.value, "skipped_same_content_hash");
+        assert.equal(findMetaCalls, 1);
+        assert.equal(findFullCalls, 0);
+        assert.equal(writeCalls, 0);
+    });
 
-    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("u2")));
-    unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "a2" }],
-    }));
+    it("RestorePath.restoreToRevision：head version 不等且正文不同时仍执行 restore", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
+        const revisions = new SqliteVfsRevisionRepository(ctx.conn);
+        const { SqliteVfsEntryRepository } = await import("../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js");
+        const entries = new SqliteVfsEntryRepository(ctx.conn);
+        const scope = {
+            kind: "session" as const,
+            projectId: project.id,
+            sessionId: session.id,
+        };
 
-    assert.equal(unwrap(await svfs.read("/stable.md")).version, headVersion);
+        await svfs.write("/delta.md", "anchor", { versionCheck: false });
+        const anchorVersion = unwrap(await svfs.read("/delta.md")).version;
+        await svfs.write("/delta.md", "tail", { versionCheck: false });
+        const liveHeadByPath = new Map([["/delta.md", unwrap(await svfs.read("/delta.md")).version]]);
 
-    await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant1.id);
+        const result = await RestorePath.restoreToRevision({ vfs: svfs, revisionRepo: revisions, entryRepo: entries }, { scope, logicalPath: "/delta.md", version: anchorVersion, liveHeadByPath });
 
-    assert.equal(unwrap(await svfs.read("/stable.md")).content, "keep-me");
-    assert.equal(unwrap(await svfs.read("/stable.md")).version, headVersion);
-    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
-    assert.equal(messages.length, 2);
-    assert.equal(messages[0]!.id, user1.id);
-    assert.equal(messages[1]!.id, assistant1.id);
-  });
+        assert.equal(result.ok, true);
+        if (!result.ok) return;
+        assert.equal(result.value, "restored");
+        assert.equal(unwrap(await svfs.read("/delta.md")).content, "anchor");
+    });
+
+    it("RB-SC1：head 与 checkpoint 同 version 时回滚截断消息且正文不变", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
+
+        await svfs.write("/stable.md", "keep-me", { versionCheck: false });
+        const headVersion = unwrap(await svfs.read("/stable.md")).version;
+        const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("u1")));
+        const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "a1" }],
+        }));
+        unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
+
+        unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("u2")));
+        unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "a2" }],
+        }));
+
+        assert.equal(unwrap(await svfs.read("/stable.md")).version, headVersion);
+
+        await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant1.id);
+
+        assert.equal(unwrap(await svfs.read("/stable.md")).content, "keep-me");
+        assert.equal(unwrap(await svfs.read("/stable.md")).version, headVersion);
+        const messages = outcomeValue(await ctx.messages.listBySession(session.id));
+        assert.equal(messages.length, 2);
+        assert.equal(messages[0]!.id, user1.id);
+        assert.equal(messages[1]!.id, assistant1.id);
+    });
 });

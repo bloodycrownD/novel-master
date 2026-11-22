@@ -7,75 +7,75 @@ import {  ToolRegistry  } from "../../src/domain/tool/logic/tool-registry.js";
 import {  ToolRunner  } from "../../src/domain/tool/logic/tool-runner.js";
 
 describe("ToolRunner", () => {
-  it("throws NOT_FOUND for missing tool", async () => {
-    const registry = new ToolRegistry();
-    const runner = new ToolRunner(registry);
-    await rejectsErr(
-      () => runner.call("no.such.tool", {}, {}),
-      (e) => AppErrorOps.is(e, "TOOL_NOT_FOUND"),
-    );
-  });
-
-  it("validates input and throws INVALID_ARGUMENT", async () => {
-    const registry = new ToolRegistry();
-    registry.register({
-      name: "test.sum",
-      description: () => "sum",
-      inputSchema: z.object({ a: z.number(), b: z.number() }),
-      outputSchema: z.object({ sum: z.number() }),
-      async run(input) {
-        return { sum: input.a + input.b };
-      },
+    it("throws NOT_FOUND for missing tool", async () => {
+        const registry = new ToolRegistry();
+        const runner = new ToolRunner(registry);
+        await rejectsErr(
+            () => runner.call("no.such.tool", {}, {}),
+            (e) => AppErrorOps.is(e, "TOOL_NOT_FOUND"),
+        );
     });
-    const runner = new ToolRunner(registry);
-    await rejectsErr(
-      () => runner.call("test.sum", { a: 1 }, {}),
-      (e) =>
-        AppErrorOps.is(e) && e.key.startsWith("TOOL_") &&
-        e.key === "TOOL_INVALID_ARGUMENT" &&
-        e.details?.toolName === "test.sum" &&
-        typeof e.details === "object",
-    );
-  });
 
-  it("wraps thrown errors as FAILED and preserves cause", async () => {
-    const registry = new ToolRegistry();
-    registry.register({
-      name: "test.fail",
-      description: () => "fail",
-      inputSchema: z.object({}),
-      async run() {
-        throw new Error("boom");
-      },
+    it("validates input and throws INVALID_ARGUMENT", async () => {
+        const registry = new ToolRegistry();
+        registry.register({
+            name: "test.sum",
+            description: () => "sum",
+            inputSchema: z.object({ a: z.number(), b: z.number() }),
+            outputSchema: z.object({ sum: z.number() }),
+            async run(input) {
+                return { sum: input.a + input.b };
+            },
+        });
+        const runner = new ToolRunner(registry);
+        await rejectsErr(
+            () => runner.call("test.sum", { a: 1 }, {}),
+            (e) =>
+                AppErrorOps.is(e) && e.key.startsWith("TOOL_") &&
+                e.key === "TOOL_INVALID_ARGUMENT" &&
+                e.details?.toolName === "test.sum" &&
+                typeof e.details === "object",
+        );
     });
-    const runner = new ToolRunner(registry);
-    // 工具闭包 throw（未知异常）走 runner 的归一化抛出通道；返回 Err 才走 Result。
-    await assert.rejects(
-      () => runner.call("test.fail", {}, {}),
-      (e) =>
-        AppErrorOps.is(e) && e.key.startsWith("TOOL_") &&
-        e.key === "TOOL_FAILED" &&
-        e.details?.toolName === "test.fail" &&
-        (e.cause as Error | undefined)?.message === "boom",
-    );
-  });
 
-  it("fails when output violates schema", async () => {
-    const registry = new ToolRegistry();
-    registry.register({
-      name: "test.badOutput",
-      description: () => "bad output",
-      inputSchema: z.object({}),
-      outputSchema: z.object({ ok: z.literal(true) }),
-      async run() {
-        return { ok: false } as any;
-      },
+    it("wraps thrown errors as FAILED and preserves cause", async () => {
+        const registry = new ToolRegistry();
+        registry.register({
+            name: "test.fail",
+            description: () => "fail",
+            inputSchema: z.object({}),
+            async run() {
+                throw new Error("boom");
+            },
+        });
+        const runner = new ToolRunner(registry);
+        // 工具闭包 throw（未知异常）走 runner 的归一化抛出通道；返回 Err 才走 Result。
+        await assert.rejects(
+            () => runner.call("test.fail", {}, {}),
+            (e) =>
+                AppErrorOps.is(e) && e.key.startsWith("TOOL_") &&
+                e.key === "TOOL_FAILED" &&
+                e.details?.toolName === "test.fail" &&
+                (e.cause as Error | undefined)?.message === "boom",
+        );
     });
-    const runner = new ToolRunner(registry);
-    await rejectsErr(
-      () => runner.call("test.badOutput", {}, {}),
-      (e) => AppErrorOps.is(e, "TOOL_FAILED"),
-    );
-  });
+
+    it("fails when output violates schema", async () => {
+        const registry = new ToolRegistry();
+        registry.register({
+            name: "test.badOutput",
+            description: () => "bad output",
+            inputSchema: z.object({}),
+            outputSchema: z.object({ ok: z.literal(true) }),
+            async run() {
+                return { ok: false } as any;
+            },
+        });
+        const runner = new ToolRunner(registry);
+        await rejectsErr(
+            () => runner.call("test.badOutput", {}, {}),
+            (e) => AppErrorOps.is(e, "TOOL_FAILED"),
+        );
+    });
 });
 

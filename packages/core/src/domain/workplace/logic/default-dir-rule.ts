@@ -10,9 +10,9 @@ import type { FillPolicy, SortField, SortOrder } from "../model/workplace-types.
 
 /** 目录启用规则但无 {@link WorkplaceDirRule} 行时应用的默认值。 */
 export const DEFAULT_WORKPLACE_DIR_RULE = {
-  sortField: "name" as const satisfies SortField,
-  sortOrder: "asc" as const satisfies SortOrder,
-  headCount: 0,
-  tailCount: 1000,
-  fillPolicy: "header" as const satisfies FillPolicy,
+    sortField: "name" as const satisfies SortField,
+    sortOrder: "asc" as const satisfies SortOrder,
+    headCount: 0,
+    tailCount: 1000,
+    fillPolicy: "header" as const satisfies FillPolicy,
 } as const;

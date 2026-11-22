@@ -6,35 +6,35 @@ import {ScopeKeyCache} from '@/services/scope-key-cache';
 const richHtmlCache = ScopeKeyCache.create<string>({maxEntries: 500});
 
 export namespace EnrichTranscriptRows {
-  function richHtmlCached(cacheKey: string, content: string): string | undefined {
-    const hit = richHtmlCache.get(cacheKey);
-    if (hit !== undefined) {
-      return hit || undefined;
+    function richHtmlCached(cacheKey: string, content: string): string | undefined {
+        const hit = richHtmlCache.get(cacheKey);
+        if (hit !== undefined) {
+            return hit || undefined;
+        }
+        const html = TranscriptRichHtml.prepare(content);
+        richHtmlCache.set(cacheKey, html ?? '');
+        return html;
     }
-    const html = TranscriptRichHtml.prepare(content);
-    richHtmlCache.set(cacheKey, html ?? '');
-    return html;
-  }
 
-  /** Adds textHtml/thinkingHtml for assistant rows when richText is enabled. */
-  export function enrich(rows: readonly TranscriptRow[], richText: boolean): readonly TranscriptRow[] {
-    if (!richText) {
-      return rows;
+    /** Adds textHtml/thinkingHtml for assistant rows when richText is enabled. */
+    export function enrich(rows: readonly TranscriptRow[], richText: boolean): readonly TranscriptRow[] {
+        if (!richText) {
+            return rows;
+        }
+        return rows.map(row => {
+            if (row.kind !== 'message' || row.role !== 'assistant') {
+                return row;
+            }
+            return {
+                ...row,
+                textHtml: row.text ? richHtmlCached(`${row.id}:text:${row.text}`, row.text) : undefined,
+                thinkingHtml: row.thinking ? richHtmlCached(`${row.id}:thinking:${row.thinking}`, row.thinking) : undefined,
+            };
+        });
     }
-    return rows.map(row => {
-      if (row.kind !== 'message' || row.role !== 'assistant') {
-        return row;
-      }
-      return {
-        ...row,
-        textHtml: row.text ? richHtmlCached(`${row.id}:text:${row.text}`, row.text) : undefined,
-        thinkingHtml: row.thinking ? richHtmlCached(`${row.id}:thinking:${row.thinking}`, row.thinking) : undefined,
-      };
-    });
-  }
 
-  /** Test-only: reset the bounded cache between cases. */
-  export function clearRichHtmlCacheForTests(): void {
-    richHtmlCache.clearAll();
-  }
+    /** Test-only: reset the bounded cache between cases. */
+    export function clearRichHtmlCacheForTests(): void {
+        richHtmlCache.clearAll();
+    }
 }

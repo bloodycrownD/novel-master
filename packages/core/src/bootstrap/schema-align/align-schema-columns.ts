@@ -13,7 +13,7 @@ import { SCHEMA_COLUMN_ALIGNMENTS } from "./schema-column-alignments.js";
  * schema 列对齐操作族。
  */
 export const SchemaColumnAlign = {
-  /**
+    /**
    * 对已有表逐项 pragma 检测并 ADD 缺失列；表不存在则跳过（新库由 DDL 创建）。
    *
    * `afterAdd` 仅在该次 ADD 列之后执行，避免每次 bootstrap 重复全表写。
@@ -22,17 +22,17 @@ export const SchemaColumnAlign = {
    *
    * @param tx - 事务连接
    */
-  async align(tx: TdbcConnection): Promise<void> {
-    for (const alignment of SCHEMA_COLUMN_ALIGNMENTS) {
-      const rows = await tx.query<{ name: string }>(`SELECT name FROM pragma_table_info('${alignment.table}')`);
-      const columnNames = new Set(rows.map((row) => row.name));
-      if (columnNames.size === 0 || columnNames.has(alignment.column)) {
-        continue;
-      }
-      await tx.execute(alignment.addColumnSql);
-      if (alignment.afterAdd) {
-        await alignment.afterAdd(tx);
-      }
-    }
-  },
+    async align(tx: TdbcConnection): Promise<void> {
+        for (const alignment of SCHEMA_COLUMN_ALIGNMENTS) {
+            const rows = await tx.query<{ name: string }>(`SELECT name FROM pragma_table_info('${alignment.table}')`);
+            const columnNames = new Set(rows.map((row) => row.name));
+            if (columnNames.size === 0 || columnNames.has(alignment.column)) {
+                continue;
+            }
+            await tx.execute(alignment.addColumnSql);
+            if (alignment.afterAdd) {
+                await alignment.afterAdd(tx);
+            }
+        }
+    },
 } as const;

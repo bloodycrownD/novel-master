@@ -10,80 +10,80 @@ import { DesktopRuntimeSingleton } from "../../runtime/desktop-runtime-singleton
 import { IpcResults } from "../ipc-result.js";
 
 export const Scope = {
-  get(): Promise<IpcResult<ScopeSnapshotDto>> {
-    return IpcResults.from(async (): Promise<Result<ScopeSnapshotDto, AppError>> => {
-      const built = await DesktopRuntimeSingleton.get();
-      // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
-      if (!built.ok) return Result.err(built.error);
-      const rt = built.value;
-      const currentProject = await rt.state.getCurrentProjectId();
-      // 已知失败沿 Result 上行（错误通道迁移四期），handleScopeGet 经 toIpcResult 转码。
-      if (!currentProject.ok) return Result.err(currentProject.error);
-      let projectId = currentProject.value;
-      const currentSession = await rt.state.getCurrentSessionId();
-      if (!currentSession.ok) return Result.err(currentSession.error);
-      let sessionId = currentSession.value;
+    get(): Promise<IpcResult<ScopeSnapshotDto>> {
+        return IpcResults.from(async (): Promise<Result<ScopeSnapshotDto, AppError>> => {
+            const built = await DesktopRuntimeSingleton.get();
+            // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+            if (!built.ok) return Result.err(built.error);
+            const rt = built.value;
+            const currentProject = await rt.state.getCurrentProjectId();
+            // 已知失败沿 Result 上行（错误通道迁移四期），handleScopeGet 经 toIpcResult 转码。
+            if (!currentProject.ok) return Result.err(currentProject.error);
+            let projectId = currentProject.value;
+            const currentSession = await rt.state.getCurrentSessionId();
+            if (!currentSession.ok) return Result.err(currentSession.error);
+            let sessionId = currentSession.value;
 
-      const projects = await rt.projects.list();
-      if (projectId != null && !projects.some((p) => p.id === projectId)) {
-        projectId = undefined;
-        await rt.state.resetCurrentProjectId();
-      }
-      if (projectId == null && projects.length > 0) {
-        projectId = projects[0]!.id;
-        await rt.state.setCurrentProjectId(projectId);
-      }
+            const projects = await rt.projects.list();
+            if (projectId != null && !projects.some((p) => p.id === projectId)) {
+                projectId = undefined;
+                await rt.state.resetCurrentProjectId();
+            }
+            if (projectId == null && projects.length > 0) {
+                projectId = projects[0]!.id;
+                await rt.state.setCurrentProjectId(projectId);
+            }
 
-      if (projectId == null) {
-        if (sessionId != null) {
-          await rt.state.resetCurrentSessionId();
-        }
-        return Result.ok({ projectId: undefined, sessionId: undefined });
-      }
+            if (projectId == null) {
+                if (sessionId != null) {
+                    await rt.state.resetCurrentSessionId();
+                }
+                return Result.ok({ projectId: undefined, sessionId: undefined });
+            }
 
-      const sessions = await rt.sessions.listByProject(projectId);
-      if (!sessions.ok) return Result.err(sessions.error);
-      if (sessionId != null && !sessions.value.some((s) => s.id === sessionId)) {
-        sessionId = undefined;
-        await rt.state.resetCurrentSessionId();
-      }
-      if (sessionId == null && sessions.value.length > 0) {
-        sessionId = sessions.value[0]!.id;
-        await rt.state.setCurrentSessionId(sessionId);
-      }
+            const sessions = await rt.sessions.listByProject(projectId);
+            if (!sessions.ok) return Result.err(sessions.error);
+            if (sessionId != null && !sessions.value.some((s) => s.id === sessionId)) {
+                sessionId = undefined;
+                await rt.state.resetCurrentSessionId();
+            }
+            if (sessionId == null && sessions.value.length > 0) {
+                sessionId = sessions.value[0]!.id;
+                await rt.state.setCurrentSessionId(sessionId);
+            }
 
-      return Result.ok({ projectId, sessionId });
-    });
-  },
+            return Result.ok({ projectId, sessionId });
+        });
+    },
 
-  setProject(req: ScopeSetProjectRequest): Promise<IpcResult<ScopeSnapshotDto>> {
-    return IpcResults.from(async () => {
-      const built = await DesktopRuntimeSingleton.get();
-      // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
-      if (!built.ok) return Result.err(built.error);
-      const rt = built.value;
-      await rt.state.setCurrentProjectId(req.projectId);
-      const sessions = await rt.sessions.listByProject(req.projectId);
-      if (!sessions.ok) return Result.err(sessions.error);
-      const sessionId = sessions.value[0]?.id;
-      if (sessionId != null) {
-        await rt.state.setCurrentSessionId(sessionId);
-      } else {
-        await rt.state.resetCurrentSessionId();
-      }
-      return Result.ok({ projectId: req.projectId, sessionId });
-    });
-  },
+    setProject(req: ScopeSetProjectRequest): Promise<IpcResult<ScopeSnapshotDto>> {
+        return IpcResults.from(async () => {
+            const built = await DesktopRuntimeSingleton.get();
+            // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+            if (!built.ok) return Result.err(built.error);
+            const rt = built.value;
+            await rt.state.setCurrentProjectId(req.projectId);
+            const sessions = await rt.sessions.listByProject(req.projectId);
+            if (!sessions.ok) return Result.err(sessions.error);
+            const sessionId = sessions.value[0]?.id;
+            if (sessionId != null) {
+                await rt.state.setCurrentSessionId(sessionId);
+            } else {
+                await rt.state.resetCurrentSessionId();
+            }
+            return Result.ok({ projectId: req.projectId, sessionId });
+        });
+    },
 
-  setSession(req: ScopeSetSessionRequest): Promise<IpcResult<ScopeSnapshotDto>> {
-    return IpcResults.from(async () => {
-      const built = await DesktopRuntimeSingleton.get();
-      // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
-      if (!built.ok) return Result.err(built.error);
-      const rt = built.value;
-      await rt.state.setCurrentProjectId(req.projectId);
-      await rt.state.setCurrentSessionId(req.sessionId);
-      return Result.ok({ projectId: req.projectId, sessionId: req.sessionId });
-    });
-  },
+    setSession(req: ScopeSetSessionRequest): Promise<IpcResult<ScopeSnapshotDto>> {
+        return IpcResults.from(async () => {
+            const built = await DesktopRuntimeSingleton.get();
+            // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+            if (!built.ok) return Result.err(built.error);
+            const rt = built.value;
+            await rt.state.setCurrentProjectId(req.projectId);
+            await rt.state.setCurrentSessionId(req.sessionId);
+            return Result.ok({ projectId: req.projectId, sessionId: req.sessionId });
+        });
+    },
 } as const;

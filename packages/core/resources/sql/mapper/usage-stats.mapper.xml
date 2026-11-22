@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  usage_record 统计读口的 SQL mapper（schema 见 resources/sql/schema/usage-record.sql）。
+
+  结构约定与 chat-message.mapper.xml 一致：
+  - 语句 id 与 repo 方法同名（camelCase），生成器按 id 产出 generated TS 映射
+    （src/infra/sql-template/generated/），调用点只留引用。
+  - 聚合 SELECT 列表（aggSelect）与筛选谓词（usageNotNull / modelFilter /
+    providerFilter / timeRange）经 <sql id> + <include ref> 展开；生成物里每条
+    语句都是完整字面量。同构查询各自独立成语句，不合并成万能动态模板。
+  - 三态筛选收在 <if test>（JS 表达式吃 params）：undefined 或 false 不渲染，
+    调用处传原始入参由 test 分派。
+
+  语句归属说明：本 mapper 按服务文件划名（namespace=usage_stats），其中
+  listModels 读 llm_saved_model、visibleMessageCount 与
+  listAssistantMessageContents 读 chat_message——两处均只服务本服务的读口，
+  不散落到其他表的 mapper。
+-->
+<mapper namespace="usage_stats">
+
+  <!-- 命中率分母（计费口径全部输入）的 SUM 表达式：anthropic 行 input_tokens 不含 cache，
+       须加回 cache_read 与 cache_creation；其余协议 prompt 已含 cached。FILTER 只对 cache
+       列非 NULL 的行求和——缺失行不入分母（PRD 口径，避免拉低命中率）。 -->
+  <sql id="billedInputSum">SUM(CASE WHEN provider = 'anthropic'
+    THEN prompt_tokens + COALESCE(cache_read_tokens, 0) + COALESCE(cache_creation_tokens, 0)
+    ELSE prompt_tokens
+  END) FILTER (WHERE cache_read_tokens IS NOT NULL OR cache_creation_tokens IS NOT NULL)</sql>
+
+  <!-- 速率聚合的有效行 FILTER（summary 与桶查询共用）：token 三列与耗时两列均非 NULL，
+       且 duration_ms > first_token_ms（非流式行 first=duration 与时钟毛刺行不入分母，
+       避免除零与负速率）。 -->
+  <sql id="rateFilter">WHERE completion_tokens IS NOT NULL
+    AND first_token_ms IS NOT NULL
+    AND duration_ms IS NOT NULL AND duration_ms > first_token_ms</sql>
+
+  <!-- 聚合 SELECT 列表（bucket 复用后丢弃 total_tokens）。 -->
+  <sql id="aggSelect">COUNT(*) AS calls,
+  COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
+  COALESCE(SUM(completion_tokens), 0) AS completion_tokens,
+  COALESCE(SUM(total_tokens), 0) AS total_tokens,
+  COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens,
+  COALESCE(SUM(cache_creation_tokens), 0) AS cache_creation_tokens,
+  COALESCE(<include ref="billedInputSum"/>, 0) AS billed_input_tokens,
+  AVG(first_token_ms) AS avg_first_token_ms,
+  CAST(SUM(completion_tokens) FILTER (<include ref="rateFilter"/>) AS REAL)
+    / (SUM(duration_ms - first_token_ms) FILTER (<include ref="rateFilter"/>) / 1000.0) AS avg_tokens_per_second</sql>
+
+  <!-- 账本有效行判据（公共片断）：prompt / completion 至少一侧非空。
+
+       统计唯一数据源是 usage_record（独立用量账本，按请求粒度，账本与内容分离——删除
+       会话/消息/回滚截尾都不删本表行）。新表只在记账点插入，写入端按同判据把关（无
+       token 真值的请求不入账本），此处保留 token 非空判据作为写入契约的防御性复核；
+       旧口径的 role = 'assistant' 判据随之退役（账本表不存在非 assistant 行，hidden
+       维度也不存在——hidden 只是内容侧可见性）。 -->
+  <sql id="usageNotNull">(prompt_tokens IS NOT NULL OR completion_tokens IS NOT NULL)</sql>
+
+  <!-- 动态筛选片断（原三函数迁 SqlTemplate <if>，绑定值传原始入参，由 test 表达式分派三态）：
+
+       - 模型：undefined = 全部（无谓词）；null = 「其他」桶（未记录 + 不在已保存模型集合
+         内）；字符串 = 指定模型。子查询免动态参数。
+       - 服务商：undefined = 全部；null = 「其他」桶（provider_id IS NULL 的历史行）；
+         字符串 = 指定服务商配置 id（写入时快照，服务商已删除也照常按 id 匹配——解析不到
+         展示名是 UI 层的事）。
+       - 时间谓词：fromMs/toMs 任一为 null 时不限时间（全历史），非空时拼 [fromMs, toMs)
+         半开区间条件（与 range 可选语义配套）。 -->
+  <sql id="modelFilter"><if test="model === null">
+  AND (model_name IS NULL OR model_name NOT IN (SELECT DISTINCT vendor_model_id FROM llm_saved_model))</if><if test="model !== undefined and model !== null">
+  AND model_name = #{model}</if></sql>
+
+  <sql id="providerFilter"><if test="providerId === null">
+  AND provider_id IS NULL</if><if test="providerId !== undefined and providerId !== null">
+  AND provider_id = #{providerId}</if></sql>
+
+  <sql id="timeRange"><if test="fromMs != null and toMs != null">
+  AND created_at_ms &gt;= #{fromMs} AND created_at_ms &lt; #{toMs}</if></sql>
+
+  <!-- 单区间聚合（无 GROUP BY，聚合恒返回一行；fromMs/toMs 为 null 时不加时间谓词 = 全历史）。 -->
+  <select id="aggregate">
+    SELECT <include ref="aggSelect"/>
+    FROM usage_record
+    WHERE <include ref="usageNotNull"/> <include ref="timeRange"/> <include ref="modelFilter"/> <include ref="providerFilter"/>
+  </select>
+
+  <!-- 日桶序列：strftime 的 localtime 与 JS Date 同用进程本地时区，DST 日按挂钟日归桶。 -->
+  <select id="dailyBuckets">
+    SELECT strftime('%Y-%m-%d', created_at_ms / 1000, 'unixepoch', 'localtime') AS day_key, <include ref="aggSelect"/>
+    FROM usage_record
+    WHERE <include ref="usageNotNull"/> AND created_at_ms &gt;= #{fromMs} AND created_at_ms &lt; #{toMs} <include ref="modelFilter"/> <include ref="providerFilter"/>
+    GROUP BY day_key
+  </select>
+
+  <select id="modelBreakdown">
+    SELECT provider_id, model_name, <include ref="aggSelect"/>
+    FROM usage_record
+    WHERE <include ref="usageNotNull"/> <include ref="timeRange"/> <include ref="modelFilter"/> <include ref="providerFilter"/>
+    GROUP BY provider_id, model_name -- 不排序：输出顺序由 JS 归并后的 sort 保证（SQL 序会被归并架空）
+  </select>
+
+  <!-- 请求分页的 total 与行集共用同一组筛选谓词（range 缺省时两者都不含时间谓词）。 -->
+  <select id="countRequestUsage">
+    SELECT COUNT(*) AS n
+    FROM usage_record WHERE <include ref="usageNotNull"/>
+         <include ref="timeRange"/>
+         <include ref="modelFilter"/>
+         <include ref="providerFilter"/>
+  </select>
+
+  <select id="listRequestUsage">
+    SELECT created_at_ms, model_name, prompt_tokens, completion_tokens, total_tokens, cache_read_tokens,
+    cache_creation_tokens, first_token_ms, duration_ms
+    FROM usage_record WHERE <include ref="usageNotNull"/>
+         <include ref="timeRange"/>
+         <include ref="modelFilter"/>
+         <include ref="providerFilter"/>
+    ORDER BY created_at_ms DESC, id ASC
+    LIMIT #{limit} OFFSET #{offset}
+  </select>
+
+  <!-- 选项与服务商配置的模型列表同源（vendor_model_id 去重），不从 chat_message 历史记录
+       distinct——历史模型会随模型更替不断堆积。 -->
+  <select id="listModels">
+    SELECT DISTINCT vendor_model_id FROM llm_saved_model ORDER BY vendor_model_id ASC
+  </select>
+
+  <!-- 「最近一次请求」：打账本（usage_record，按 created_at_ms 倒序取首行）——消息被
+       删除/回滚后账本行仍在，最近请求不再随内容消失。 -->
+  <select id="lastRequest">
+    SELECT message_seq, model_name, provider, prompt_tokens, completion_tokens, cache_read_tokens, cache_creation_tokens,
+    created_at_ms
+    FROM usage_record
+    WHERE <include ref="usageNotNull"/> AND session_id = #{sessionId}
+    ORDER BY created_at_ms DESC, id DESC
+    LIMIT 1
+  </select>
+
+  <!-- 可见数属内容侧读数（随会话删，仍打 chat_message）：hidden 列判定，只剔 hidden 不筛角色。 -->
+  <select id="visibleMessageCount">
+    SELECT COUNT(*) AS n FROM chat_message WHERE session_id = #{sessionId} AND hidden = 0
+  </select>
+
+  <!-- 工具调用现算：只投影 content 列（不选 raw_json/attachments），含 hidden 行——累计口径；
+       user 侧 tool_result 不计。 -->
+  <select id="listAssistantMessageContents">
+    SELECT id, content_json FROM chat_message WHERE session_id = #{sessionId} AND role = 'assistant'
+  </select>
+
+</mapper>

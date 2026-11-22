@@ -16,67 +16,67 @@ import type { AgentSession } from "../agent-session.port.js";
  * Ephemeral session storing messages in memory.
  */
 export class InMemoryAgentSession implements AgentSession {
-  private readonly messages: ChatMessageData[] = [];
-  private seq = 0;
+    private readonly messages: ChatMessageData[] = [];
+    private seq = 0;
 
-  constructor(readonly sessionId = "in-memory", readonly workplaceScopeSessionId = sessionId, readonly kkvScopeSessionId = sessionId) {}
+    constructor(readonly sessionId = "in-memory", readonly workplaceScopeSessionId = sessionId, readonly kkvScopeSessionId = sessionId) {}
 
-  async list(): Promise<readonly ChatMessageData[]> {
-    return this.messages.filter((m) => !m.hidden);
-  }
-
-  /** 追加一条内存消息；`options.attachments` 供测试断言落库形态。内存实现永不失败，恒 Ok。 */
-  async append(role: string, content: MessageContent, options?: {provider?: string | null; modelName?: string | null; raw?: Record<string, unknown> | null; usage?: MessageUsage; attachments?: readonly MessageAttachment[]}): Promise<Result<ChatMessageData, AppError>> {
-    this.seq += 1;
-    const message: ChatMessageData = {
-      id: Random.uuid(),
-      sessionId: this.sessionId,
-      seq: this.seq,
-      role,
-      content,
-      provider: options?.provider ?? null,
-      modelName: options?.modelName ?? null,
-      raw: options?.raw ?? null,
-      createdAtMs: Date.now(),
-      hidden: false,
-      ...(options?.usage != null ? { usage: options.usage } : {}),
-      ...(options?.attachments != null && options.attachments.length > 0
-        ? { attachments: options.attachments }
-        : {}),
-    };
-    this.messages.push(message);
-    return Result.ok(message);
-  }
-
-  async hideRange(fromSeq: number, toSeq: number): Promise<Result<number, AppError>> {
-    let count = 0;
-    for (let i = 0; i < this.messages.length; i++) {
-      const m = this.messages[i]!;
-      if (m.seq >= fromSeq && m.seq <= toSeq && !m.hidden) {
-        this.messages[i] = { ...m, hidden: true };
-        count += 1;
-      }
+    async list(): Promise<readonly ChatMessageData[]> {
+        return this.messages.filter((m) => !m.hidden);
     }
-    return Result.ok(count);
-  }
 
-  async truncateAfterMessage(afterMessageId: string | null): Promise<Result<void, AppError>> {
-    if (afterMessageId == null) {
-      this.messages.length = 0;
-      this.seq = 0;
-      return Result.ok(undefined);
+    /** 追加一条内存消息；`options.attachments` 供测试断言落库形态。内存实现永不失败，恒 Ok。 */
+    async append(role: string, content: MessageContent, options?: {provider?: string | null; modelName?: string | null; raw?: Record<string, unknown> | null; usage?: MessageUsage; attachments?: readonly MessageAttachment[]}): Promise<Result<ChatMessageData, AppError>> {
+        this.seq += 1;
+        const message: ChatMessageData = {
+            id: Random.uuid(),
+            sessionId: this.sessionId,
+            seq: this.seq,
+            role,
+            content,
+            provider: options?.provider ?? null,
+            modelName: options?.modelName ?? null,
+            raw: options?.raw ?? null,
+            createdAtMs: Date.now(),
+            hidden: false,
+            ...(options?.usage != null ? { usage: options.usage } : {}),
+            ...(options?.attachments != null && options.attachments.length > 0
+                ? { attachments: options.attachments }
+                : {}),
+        };
+        this.messages.push(message);
+        return Result.ok(message);
     }
-    const idx = this.messages.findIndex((m) => m.id === afterMessageId);
-    if (idx < 0) {
-      return Result.ok(undefined);
-    }
-    this.messages.splice(idx + 1);
-    return Result.ok(undefined);
-  }
 
-  /** All messages including hidden (tests). */
-  /** nm-style: keep-public — 测试读取含 hidden 的完整消息列表。 */
-  allMessages(): readonly ChatMessageData[] {
-    return [...this.messages];
-  }
+    async hideRange(fromSeq: number, toSeq: number): Promise<Result<number, AppError>> {
+        let count = 0;
+        for (let i = 0; i < this.messages.length; i++) {
+            const m = this.messages[i]!;
+            if (m.seq >= fromSeq && m.seq <= toSeq && !m.hidden) {
+                this.messages[i] = { ...m, hidden: true };
+                count += 1;
+            }
+        }
+        return Result.ok(count);
+    }
+
+    async truncateAfterMessage(afterMessageId: string | null): Promise<Result<void, AppError>> {
+        if (afterMessageId == null) {
+            this.messages.length = 0;
+            this.seq = 0;
+            return Result.ok(undefined);
+        }
+        const idx = this.messages.findIndex((m) => m.id === afterMessageId);
+        if (idx < 0) {
+            return Result.ok(undefined);
+        }
+        this.messages.splice(idx + 1);
+        return Result.ok(undefined);
+    }
+
+    /** All messages including hidden (tests). */
+    /** nm-style: keep-public — 测试读取含 hidden 的完整消息列表。 */
+    allMessages(): readonly ChatMessageData[] {
+        return [...this.messages];
+    }
 }

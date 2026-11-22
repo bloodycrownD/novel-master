@@ -14,13 +14,13 @@ import { StreamMetricsLine, type StreamMetricsLineInput, type StreamMetricsLineP
 import { coreT } from "./core-i18n.js";
 
 export {
-  StreamMetricsLine,
-  SlidingTokenRate,
-  SLIDING_TOKEN_RATE_WINDOW_MS,
-  type TokenRateSampler,
-  type StreamMetricsLineInput,
-  type StreamMetricsLineParts,
-  StreamTokenAnchor,
+    StreamMetricsLine,
+    SlidingTokenRate,
+    SLIDING_TOKEN_RATE_WINDOW_MS,
+    type TokenRateSampler,
+    type StreamMetricsLineInput,
+    type StreamMetricsLineParts,
+    StreamTokenAnchor,
 } from "@novel-master/core/format";
 export { IncrementalTokenCounter } from "@novel-master/core/tokenizer";
 export { type StreamTokenSource } from "@novel-master/core/session-run-state";
@@ -28,7 +28,7 @@ export { type StreamTokenSource } from "@novel-master/core/session-run-state";
 /** metrics 条整行：`{prefix} · {elapsed} · {body}`（descriptor 经 coreT 翻译）。 */
 // nm-style: keep-public — desktop shared/logic 是 renderer 唯一的 core-descriptor→string 翻译边界（apps/desktop/renderer 零 `@novel-master/core` import）；唯一调用方 renderer hook 经本层拿整行 string，内联会把它拉回直连 core + translator。
 export function formatStreamMetricsLineText(metrics: StreamMetricsLineInput): string {
-  const parts: StreamMetricsLineParts = StreamMetricsLine.build(metrics);
-  return `${coreT(parts.prefix)} · ${parts.elapsed} · ${coreT(parts.body)}`;
+    const parts: StreamMetricsLineParts = StreamMetricsLine.build(metrics);
+    return `${coreT(parts.prefix)} · ${parts.elapsed} · ${coreT(parts.body)}`;
 }
 

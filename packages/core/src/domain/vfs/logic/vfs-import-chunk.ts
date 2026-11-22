@@ -17,14 +17,14 @@
 export const ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK = 200;
 
 export const VfsImportChunk = {
-  /**
+    /**
    * 把数组按固定大小切成若干片（返回生成器，零额外数组）。
    *
    * 空数组产出 0 片——调用方据此跳过整个分片循环（只跑段 B0）。
    */
-  *chunkArray<T>(items: ReadonlyArray<T>, size: number): Generator<ReadonlyArray<T>> {
-    for (let offset = 0; offset < items.length; offset += size) {
-      yield items.slice(offset, offset + size);
-    }
-  },
+    *chunkArray<T>(items: ReadonlyArray<T>, size: number): Generator<ReadonlyArray<T>> {
+        for (let offset = 0; offset < items.length; offset += size) {
+            yield items.slice(offset, offset + size);
+        }
+    },
 } as const;
