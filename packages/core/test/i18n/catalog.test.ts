@@ -13,17 +13,53 @@ import {  CORE_CATALOGS  } from "../../src/i18n/generated-catalog.js";
 const CATALOG_DIR = new URL("../../src/i18n/catalog/", import.meta.url);
 const zhCnSource = readFileSync(new URL("zh-CN.yaml", CATALOG_DIR), "utf8");
 const enUsSource = readFileSync(new URL("en-US.yaml", CATALOG_DIR), "utf8");
-const zhCn = Catalog.parseCore(zhCnSource);
-const enUs = Catalog.parseCore(enUsSource);
+// i18n 双轨收敛后 yaml 含三个组：core（parseCore 校验的对象）与 chat/settings（域段，
+// 键含伪嵌套点分、不属 CORE_MESSAGE_KEY_PATTERN 词表——只做展平对比，不进 parseCore）。
+import { parse } from "yaml";
+function flattenLocale(source: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  const walk = (node: Record<string, unknown>, prefix: string): void => {
+    for (const [k, v] of Object.entries(node)) {
+      const path = prefix === "" ? k : `${prefix}.${k}`;
+      if (v !== null && typeof v === "object") walk(v as Record<string, unknown>, path);
+      else out[path] = v as string;
+    }
+  };
+  walk(parse(source) as Record<string, unknown>, "");
+  return out;
+}
+const zhCnAll = flattenLocale(zhCnSource);
+const enUsAll = flattenLocale(enUsSource);
+const byGroup = (flat: Record<string, string>, group: "core" | "chat" | "settings"): Record<string, string> =>
+  Object.fromEntries(Object.entries(flat).filter(([k]) => (group === "chat" ? k.startsWith("chat.") : group === "settings" ? k.startsWith("settings.") : !k.startsWith("chat.") && !k.startsWith("settings."))));
+const zhCn = byGroup(zhCnAll, "core");
+const enUs = byGroup(enUsAll, "core");
+const zhCnChat = byGroup(zhCnAll, "chat");
+const enUsChat = byGroup(enUsAll, "chat");
+const zhCnSettings = byGroup(zhCnAll, "settings");
+const enUsSettings = byGroup(enUsAll, "settings");
 
 function paramsOf(template: string): string[] {
   return [...template.matchAll(/\{(\w+)\}/g)].map((match) => match[1]!).sort();
 }
 
+import { CHAT_CATALOGS } from "../../src/i18n/generated-chat-catalog.js";
+import { SETTINGS_CATALOGS } from "../../src/i18n/generated-settings-catalog.js";
+
 describe("generated catalog（构建期内嵌防漂移）", () => {
   it("CORE_CATALOGS 与 YAML 解析结果逐 key 一致（改 YAML 后须重跑 gen 脚本）", () => {
     assert.deepEqual({...CORE_CATALOGS["zh-CN"]}, {...zhCn});
     assert.deepEqual({...CORE_CATALOGS["en-US"]}, {...enUs});
+  });
+
+  it("CHAT_CATALOGS 与 YAML chat 段逐 key 一致（域段并轨后同源）", () => {
+    assert.deepEqual({...CHAT_CATALOGS["zh-CN"]}, {...zhCnChat});
+    assert.deepEqual({...CHAT_CATALOGS["en-US"]}, {...enUsChat});
+  });
+
+  it("SETTINGS_CATALOGS 与 YAML settings 段逐 key 一致（域段并轨后同源）", () => {
+    assert.deepEqual({...SETTINGS_CATALOGS["zh-CN"]}, {...zhCnSettings});
+    assert.deepEqual({...SETTINGS_CATALOGS["en-US"]}, {...enUsSettings});
   });
 });
 

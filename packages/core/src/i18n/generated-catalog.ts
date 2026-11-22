@@ -2835,8 +2835,8 @@ const EN_US = {
   "ui.menu.version_line": "Version {version}",
 } satisfies Partial<Record<CoreMessageKey, string>>;
 
-/** 各宿主同步建 translator 的内嵌数据（不读盘；YAML 是唯一真源）。 */
-export const CORE_CATALOGS: Readonly<Record<string, MessageCatalog<CoreMessageKey>>> = {
+/** 各宿主同步建 translator 的内嵌数据（不读盘；YAML 是唯一真源）。as const 保 locale 字面量键，下游 createTranslator 泛型推断不塌。 */
+export const CORE_CATALOGS = {
   "zh-CN": ZH_CN,
   "en-US": EN_US as MessageCatalog<CoreMessageKey>,
-};
+} as const;

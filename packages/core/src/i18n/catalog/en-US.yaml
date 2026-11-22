@@ -1407,3 +1407,169 @@ ui:
     export_diagnostics: Export Diagnostics
     about: About
     version_line: "Version {version}"
+
+# —— chat：locales JSON 并轨（i18n 双轨收敛；段内扁平点分键）——
+chat:
+  rollback.confirm.backfill: "Snapshots are missing and will be repaired with the latest content.\n\nFiles with missing snapshots:\n{files}\n\n{tail}"
+  rollback.confirm.backfill.file: · {path}
+  rollback.confirm.backfill.file.empty: · (unknown file)
+  rollback.confirm.backfill.tail.rewind: Other files will be rolled back to the anchor.
+  rollback.confirm.backfill.tail.undo_send: Other files will be rolled back to their state before sending.
+  rollback.confirm.degraded.rewind: This will only delete all messages after this one; workspace files will remain unchanged.
+  rollback.confirm.degraded.undo_send: This will only delete this message and all later messages; workspace files will remain unchanged.
+  rollback.confirm.primary.rewind: This will delete all messages after this one, and revert related file changes. Continue?
+  rollback.confirm.primary.undo_send: This will delete this message and all later messages, and revert related file changes. Continue?
+
+# —— settings：locales JSON 并轨（i18n 双轨收敛；段内扁平点分键）——
+settings:
+  long_task.cancel: Cancel
+  long_task.cancelled: Cancelled
+  long_task.maintenance_uninterruptible: Maintenance in progress; cannot be interrupted
+  search.auth.api_key_label: API Key
+  search.auth.base_url_hint.mobile: "Include http(s)://; leaving it empty on save clears it"
+  search.auth.base_url_label.desktop: Instance Base URL (serves the {{baseUrl}} macro in the template; leave empty to clear)
+  search.auth.base_url_label.mobile: Instance Base URL
+  search.auth.clear_key.desktop: Clear key
+  search.auth.clear_key.mobile: Clear saved key
+  search.auth.clearing: Clearing…
+  search.auth.header_name_hint.mobile: e.g. X-API-Key, X-Subscription-Token
+  search.auth.header_name_label.mobile: Header name
+  search.auth.key_placeholder.mobile: Leave empty to keep the saved key
+  search.auth.key_saved_hint.mobile: Saved; leave empty to keep the current key
+  search.auth.key_status_label.desktop: Key status
+  search.auth.key_store_hint.mobile: Written to the local keystore when you save
+  search.auth.new_key_label.desktop: New API Key (leave empty to keep the current one)
+  search.auth.section_title.mobile: Authentication
+  search.auth.style.custom_header.mobile: Custom request header
+  search.auth.style.none.mobile: No authentication
+  search.auth.style_hint.mobile: The key is injected only at send time; the configuration holds just the {{apiKey}} placeholder
+  search.auth.style_label.mobile: Authentication method
+  search.auth.style_picker.mobile: Choose authentication method
+  search.curl.command_label.desktop: curl command
+  search.curl.key_detected.desktop: A key was detected and filled into the API Key field below; it is written to the secure keystore when you save.
+  search.curl.parse_action.desktop: Parse and prefill
+  search.curl.section_desc.desktop: Paste a curl command (supports -X / -H / -d / --data-raw / -G); any plaintext key found is replaced with {{apiKey}} and written to the secure keystore when you save.
+  search.curl.section_title.desktop: Import from curl
+  search.detail.back_to_list.desktop: Back to list
+  search.detail.body_label.desktop: Request body template (optional, valid JSON object text; leave empty to let the agent pass parameters at call time)
+  search.detail.builtin_body.desktop: "Built-in free engine with no API Key required. Use the switch on the list page to control whether it takes part in search. It ignores params passthrough and does not support advanced search syntax such as site:."
+  search.detail.connection_section.desktop: Connection settings
+  search.detail.connection_section.mobile: Connection
+  search.detail.create_action.desktop: Create
+  search.detail.create_action.mobile: Create engine
+  search.detail.delete_action.mobile: Delete this custom engine
+  search.detail.delete_confirm.desktop: "Delete \"{name}\"?"
+  search.detail.delete_hint.desktop: Deleting clears this engine's template, API Key, and the instance URL saved on this device.
+  search.detail.delete_hint.mobile: Deleting clears the template configuration and the saved API Key; this cannot be undone
+  search.detail.delete_notice.mobile: "The template configuration and saved API Key for \"{name}\" will be cleared. This cannot be undone."
+  search.detail.delete_section: Delete engine
+  search.detail.delete_title: Delete custom engine
+  search.detail.desc_create.desktop: Import from curl or fill in the request template directly; the API Key is stored in the local secure keystore.
+  search.detail.desc_custom.desktop: Custom engine; the API Key is stored in the local secure keystore.
+  search.detail.engine_section.desktop: Search engine
+  search.detail.headers_label.desktop: Headers (JSON object)
+  search.detail.method_label.desktop: Method
+  search.detail.method_label.mobile: HTTP method
+  search.detail.name_hint.mobile: Engine name shown in the list row title and the tool description
+  search.detail.name_label.desktop: Display name
+  search.detail.name_label.mobile: Display name
+  search.detail.name_locked_hint.mobile: Built-in engine names are fixed; create a custom engine if you need your own name
+  search.detail.name_placeholder.desktop: e.g. My Search API
+  search.detail.name_placeholder.mobile: e.g. My search
+  search.detail.override_hint.desktop: This engine already has a custom override; saving submits only the fields you changed, and unchanged fields keep the existing override.
+  search.detail.override_hint.mobile: Only the fields you changed are submitted when you save; unchanged fields keep using the factory template
+  search.detail.override_section.mobile: Template override
+  search.detail.reset_action.desktop: Restore defaults
+  search.detail.reset_action.mobile: Restore default template
+  search.detail.save_action.desktop: Save
+  search.detail.save_action.mobile: Save configuration
+  search.detail.saving.desktop: Saving…
+  search.detail.template_section.desktop: Request template
+  search.detail.test_action.desktop: Test
+  search.detail.test_count.desktop: "{count} results"
+  search.detail.test_desc.desktop: "Direct draft test: sends a real search using the current form contents (nothing is saved), which consumes the engine's call quota."
+  search.detail.test_query_label.desktop: Test query
+  search.detail.test_query_placeholder.desktop: e.g. artificial intelligence
+  search.detail.test_section.desktop: Test
+  search.detail.test_truncated.desktop: truncated
+  search.detail.testing.desktop: Testing…
+  search.detail.url_hint.mobile: Fixed endpoint; the agent passes parameters at call time (GET appends them to the query string / POST merges them into the request body), so no placeholders are needed
+  search.detail.url_label.desktop: URL (fixed endpoint; parameters are passed by the agent at call time)
+  search.detail.url_label.mobile: Request URL
+  search.detail.url_locked_hint.mobile: Built-in engine endpoints are fixed; create a custom engine to use your own
+  search.empty.engine_missing.desktop: The engine does not exist; it may have been deleted.
+  search.empty.loading.desktop: Loading…
+  search.empty.no_engine_selected.desktop: No engine specified. Choose one from the search settings list.
+  search.help.custom_engine.body.desktop: "You can edit a preset engine's request template on its detail page and restore the defaults; you can also create a custom engine by pasting a curl command and describe any search API with a template (the {{query}}/{{count}}/{{apiKey}}/{{baseUrl}} placeholders are supported). The request body defaultBody is optional; leave it empty to let the agent pass parameters at call time. Placeholders go inside string values; write \"{{count}}\" (with quotes) for integer fields and it is converted to a number at run time."
+  search.help.custom_engine.body.mobile: You can edit a preset engine's request template on its detail page and restore the defaults; you can also create a custom engine and describe any search API with a template. The agent passes request parameters at call time (GET appends them to the query string / POST merges them into the request body); the API Key is injected from the local keystore only at send time, and the configuration contains only the {{apiKey}} placeholder.
+  search.help.custom_engine.title: Templates and custom engines
+  search.help.dismiss: Got it
+  search.help.key_security.body: The API Key is stored only in the local secure keystore; it never enters conversation records and is not uploaded by cloud sync.
+  search.help.key_security.title: Key security
+  search.help.priority.body: List order is the order engines are tried during a search; if a request fails (for example an invalid key or a timeout), the next enabled and fully configured engine is tried automatically.
+  search.help.priority.title: Engine priority
+  search.help.title: Usage guide
+  search.help.toggle.body: Only engines with the switch on take part in search; by default only the built-in DuckDuckGo is enabled. If every engine is off, search returns a notice instead of silently falling back.
+  search.help.toggle.title: Enable switch
+  search.list.cancel.mobile: Cancel
+  search.list.create_custom: New custom engine
+  search.list.delete_confirm.desktop: "Delete \"{name}\"? Its API Key and the instance URL saved on this device will be cleared as well."
+  search.list.deleting.mobile: Deleting…
+  search.list.issue.base_url_missing.mobile: Instance URL not configured
+  search.list.issue.key_missing.mobile: API Key not configured
+  search.list.menu.delete: Delete
+  search.list.menu.move_down: Move down
+  search.list.menu.move_up: Move up
+  search.list.more_menu_aria.desktop: More actions for {name}
+  search.list.retry.mobile: Retry
+  search.list.tag.base_url_missing.desktop: No instance URL
+  search.list.tag.configured.desktop: Configured
+  search.list.tag.custom.desktop: Custom
+  search.list.tag.key_missing.desktop: No API Key
+  search.list.title.mobile: Search settings
+  search.list.toggle_aria.desktop: Enable {name}
+  search.meta.hint.builtin_free: Built-in · Free
+  search.meta.hint.custom_template.mobile: Custom template
+  search.meta.hint.metered_intl: Pay per use · International
+  search.meta.hint.metered_zh: Pay per use · Chinese search
+  search.meta.hint.self_hosted_free: Self-hosted · Free
+  search.meta.label.bocha: Bocha
+  search.meta.label.brave: Brave
+  search.meta.label.deepseek: DeepSeek
+  search.meta.label.duckduckgo: DuckDuckGo
+  search.meta.label.searxng: SearXNG
+  search.meta.label.tavily: Tavily
+  search.meta.label.zhipu: Zhipu
+  search.meta.preset_label.desktop: Preset engine
+  search.params.hint.mobile: Appended to the tool description; the agent passes parameters accordingly
+  search.params.locked_hint.mobile: Fixed for built-in engines; passed through to the agent as part of the tool description
+  search.params.placeholder.desktop: Can be passed through params…
+  search.params.placeholder.mobile: e.g. native parameters such as count(1..20) and time_range(day/week/month/year)
+  search.params.placeholder_note.desktop: "Placeholders go inside string values; write \"{{count}}\" (with quotes) for integer fields and it is converted to a number at run time"
+  search.params.title.desktop: Parameter notes (appended to the tool description; fixed for built-in engines)
+  search.params.title.mobile: Parameter notes
+  search.params.title_locked.mobile: Parameter notes (fixed for built-in engines)
+  search.toast.clear_failed.mobile: Failed to clear
+  search.toast.cleared.desktop: Cleared
+  search.toast.config_saved.mobile: Configuration saved
+  search.toast.created.desktop: Created
+  search.toast.curl_imported.desktop: curl configuration imported
+  search.toast.custom_engine_created.mobile: Custom engine created
+  search.toast.custom_engine_deleted.mobile: Custom engine deleted
+  search.toast.delete_failed.mobile: Failed to delete
+  search.toast.deleted.desktop: Deleted
+  search.toast.engine_not_found.mobile: "Search engine not found: {name}"
+  search.toast.key_cleared.mobile: Cleared the API Key for {name}
+  search.toast.load_failed.mobile: Failed to load search settings
+  search.toast.no_changes: No changes
+  search.toast.order_failed.mobile: Failed to change the order
+  search.toast.reset_done.desktop: Defaults restored
+  search.toast.reset_done.mobile: Default template restored
+  search.toast.reset_failed.mobile: Failed to restore defaults
+  search.toast.save_failed.mobile: Failed to save
+  search.toast.saved.desktop: Saved
+  search.toast.toggle_failed.mobile: Failed to toggle the enabled state
+  search.validation.api_key_required: Enter an API Key (leaving it empty will not change the saved key)
+  search.validation.headers_invalid_json.desktop: Headers must be valid JSON
+  search.validation.headers_not_object.desktop: Headers must be a JSON object
+  search.validation.test_query_required.desktop: Enter a test query

@@ -126,10 +126,17 @@
       "types": "./dist/domain/agent/stored-config-validity/index.d.ts",
       "import": "./dist/domain/agent/stored-config-validity/index.js"
     },
-    "./locales/*": "./locales/*",
     "./i18n": {
       "types": "./dist/i18n/index.d.ts",
       "import": "./dist/i18n/index.js"
+    },
+    "./i18n/catalog/chat": {
+      "types": "./dist/i18n/generated-chat-catalog.d.ts",
+      "import": "./dist/i18n/generated-chat-catalog.js"
+    },
+    "./i18n/catalog/settings": {
+      "types": "./dist/i18n/generated-settings-catalog.d.ts",
+      "import": "./dist/i18n/generated-settings-catalog.js"
     },
     "./i18n/catalog/*": "./src/i18n/catalog/*",
     "./domain/chat/presentation/*": {

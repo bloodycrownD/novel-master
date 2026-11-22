@@ -76,6 +76,14 @@ module.exports = {
       repoRoot,
       'packages/core/dist/public/chat.js',
     ),
+    '^@novel-master/core/i18n/catalog/chat$': path.join(
+      repoRoot,
+      'packages/core/dist/i18n/generated-chat-catalog.js',
+    ),
+    '^@novel-master/core/i18n/catalog/settings$': path.join(
+      repoRoot,
+      'packages/core/dist/i18n/generated-settings-catalog.js',
+    ),
     '^@novel-master/core/common$': path.join(
       repoRoot,
       'packages/core/dist/common/index.js',

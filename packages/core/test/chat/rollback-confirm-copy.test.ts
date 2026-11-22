@@ -5,8 +5,10 @@ import {  createTranslator, type MessageCatalog  } from "../../src/common/i18n.j
 import type { ChatMessageKey } from "../../src/domain/chat/i18n/keys.js";
 import {  RollbackConfirmView  } from "../../src/domain/chat/presentation/rollback-confirm.js";
 
-const zhCN = JSON.parse(fs.readFileSync(new URL("../../locales/chat.zh-CN.json", import.meta.url), "utf8")) as MessageCatalog<ChatMessageKey>;
-const enUS = JSON.parse(fs.readFileSync(new URL("../../locales/chat.en-US.json", import.meta.url), "utf8")) as MessageCatalog<ChatMessageKey>;
+// i18n 双轨收敛：catalog 唯一真源迁 yaml chat 段，测试消费生成物。
+import { CHAT_CATALOGS } from "../../src/i18n/generated-chat-catalog.js";
+const zhCN = CHAT_CATALOGS["zh-CN"] as MessageCatalog<ChatMessageKey>;
+const enUS = CHAT_CATALOGS["en-US"] as MessageCatalog<ChatMessageKey>;
 const translateZh = createTranslator({ "zh-CN": zhCN }, "zh-CN");
 const translateEn = createTranslator({ "en-US": enUS }, "en-US");
 
