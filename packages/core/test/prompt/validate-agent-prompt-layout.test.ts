@@ -3,7 +3,7 @@ import {  describe, it  } from "node:test";
 import {  AppErrorOps  } from "../../src/errors/app-error.js";
 import type { Result } from "../../src/errors/either.js";
 import {  agentDefinitionSchema  } from "../../src/domain/agent/model/agent-definition.schema.js";
-import {  SerializationDecode  } from "../../src/infra/serialization/decode.js";
+import {  SerializationDecode  } from "@/common/serialization/decode.js";
 import {  AgentPromptLayoutValidate  } from "../../src/domain/prompt/logic/validate-agent-prompt-layout.js";
 import {  tCore  } from "../helpers/core-i18n.js";
 import type { AppError } from "../../src/errors/app-error.js";

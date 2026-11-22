@@ -6,7 +6,7 @@
 
 import type { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import type { LlmToolDefinition } from "../ports/adapter.port.js";
-import { SerializationZodToJsonSchema } from "@/infra/serialization/zod-to-json-schema.js";
+import { SerializationZodToJsonSchema } from "@/common/serialization/zod-to-json-schema.js";
 
 export const ToolDefinitions = {
     /**

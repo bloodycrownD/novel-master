@@ -9,7 +9,7 @@ import { Guards } from "@/common/guards.js";
 import { agentDefinitionSchema } from "@/domain/agent/model/agent-definition.schema.js";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import { AgentPromptLayoutNormalize } from "@/domain/prompt/logic/normalize-agent-prompt-layout.js";
-import { SerializationDecode } from "@/infra/serialization/decode.js";
+import { SerializationDecode } from "@/common/serialization/decode.js";
 import type { StoredConfigHealth } from "./types.js";
 
 const REMOVED_FEATURE_KEYWORDS = [

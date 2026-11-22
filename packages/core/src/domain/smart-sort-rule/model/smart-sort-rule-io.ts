@@ -18,7 +18,7 @@
 import { z } from "zod";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { SerializationDecode } from "@/infra/serialization/decode.js";
+import { SerializationDecode } from "@/common/serialization/decode.js";
 import { SMART_SORT_CAPTURE_KINDS, type SmartSortCaptureKind, type SmartSortRule } from "./smart-sort-rule.js";
 
 /** Current bundle document schema version. */

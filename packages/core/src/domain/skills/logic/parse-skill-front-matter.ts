@@ -12,7 +12,7 @@ import { Coerce } from "@/common/coerce.js";
 import { Guards } from "@/common/guards.js";
 import type { MessageLike } from "@/common/i18n.js";
 import { LocalizedMessage } from "@/i18n/localized-message.js";
-import { SerializationParseText } from "@/infra/serialization/parse-text.js";
+import { SerializationParseText } from "@/common/serialization/parse-text.js";
 import { skillFrontMatterSchema } from "../model/skill.schema.js";
 
 /** front matter 解析结果（含有效性标记与无效原因；invalidReason 供 UI 翻译）。 */

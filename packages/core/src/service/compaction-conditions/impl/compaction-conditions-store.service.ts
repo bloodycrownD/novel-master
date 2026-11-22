@@ -4,7 +4,7 @@
  * @module service/compaction-conditions/impl/compaction-conditions-store.service
  */
 
-import { SerializationDecode } from "@/infra/serialization/decode.js";
+import { SerializationDecode } from "@/common/serialization/decode.js";
 import { compactionConditionsSchema } from "@/domain/compaction-conditions/model/compaction-conditions.schema.js";
 import { DEFAULT_HIDE_START_DEPTH, type CompactionConditions } from "@/domain/compaction-conditions/model/compaction-conditions.js";
 import { AppError, AppErrorOps } from "@/errors/app-error.js";

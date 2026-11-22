@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {  describe, it  } from "node:test";
-import {  SerializationDecode  } from "../../src/infra/serialization/decode.js";
+import {  SerializationDecode  } from "@/common/serialization/decode.js";
 import {  AppErrorOps  } from "../../src/errors/app-error.js";
 import {  sessionAgentConfigSchema  } from "../../src/domain/chat/model/session-agent-config.schema.js";
 import type { ZodType } from "zod";

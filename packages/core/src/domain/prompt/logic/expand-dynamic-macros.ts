@@ -8,8 +8,8 @@ import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
 import { DateTime } from "@/common/datetime.js";
-import { MacroRender } from "@/infra/prompt-template/macro-render.js";
-import { WeekCn } from "@/infra/prompt-template/week-cn.js";
+import { MacroRender } from "@/common/macro.js";
+
 
 /** dynamic 宏展开上下文。 */
 interface DynamicMacroContext {
@@ -48,7 +48,7 @@ export const DynamicMacrosExpansion = {
         }
         const root = {
             time: DateTime.localDateTime(now),
-            week_cn: WeekCn.format(now),
+            week_cn: DateTime.weekCn(now),
             filetree,
         };
         // MacroRender.render 已 Result 化（错误通道迁移四期）：Err 在本层转译收口（见 @returns，

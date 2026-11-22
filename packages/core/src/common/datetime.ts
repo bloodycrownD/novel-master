@@ -30,4 +30,11 @@ export const DateTime = {
 
     /** 两个时刻是否落在同一本地日历日。 */
     isSameDay: (a: Date, b: Date): boolean => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate(),
+
+    /**
+     * 本地中文星期标签（如「星期一」；原 prompt-template/week-cn 上收）。
+     * nm-style: keep-local —— 单点生产调用（$.week_cn 宏展开）但它是日期
+     * 格式化家族成员，内联回 expand-dynamic-macros 会退回 domain，与上收方向相反。
+     */
+    weekCn: (date: Date): string => date.toLocaleDateString("zh-CN", { weekday: "long" }),
 } as const;

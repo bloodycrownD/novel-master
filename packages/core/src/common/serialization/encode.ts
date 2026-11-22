@@ -1,7 +1,7 @@
 /**
  * Encode domain values to wire objects for persistence.
  *
- * @module infra/serialization/encode
+ * @module common/serialization/encode
  */
 
 import type { ZodType } from "zod";

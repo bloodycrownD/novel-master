@@ -7,7 +7,7 @@
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { LocalizedMessage } from "@/i18n/localized-message.js";
-import { SerializationDecode } from "@/infra/serialization/decode.js";
+import { SerializationDecode } from "@/common/serialization/decode.js";
 import { AgentToolPolicyValidator } from "./validate-agent-tool-policy.js";
 import type { AgentDefinition } from "../model/agent-definition.js";
 import { agentDefinitionSchema } from "../model/agent-definition.schema.js";

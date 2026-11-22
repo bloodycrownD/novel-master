@@ -20,7 +20,7 @@ import { VfsTreeCopy } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { LiveHeadRevisionSeeder } from "@/domain/vfs/logic/seed-live-head-revisions.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { SerializationDecode } from "@/infra/serialization/decode.js";
+import { SerializationDecode } from "@/common/serialization/decode.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { SessionFsServiceFactory, DeferredBlobGc } from "@/service/session-fs/create-session-fs-service.js";
 import { SessionKkvServiceFactory } from "@/service/session-kkv/create-session-kkv-service.js";

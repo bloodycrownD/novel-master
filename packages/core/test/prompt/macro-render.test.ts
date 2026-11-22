@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import {  describe, it  } from "node:test";
 import {  DateTime  } from "../../src/common/datetime.js";
 import {  AppErrorOps  } from "../../src/errors/app-error.js";
-import {  MacroRender  } from "../../src/infra/prompt-template/macro-render.js";
+import {  MacroRender  } from "../../src/common/macro.js";
 import {  unwrap  } from "../helpers/result-unwrap.js";
 
 const fixedNow = new Date(2026, 4, 24, 15, 30, 45);

@@ -159,7 +159,7 @@ export type { CurlCommandDraft, CurlParseError } from "./domain/tool/builtin/sea
 /**
  * 基础序列化能力：供跨端配置读写共用。
  */
-export { SerializationParseText, type TextFormat } from "./infra/serialization/parse-text.js";
-export { SerializationStringifyText } from "./infra/serialization/stringify-text.js";
-export { SerializationDecode } from "./infra/serialization/decode.js";
-export { SerializationEncode, type EncodableSchema } from "./infra/serialization/encode.js";
+export { SerializationParseText, type TextFormat } from "@/common/serialization/parse-text.js";
+export { SerializationStringifyText } from "@/common/serialization/stringify-text.js";
+export { SerializationDecode } from "@/common/serialization/decode.js";
+export { SerializationEncode, type EncodableSchema } from "@/common/serialization/encode.js";

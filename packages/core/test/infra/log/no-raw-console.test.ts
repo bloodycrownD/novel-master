@@ -17,7 +17,13 @@ import {  describe, it  } from "node:test";
  */
 const CALL_FORM = /\bconsole\.(log|info|warn|error|debug|trace)\s*\(/;
 const SRC_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "src");
-const ALLOWED = new Set(["infra/log/logger.ts", "domain/abort/logic/create-abort-scope.ts"]);
+const ALLOWED = new Set([
+    "infra/log/logger.ts",
+    "domain/abort/logic/create-abort-scope.ts",
+    // common/events.ts：SimpleEventBus 的 onHandlerError 默认兜底告警（common 不依赖
+    // infra/log，需要接 logger 的装配点注入回调覆盖）；与 create-abort-scope 同款分层约束豁免。
+    "common/events.ts",
+]);
 
 function collectTsFiles(dir: string): string[] {
     const out: string[] = [];

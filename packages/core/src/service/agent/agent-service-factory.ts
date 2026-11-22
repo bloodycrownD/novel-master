@@ -12,7 +12,7 @@ import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import type { ModelRequestService } from "../provider/model-request.port.js";
-import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
+import type { SimpleEventBus } from "@/common/events.js";
 import type { SessionKkvService } from "../session-kkv/session-kkv.port.js";
 import type { WorkplaceService } from "../workplace/workplace.port.js";
 import type { CompactionConditionEvaluator } from "../compaction-conditions/compaction-factory.js";

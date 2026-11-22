@@ -7,8 +7,8 @@
 import type {TdbcConnection} from "@/infra/tdbc/ports/connection.port.js";
 import {SqlTemplateParser} from "@/infra/sql-template/index.js";
 import {TdbcTemplate} from "@/infra/tdbc/logic/template-helper.js";
-import {SerializationDecode} from "@/infra/serialization/decode.js";
-import {SerializationEncode} from "@/infra/serialization/encode.js";
+import {SerializationDecode} from "@/common/serialization/decode.js";
+import {SerializationEncode} from "@/common/serialization/encode.js";
 import {AppError} from "@/errors/app-error.js";
 import {Result} from "@/errors/either.js";
 import {AgentDefinitionSql} from "@/infra/sql-template/generated/agent_definition.mapper.generated.js";

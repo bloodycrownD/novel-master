@@ -1,7 +1,7 @@
 /**
  * Decode unknown via Zod schema.
  *
- * @module infra/serialization/decode
+ * @module common/serialization/decode
  */
 
 import type { ZodError, ZodType } from "zod";

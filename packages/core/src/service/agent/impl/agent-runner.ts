@@ -36,7 +36,7 @@ import { LogFactory } from "@/infra/log/logger.js";
 import type { AgentRunOptions, AgentRunner as AgentRunnerPort } from "../agent.port.js";
 import { AbortScopeFactory } from "@/domain/abort/logic/create-abort-scope.js";
 import { EphemeralOverlayAgentSession } from "./ephemeral-overlay-agent-session.js";
-import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
+import type { SimpleEventBus } from "@/common/events.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import { WorkplaceDisplayAssembler, type AssembleWorkplaceDisplayDeps, type AssembleWorkplaceDisplayOptions } from "@/service/workplace/assemble-workplace-display.js";
 import type { CompactionEvaluationContext } from "@/domain/compaction-conditions/ports/compaction-condition-trigger.port.js";

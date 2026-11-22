@@ -70,4 +70,4 @@ export type {
     ModelRequestService,
     ModelRequestOptions,
 } from "../service/provider/model-request.port.js";
-export { SerializationZodToJsonSchema } from "../infra/serialization/zod-to-json-schema.js";
+export { SerializationZodToJsonSchema } from "@/common/serialization/zod-to-json-schema.js";

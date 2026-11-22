@@ -37,7 +37,7 @@ import {AGENT_TOOL_NAME} from "@/domain/tool/builtin/agent-tool.js";
 import type {SearchConfigStore} from "@/domain/tool/builtin/search/search-config.js";
 import {ToolRegistry} from "@/domain/tool/logic/tool-registry.js";
 import type {VfsScope} from "@/domain/vfs/logic/vfs-path-mapper.js";
-import type {SimpleEventBus} from "@/infra/events/simple-event-bus.js";
+import type {SimpleEventBus} from "@/common/events.js";
 import {AppError, AppErrorOps} from "@/errors/app-error.js";
 import {AbortScopeFactory} from "@/domain/abort/logic/create-abort-scope.js";
 import type {AbortScope} from "@/domain/abort/model/abort-scope.js";

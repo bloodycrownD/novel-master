@@ -1,8 +1,8 @@
-export { SimpleEventBus } from "../infra/events/simple-event-bus.js";
+export { SimpleEventBus } from "@/common/events.js";
 export type {
     EventBus,
     EventSubscription,
-} from "../infra/events/simple-event-bus.js";
+} from "@/common/events.js";
 export {
     EVENT_AGENT_RUN_STARTED,
     EVENT_AGENT_RUN_FINISHED,

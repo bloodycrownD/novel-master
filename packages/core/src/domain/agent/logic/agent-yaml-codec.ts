@@ -10,10 +10,10 @@
 
 import type { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { SerializationDecode } from "@/infra/serialization/decode.js";
-import { SerializationEncode } from "@/infra/serialization/encode.js";
-import { SerializationParseText } from "@/infra/serialization/parse-text.js";
-import { SerializationStringifyText } from "@/infra/serialization/stringify-text.js";
+import { SerializationDecode } from "@/common/serialization/decode.js";
+import { SerializationEncode } from "@/common/serialization/encode.js";
+import { SerializationParseText } from "@/common/serialization/parse-text.js";
+import { SerializationStringifyText } from "@/common/serialization/stringify-text.js";
 import type { AgentDefinition } from "../model/agent-definition.js";
 import { agentDefinitionSchema } from "../model/agent-definition.schema.js";
 

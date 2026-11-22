@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import {  describe, it  } from "node:test";
 import {  EVENT_AGENT_STREAM_TEXT_DELTA, EVENT_AGENT_STREAM_THINKING_DELTA, EVENT_AGENT_STREAM_TOOL_USE, EVENT_AGENT_STREAM_USAGE, type AgentStreamTextDeltaPayload, type AgentStreamThinkingDeltaPayload, type AgentStreamToolUsePayload, type AgentStreamUsagePayload  } from "../../src/domain/events/model/event-types.js";
-import {  SimpleEventBus  } from "../../src/infra/events/simple-event-bus.js";
+import {  SimpleEventBus  } from "@/common/events.js";
 import {  AgentRunner  } from "../../src/service/agent/impl/agent-runner.js";
 
 const RUN_ID = "run-test-uuid";

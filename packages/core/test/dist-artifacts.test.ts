@@ -9,7 +9,7 @@ const distRoot = join(fileURLToPath(new URL("..", import.meta.url)), "dist");
 /** Paths re-exported from dist/index.js for event-bus iteration (Metro / CLI). */
 const REQUIRED_DIST_FILES = [
     "domain/compaction-conditions/model/compaction-conditions.schema.js",
-    "infra/events/simple-event-bus.js",
+    "common/events.js",
 ] as const;
 
 describe("core dist artifacts", () => {

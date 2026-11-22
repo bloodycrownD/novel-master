@@ -4,7 +4,7 @@
  * @module domain/provider/repositories/impl/kkv-model-suggestion.repository
  */
 
-import { SerializationDecode } from "@/infra/serialization/decode.js";
+import { SerializationDecode } from "@/common/serialization/decode.js";
 import { AppErrorOps, type AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { KkvReaderPort } from "@/domain/kkv/ports/kkv-reader.port.js";

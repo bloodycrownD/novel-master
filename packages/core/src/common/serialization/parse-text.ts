@@ -1,7 +1,7 @@
 /**
  * Parse YAML or JSON text to unknown.
  *
- * @module infra/serialization/parse-text
+ * @module common/serialization/parse-text
  */
 
 import { parse as parseYaml } from "yaml";

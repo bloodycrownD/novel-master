@@ -10,7 +10,7 @@
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { MessageLike } from "@/common/i18n.js";
-import { MacroScan } from "@/infra/prompt-template/macro-scan.js";
+import { MacroScan } from "@/common/macro.js";
 
 /** dynamic 区允许的 `$` 根宏键（与 UI 芯片白名单一致）。 */
 export const ALLOWED_DYNAMIC_ROOT_MACROS = ["time", "week_cn", "filetree"] as const;

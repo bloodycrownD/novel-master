@@ -1,11 +1,14 @@
 /**
- * Scans prompt template strings for `{{ ... }}` actions (comments and fields).
+ * 文本模板宏原语：`{{ ... }}` 动作扫描（MacroScan）与 Go-style 字段宏替换
+ * （MacroRender）。纯文本变换，与 prompt 业务无关（prompt-template 的
+ * 原位是命名错挂，2026-11-23 上收 common）。
  *
- * @module infra/prompt-template/macro-scan
+ * @module common/macro
  */
 
-import { AppError } from "../../errors/app-error.js";
-import { Result } from "../../errors/either.js";
+
+import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 
 type MacroActionKind = "comment" | "dot" | "root";
 
@@ -100,5 +103,82 @@ export const MacroScan = {
         }
 
         return Result.ok(actions);
+    },
+} as const;
+
+
+interface MacroRenderContext {
+    readonly dot: Readonly<Record<string, unknown>>;
+    readonly root: Readonly<Record<string, string>>;
+    /** Dot fields that resolve to "" when missing. */
+    readonly optionalDotFields?: readonly string[];
+}
+
+/**
+ * `{{ ... }}` 宏渲染。
+ */
+export const MacroRender = {
+    /**
+   * Replaces `{{ ... }}` macros in `template` using dot and root contexts;
+   * 模板引用了不存在的字段是用户内容错误，沿 `Result.err` 回传，不抛。
+   */
+    render(template: string, ctx: MacroRenderContext): Result<string, AppError> {
+        const scanned = MacroScan.scan(template);
+        if (!scanned.ok) {
+            return Result.err(scanned.error);
+        }
+        const actions = scanned.value;
+        if (actions.length === 0) {
+            return Result.ok(template);
+        }
+
+        const optionalTopLevel = ctx.optionalDotFields != null ? new Set(ctx.optionalDotFields) : undefined;
+
+        let out = "";
+        let cursor = 0;
+
+        for (const action of actions) {
+            out += template.slice(cursor, action.start);
+
+            if (action.kind === "comment") {
+                cursor = action.end;
+                continue;
+            }
+
+            let resolved: string;
+            if (action.kind === "dot") {
+                if (action.path.length === 1 && optionalTopLevel?.has(action.path[0]!) === true) {
+                    const value = ctx.dot[action.path[0]!];
+                    resolved = value == null || typeof value !== "string" ? "" : value;
+                } else {
+                    let current: unknown = ctx.dot;
+                    for (const segment of action.path) {
+                        if (current == null || typeof current !== "object" || Array.isArray(current)) {
+                            return Result.err(new AppError("PROMPT_UNKNOWN_FIELD", { detail: `unknown field: .${action.path.join(".")}`, offset: action.start }));
+                        }
+                        current = (current as Record<string, unknown>)[segment];
+                    }
+                    if (current == null) {
+                        return Result.err(new AppError("PROMPT_UNKNOWN_FIELD", { detail: `unknown field: .${action.path.join(".")}`, offset: action.start }));
+                    }
+                    if (typeof current !== "string") {
+                        return Result.err(new AppError("PROMPT_UNKNOWN_FIELD", { detail: `field .${action.path.join(".")} is not a string`, offset: action.start }));
+                    }
+                    resolved = current;
+                }
+            } else {
+                const value = ctx.root[action.path[0]!];
+                if (value == null) {
+                    return Result.err(new AppError("PROMPT_UNKNOWN_FIELD", { detail: `unknown field: $.${action.path[0]!}`, offset: action.start }));
+                }
+                resolved = value;
+            }
+            out += resolved;
+
+            cursor = action.end;
+        }
+
+        out += template.slice(cursor);
+        return Result.ok(out);
     },
 } as const;

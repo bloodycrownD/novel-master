@@ -1,7 +1,7 @@
 /**
  * Minimal Zod ? JSON Schema conversion (tool parameters, wire schemas).
  *
- * @module infra/serialization/zod-to-json-schema
+ * @module common/serialization/zod-to-json-schema
  */
 
 import { z } from "zod";

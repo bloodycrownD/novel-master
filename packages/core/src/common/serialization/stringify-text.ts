@@ -1,12 +1,14 @@
 /**
  * Serialize unknown to YAML or JSON text.
  *
- * @module infra/serialization/stringify-text
+ * @module common/serialization/stringify-text
  */
 
 import { stringify as stringifyYaml } from "yaml";
 
-export type TextFormat = "yaml" | "json";
+import type { TextFormat } from "./parse-text.js";
+
+export type { TextFormat };
 
 /**
  * 值 → YAML / JSON 文本序列化。
