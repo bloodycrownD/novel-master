@@ -31,9 +31,9 @@ date: 2026-11-22
 
 - **Phase A 可见化+取证**（**已完成，2026-11-22**）：注册失败可见化落地（`native.ts` registerWith 失败 warn + `setup-llm-fetch.ts` 注册结果 warn）；一次性设备取证**已定死根因**——不是「注册面缺失」而是**构建版本错位 × 探测自缚**：真机 APK（11-12 构建）Kotlin 方法面 = sseConnect/sseAbort/request 三方法（dex 实证无 `requestAbort`，该方法 11-17 `17cd4d55b` 才入仓），而 11-17 后 JS `isAvailable()` 探测升为四方法 → `requestAbort` 探测失败 → 流式永不接管。且 `requestAbort` 是非流式 shim 的取消方法，流式 transport 根本不用（流式取消走 `sseAbort`）。
 - **Phase B 接管修复**（**已完成，2026-11-22**）：`isAvailable()`/`createBridge` 探测与解构降为流式必需的 `sseConnect/sseAbort`；`LlmSseNativeBridge` 类型收窄为 `Pick<…, "sseConnect"|"sseAbort"> & {events}`；`apps/mobile/__tests__/llm-sse-native-bridge-interop.test.ts` 增防回归用例（requestAbort 缺失仍注册）。**真机实证**：`注册结果: 成功(registered)`、`transport: "native"`、`native first chunk`（真机史上首次接管）。重打 APK（含 11-17 Kotlin）仍在后续版本对齐时自然发生，不阻塞。
-- **Phase C WHATWG 解码器**：Kotlin 侧新建纯函数流式解码器（malformed→FFFD、EOF 残尾→FFFD、永不丢块永不错位），替换 `pumpStream` 现有 okio `readUtf8(safe)` 隐式 REPLACE 语义；建 JVM 单测基建（抄 `tokenizer-driver-rn/android/src/test` 先例，显式推翻 `llm-stream-native` spec:65 的「不建基建」登记）。**mode G 终验基线（2026-11-22 实测）**：native 接管后 FFFD=138（有声）vs Node WHATWG 60——REPLACE 粒度差是本阶段的量化验收对象（目标：FFFD 计数与 WHATWG oracle 一致）。
-- **Phase D 验收资产收编**：`mock-openai-utf8-probe.mjs` 的仓外依赖（`D:/tmp/replay-text.txt`）迁入 `e2e/fixtures/`；Node WHATWG 对照脚本（`D:/tmp/whatwg-compare.js`）收编为 `e2e/scripts/whatwg-utf8-oracle.mjs` 并参数化；probe 提示文案补 E/F/G；端口参数化。
-- **Phase E 真机验收**：mode G 注入流经 native 接管后落库，与 Node oracle 输出**逐字符一致**（含 FFFD 标记、零丢段）。
+- **Phase C WHATWG 解码器**（**已完成，2026-11-23，commit `edf2ec963`**）：`Utf8StreamingDecoder.kt` 落地（WHATWG UTF-8 decoder 状态机：maximal subpart 每段恰 1 FFFD、越界字节前置回流重判、EOF 残尾 1 FFFD、carry 内聚进 decoder），替换 `pumpStream` 的 `completeUtf8PrefixLength`+`readUtf8` 组合（两者退役）。JVM 单测 13 例全绿（WHATWG 官方形态 + 任意切分不变性 + mode G 粒度动态断言）；JVM 基建按 tokenizer-driver-rn 先例（`testImplementation junit:4.13.2`）。
+- **Phase D 验收资产收编**（部分完成）：probe 判据已大小写不敏感（真机小写 `modeg` 触发，绕开 adb input 打不出大写的限制）；`replay-text.txt` / `whatwg-utf8-oracle.mjs` 仍在 `D:/tmp`，待迁入 `e2e/fixtures/` 与 `e2e/scripts/` 并参数化端口。
+- **Phase E 真机验收**（**已完成，2026-11-23**）：重打 debug APK（`adb push`+`pm install` 通道；`adb install` streaming 在荣耀卡死）→ 注册成功、`transport=native` → mode G 注入流落库 **1847 字符 / FFFD=60，与 Node WHATWG oracle 逐字符一致（相似度 1.0000）**；干净回放流 1787=原文逐字零损失。三代对照：XHR 1628/FFFD0（无声丢段）→ Java REPLACE 1856/138（假标记）→ WHATWG 1847/60（精确）。
 
 ## 最终项目结构
 

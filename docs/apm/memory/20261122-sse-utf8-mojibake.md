@@ -22,3 +22,9 @@
 - 真机实证链：`注册结果: 成功(registered)`（logcat ×2）→ 切「测试/glm-5.3」模型发 `modeGnativecheck` → 文件日志 `transport: "native"` + `native first chunk {bytes:35}`（**真机史上首次接管**）。
 - mode G 终验（native 接管后 vs 修复前 XHR）：落库 1856/FFFD=138（有声标记+净内容 1718） vs 1628/FFFD=0（无声+净内容 1628）；Node WHATWG 参照 1847/60。**「无声损坏」已死**；剩余 REPLACE 粒度差（138 vs 60）是 spec Phase C（Utf8StreamingDecoder）的量化验收对象。
 - 排查坑四连：① logcat 中文串被转义（grep 必须用 ASCII 前缀如 `[nm-llm]`）；② MSYS 把 `/sdcard/...` 转成 Windows 路径导致 uiautomator dump 全空（必须 `MSYS_NO_PATHCONV=1`）；③ 会话模型已删除时消息「发出即失败」且不产生任何 sse-transport 日志（先查 DB 的 `[生成失败] Model not saved`）；④ 锁屏下 force-stop 重启的 app JS 不跑（需用户解锁）。
+
+### 2026-11-23 凌晨：Phase C/E 收官——WHATWG 解码器真机逐字符对齐 oracle
+
+- `Utf8StreamingDecoder.kt`（commit `edf2ec963`）：WHATWG UTF-8 decoder 状态机（maximal subpart 每段恰 1 FFFD、越界字节前置回流重判、EOF 残尾 1 FFFD、carry 内聚），退役 `completeUtf8PrefixLength`+`readUtf8`。JVM 13 例全绿（两次红均为测试自身注入点数算错，decoder 无错）。
+- **真机终验逐字符一致**：mode G 注入流落库 1847/FFFD=60 == Node WHATWG oracle（1.0000）；干净流 1787=原文逐字零损失。三代对照：XHR 1628/FFFD0（无声丢段）→ Java REPLACE 1856/138（假标记）→ WHATWG 1847/60（精确）。spec Phase A/B/C/E 全完成，Phase D 剩 oracle/replay 收编进仓。
+- 新坑记录：① `adb install` streaming 在荣耀卡死（十几分钟无响应）→ 通道重启后 `adb push`（2.9s/191MB）+ `pm install -r -d` 稳定；② MSYS 对 `/data/...` 同样转换（push 目标被推进 git 安装目录）——**adb 设备侧路径一律 `MSYS_NO_PATHCONV=1`，此时本地路径须写 Windows 形式 `D:/...`**；③ `adb kill-server` 清空 reverse 映射（9753 probe 连不上时先查 reverse）；④ `adb input text` 在该荣耀上随机丢字且打不出大写（`modeG`→`modeatw`、`modeg`→`mg`）——关键注入用逐键 `input keyevent`（KEYCODE m=41/o=43/d=32/e=33/g=35），probe 判据改大小写不敏感；⑤ python heredoc 双层转义：工具层把 `\\uFFFD` 降级成 `\uFFFD`，python 单引号串又把它转义回 FFFD 字符本身——需要写字面反斜杠时用 `chr(92)+'uFFFD'` 拼接。
