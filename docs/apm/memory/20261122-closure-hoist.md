@@ -43,3 +43,16 @@
 - signatures=0、top-let=0、throw-audit PASS（UNTRIAGED 0）、dup gate PASS（95+141，+0/-0）、
   typecheck 15/15、core 960 / desktop 774 / mobile 2384 全绿
 - SQL 模板全仓统一 R5 多行风格（298 处），`SQL_HEAD_RE`/E5 双豁免进 signatures 规则
+
+## 后补：AbortError 通道收敛（w3b，805aed661，tag 移至本提交）
+用户质询「AbortError 是 error（该收 AppError）还是控制流（该收 Outcome）」揭出两笔债并落地：
+1. **T2 判据 namespace 化盲区**：throw-audit 只认旧名 `createAbortError()`，p23 工厂 object
+   namespace 化（AbortError.create()）后 16 站点全量漏网——判据改双形态（isAbortFactoryText）。
+   教训：**改名/namespace 化迁移必须同步迁移检测器判据的文本匹配**。
+2. **VIOLATION 4 处 Outcome 化**：fork/copy（事务外检查点中断沿返回值上行，事务回调内 throw
+   保持 P1）、export-database-backup.toPath（「Promise 无 Result 通道」理由不成立——签名自选）、
+   mobile exportViaPicker/importViaPicker 入口检查点（返回 'cancelled'/'reloaded' 字面量）。
+3. AbortError 定位写死在 create-abort-error.ts：**平台线格式，不是通道**——语义在通道两端表达
+   （throw 点翻译自 Outcome 检查、catch 点转回控制流）。
+4. 新坑：**async try-finally 裸 `return promise` 的 finally 先于 settle 执行**（release 提前放行
+   busy，被 ic-20 busy 采样测试抓回）——try-finally 中必须 `return await`。
