@@ -4,37 +4,37 @@
  * @module domain/chat/model/project-agent-config.schema
  */
 
-import { z } from "zod";
-import { AppError } from "@/errors/app-error.js";
-import { Result } from "@/errors/either.js";
-import { agentDefinitionSchema } from "@/domain/agent/model/agent-definition.schema.js";
-import type { ProjectAgentConfig } from "./project-agent-config.js";
+import {z} from "zod";
+import {AppError} from "@/errors/app-error.js";
+import {Result} from "@/errors/either.js";
+import {agentDefinitionSchema} from "@/domain/agent/model/agent-definition.schema.js";
+import type {ProjectAgentConfig} from "./project-agent-config.js";
 
 const projectAgentModeSchema = z.enum(["follow", "custom"]);
 
 const projectAgentConfigDocumentSchema = z.object({
-  mode: projectAgentModeSchema,
-  definition: agentDefinitionSchema.optional(),
+    mode: projectAgentModeSchema,
+    definition: agentDefinitionSchema.optional(),
 }).strict().superRefine((value, ctx) => {
-  if (value.mode === "custom" && value.definition == null) {
-    ctx.addIssue({
-      code: "custom",
-      message: "error.chat.project_agent_definition_required",
-      path: ["definition"],
-    });
-  }
+    if (value.mode === "custom" && value.definition == null) {
+        ctx.addIssue({
+            code: "custom",
+            message: "error.chat.project_agent_definition_required",
+            path: ["definition"],
+        });
+    }
 });
 
 /** 列内 JSON → {@link ProjectAgentConfig}；含 `toWire` 用于持久化。 */
 export const projectAgentConfigSchema = Object.assign(projectAgentConfigDocumentSchema, {
-  toWire: (config: ProjectAgentConfig): Result<Record<string, unknown>, AppError> => {
-    const definition = config.definition != null ? agentDefinitionSchema.toWire(config.definition) : undefined;
-    if (definition != null && !definition.ok) return Result.err(definition.error);
-    return Result.ok({
-      mode: config.mode,
-      ...(definition != null && definition.ok ? { definition: definition.value } : {}),
-    });
-  },
+    toWire: (config: ProjectAgentConfig): Result<Record<string, unknown>, AppError> => {
+        const definition = config.definition != null ? agentDefinitionSchema.toWire(config.definition) : undefined;
+        if (definition != null && !definition.ok) return Result.err(definition.error);
+        return Result.ok({
+            mode: config.mode,
+            ...(definition != null && definition.ok ? {definition: definition.value} : {}),
+        });
+    },
 });
 
-export { projectAgentModeSchema };
+export {projectAgentModeSchema};
