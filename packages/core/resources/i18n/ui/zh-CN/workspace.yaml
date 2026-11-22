@@ -1,0 +1,185 @@
+  nav:
+    tab_chat: 对话
+    tab_profile: 我的
+    chat: 会话
+    profile_config: 配置
+    agent_settings: 智能体配置
+    view_prompt: 查看提示词
+    turn_detail: 轮详情
+    providers: 服务商配置
+    provider_create: 添加服务商
+    model_management: 模型管理
+    sampling: 采样配置
+    storage: 存储配置
+    cloud_sync: 云同步
+    cloud_storage: 云存储配置
+    cloud_storage_setup: 云端存储设置
+    search_engines: 搜索配置
+    file_browser: 文件浏览器
+    smart_sort_rules: 智能排序规则
+    rule_editor: 规则详情
+    file_editor: 编辑文件
+    session_detail: 会话详情
+    skills: 技能
+    prompt_editor: 编辑提示词
+    skills_manage: 技能管理
+    skill_detail: 技能详情
+    subagent_session: 子会话
+    subagent_session_view: 子智能体会话
+    token_stats: 数据统计
+    about: 关于 Novel Master
+    settings: 设置
+    settings_categories: 设置分类
+    settings_general: 常规
+    workspace: 工作区
+    settings_advanced: 高级
+    settings_data: 数据
+    settings_backup: 备份与恢复
+    settings_smart_sort: 智能排序
+    settings_app: 应用
+    global_actions: 全局操作
+    pane_visibility: 栏位显示
+    pane_left: 左侧栏（文件预览）
+    pane_center: 中间栏（工作区）
+    pane_right: 右侧栏（聊天）
+    pane_toggle_aria: "显示或隐藏{label}"
+    toggle_light_theme: 切换浅色主题
+    toggle_dark_theme: 切换深色主题
+    toggle_theme: 切换主题
+    open_settings: 打开设置
+    close_settings: 关闭设置
+    back_level: 返回上一级
+    chat_nav_aria: Chat 导航
+    chat_content_aria: Chat 内容
+    workspace_session: 会话工作区
+    workspace_chat: 聊天工作区
+    untitled_session: 未命名会话
+    this_session: 该会话
+    project_workspace_title: 项目工作区
+    project_list_menu: 项目列表
+    session_actions: 会话操作
+    project_actions: 项目操作
+    resize_left_aria: 调整预览区与工作区宽度
+    resize_right_aria: 调整工作区与聊天区宽度
+  # —— chat：会话屏：composer/消息操作/文件·技能引用（mobile chat-tab + desktop features/chat；ui.transcript.* 已覆盖转录层） ——
+  project:
+    title: 项目
+    new_title: 新建项目
+    rename_title: 重命名项目
+    name_label: 项目名称
+    name_placeholder: 如 科幻小说创作
+    delete_select_hint: 选择要删除的项目（将同时移除其下所有会话）
+    delete_batch_confirm: "确定删除选中的 {count} 个项目？将同时移除其下所有会话。"
+    delete_confirm_named: "确定删除项目「{name}」？将同时移除其下所有会话。"
+    empty_mobile: 暂无项目，点击「新建」开始。
+    empty_desktop: 暂无项目
+    new_session: 新建会话
+    rename_session: 重命名会话
+    empty_sessions: 暂无会话
+    select_sessions_hint: 选择要删除的会话
+  # —— update：更新检查（mobile UpdateCheckHost·UpdateCheckResultModal·AboutScreen + desktop Update*Modal·AboutView·SettingsViews） ——
+  update:
+    available_title: 发现新版本
+    available_line: "发现新版本 {version}"
+    open_releases_suffix: 将在浏览器中打开 GitHub 发行页下载。
+    open_releases_hint: 将在浏览器中打开 GitHub 发行页，请下载对应平台的安装包。
+    check_title: 版本检查
+    up_to_date: 当前已是最新版本
+    check_failed: 无法检查更新，请检查网络
+    later: 稍后
+    go_download: 前往下载
+    remind_off_today: 今日不再提醒
+    section: 更新
+    auto_check: 自动检查更新
+    check_now: 检查更新
+    checking: 检查中…
+    check_now_desktop: 立即检查
+    new_version_line: "有新版本 {version}"
+    last_check_failed: 上次检查失败
+  # —— about：关于页（mobile AboutScreen + desktop AboutView） ——
+  about:
+    version: "版本 {version}"
+    links_section: 项目链接
+    github_repo: GitHub 仓库
+    releases: 发行版
+    license: 许可证
+    # —— 波 3c-a 补键：波 3-2 MISS 收尾（D1 settings-nav 纯「关于」） ——
+    title: 关于
+  # —— runtime：启动/加载屏（mobile novel-master-context·ChatConversationWebView 错误态 + desktop NovelMasterProvider） ——
+  runtime:
+    loading: 正在加载…
+    boot_failed: 启动失败
+    reload: 重载
+    load_failed: 对话页加载失败
+    timeout_hint: 页面加载超时，点重载恢复；若持续出现请重启应用
+  # —— notification：生成结束/进行中系统通知（mobile agent-finished-notification·novel-master-context） ——
+  notification:
+    channel_finished: 生成结束通知
+    channel_running: 生成进行中
+    finished_title: 生成完成
+    failed_title: 生成失败
+    body_finished: "「{session}」生成结束"
+    body_interrupted: "「{session}」的生成已中断"
+    body_finished_short: 本次生成已结束
+    body_interrupted_short: 本次生成已中断
+    idle_title: novel master · 空闲
+    running_title: "正在生成 · {session}"
+    running_title_plain: 正在生成
+    running_count: "共 {count} 个会话生成中"
+    running_hint: 完成后自动结束；期间请勿强行关闭应用
+  # —— rich_document：rich-document webview 管线（r6-exemptions 桥接面盘点：1 处未立键，波 3-1 随第二座桥补齐） ——
+  menu:
+    file: 文件
+    quit: 退出
+    edit: 编辑
+    undo: 撤销
+    redo: 重做
+    cut: 剪切
+    view: 视图
+    reload: 重新加载
+    dev_tools: 开发者工具
+    fullscreen: 全屏
+    window: 窗口
+    minimize: 最小化
+    close_window: 关闭窗口
+    help: 帮助
+    open_logs_dir: 打开日志目录
+    export_diagnostics: 导出诊断包
+    about: 关于
+    version_line: "版本 {version}"
+
+# —— chat：locales JSON 并轨（i18n 双轨收敛；段内扁平点分键）——
+
+# —— en-US ——
+  storage:
+    space_section: 存储空间
+    space_desc: 数据库文件体积与清理可回收的空间
+    db_size: 库体积
+    reclaimable: 可回收
+    cloud_entry: 云端配置
+    cleanup_section: 数据清理
+    cleanup_action: 清理数据库空间
+    cleanup_confirm: 将回收缓存冗余并压缩数据库文件，耗时随库体积增长（可能数十秒），期间请勿关闭应用，清理过程可能临时占用额外磁盘空间。是否继续？
+    cleanup_start: 开始清理
+    cleanup_done: "清理完成：{before} → {after}"
+    cleanup_desktop_desc: "回收缓存冗余与空闲页并压缩数据库文件。当前库体积 {before} · 可回收约 {after}"
+    cleanup_confirm_desktop: 清理将回收缓存冗余并压缩数据库文件，耗时随库体积增长（大库可能数十秒），期间应用可能短暂无响应；完成后磁盘占用通常会下降。确定继续？
+    cleanup_confirm_title_desktop: 确认清理
+    export_db: 导出数据库
+    export_desc: 将当前数据库导出为 .nmbackup 文件，可与 mobile 互通。
+    share_backup: 分享备份文件
+    export_db_done: 数据库已导出；备份文件包含聊天记录明文，请妥善保管
+    export_db_done_desktop: 已导出数据库
+    export_logs: 导出日志
+    share_logs: 分享日志文件
+    logs_exported: 日志已导出
+    import_db: 导入数据库
+    import_desc_desktop: 用备份文件完全替换当前数据库。本机服务商与 API Key 将保留，备份中的服务商配置不会导入。操作不可撤销。
+    replace_all: 完全替换
+    import_confirm_mobile: 将用所选备份完全替换当前应用数据（项目、会话、消息等）。本机服务商与 API Key 将保留，备份中的服务商配置不会导入。此操作不可撤销，是否继续？
+    import_confirm_desktop: 导入将完全替换当前数据库；本机服务商与 API Key 将保留，备份中的服务商配置不会导入。确定继续？
+    import_confirm_title_desktop: 确认导入
+    continue_pick: 继续选择文件
+    reloading: 正在重新加载，请稍候…
+    imported_done: 已导入并重新加载
+  # —— vfs：工作区文件管理/导入导出/目录规则/预览编辑/批注（mobile Vfs* + desktop workspace 组件群 + FileMarkdownPreview·PreviewAnnotateUi·workspace-actions 等） ——

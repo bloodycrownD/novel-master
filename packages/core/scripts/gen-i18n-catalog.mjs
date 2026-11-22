@@ -6,7 +6,7 @@
  * webview「构建期内嵌」先例推广到全宿主）。YAML 仍是唯一真源；本脚本在
  * catalog 变更后手动重跑，catalog.test.ts 断言生成物与 YAML 同步防漂移。
  */
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { parse } from "yaml";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -34,28 +34,52 @@ function flatten(node, prefix, out) {
 }
 
 /**
- * i18n 按域拆分：resources/i18n/{error,label,ui,chat,settings}.yaml，文件名 = 顶层段，
- * 每文件顶层 zh-CN: / en-US: locale 段、段下保留完整段子树（与旧单文件同构，纯物理拆分）。
+ * i18n 按域拆分：resources/i18n/{error,label,chat,settings}.yaml + resources/i18n/ui/*.yaml。
+ * 单文件域 = 文件名承载域层；子目录域（ui/）= 目录名承载域层、locale 子目录承载语言、*.yaml 按语义族物理拆分（生成时合并）。
+ * 每文件/子目录文件顶层 zh-CN: / en-US: locale 段、段下保留完整段子树（与旧单文件同构，纯物理拆分）。
  */
-const DOMAIN_FILES = ["error", "label", "ui", "chat", "settings"];
+const DOMAIN_FILES = ["error", "label", "chat", "settings"];
+const DOMAIN_DIRS = ["ui"];
 const LOCALES = ["zh-CN", "en-US"];
+
+function loadDomainDoc(domain, path) {
+  const doc = parse(readFileSync(path, "utf8")) ?? {};
+  const seenLocales = Object.keys(doc);
+  if (seenLocales.sort().join(",") !== [...LOCALES].sort().join(",")) {
+    throw new Error(`${path} 顶层必须且只能是 ${LOCALES.join(" / ")} locale 段，实际：${seenLocales.join(" / ")}`);
+  }
+  for (const locale of LOCALES) {
+    const segment = doc[locale];
+    if (segment == null || typeof segment !== "object" || Array.isArray(segment)) throw new Error(`${path} 缺 ${locale} 段`);
+    // locale 段下直接是域内容（域层由文件名/目录名承载，组装时补 ${domain}. 前缀）；同名子层说明双层嵌套，报错。
+    if (Object.keys(segment).includes(domain)) {
+      throw new Error(`${path} 的 ${locale} 段下不应再嵌套 ${domain}: 层（域层由文件名承载）`);
+    }
+  }
+  return doc;
+}
 
 function loadGroups() {
   const flat = { "zh-CN": {}, "en-US": {} };
   for (const domain of DOMAIN_FILES) {
-    const doc = parse(readFileSync(join(catalogDir, `${domain}.yaml`), "utf8")) ?? {};
-    const seenLocales = Object.keys(doc);
-    if (seenLocales.sort().join(",") !== [...LOCALES].sort().join(",")) {
-      throw new Error(`${domain}.yaml 顶层必须且只能是 ${LOCALES.join(" / ")} locale 段，实际：${seenLocales.join(" / ")}`);
-    }
+    const doc = loadDomainDoc(domain, join(catalogDir, `${domain}.yaml`));
+    for (const locale of LOCALES) Object.assign(flat[locale], flatten(doc[locale], domain, {}));
+  }
+  for (const domain of DOMAIN_DIRS) {
+    // 子目录域：ui/{locale}/*.yaml——目录名承载域层、locale 子目录承载语言，分片按文件名序合并（同段键互斥防静默覆盖）。
     for (const locale of LOCALES) {
-      const segment = doc[locale];
-      if (segment == null || typeof segment !== "object" || Array.isArray(segment)) throw new Error(`${domain}.yaml 缺 ${locale} 段`);
-      // locale 段下直接是域内容（域层由文件名承载，组装时补 ${domain}. 前缀）；同名子层说明双层嵌套，报错。
-      if (Object.keys(segment).includes(domain)) {
-        throw new Error(`${domain}.yaml 的 ${locale} 段下不应再嵌套 ${domain}: 层（域层由文件名承载）`);
+      const dir = join(catalogDir, domain, locale);
+      const partFiles = readdirSync(dir).filter((f) => f.endsWith(".yaml")).sort();
+      if (partFiles.length === 0) throw new Error(`${dir}/ 下没有 .yaml 分片`);
+      const merged = {};
+      for (const f of partFiles) {
+        const segment = parse(readFileSync(join(dir, f), "utf8")) ?? {};
+        for (const k of Object.keys(segment)) {
+          if (k in merged) throw new Error(`${dir}/${f} 顶层键 ${k} 与其他分片重复`);
+          merged[k] = segment[k];
+        }
       }
-      Object.assign(flat[locale], flatten(segment, domain, {}));
+      Object.assign(flat[locale], flatten(merged, domain, {}));
     }
   }
   return flat;

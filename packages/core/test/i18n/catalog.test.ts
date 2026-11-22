@@ -3,7 +3,7 @@
  * key 正则与域词表、叶子全 string、§2.6 静态书写扫描，外加 tCore 接线冒烟。
  */
 import assert from "node:assert/strict";
-import {  readFileSync  } from "node:fs";
+import {  readFileSync, readdirSync } from "node:fs";
 import {  describe, it  } from "node:test";
 import {  Catalog  } from "../../src/i18n/catalog.js";
 import {  CORE_MESSAGE_KEYS, CORE_MESSAGE_KEY_PATTERN, ERROR_KEY_DOMAINS, LABEL_KEY_DOMAINS, UI_KEY_DOMAINS, type CoreMessageKey  } from "../../src/i18n/keys.js";
@@ -14,11 +14,31 @@ const CATALOG_DIR = new URL("../../resources/i18n/", import.meta.url);
 // i18n 按域拆分：catalog/{error,label,ui,chat,settings}.yaml，文件名 = 组；每文件顶层 locale 段。
 import { parse } from "yaml";
 const CORE_FILES = ["error", "label", "ui"] as const;
-const DOMAIN_FILES = ["error", "label", "ui", "chat", "settings"] as const;
+const DOMAIN_FILES = ["error", "label", "chat", "settings"] as const;
+const DOMAIN_DIRS = ["ui"] as const;
+
+/** ui/ 子目录分片按文件名序合并为单棵双 locale 树（分片顶层是 zh-CN/en-US 段；同段键互斥防静默覆盖，与 gen-i18n-catalog 的 loadGroups 同款）。 */
+function loadUiMerged(): Record<string, Record<string, unknown>> {
+    const merged: Record<string, Record<string, unknown>> = {};
+    for (const locale of ["zh-CN", "en-US"]) {
+        const dir = new URL(`ui/${locale}/`, CATALOG_DIR);
+        merged[locale] = {};
+        for (const f of readdirSync(dir).filter((f) => f.endsWith(".yaml")).sort()) {
+            const segment = (parse(readFileSync(new URL(f, dir), "utf8")) ?? {}) as Record<string, unknown>;
+            for (const k of Object.keys(segment)) {
+                if (k in merged[locale]) throw new Error(`ui/${locale}/${f} 顶层键 ${k} 与其他分片重复`);
+                merged[locale][k] = segment[k];
+            }
+        }
+    }
+    return merged;
+}
 
 function flattenFile(file: string, locale: string): Record<string, string> {
     const out: Record<string, string> = {};
-    const doc = parse(readFileSync(new URL(`${file}.yaml`, CATALOG_DIR), "utf8")) as Record<string, unknown>;
+    const doc = file === "ui"
+        ? loadUiMerged()
+        : (parse(readFileSync(new URL(`${file}.yaml`, CATALOG_DIR), "utf8")) as Record<string, unknown>);
     const segment = doc[locale];
     if (segment == null || typeof segment !== "object") throw new Error(`${file}.yaml 缺 ${locale} 段`);
     const walk = (node: Record<string, unknown>, prefix: string): void => {
@@ -110,8 +130,8 @@ describe("core catalog（G0.7）", () => {
     });
 
     it("静态书写规范：无 Tab 缩进、无裸陷阱词/数字/布尔、含半角冒号的值必须加引号", () => {
-        for (const file of DOMAIN_FILES) {
-            const source = readFileSync(new URL(`${file}.yaml`, CATALOG_DIR), "utf8");
+        for (const file of [...DOMAIN_FILES, ...DOMAIN_DIRS]) {
+            const source = readFileSync(new URL(file === "ui" ? "ui/zh-CN/transcript.yaml" : `${file}.yaml`, CATALOG_DIR), "utf8");
             assertWritingRules(source, `${file}.yaml`);
         }
     });

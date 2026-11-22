@@ -1,0 +1,270 @@
+  agent:
+    basic_info: Basics
+    import_yaml: Import YAML
+    export_yaml: Export YAML
+    scope: Scope
+    scope_picker_title: Select scope
+    description_hint: Tell the task tool what this agent is good at. Optional.
+    description_placeholder: e.g. good at codebase search and writing tests.
+    description_task_hint: "Introduces this agent's abilities to the primary agent via the task tool."
+    tool_mode_default: Default (all tools)
+    tool_mode_default_all: Default (all)
+    tool_mode_allow: Allowlist
+    tool_mode_deny: Denylist
+    scope_primary: Primary only
+    scope_subagent: Subagents only
+    workplace_label: Persistent workspace
+    workplace_hint: The assistant confirmation text is editable.
+    workplace_disabled_hint: "When off, the project file tree is not injected."
+    assistant_text_label: Assistant confirmation text
+    assistant_text_readonly_hint: Assistant confirmation text (read-only).
+    prompt_template_title: Prompt template
+    system_label: System
+    system_blocks_label: System section
+    system_content_label: System content
+    system_prompt_label: System prompt
+    enable_system: Enable system
+    enable_persist: Enable persistent section
+    enable_dynamic: Enable dynamic section
+    persist_blocks_label: Persistent section
+    dynamic_blocks_label: Dynamic section
+    persist_macro_hint: Macros are not allowed in the persistent section.
+    layout_order: System → Skill index → Persistent workspace → Persistent section → Chat history → Dynamic section
+    layout_order_prefix: "Vertical order matches model assembly:"
+    layout_order_prefix_short: "Vertical order:"
+    system_disabled_hint: "When off, the system prompt is not written."
+    persist_disabled_hint: "When off, persistent-section content is not sent to the AI; entered content is kept."
+    dynamic_disabled_hint: "When off, dynamic-section content is not sent to the AI; entered content is kept."
+    system_placeholder: Single system-level instruction…
+    max_steps_label: Max steps
+    max_steps_hint: Caps model/tool round-trips per turn; defaults to 20 when empty.
+    max_steps_value: "Max steps {n}"
+    blocks_empty_hint: No blocks yet. Tap add.
+    chat_blocks_label: Chat history
+    chat_tag: Chat messages
+    chat_blocks_short: Chat section
+    chat_readonly_hint: "Visible session messages are injected at runtime, fixed between the persistent and dynamic sections. Not editable, cannot be turned off, and always sent to the AI."
+    skills_label: Skill index
+    skills_blocks_label: Skill index section
+    skills_readonly_hint: The active skill index is injected at runtime.
+    skills_disabled_hint: "When off, the index is not injected and the skill tool is not registered; manual skill references still work."
+    block_role_picker_title: Select role
+    block_content_aria_persist: "Persistent block {name} content"
+    block_content_aria_dynamic: "Dynamic block {name} content"
+    macro_chip: Macros
+    macro_prefix: "Macros:"
+    attach_toggle_label: Enable custom extra info
+    attach_toggle_hint: "User chat history; when on, extra content can be attached to every input"
+    attach_text_label: Extra info text
+    attach_text_label_mobile: Extra info content
+    attach_text_hint: This text is attached to every user message sent to the model
+    attach_macro_hint: "Supports $time, $week_cn, $filetree…"
+    blocks_list_label: Blocks
+    tools_section: Tool policy
+    tools_mode_label: Mode
+    tools_mode_picker_title: Tool list mode
+    select_tools: Select tools
+    allowlist_label: Allowlist tools
+    denylist_label: Denylist tools
+    builtin_tools_hint: "When unset, all {count} built-in tools are used: task, read, write, edit, fs, glob, grep, skill, agent, curl, search."
+    selected_tools_aria: "Selected tools ({selected}/{total})"
+    no_tools_selected: "No tools selected (0/{total})"
+    all_tools_selected: "All tools ({total}/{total})"
+    search_tools_placeholder: Search tools…
+    skill_injection_toggle: Enable skill injection and the skill tool
+    skills_prefix_label: Index prefix text
+    model_dedicated: Dedicated model
+    model_follow_hint: "\"Default (follow)\" means using the current model set in the session drawer / Me tab."
+    model_picker_title: Select dedicated model
+    model_follow_option: Default (follow)
+    no_models_hint: Add models on the Providers page first
+    unresolved_model_warn: "⚠ The previously bound model is currently unavailable ({id})"
+    unresolved_model_hint: "The previously bound model is unavailable (the provider may have been deleted or the model list failed to load). Saving keeps the binding; choose \"Default (follow)\" to release it."
+    runtime_section: Runtime
+    unnamed: Unnamed agent
+    deleted_done: Agent deleted
+    template_overwritten: Overwritten with the default template and saved
+    back_to_list: Back to list
+    delete_agent_title: Delete agent
+    delete_agent_confirm_msg_named: "Delete agent \"{name}\"?"
+    delete_agents_confirm_msg: "Delete the selected {count} agents?"
+    template_overwrite_title: Overwrite with default template
+    template_overwrite_msg: "This overwrites the current configuration with the default prompts and runtime, keeping the Agent ID and display name. Continue?"
+    template_overwrite_confirm: Overwrite and save
+    saved_done: Agent settings saved
+    yaml_exported: Agent YAML exported
+    yaml_import_confirm: This overwrites the current agent settings. Continue?
+    yaml_imported: Agent YAML imported
+    builtin_note_mobile: "Built-in agent, not editable"
+    builtin_note_desktop: "Built-in agent, not editable — general is a factory built-in generic subagent, virtually injected at runtime (not persisted); the primary agent can delegate to it anytime."
+    edit_title: "Edit {name}{dirty}"
+    unsaved_suffix: " · unsaved"
+    list_primary_hint: "Primary agents can be picked directly as the conversation; agents tagged \"All\" are available in both tabs."
+    list_subagent_hint: "Subagents are invoked by the primary agent via task delegation; agents tagged \"All\" are available in both tabs."
+    list_primary_empty: "No primary agents. Tap \"New\" to create one."
+    list_subagent_empty: "No subagents. Tap \"New\" to create one."
+    list_workspace_suffix: "{label} · Workspace"
+    general_note: General assistant · not editable
+    delete_select_title: Select agents to delete
+    primary_tab: Primary agents
+    subagent_tab: Subagents
+    rename_title: Rename agent
+    display_name_label: Display name
+    agent_name_label: Agent name
+    tool_desc_task: Delegate subtasks to subagents (primary agent only)
+    tool_desc_read: Read workspace files (paginated)
+    tool_desc_write: Write or overwrite whole files
+    tool_desc_edit: Exact find-and-replace (with append)
+    tool_desc_fs: Filesystem commands (ls/rm/mv/cp/mkdir/rmdir)
+    tool_desc_glob: Find paths by glob patterns
+    tool_desc_grep: Search workspace file contents (regex/exclude/context)
+    tool_desc_skill: Use and manage skills (load/read/write/edit/list)
+    tool_desc_agent: Manage agent definitions (list/get/create/update; primary agent only)
+    tool_desc_curl: "Send http/https requests to fetch or submit web/API content, with custom methods, headers and bodies; responses over 50KB are saved to the session workspace /tmp/ (readable via read)"
+    tool_desc_search: "Web search: query pages serially through the enabled search engines and return raw engine results (JSON text); engines are managed under Settings → Search (only the built-in DuckDuckGo free search is enabled by default, no configuration needed)"
+    # p27 R6 wave 3-2a: editor validations and failure titles (agent-editor-state shared validations + mobile editor toasts)
+    name_required: Agent name is required
+    assistant_text_required: Workplace assistant confirmation text is required
+    prompt_block_min: Keep at least one Prompt block
+    dedicated_model_uuid_invalid: Dedicated model must be the UUID of a saved model
+    min_one_agent: Keep at least one agent
+    select_dedicated_model: Select a dedicated model first
+    list_load_failed: Failed to load agent list
+    overwrite_default_failed: Failed to overwrite with default template
+    export_yaml_failed: YAML export failed
+    import_yaml_failed: YAML import failed
+    # p27 wave 3c-a: wave 3-2 MISS backfill (D2 editor guards / load failure, M1 not-found, D3 new + batch delete template)
+    agent_id_missing: Missing agentId
+    load_failed: Unable to load agent configuration
+    not_found: "Agent not found: {agent_id}"
+    new_title: New Agent
+    deleted_count_done: "Deleted {count} Agents"
+    # p27 wave 3c-c: 3c-b D-line contract-align new MISS (SettingsViews primary/sub agent tab hints)
+    primary_scope_hint: "Primary agents respond to user messages directly; agents scoped to all show in both tabs."
+    subagent_scope_hint: "Subagents are delegated by primary agents; the built-in general is a fallback and cannot be edited."
+  skills:
+    new_title: New skill
+    name_label_plain: Skill name
+    name_label_manage_hint: Skill name (rename in the manage page)
+    name_label_dir_hint: Skill name (also the directory name; rename in the manage page)
+    name_label_builtin_hint: Skill name (built-in skills cannot be renamed)
+    name_example_desktop: e.g. lore-style-guide
+    name_example_mobile: e.g. worldbuilding-checker
+    desc_required_label: Description (enters the skill index; required)
+    desc_label_desktop: Description (enters the skill index)
+    desc_hint: Enters the skill index; the model decides usage based on it
+    desc_hint_desktop: The model decides whether to use the skill based on this
+    domain_label: Storage domain
+    domain_global: Global (all projects)
+    domain_project: Project
+    project_label: Owning project
+    project_picker_title: Select owning project
+    no_projects_option: (no projects)
+    importing_zip: Importing from ZIP…
+    reading_zip: Reading…
+    zip_imported_info: "ZIP imported · {count} files (all brought in on create)"
+    create_and_edit: Create and edit
+    domain_tag_global: Global
+    domain_tag_overridden: Project · overrides global
+    global_tab: Global skills
+    project_tab: Project skills
+    domain_section: Skill domains
+    global_hint: Global skills apply to all projects; same-name project copies override the global version (the global version applies only to projects without a copy).
+    project_hint: Project skills apply only to their project; grouped by all projects.
+    global_tab_hint_mobile: "Global skills apply to all projects. If any project has a same-name copy, that copy wins — the global version applies only to projects without one."
+    project_tab_hint_mobile: Project skills apply only to their project and override the global version on same name. All project skills are grouped by project.
+    edit_info: Edit info
+    export_zip: Export ZIP
+    exported_zip: "Exported \"{name}.zip\""
+    delete_title: Delete skills
+    deleted_done: Skills deleted
+    global_delete_warn: This skill affects all projects; after deletion no session injects it.
+    project_delete_warn: This skill applies only to its project; deleting it does not affect other projects.
+    batch_delete_warn_global: Global skills among them affect all projects; after deletion no session injects them.
+    batch_delete_warn_project: Project skills apply only to their projects; deleting them does not affect other projects.
+    global_shadow_note: This global version applies only to projects without a same-name copy; projects with a copy use the project version.
+    overridden_tag: Overridden by project copy
+    invalid_tag: "Invalid · {reason}"
+    invalid_default_reason: Invalid front matter
+    selected_skills_label: "Selected {count} skills"
+    delete_confirm_named: "Delete \"{name}\"? {scope}"
+    scope_hint_global: Deleting global skills affects all projects
+    scope_hint_project_single: "This skill applies only to this project ({project})"
+    scope_hint_project: Project skills apply only to their project
+    select_delete_title: Select skills to delete
+    empty_global: "No global skills. Use \"New\" above to create one."
+    empty_global_mobile: No global skills. Create one and it becomes available to all projects.
+    empty_projects_desktop: No projects yet. Create one in the main navigation first.
+    empty_project_desktop: No skills in this project.
+    empty_project_mobile: No project skills. Project skills apply only to their project and override the global version on same name.
+    menu_aria: "Skill {name} more actions"
+    skill_aria: "Skill {name}"
+    info_saved: Skill info saved
+    file_saved: Skill file saved
+    file_entry_protected: SKILL.md is the reserved entry file; a file with this name cannot be created.
+    file_entry_delete_protected: SKILL.md is the reserved entry file and cannot be deleted.
+    entry_protected_mobile: SKILL.md is the skill entry file; it cannot be deleted or renamed
+    unspecified: No skill specified.
+    missing_panel: The skill does not exist or was deleted.
+    missing_toast: The skill does not exist or was deleted
+    back_to_manage: Back to skill management
+    domain_project_line: "Project domain · {project}"
+    domain_global_line: Global domain · applies to all projects
+    new_aux_file: New auxiliary file
+    entry_file_tag: Entry file
+    delete_file_aria: "Delete {path}"
+    file_mode_label: Skill file mode
+    editor_title: Skill file editing
+    unsaved_hint: Unsaved (Ctrl+S to save)
+    delete_aux_title: Delete auxiliary file
+    pick_hint_mobile: Single-select inserts the skill name; disabled skills still apply when explicitly referenced
+    pick_hint_desktop: "Flat merged view of the current project, multi-select; disabled skills still inject full text"
+    pick_empty: No available skills
+    pick_empty_project: No available skills in this project
+    pick_aria: "Select skill {name}"
+    pick_ref_aria: "Reference skill {name}"
+    disabled_tag: Disabled
+    session_panel_back: Back to session details
+    domain_tag_project: Project
+    session_organize: Organize
+    session_enabled_stat: "{enabled}/{valid} enabled"
+    session_empty: "No skills yet. Tap \"New\" to create project skills, or maintain global skills in Settings → Skill management."
+    session_toggle_aria: "{action} skill {name} (this project only)"
+    panel_empty_mobile: No skills in this project yet. Skills are reusable instruction docs; after creation they enter the prompt index and the model decides usage by description.
+    # p27 R6 wave 3-2a: panel toggle failures and desktop aux-file form validations (SkillPanelScreen + SkillDetailView)
+    enable_failed: Failed to enable
+    disable_failed: Failed to disable
+    path_relative_required: Enter a relative path.
+    path_no_dotdot: 'Path cannot contain "..".'
+    file_exists: This file already exists.
+    # p27 wave 3c-a: wave 3-2 MISS backfill (M2 load failure / NewSkillModal validations / delete-confirm frame + D1/D2 aux file)
+    load_failed: Failed to load skills
+    aux_deleted: Auxiliary file deleted
+    path_relative_label: "Relative path (subdirectories supported, e.g. references/x.md)"
+    desc_empty: Description required (it enters the index so the model can decide usage)
+    project_required: Select a project
+    zip_root_missing: "ZIP root lacks SKILL.md (export format: the zip root is the skill directory)"
+    domain_name_conflict: "A skill named \"{name}\" already exists in the target domain"
+    delete_confirm_frame: ". Delete {names}? The whole directory and its disable records will be removed."
+  prompt:
+    turn_aria: "{action} {role} turn, {summary}"
+    tool_group_aria: "{action} tool calls {name}"
+    file_preview_aria: "{action} file preview {path}"
+    parallel_tag: Parallel
+    tool_input_aria: "View tool input, {name}"
+    tool_result_aria: "View tool result, {name}"
+    leaf_view_aria: "View {leaf}, {name}"
+    lost_result: No result returned
+    status_lost: Lost
+    mode_full: Full content
+    mode_filename: File name
+    mode_header: File header
+    file_full_aria: "View full file {path}"
+    viewer_hint_mobile: Adjust inclusion rules in the chat workspace to change preview content. Tap a turn header to expand in place; tap a child card for full-screen reading.
+    viewer_hint_desktop: Adjust inclusion rules in the session workspace to change preview content. Click a turn header to expand in place; click a child card for full-screen reading.
+    fullscreen_aria: "{title} details"
+    input_label: Input
+    empty_prompt: (empty prompt)
+    empty_value: (empty)
+    # p27 wave 3c-a: wave 3-2 MISS backfill (M2 RealPrompt project/session guard)
+    select_project_session: Select a project and session first

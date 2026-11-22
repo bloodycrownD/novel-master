@@ -1,0 +1,226 @@
+  vfs:
+    import_kind_file: Single file
+    import_kind_zip: ZIP archive
+    import_kind_card: Character card
+    import_form_section: Import mode
+    import_zip_title: Import ZIP
+    import_card_title: Import character card
+    import_single_title: Import single file
+    zip_import_done: ZIP import completed
+    card_import_done: Character card imported
+    single_import_done: Single file imported
+    single_import_skipped: "Single file imported; skipped {count} non-UTF-8 files"
+    skip_non_utf8: "Skipped {count} non-UTF-8 files"
+    import_done_nochange: Import completed (no changes)
+    import_done_report: "Import completed: {report}"
+    import_report_written: "Wrote {count}"
+    import_report_skipped: "Skipped {count}"
+    import_report_failed: "Failed {count}"
+    export_preparing: Preparing export…
+    file_saved_location: File saved to the chosen location
+    exported_zip: ZIP exported
+    exported_file: File exported
+    imported_zip: ZIP imported
+    target_root: Current directory (workspace root)
+    target_root_quoted: "\"Current directory (workspace root)\""
+    import_overwrite_confirm: "This overwrites all files under {target}; sibling content is unaffected. Continue?"
+    import_overwrite_confirm_desktop: "This overwrites all files under \"{path}\"; sibling content is unaffected. Continue?"
+    import_card_confirm: "This overwrites same-name character-card files under {target}; other files are unaffected. Continue?"
+    import_card_confirm_desktop: "Character-card content is written to \"{path}\"; same-name files are overwritten. Continue?"
+    conflict_confirm: "The target already has {count} same-name files; overwriting is irreversible. Continue?"
+    conflict_confirm_desktop: "The target already has {count} same-name files/directories. Overwriting is irreversible. Continue?"
+    menu_status_change: Status change
+    menu_status_settings: Status settings
+    menu_create_directory: New directory
+    menu_create_folder: New folder
+    create_file: New file
+    menu_directory_rule: Directory rules
+    menu_rules_config: Rule settings
+    menu_delete_folder: Delete folder
+    menu_delete_file: Delete file
+    rename_placeholder: New name
+    create_file_placeholder: "File name, e.g. note.md"
+    create_directory_placeholder: Directory name
+    folder_name_label: Folder name
+    parent_dir_aria: Parent directory
+    more_actions_aria: More actions
+    batch_hint: Select entries to operate on
+    empty_dir: Empty directory
+    moved_count: "Moved {count} items"
+    moved_skipped: "Moved {moved} items; skipped {skipped}"
+    target_exists_skipped: Target already has a same-name entry; skipped
+    row_badge_hidden: Hidden
+    row_badge_follow: Follow
+    row_subtitle_follow_full: Follow · full content
+    row_files_count: "{count} files"
+    inclusion_title: File inclusion status
+    inclusion_mode_label: Inclusion mode
+    inclusion_show: Show
+    inclusion_full_hint: Force into agent context with full content
+    inclusion_hide_hint: Force out of agent context
+    inclusion_follow_hint: Decided by the parent directory rule (default)
+    sort_mode_label: Sort by
+    sort_mode_picker: Select sort mode
+    sort_mode_aria: "Sort mode {label}"
+    sort_mode_empty: No sort modes available
+    sort_dir_label: Sort direction
+    sort_by_name: File name
+    sort_by_created: Created time
+    sort_by_updated: Updated time
+    sort_asc: Ascending
+    sort_desc: Descending
+    header_field_header: Header info
+    header_field_hidden: Hidden
+    header_count_label: Header count (0–1000)
+    tail_count_label: Tail count (0–1000)
+    rest_fill_label: Fill for remaining files
+    rule_saved_done: Directory rules saved
+    rule_enabled_done: Directory rules enabled
+    rule_disabled_done: Directory rules disabled
+    synced_from_project: Synced from project workspace
+    pushed_to_project: Pushed to project workspace
+    init_action: Initialize
+    push_confirm_desktop: "This overwrites the project workspace with the current chat workspace. The project workspace is the template for all of the project's sessions; new sessions and other sessions' \"sync from parent\" receive the overwritten content."
+    pull_confirm: This overwrites the current chat workspace from the project workspace; local changes will be lost. Continue?
+    push_confirm_mobile: This overwrites the project workspace with the current chat workspace and cannot be undone.
+    sync_done: Sync completed
+    sync_menu_title: Sync from parent
+    sync_action: Sync
+    push_project_title: Push to project workspace
+    workplace_ops_title: Workspace actions
+    entry_label: Entry
+    preview_title: File preview
+    preview_mode_label: Preview mode
+    select_to_edit: Select a file in the workspace to edit
+    select_to_preview: Select a file in the workspace to preview
+    file_missing: File deleted or missing
+    editor_title: File editing
+    line_count: "{count} lines"
+    ctrl_s_hint: Ctrl+S to save
+    char_count: "{count} chars"
+    dirty_suffix: " · unsaved edits"
+    tabs_title: Open files
+    tab_deleted_suffix: "{path} (deleted)"
+    annotate: Annotate
+    annotate_desc_placeholder: Annotation note
+    annotate_add: Add annotation
+    annotate_input_hint: Enter annotation note
+    annotate_detail_title: Annotation details
+    annotate_pick_title: Select annotation
+    annotate_empty_aria: No note
+    edit_annotate_title: Edit annotation
+    markdown_empty_body: (empty body)
+    fm_empty: (empty front matter)
+    global_template_hint: "Read-only browsing of all library files: global templates, skills and per-project/session files merged into one view, for reading only."
+    # p27 R6 wave 3-2a: move guard / rule load / drag-in import failures (VfsFileManager both ends + workspace-batch-dnd)
+    move_self_blocked: Cannot move into itself or its own subdirectory
+    rule_load_failed: Failed to load rules
+    local_file_read_failed: Cannot read the dropped local file
+    import_incomplete: Import not completed
+    # p27 wave 3c-a: wave 3-2 MISS backfill (M3 protected paths + D3 invalid op / drag-out / materialize / import hints / annotate aria)
+    protected_path_blocked: "Selection contains a protected path: {path}"
+    invalid_action: Invalid operation
+    pick_file_failed: Failed to pick file
+    drag_out_failed: Drag out failed
+    export_materialize_failed: Export materialization failed
+    import_hint_zip: Extract into the target directory; all existing contents under it will be overwritten
+    import_hint_card: Parse the character card and write into the target directory; same-name files there will be overwritten
+    import_hint_file: Write a single file; same-name files require confirmation before being overwritten
+    annotate_actions_aria: Annotate actions
+  cloud_sync:
+    save_config: Save settings
+    s3_section: S3-compatible storage
+    endpoint_hint: "Include https://"
+    bucket_hint: Optional (MinIO)
+    prefix_label: Path prefix
+    prefix_hint: Must end with /; normalized on save
+    path_style_hint: Required for MinIO; turn off for official Aliyun OSS endpoints
+    credentials_section: Credentials
+    secret_saved_hint: Saved; leave empty to keep the existing key
+    secret_create_hint: Written to SKSP on save
+    secret_placeholder: Leave empty to keep the stored key
+    device_label: Device name (optional)
+    device_hint: Helps identify this machine
+    testing: Testing…
+    test_connection: Test connection
+    test_note: Test connection only checks bucket access; it does not pull or push.
+    connected_done: Connected
+    config_saved: Settings saved
+    config_saved_desktop: Cloud sync settings saved
+    pull_title: Pull from cloud
+    push_title: Push to cloud
+    cloud_newer_title: Cloud has updates
+    cloud_newer_msg: Pull cloud data first. Overwrite the cloud anyway?
+    pull_first: Pull first
+    force_overwrite: Overwrite cloud anyway
+    cloud_newer_hint: Cloud has updates; pull before pushing.
+    push_cancelled: Push cancelled
+    pull_cancelled: Pull cancelled
+    up_to_date: Already up to date
+    pull_reloading: Pull succeeded; reloading…
+    push_done: Push completed
+    pull_done: Pull completed
+    sync_status: Sync status
+    status_desc: Shows how local and cloud revs align
+    status_desc_desktop: Shows how local and cloud revs align; save settings before pulling/pushing.
+    agent_active_note: Agent running; sync actions are disabled.
+    local_status: Local and cloud revs are aligned.
+    rev_cloud: Cloud rev
+    rev_local: Local rev
+    rev_cloud_line: "Cloud rev: {rev}"
+    rev_synced_line: "Last synced rev: {rev}"
+    last_pull_line: "Last pull: {time}"
+    last_push_line: "Last push: {time}"
+    last_pull_result: "Pull result: {result}"
+    last_push_result: "Push result: {result}"
+    pulled_done: "Pulled cloud data (rev {rev})"
+    pushed_done: "Pushed to cloud (rev {rev})"
+    enabled_toggle: Enable cloud sync
+    desc: Syncs database snapshots between Desktop and Mobile via S3-compatible object storage. Secret keys are stored encrypted via SKSP.
+    agent_busy_value: Agent running
+    configured: Configured
+    not_configured: Not configured
+    result_ok: Success
+    result_fail: Failed
+    last_time: "Last {time}"
+    manual_sync: Manual sync
+    not_configured_msg: Complete cloud storage setup first
+    status_unreadable: Cannot read sync status
+    pull_confirm_msg: "This replaces local data (projects, sessions, messages, etc.) with the latest cloud snapshot. Local providers and API keys are kept. Continue?"
+    pull_action: Pull
+    progress_push_prepare: Preparing push…
+    progress_pull_prepare: Preparing pull…
+    progress_connecting: Connecting to cloud…
+    progress_checking_remote: Checking cloud state…
+    progress_reading_remote: Reading cloud state…
+    progress_acquiring_lock: Acquiring sync lock…
+    progress_lock_acquired: Sync lock acquired
+    progress_exporting: Exporting local database…
+    progress_exported: Export completed
+    progress_hashing: Hashing snapshot…
+    progress_hashed: Hashing completed
+    progress_reading_snapshot: Reading snapshot…
+    progress_snapshot_read: Read completed
+    progress_uploading: Uploading snapshot to cloud…
+    progress_uploaded: Snapshot uploaded
+    progress_downloading: Downloading cloud snapshot…
+    progress_downloaded: Download completed
+    progress_importing: Importing database…
+    progress_imported: Import completed
+    progress_syncing: Syncing…
+    progress_transferring: Transferring…
+    progress_keep_open: Keep the app open; large files can take several minutes
+    # p27 R6 wave 3-2a: config load failure and Secret validation (CloudSyncConfigScreen)
+    secret_required: Secret Key is required
+    load_config_failed: Failed to load cloud sync configuration
+    # p27 wave 3c-a: wave 3-2 MISS backfill (M3 push button / MinIO / Region + D3 pull confirm and cloud-newer desktop variants)
+    push_action: Push
+    minio_optional_hint: Leave empty for MinIO
+    region_label: Region
+    pull_confirm_title: Confirm pull
+    pull_confirm_msg_desktop: "Pulling will replace the local database with the cloud snapshot (local providers and API Keys are kept). Continue?"
+    cloud_newer_msg_desktop: "The cloud has unpulled updates. Pull to merge first, or overwrite the cloud anyway (unpulled cloud changes will be lost)."
+  rich_document:
+    over_limit_hint: Content too long; showing raw text
+  mermaid:
+    render_failed_badge: Render failed; showing source

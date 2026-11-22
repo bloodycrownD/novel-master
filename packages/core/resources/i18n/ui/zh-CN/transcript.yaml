@@ -1,0 +1,314 @@
+  transcript:
+    # 长按菜单（menu.ts）
+    menu:
+      edit: 编辑
+      copy: 复制
+      set_floor: 置位
+      fork: 分叉
+      rollback: 回滚
+    # tool 卡片（rows-click / tool-logic / ToolGroup）
+    tool_result_title: 工具结果
+    tool_status:
+      success: 成功
+      error: 失败
+      pending: 执行中
+      interrupted: 已中断
+    tool_group_title: "工具调用 ({count})"
+    open_hint: "点击查看 · {kind}"
+    open_kind:
+      subagent: 子会话
+      skill: 技能
+      result: 结果
+      workspace: 聊天工作区
+    # 消息行角色与操作（MessageRow / StreamingMessageRow）
+    role:
+      user: 用户
+      assistant: 助手
+    message_actions: 消息操作
+    # 附件组（AttachGroup）
+    attach_group_title: "消息附件 ({count})"
+    attach_src:
+      workspace: 工作区
+      dir: 目录
+      file: 文件
+  # —— common：跨屏通用动作词/状态词（波 3-2 各分片按需接线） ——
+  chat:
+    placeholder: 输入消息…
+    placeholder_no_model: 选择模型后可发送
+    placeholder_desktop: 输入消息…（Ctrl+Enter 发送）
+    composer_disabled_hint: 请先配置模型（设置 → Provider）
+    no_model_selected: 未选择模型
+    configure_model_first: 请先配置模型
+    no_workspace_model_hint: 请先选择工作区模型
+    message_input_aria: 消息输入
+    more_options: 更多选项
+    reference_files: 引用文件
+    reference_skills: 引用技能
+    stop_gen: 终止
+    stop_generating: 停止生成
+    stop_subagent: 停止子会话
+    attachment_draft_aria: 待发送附件
+    attachment_status_aria: 状态附件
+    remove_attachment_aria: "移除 {label}"
+    select_model_title: 选择工作区模型
+    no_saved_models: 暂无已保存模型。请先在「服务商」页添加模型。
+    select_project_first: 请先选择项目
+    select_session_first: 请先选择会话
+    select_session: 请选择会话
+    rename_prompt: 请输入名称
+    copy_session_done: "已复制会话：{name}"
+    delete_sessions_confirm: "确定删除选中的 {count} 个会话？"
+    delete_session_done: 已删除会话
+    delete_session_confirm: "确定删除会话「{name}」？消息与文件将一并删除，且无法恢复。"
+    edit_message_title: 编辑消息
+    edit_message_placeholder: 输入消息内容
+    fork_done: "已分叉：{name}"
+    rollback_success: 回滚成功
+    rollback_truncated: 对话已截断，工作区未恢复
+    rollback_blocked_title: 暂时无法回滚
+    rollback_blocked_msg: Agent 正在运行，请先停止生成或等本轮完成后再回滚。
+    set_floor_done: 已置位
+    set_floor_confirm_title: 置位到此消息？
+    set_floor_confirm_msg: 此消息之前将不参与提示词，此消息及之后将恢复可见。
+    rollback_confirm_title: 回滚到此消息
+    rollback_degraded_title: 仅删除后续对话
+    rollback_continue: 继续回滚
+    snapshot_missing: 快照丢失
+    workspace_restore_fail_title: 无法恢复工作区
+    context_up_to_date: 上下文已是最新状态
+    compacting_toast: 正在压缩上下文…
+    compact_done: 已压缩
+    compact_cancelled: 已取消压缩
+    active_suffix: " · 活跃中"
+    hidden_tag: 已隐藏
+    role_system: 系统
+    tab_chat: 聊天
+    tab_prompt: 提示词
+    tab_conversation: 会话内容
+    subagent_running_empty: 子智能体运行中…
+    subagent_pick_parent_hint: 请返回父会话并重新点击子智能体卡片
+    subagent_empty: 子会话暂无消息
+    thinking_sanitized: 思考（已脱敏）
+    workspace_unavailable: 聊天工作区不可用
+    parent_dir: 上一级
+    pick_target_dir_title: 选择目标目录
+    pick_dir_hint: 浏览到目标文件夹后确认；不可选中源自身或其子树
+    file_ref_hint: 可多选文件与目录
+    select_current_folder: 选择当前文件夹
+    deselect_current_folder: 取消选用
+    pick_dir_empty: 暂无子目录
+    pick_file_empty: 暂无文件
+    pick_dir_blocked: （不可作目标）
+    dir_blocked_hint: 当前目录是源自身或子树，不能作为目标
+    pick_dir_aria: "选用目录 {label}"
+    enter_dir_aria: "进入目录 {label}"
+    pick_file_aria: "选用文件 {label}"
+    file_path_suggest_aria: 文件路径建议
+    skill_suggest_aria: 技能建议
+    open_file_aria: "打开文件 {path}"
+    open_subagent_aria: "打开子会话 {id}"
+    open_skill_aria: "打开技能 {name}"
+    view_subagent_aria: "查看子智能体会话 {id}"
+    view_skill_aria: "查看技能 {name}"
+    view_result_aria: "查看工具结果 {name}"
+    io_input_label: 【输入】
+    io_output_label: 【输出】
+    reset_workplace_cache_done: 已重置常驻工作区缓存
+    reset_workplace_cache_failed: 重置常驻工作区缓存失败
+    stream_disconnected: 连接已断开，生成被中断
+    runtime_rebuilding: 运行时正在重建，请稍后重试
+    session_generating_busy: 该会话已有进行中的生成，请先等待完成或停止
+    # —— 波 3-2a 补键：Agent 运行中守卫与消息操作失败提示（含 U 线保守清单第 7 条「该消息没有可复制的文本」「未知操作」） ——
+    agent_running_compact_blocked: Agent 运行中无法压缩
+    agent_running_fork_blocked: Agent 运行中无法分叉
+    agent_running_set_floor_blocked: Agent 运行中无法置位
+    agent_running_rollback_blocked: Agent 运行中无法回滚
+    message_missing: 消息不存在
+    message_no_editable_text: 该消息没有可编辑的文本
+    message_no_copyable_text: 该消息没有可复制的文本
+    message_content_required: 消息内容不能为空
+    compact_partial_failed: 压缩部分失败
+    select_or_create_project: 请先创建或选择项目
+  # —— session：会话详情/会话级切换（mobile SessionDetailScreen·ChatTabScreen + desktop SessionDetailDrawer·ConversationPanel + 两端 chat-agent-meta） ——
+  common:
+    cancel: 取消
+    confirm: 确定
+    confirm_alt: 确认
+    delete: 删除
+    save: 保存
+    saving: 保存中…
+    saved: 已保存
+    edit: 编辑
+    copy: 复制
+    copy_code: 复制代码
+    close: 关闭
+    create: 创建
+    creating: 创建中…
+    created: 已创建
+    add: 添加
+    adding: 添加中…
+    added: 已添加
+    new: 新建
+    retry: 重试
+    select_placeholder: "请选择"
+    no_options: 暂无选项
+    back: 返回
+    more: 更多
+    move_up: 上移
+    move_down: 下移
+    move_top: 置顶
+    move_bottom: 置底
+    select_all: 全选
+    select_none: 全不选
+    select: 选择
+    deselect: 取消选择
+    selected_count: "已选 {count} 项"
+    loading: 加载中…
+    processing: 处理中…
+    cancelled: 已取消
+    renamed: 已重命名
+    deleted: 已删除
+    remove: 移除
+    clear: 清除
+    done: 完成
+    understood: 知道了
+    current: 当前
+    preview: 预览
+    text: 文本
+    stay: 留下
+    leave: 离开
+    unsaved_title: 未保存
+    unsaved_confirm_msg: 有未保存的更改，确定离开？
+    unsaved_discard_msg: 有未保存的更改，离开将丢弃。是否继续？
+    confirm_delete: 确认删除
+    confirm_op: 确认操作
+    confirm_count_msg: "确定删除选中的 {count} 项？"
+    delete_named_confirm: "确定删除 {name}？"
+    overwrite: 覆盖
+    overwrite_confirm_title: 覆盖确认
+    expand: 展开
+    collapse: 收起
+    manage: 管理
+    stop: 停止
+    send: 发送
+    paste: 粘贴
+    import: 导入
+    export: 导出
+    rename: 重命名
+    move: 移动
+    view: 查看
+    enable: 启用
+    turn_off: 关闭
+    on: 开启
+    off: 关闭
+    builtin: 内置
+    all: 全部
+    not_enabled: 不启用
+    open_fullscreen: 全屏编辑
+    fullscreen_edit_aria: "全屏编辑：{label}"
+    dismiss_keyboard: 收起键盘
+    restoring: 恢复中…
+    reset_default: 恢复默认
+    restore: 恢复
+    name: 名称
+    description: 描述
+    content: 内容
+    role: 角色
+    model: 模型
+    model_name: 模型名称
+    file: 文件
+    result: 结果
+    test: 测试
+    copied: 已复制
+    empty_file: （空文件）
+    empty_note: （空说明）
+    picker_empty: 暂无可选项，请先在设置中创建。
+    zip_saved: ZIP 已保存到所选位置
+    updated_at: "更新于 {time}"
+    time_just_now: 刚刚
+    time_minutes_ago: "{count} 分钟前"
+    time_hours_ago: "{count} 小时前"
+    time_days_ago: "{count} 天前"
+    # —— 波 3-2a 补键：失败标题/守卫提示（ToastMessage.toast 失败标题直取字符串，按「<动作>失败」通用模式归并） ——
+    load_failed: 加载失败
+    delete_failed: 删除失败
+    save_failed: 保存失败
+    import_failed: 导入失败
+    export_failed: 导出失败
+    create_failed: 创建失败
+    rename_failed: 重命名失败
+    set_failed: 设置失败
+    op_failed: 操作失败
+    rollback_failed: 回滚失败
+    copy_failed: 复制失败
+    connect_failed: 连接失败
+    read_failed: 读取失败
+    set_floor_failed: 置位失败
+    move_failed: 移动失败
+    cleanup_failed: 清理失败
+    check_failed: 检查失败
+    restore_failed: 恢复失败
+    failed: 失败
+    error: 错误
+    please_wait: 请稍候
+    cannot_edit: 无法编辑
+    cannot_copy: 无法复制
+    cannot_save: 无法保存
+    open_link_failed: 无法打开链接
+    unknown_action: 未知操作
+    push_failed: 推送失败
+    sync_failed: 同步失败
+    pull_failed: 拉取失败
+    # —— 波 3c-a 补键：波 3-2 六片 MISS 收尾（M1 压缩/分叉失败标题、M2/D3 批量「禁用」、双端未保存标记） ——
+    compact_failed: 压缩失败
+    fork_failed: 分叉失败
+    disable: 禁用
+    unsaved_changes: 有未保存的更改
+  # —— nav：导航头/tab/设置分类/桌面壳导航（mobile header-config·RootNavigator·ProfileTabScreen + desktop AppChrome·MainShell·settings-nav·ChatRail·ShellNavProvider） ——
+  session:
+    name_label: 会话名称
+    name_placeholder: 输入会话名称
+    name_input_aria: 会话名称输入框
+    rename_title: 编辑会话名称
+    untitled: （未命名）
+    current_agent: 当前智能体
+    current_model: 当前大模型
+    switch_agent: 切换智能体
+    switch_model: 切换大模型
+    switch_agent_aria: "切换智能体，当前 {name}"
+    switch_model_aria: "切换模型，当前 {name}"
+    switch_agent_error: 切换智能体（加载失败）
+    switch_agent_loading: 切换智能体（加载中）
+    switch_agent_pending: 切换智能体（待重选）
+    view_prompt_value: 预览提示词
+    compact_context: 压缩上下文
+    compact_confirm_msg: 将压缩上下文。是否继续？
+    compact_confirm_msg_desktop: 将按照事件配置压缩上下文。是否继续？
+    compacting: 正在压缩…
+    cancel_compact: 取消压缩
+    compact_value: 减少上下文占用
+    skills_value: 查看与管理
+    context_usage: 上下文占用
+    agent_locked: 智能体锁定
+    agent_deleted_hint: 智能体已删除 · 点击重选
+    agent_loading_guide: 智能体信息加载中，请稍候再试。
+    agent_loading_toast: 智能体信息加载中，请稍候再试
+    agent_lock_model_toast: 当前智能体已锁定模型，会话内无法覆盖
+    agent_model_locked_hint: 当前智能体已锁定模型，会话内无法覆盖。
+    agent_picker_title: 选择 Agent
+    agent_picker_title_aria: "选择 Agent（当前：{name}）"
+    model_picker_title_aria: "选择模型（当前：{name}）"
+    clear_model_override_aria: 清除会话覆盖（使用智能体锁定模型）
+    no_agents: 暂无 Agent，请先在设置中配置。
+    no_models: 暂无模型，请先在设置中配置 Provider。
+    agent_picker_empty: 暂无智能体。请先在「智能体配置」中创建。
+    # —— 波 3-2a 补键：加载失败标题（会话详情/子会话/智能体信息，两端同文同键） ——
+    agent_info_load_failed: 智能体信息加载失败
+    detail_load_failed: 加载会话详情失败
+    subsession_load_failed: 加载子会话失败
+    # —— 波 3c-a 补键：波 3-2 MISS 收尾（M1 meta 兜底名/压缩 Alert 确认按钮 + D1 drawer aria） ——
+    agent_unconfigured: 未配置 Agent
+    compact_button: 压缩
+    view_skills_aria: 查看会话技能
+    switch_model_locked_aria: 切换大模型（已锁定）
+  # —— agent：智能体编辑器/列表/选择器/工具目录（config-forms agent-editor-state 两端共用 + mobile Agent* + desktop AgentEditorView·ToolPolicyPicker） ——
