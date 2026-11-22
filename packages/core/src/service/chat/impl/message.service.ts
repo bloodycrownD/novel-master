@@ -245,27 +245,28 @@ export class DefaultMessageService implements MessageService {
     return Result.ok(message.value);
   }
 
-  async fork(sessionId: string, upToMessageId: string, hooks?: LongTaskHooks): Promise<Result<ChatSession, AppError>> {
+  async fork(sessionId: string, upToMessageId: string, hooks?: LongTaskHooks): Promise<Outcome<ChatSession>> {
     const source = await this.deps.sessions.findById(sessionId);
     if (source == null) {
-      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `session not found: ${sessionId}`, kind: "session", id: sessionId }));
+      return { kind: "failed", error: new AppError("CHAT_NOT_FOUND", { detail: `session not found: ${sessionId}`, kind: "session", id: sessionId }) };
     }
     const upTo = await this.deps.messages.findById(upToMessageId);
     if (upTo == null || upTo.sessionId !== sessionId) {
-      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `message not found: ${upToMessageId}`, kind: "message", id: upToMessageId, sessionId, messageId: upToMessageId }));
+      return { kind: "failed", error: new AppError("CHAT_NOT_FOUND", { detail: `message not found: ${upToMessageId}`, kind: "message", id: upToMessageId, sessionId, messageId: upToMessageId }) };
     }
     // 上界收窄读口：fork 的全部消费都落在「锚点及更早」方向（下方
     // seedForkCopyParity 吃同一份 toCopy），锚点之后的
     // 整条尾巴是纯浪费。旧形态是 listBySession 全量读 + 事务内 filter 丢弃。
     const allRead = await this.deps.messages.listBySessionUpToSeq(sessionId, upTo.seq, hooks);
-    if (allRead.kind === "failed") return Result.err(allRead.error);
-    // 中断不是错误：本方法出口是边界，转抛 AbortError 交给上层（IPC / CLI）收口。
-    if (allRead.kind !== "completed") throw AbortError.create();
+    if (allRead.kind === "failed") return { kind: "failed", error: allRead.error };
+    // 中断沿返回值上行（Outcome 通道）：cancelled/replaced 原样透传，事务回调内的
+    // 中断仍走 throw 回滚（平台强制），由 repository 出口转回 Outcome。
+    if (allRead.kind !== "completed") return allRead;
     const all = allRead.value;
     if (all.length === 0) {
       // 空集合守卫**必须在开事务之前**：上界读口在事务外，锚点之前的消息一条都
       // 没有时直接拒绝，不为一个必然回滚的动作开事务。
-      return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { detail: "No messages to fork up to the given id" }));
+      return { kind: "failed", error: new AppError("CHAT_INVALID_ARGUMENT", { detail: "No messages to fork up to the given id" }) };
     }
     const projectSessions = await this.deps.sessions.listByProject(source.projectId);
     const forkBaseTitle = source.title?.trim() || "会话";
@@ -335,7 +336,7 @@ export class DefaultMessageService implements MessageService {
       await TdbcTransaction.unwrapOrRollback(await ForkCopySeeder.seed(tx, { projectId: source.projectId, sourceSessionId: source.id, targetSessionId: forked.id, newMessages }));
       return forked;
     });
-    return Result.ok(await forkTransaction);
+    return { kind: "completed", value: await forkTransaction };
   }
 
   async hide(messageId: string): Promise<Result<void, AppError>> {

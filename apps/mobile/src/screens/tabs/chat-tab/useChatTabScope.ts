@@ -584,7 +584,9 @@ export function useChatTabScope({runtime, projectId, sessionId, setCurrentProjec
   const handleCopySession = useCallback(
     async (sourceSessionId: string) => {
       const copy = await runtime.sessions.copy(sourceSessionId);
-      if (!copy.ok) {
+      // 中断沿返回值上行（Outcome 通道）：取消/替换静默（控制流不是失败）。
+      if (copy.kind === 'cancelled' || copy.kind === 'replaced') return;
+      if (copy.kind === 'failed') {
         showToast(ToastMessage.toast(coreT({key: "ui.common.copy_failed"}), copy.error));
         return;
       }

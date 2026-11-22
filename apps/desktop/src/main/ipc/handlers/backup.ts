@@ -47,10 +47,11 @@ export const Backup = {
     const stopped = RunScope.outcomeIfAborted(scope);
     if (stopped != null) return stopped;
     try {
-      await DbBackupService.exportToPath(rt, destPath, () => scope.checkpoint());
-      return { kind: "completed", value: "saved" };
+      // 中断沿返回值上行（Outcome 通道）：cancelled/replaced 原样透传给 handler 消费方。
+      const exported = await DbBackupService.exportToPath(rt, destPath, () => scope.checkpoint());
+      return exported.kind === "completed" ? { kind: "completed", value: "saved" } : exported;
     } catch (err) {
-      // copyFile 前 checkpoint 命中：service 抛 AbortError，这里转回控制流 Outcome。
+      // 兜底：未来 throw 源的 AbortError 转回控制流 Outcome。
       if (RequestAbort.isAbortLikeError(err)) return { kind: "cancelled", reason: scope.reason ?? "user-stop" };
       throw err;
     }

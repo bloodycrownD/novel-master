@@ -10,6 +10,7 @@ import {
 import { MessageBodyText } from '@novel-master/core/prompt';
 import { type ContentBlock } from '@novel-master/core/chat';
 import { Result } from "@novel-master/core/errors";
+import { AbortError } from "@novel-master/core/abort";
 import { assert } from "@novel-master/core/common";
 import type {
   ChatMessageDto,
@@ -212,14 +213,19 @@ export namespace Messages {
       if (!built.ok) return Result.err(built.error);
       const rt = built.value;
       const forked = await rt.messages.fork(req.sessionId, req.messageId);
-      return forked.map((session) => ({
+      // nm-throw: keep 平台强制（P4 IPC 取消协议）——handler 是 IpcResult 线格式出口，中断分支转 AbortError 由 formatIpcError 映射 IPC_ABORTED。
+      if (forked.kind === "cancelled" || forked.kind === "replaced") throw AbortError.create();
+      // nm-throw: keep 合法边界转码——core Result 失败解包上抛，IpcResults.from 的 catch 统一收编转 IpcResult（五期 handler 既有形态）。
+      if (forked.kind === "failed") throw forked.error;
+      const session = forked.value;
+      return Result.ok({
         id: session.id,
         projectId: session.projectId,
         title: session.title,
         parentSessionId: session.parentSessionId,
         createdAtMs: session.createdAtMs,
         updatedAtMs: session.updatedAtMs,
-      }));
+      });
     });
   }
 

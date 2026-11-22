@@ -98,7 +98,7 @@ export interface MessageService {
    * `hooks` 透传给上界读口与 `batchInsert`：中断在事务边界转
    * `throw createAbortError()` 整体回滚（不留半写 fork）。
    */
-  fork(sessionId: string, upToMessageId: string, hooks?: LongTaskHooks): Promise<Result<ChatSession, AppError>>;
+  fork(sessionId: string, upToMessageId: string, hooks?: LongTaskHooks): Promise<Outcome<ChatSession>>;
 
   /** Hide a single message from LLM prompt rendering. */
   hide(messageId: string): Promise<Result<void, AppError>>;

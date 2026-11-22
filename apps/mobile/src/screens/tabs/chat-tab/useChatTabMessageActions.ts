@@ -167,7 +167,9 @@ export function useChatTabMessageActions({
       }
       try {
         const forked = await runtime.messages.fork(sessionId, messageId);
-        if (!forked.ok) {
+        // 中断沿返回值上行（Outcome 通道）：取消/替换静默（控制流不是失败，与桌面 IPC_ABORTED 同口径）。
+        if (forked.kind === 'cancelled' || forked.kind === 'replaced') return;
+        if (forked.kind === 'failed') {
           showToast(ToastMessage.toast(coreT({key: "ui.common.fork_failed"}), forked.error));
           return;
         }

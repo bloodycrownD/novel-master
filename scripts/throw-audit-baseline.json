@@ -1,7 +1,7 @@
 {
   "note": "throw-audit 基线（p26 R3）。站点键 = 文件 + throw 语句空白归一原文；disposition：ALLOWED（白名单三类）/ BOUNDARY（合法边界转码，理由必填）/ KEEP（nm-throw: keep 存量）/ UNTRIAGED（定性不了的欠账——gate 不拦但报告显数）。gate 拦矩阵判 VIOLATION/VIOLATION-B/BOUNDARY 且未登记的站点；重建：nm-style throw-audit --write-baseline。",
   "toolVersion": "0.1.0",
-  "generatedAt": "2026-11-21T14:49:14.153Z",
+  "generatedAt": "2026-11-22T01:55:53.355Z",
   "includeTests": false,
   "sites": {
     "apps/desktop/renderer/features/workspace/workspace-actions.ts#throw new Error(picked.error.message || coreT({key: \"ui.vfs.pick_file_failed\"}));": {
@@ -81,6 +81,24 @@
       "line": 72,
       "disposition": "KEEP",
       "reason": "测试 seam 未配置属编程错误（用例忘了覆盖），必须显式炸掉而不是静默给默认值。"
+    },
+    "apps/desktop/src/main/ipc/handlers/messages.ts#throw AbortError.create();": {
+      "form": "T2",
+      "line": 217,
+      "disposition": "KEEP",
+      "reason": "缺理由：nm-throw: keep 注释未带理由，须补"
+    },
+    "apps/desktop/src/main/ipc/handlers/messages.ts#throw forked.error;": {
+      "form": "T1",
+      "line": 219,
+      "disposition": "KEEP",
+      "reason": "缺理由：nm-throw: keep 注释未带理由，须补"
+    },
+    "apps/desktop/src/main/ipc/run-scope.ts#throw AbortError.create();": {
+      "form": "T2",
+      "line": 99,
+      "disposition": "KEEP",
+      "reason": "缺理由：nm-throw: keep 注释未带理由，须补"
     },
     "apps/desktop/src/main/runtime/desktop-runtime-singleton.ts#throw new Error(\"Desktop runtime not initialized\");": {
       "form": "T4",
@@ -186,7 +204,7 @@
     },
     "apps/mobile/src/runtime/novel-master-context.tsx#throw new Error('useNovelMaster must be used within NovelMasterProvider');": {
       "form": "T4",
-      "line": 420,
+      "line": 424,
       "disposition": "KEEP",
       "reason": "Provider 外调用 hook 属编程错误；渲染期同步返回值无 Result 通道（desktop/mobile 7 处 hook 守卫同族同判）"
     },
@@ -346,6 +364,18 @@
       "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
+    "apps/mobile/src/services/cloud-sync.service.ts#throw AbortError.create();": {
+      "form": "T2",
+      "line": 464,
+      "disposition": "ALLOWED",
+      "reason": "白名单自动判定（control-signal）"
+    },
+    "apps/mobile/src/services/db-backup.service.ts#throw AbortError.create();": {
+      "form": "T2",
+      "line": 221,
+      "disposition": "KEEP",
+      "reason": "缺理由：nm-throw: keep 注释未带理由，须补"
+    },
     "apps/mobile/src/services/document-io.ts#throw new Error(result.error);": {
       "form": "T4",
       "line": 96,
@@ -354,13 +384,13 @@
     },
     "apps/mobile/src/services/llm-native-fetch-shim.ts#throw new Error(`llm-native-fetch 仅支持 GET/POST 非流式请求（收到 ${method}）`);": {
       "form": "T4",
-      "line": 194,
+      "line": 197,
       "disposition": "KEEP",
       "reason": "native bridge fetch 适配层：fetch 形状契约以 reject 报错（测试钉 'GET/POST' 拒绝）"
     },
     "apps/mobile/src/services/llm-native-fetch-shim.ts#throw new Error(`llm-native-fetch 仅支持 string body（收到 ${typeof rawBody}）`);": {
       "form": "T4",
-      "line": 203,
+      "line": 206,
       "disposition": "KEEP",
       "reason": "native bridge fetch 适配层：fetch 形状契约以 reject 报错"
     },
@@ -402,13 +432,13 @@
     },
     "apps/mobile/src/webview-host/typed-message-bridge.ts#throw new Error(versionError);": {
       "form": "T4",
-      "line": 38,
+      "line": 30,
       "disposition": "KEEP",
       "reason": "webview bridge 边界：坏信封由宿主 onMessage catch 后静默丢弃"
     },
     "apps/mobile/src/webview-host/typed-message-bridge.ts#throw new Error(shapeError);": {
       "form": "T4",
-      "line": 42,
+      "line": 34,
       "disposition": "KEEP",
       "reason": "webview bridge 边界：坏信封由宿主 onMessage catch 后静默丢弃"
     },
@@ -502,33 +532,45 @@
       "disposition": "KEEP",
       "reason": "e2e 专用短路钩子，刻意走 reject 模拟「更新检查失败」错误态；update-check 属 infra 适配层。"
     },
+    "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts#throw AbortError.create();": {
+      "form": "T2",
+      "line": 392,
+      "disposition": "KEEP",
+      "reason": "缺理由：nm-throw: keep 注释未带理由，须补"
+    },
     "packages/core/src/domain/message-checkpoint/logic/truncate-tail-in-transaction.ts#throw tailRead.error;": {
       "form": "T1",
       "line": 60,
       "disposition": "ALLOWED",
       "reason": "白名单自动判定（transaction）"
     },
+    "packages/core/src/domain/message-checkpoint/logic/truncate-tail-in-transaction.ts#throw AbortError.create();": {
+      "form": "T2",
+      "line": 62,
+      "disposition": "ALLOWED",
+      "reason": "白名单自动判定（transaction）"
+    },
     "packages/core/src/domain/vfs/content-store/impl/sqlite-vfs-content-store.ts#throw new AppError(\"VFS_CONTENT_BLOB_MISSING\", { detail: `vfs_content_blob 缺失且无可回退明文: ${contentHash}`, contentHash });": {
       "form": "T3",
-      "line": 275,
+      "line": 283,
       "disposition": "KEEP",
       "reason": "blob 缺失且无回退明文=数据受损域失败；消费方均在事务回调内（restore-path 持 tx、vfs-tree-copy replaceSubtree/Outcome 边界转 createAbortError、seed 链），抛错即回滚，service 边界 unwrapTxDomainError 收进 Result.err。"
     },
     "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts#throw new AppError(\"VFS_NOT_FOUND\", { path: oldBase, detail: `Path not found: ${oldBase}` });": {
       "form": "T3",
-      "line": 684,
+      "line": 689,
       "disposition": "KEEP",
       "reason": "幽灵路径按既定设计抛错回滚：唯一消费链 renamePrefix（revision-aware-vfs）注释明言 repo 抛 VFS_NOT_FOUND，边界已 unwrapTxDomainError 转 Err。"
     },
     "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.ts#throw new AppError(\"VFS_NOT_FOUND\", { detail: `Revision not found: entry ${entryId}@${version}`, entryId, version });": {
       "form": "T3",
-      "line": 273,
+      "line": 278,
       "disposition": "KEEP",
       "reason": "守护 T-RB-REF-MISSING 不变量（ref_count 不得悬空）：adjustRefCount delta>0 命中 0 行即单条缺失；消费方 RevisionRefCount.adjust 链全部落在事务回调内，抛错回滚 + service 边界转码。"
     },
     "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.ts#throw new AppError(\"VFS_NOT_FOUND\", { detail: `Revision not found: entry ${first.entryId}@${first.version} （共 ${missing.length} 条缺失）`, missing });": {
       "form": "T3",
-      "line": 301,
+      "line": 306,
       "disposition": "KEEP",
       "reason": "同 adjustRefCount：batchAdjustRefCountWithDelta 批量 +1 前置存在性校验，守护 T-RB-REF-MISSING 不变量；事务回调内抛错回滚 + service 边界转码。"
     },
@@ -567,6 +609,12 @@
       "line": 54,
       "disposition": "KEEP",
       "reason": "catalog 结构不变量：构建期内嵌资源写坏即打包错误，非用户可触发失败。"
+    },
+    "packages/core/src/infra/cloud-sync/impl/cloud-sync-coordinator.ts#throw AbortError.create();": {
+      "form": "T2",
+      "line": 237,
+      "disposition": "KEEP",
+      "reason": "缺理由：nm-throw: keep 注释未带理由，须补"
     },
     "packages/core/src/infra/db-backup/provider-table-snapshot.ts#throw validation.error;": {
       "form": "T1",
@@ -624,19 +672,19 @@
     },
     "packages/core/src/infra/llm-protocol/logic/anthropic-sse-parser.ts#throw asserted.error;": {
       "form": "T1",
-      "line": 278,
+      "line": 280,
       "disposition": "KEEP",
       "reason": "llm-protocol port 出口（总纲 §五例外 5）：port 契约无失败位，ProviderError 走 throw 通道供 retry 按 catch+code 分派。"
     },
     "packages/core/src/infra/llm-protocol/logic/gemini-sse-parser.ts#throw asserted.error;": {
       "form": "T1",
-      "line": 254,
+      "line": 256,
       "disposition": "KEEP",
       "reason": "llm-protocol port 出口（总纲 §五例外 5）：port 契约无失败位，ProviderError 走 throw 通道供 retry 按 catch+code 分派。"
     },
     "packages/core/src/infra/llm-protocol/logic/openai-sse-parser.ts#throw asserted.error;": {
       "form": "T1",
-      "line": 85,
+      "line": 87,
       "disposition": "KEEP",
       "reason": "llm-protocol port 出口（总纲 §五例外 5）：port 契约无失败位，ProviderError 走 throw 通道供 retry 按 catch+code 分派。"
     },
@@ -672,19 +720,19 @@
     },
     "packages/core/src/service/agent/logic/run-agent-turn.ts#throw result.error;": {
       "form": "T1",
-      "line": 436,
+      "line": 439,
       "disposition": "KEEP",
       "reason": "runner 收口漏斗（总纲 §五7a）：throw 喂同函数 catch 的统一收口——FAILED('') 补发 + onRunFailed 记账，直接 return 会跳过终态事件；mapResolveError 是 desktop rejection 契约的 OrThrow 边界。"
     },
     "packages/core/src/service/agent/logic/run-agent-turn.ts#throw new AppError(\"AGENT_MESSAGE_EMPTY\");": {
       "form": "T3",
-      "line": 644,
+      "line": 647,
       "disposition": "KEEP",
       "reason": "runner 收口漏斗（总纲 §五7a）：throw 喂同函数 catch 的统一收口——FAILED('') 补发 + onRunFailed 记账，直接 return 会跳过终态事件；mapResolveError 是 desktop rejection 契约的 OrThrow 边界。"
     },
     "packages/core/src/service/agent/logic/run-agent-turn.ts#throw tailRead.error;": {
       "form": "T1",
-      "line": 633,
+      "line": 636,
       "disposition": "KEEP",
       "reason": "runner 收口漏斗（总纲 §五7a）：throw 喂同函数 catch 的统一收口——FAILED('') 补发 + onRunFailed 记账，直接 return 会跳过终态事件；mapResolveError 是 desktop rejection 契约的 OrThrow 边界。"
     },
@@ -702,13 +750,19 @@
     },
     "packages/core/src/service/chat/impl/message.service.ts#throw vfsCopied.error;": {
       "form": "T1",
-      "line": 314,
+      "line": 315,
+      "disposition": "ALLOWED",
+      "reason": "白名单自动判定（transaction）"
+    },
+    "packages/core/src/service/chat/impl/message.service.ts#throw AbortError.create();": {
+      "form": "T2",
+      "line": 333,
       "disposition": "ALLOWED",
       "reason": "白名单自动判定（transaction）"
     },
     "packages/core/src/service/chat/impl/message.service.ts#throw inserted.error;": {
       "form": "T1",
-      "line": 331,
+      "line": 332,
       "disposition": "ALLOWED",
       "reason": "白名单自动判定（transaction）"
     },
@@ -720,43 +774,49 @@
     },
     "packages/core/src/service/chat/impl/session.service.ts#throw new AppError(\"CHAT_NOT_FOUND\", { detail: `session not found: ${session.id}`, kind: \"session\", id: session.id });": {
       "form": "T3",
-      "line": 221,
+      "line": 223,
       "disposition": "KEEP",
       "reason": "事务回调内必须靠抛错回滚——改 return 会在「子树已删、根删失败」时提交半删事务；delete() 边界已补 unwrapTxDomainError 收进 Result.err（p27 R1 修复）。"
     },
     "packages/core/src/service/chat/impl/session.service.ts#throw vfsCopied.error;": {
       "form": "T1",
-      "line": 360,
+      "line": 363,
+      "disposition": "ALLOWED",
+      "reason": "白名单自动判定（transaction）"
+    },
+    "packages/core/src/service/chat/impl/session.service.ts#throw AbortError.create();": {
+      "form": "T2",
+      "line": 367,
       "disposition": "ALLOWED",
       "reason": "白名单自动判定（transaction）"
     },
     "packages/core/src/service/chat/impl/session.service.ts#throw inserted.error;": {
       "form": "T1",
-      "line": 363,
+      "line": 366,
       "disposition": "ALLOWED",
       "reason": "白名单自动判定（transaction）"
     },
     "packages/core/src/service/message-checkpoint/impl/message-rollback.service.ts#throw new AppError(\"SESSION_FS_ROLLBACK_CONFLICT\", { descriptor: { key: \"error.session_fs.rollback_conflict\", params: { expected_message_count: plan.messageCountSnapshot, actual_message_count: currentCount } }, expectedMessageCount: plan.messageCountSnapshot, actualMessageCount: currentCount, sessionId, messageId: anchorMessageId, });": {
       "form": "T3",
-      "line": 182,
+      "line": 181,
       "disposition": "ALLOWED",
       "reason": "白名单自动判定（transaction）"
     },
     "packages/core/src/service/message-checkpoint/impl/message-rollback.service.ts#throw new AppError(\"SESSION_FS_ROLLBACK_CONFLICT\", { descriptor: { key: \"error.session_fs.rollback_conflict\", params: { expected_message_count: plan.fileTreeFingerprint.length, actual_message_count: currentFingerprint.length } }, expectedMessageCount: plan.fileTreeFingerprint.length, actualMessageCount: currentFingerprint.length, sessionId, messageId: anchorMessageId, });": {
       "form": "T3",
-      "line": 200,
+      "line": 199,
       "disposition": "ALLOWED",
       "reason": "白名单自动判定（transaction）"
     },
     "packages/core/src/service/message-checkpoint/impl/message-rollback.service.ts#throw new AppError(\"SESSION_FS_ROLLBACK_VFS_RESTORE_FAILED\", { descriptor: { key: \"error.session_fs.vfs_restore_failed\", params: { detail } }, sessionId, messageId: anchorMessageId });": {
       "form": "T3",
-      "line": 221,
+      "line": 220,
       "disposition": "ALLOWED",
       "reason": "白名单自动判定（transaction）"
     },
     "packages/core/src/service/message-checkpoint/impl/message-rollback.service.ts#throw new AppError(\"SESSION_FS_ROLLBACK_TAIL_DRIFT\", { descriptor: { key: \"error.session_fs.rollback_tail_drift\", params: { expected_message_count: plan.tailMessageIds.length, actual_message_count: actualTailIds.length } }, expectedMessageCount: plan.tailMessageIds.length, actualMessageCount: actualTailIds.length, sessionId, messageId: anchorMessageId, });": {
       "form": "T3",
-      "line": 235,
+      "line": 234,
       "disposition": "ALLOWED",
       "reason": "白名单自动判定（transaction）"
     },
@@ -778,39 +838,39 @@
       "disposition": "ALLOWED",
       "reason": "白名单自动判定（transaction）"
     },
-    "packages/core/src/service/vfs/impl/character-card-import.service.ts#throw new AppError(\"VFS_CHARACTER_CARD_INVALID_PATH\", { detail: `character card target path is a file, not a directory: ${directoryPath}` });": {
+    "packages/core/src/service/vfs/impl/character-card-import.service.ts#throw new AppError(\"VFS_CHARACTER_CARD_INVALID_PATH\", {detail: `character card target path is a file, not a directory: ${directoryPath}`});": {
       "form": "T3",
-      "line": 178,
+      "line": 194,
       "disposition": "KEEP",
-      "reason": "白名单自动判定（transaction）"
+      "reason": "平台强制 P2：事务回调内抛错驱动整体回滚；外层 catch 把 AppError 原形收进 Result.err。"
     },
     "packages/core/src/service/vfs/impl/character-card-import.service.ts#throw new Error(\"test import failure\");": {
       "form": "T4",
-      "line": 211,
+      "line": 227,
       "disposition": "KEEP",
       "reason": "测试故障注入点：调用方按 \"test import failure\" 原文案直供抛回（用例断言该 message），非业务错误。"
     },
     "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts#throw new AppError(\"VFS_NOT_FOUND\", { path: normalized, detail: `Path not found: ${normalized}` });": {
       "form": "T3",
-      "line": 121,
+      "line": 112,
       "disposition": "KEEP",
       "reason": "事务回调内失败靠抛错回滚（总纲 §五例外 2）；方法边界已 unwrapTxDomainError 收进 Err（RB4b 教训）。（非递归删根不存在）"
     },
     "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts#throw new AppError(\"VFS_NOT_FOUND\", { path: normalized, detail: `cannot resetHeadToVersion: entry missing for ${normalized}` });": {
       "form": "T3",
-      "line": 175,
+      "line": 166,
       "disposition": "KEEP",
       "reason": "事务回调内失败靠抛错回滚（总纲 §五例外 2）；方法边界已 unwrapTxDomainError 收进 Err（RB4b 教训）。（entry 缺失）"
     },
     "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts#throw new AppError(\"VFS_NOT_FOUND\", { path: normalized, detail: `cannot resetHeadToVersion: revision missing or deleted for ${normalized}@${version}` });": {
       "form": "T3",
-      "line": 182,
+      "line": 173,
       "disposition": "KEEP",
       "reason": "事务回调内失败靠抛错回滚（总纲 §五例外 2）；方法边界已 unwrapTxDomainError 收进 Err（RB4b 教训）（revision 缺失/已删）"
     },
     "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts#throw new AppError(\"VFS_NOT_FOUND\", { path: normalized, detail: `cannot resetHeadToVersion: active revision has no content for ${normalized}@${version}` });": {
       "form": "T3",
-      "line": 186,
+      "line": 177,
       "disposition": "KEEP",
       "reason": "事务回调内失败靠抛错回滚（总纲 §五例外 2）；方法边界已 unwrapTxDomainError 收进 Err（RB4b 教训）（active revision 无内容）"
     },

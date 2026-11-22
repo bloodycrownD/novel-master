@@ -97,10 +97,16 @@ const ALLOWED_FILE_RULES: ReadonlyArray<{ category: string; test: (rel: string) 
 
 function formOf(expr: ts.Expression): ThrowForm | null {
   if (ts.isPropertyAccessExpression(expr) && ts.isIdentifier(expr.name) && expr.name.text === "error") return "T1";
-  if (ts.isCallExpression(expr) && ts.isIdentifier(expr.expression) && expr.expression.text === "createAbortError") return "T2";
+  if (ts.isCallExpression(expr) && isAbortFactoryText(expr.expression)) return "T2";
   if (ts.isNewExpression(expr) && ts.isIdentifier(expr.expression) && expr.expression.text === "AppError") return "T3";
   if (ts.isNewExpression(expr) && ts.isIdentifier(expr.expression) && expr.expression.text === "Error") return "T4";
   return null;
+}
+
+/** T2 载荷识别（p29 补丁）：工厂 namespace 化后 `AbortError.create()`（属性访问）与旧名 `createAbortError()`（裸标识符）都要认——p23 改名曾让 T2 全量漏网。 */
+function isAbortFactoryText(expr: ts.Expression): boolean {
+  if (ts.isIdentifier(expr)) return expr.text === "createAbortError";
+  return ts.isPropertyAccessExpression(expr) && ts.isIdentifier(expr.expression) && expr.expression.text === "AbortError" && ts.isIdentifier(expr.name) && expr.name.text === "create";
 }
 
 /** 限定函数：从 throw 向上找最近函数节点（返回形态/catch 都按最近一层算——回调槽的标注不该被外层函数顶替），同时收全部祖先函数段（方法拼类名、箭头找绑定名，外层在前 . 连接）。 */

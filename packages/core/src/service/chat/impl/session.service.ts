@@ -18,6 +18,7 @@ import { ForkCopySeeder } from "@/domain/chat/logic/fork-copy-seeder.js";
 import { TdbcTransaction } from "@/infra/tdbc/logic/transaction-helper.js";
 import type { LongTaskHooks } from "@/domain/abort/model/abort-scope.js";
 import { AbortError } from "@/domain/abort/logic/create-abort-error.js";
+import type { Outcome } from "@/errors/outcome.js";
 import { VfsTreeCopy } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { TemplatePullServiceFactory } from "@/service/template/create-template-pull-service.js";
@@ -312,16 +313,17 @@ export class DefaultSessionService implements SessionService {
    * ⚠️ 引入的 TOCTOU 窗口后果是「复制到一个稍旧快照」——copy 的语义本就是快照，
    * 可接受；这里刻意不引入新锁（引入就退化成今天的全事务形态）。
    */
-  async copy(id: string, hooks?: LongTaskHooks): Promise<Result<ChatSession, AppError>> {
+  async copy(id: string, hooks?: LongTaskHooks): Promise<Outcome<ChatSession>> {
     const source = await this.get(id);
-    if (!source.ok) return source;
+    if (!source.ok) return { kind: "failed", error: source.error };
     const src = source.value;
     // 事务外读：repo 绑 `this.deps.conn`（不是 tx）——在事务回调里用外层 conn
     // 会撞驱动层 AsyncMutex 不可重入，那是死锁不是报错。
     const messagesRead = await ChatServiceFactory.createRepoDeps(this.deps.conn).messages.listBySession(src.id, undefined, hooks);
-    if (messagesRead.kind === "failed") return Result.err(messagesRead.error);
-    // 中断不是错误：本方法出口是边界，转抛 AbortError（未注入 hooks 时不可达）。
-    if (messagesRead.kind !== "completed") throw AbortError.create();
+    if (messagesRead.kind === "failed") return { kind: "failed", error: messagesRead.error };
+    // 中断沿返回值上行（Outcome 通道）：cancelled/replaced 原样透传；事务回调内
+    // 的中断仍走 throw 回滚（平台强制），由 repository 出口转回 Outcome。
+    if (messagesRead.kind !== "completed") return messagesRead;
     const messages = messagesRead.value;
     const now = Date.now();
     const copy: ChatSession = {
@@ -368,6 +370,6 @@ export class DefaultSessionService implements SessionService {
       await TdbcTransaction.unwrapOrRollback(await ForkCopySeeder.seed(tx, { projectId: src.projectId, sourceSessionId: src.id, targetSessionId: copy.id, newMessages }));
       return copy;
     });
-    return Result.ok(await copyTransaction);
+    return { kind: "completed", value: await copyTransaction };
   }
 }

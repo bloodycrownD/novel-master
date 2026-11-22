@@ -12,7 +12,7 @@ import { access, copyFile, open as openFileHandle, unlink, writeFile } from "nod
 import { resolve } from "node:path";
 import { dialog, type BrowserWindow } from "electron";
 import { DatabaseBackupExport, ProviderTableSnapshotIo, SqliteBackupHeader, TdbcOpen, type ProviderTableSnapshot } from "@novel-master/core";
-import { AppError } from "@novel-master/core/errors";
+import { AppError , type Outcome} from "@novel-master/core/errors";
 import { Errors } from "@novel-master/core/common";
 import { Result, type Interrupt } from "@novel-master/core/errors";
 import { BetterSqlite3Register } from "@novel-master/tdbc-driver-better-sqlite3";
@@ -77,10 +77,11 @@ export namespace DbBackupService {
    * 最外层流程（备份导入 / 云同步 pull）另持一枚令牌、在 rebootstrap 完成
    * 之后 release，含重建窗口的完整互斥。计数语义下嵌套调用互不提前清位。
    */
-  export async function exportToPath(runtime: DesktopNovelMasterRuntime, destPath: string, checkpoint?: () => Interrupt | null): Promise<void> {
+  export async function exportToPath(runtime: DesktopNovelMasterRuntime, destPath: string, checkpoint?: () => Interrupt | null): Promise<Outcome<void>> {
     maintenanceBusy.acquire();
     try {
-      await DatabaseBackupExport.toPath(runtime.conn, destPath, { checkpointDatabase: DesktopDb.checkpoint, resolveDbPath: DesktopDbPath.resolve, copyFile }, checkpoint);
+      // return await（非裸 return）：async try-finally 里裸 return promise 的 finally 先于 settle 执行，release 会提前放行 busy。
+      return await DatabaseBackupExport.toPath(runtime.conn, destPath, { checkpointDatabase: DesktopDb.checkpoint, resolveDbPath: DesktopDbPath.resolve, copyFile }, checkpoint);
     } finally {
       maintenanceBusy.release();
     }

@@ -92,11 +92,11 @@ export const RunScope = {
         completed: (value) => IpcResults.ok(value),
         cancelled: (reason) => {
           log.info("run aborted", { key, reason, phase: "handler" });
-          throw AbortError.create();
+          throw AbortError.create(); // nm-throw: keep 平台强制（P4 IPC 取消协议）——可中止 handler 统一边界转码，formatIpcError 映射 IPC_ABORTED
         },
         replaced: () => {
           log.info("run replaced", { key, phase: "handler" });
-          throw AbortError.create();
+          throw AbortError.create(); // nm-throw: keep 平台强制（P4 IPC 取消协议）——同上，replaced 亦映射 IPC_ABORTED
         },
         failed: (error) => {
           throw error;

@@ -13,6 +13,7 @@
 import {Platform} from 'react-native';
 import {types} from '@react-native-documents/picker';
 import {DatabaseBackupExport, ProviderTableSnapshotIo, SqliteBackupHeader, TdbcOpen} from '@novel-master/core';
+import type {Outcome} from '@novel-master/core/errors';
 import {AppError} from '@novel-master/core/errors';
 import {ABORT_KEY, AbortError, AbortScopeFactory} from '@novel-master/core/abort';
 import {Result, type Interrupt} from '@novel-master/core/errors';
@@ -55,10 +56,11 @@ export namespace DbBackupService {
    * busy 互斥在此底层置位（计数/令牌配对）：云同步等直调路径不经上层包装
    * 也能被覆盖，期间归一/压缩后台循环让路。
    */
-  export async function exportToPath(runtime: MobileNovelMasterRuntime, destPath: string, checkpoint?: () => Interrupt | null): Promise<void> {
+  export async function exportToPath(runtime: MobileNovelMasterRuntime, destPath: string, checkpoint?: () => Interrupt | null): Promise<Outcome<void>> {
     maintenanceBusy.acquire();
     try {
-      await DatabaseBackupExport.toPath(runtime.conn, destPath, {checkpointDatabase: MobileDb.checkpointMobileDatabase, resolveDbPath: MobileDatabaseFilePath.resolve, copyFile: async (from, to) => { await RnFileIo.blobFs().cp(from, to); }}, checkpoint);
+      // return await（非裸 return）：async try-finally 里裸 return promise 的 finally 先于 settle 执行，release 会提前放行 busy。
+      return await DatabaseBackupExport.toPath(runtime.conn, destPath, {checkpointDatabase: MobileDb.checkpointMobileDatabase, resolveDbPath: MobileDatabaseFilePath.resolve, copyFile: async (from, to) => { await RnFileIo.blobFs().cp(from, to); }}, checkpoint);
     } finally {
       maintenanceBusy.release();
     }
@@ -200,12 +202,12 @@ export namespace DbBackupService {
     }
 
     // 任务级取消 scope（spec §五移动表：backup("local")，入口 + copyFile 前）。
-    // 取消只抛出 AbortError（T-S16 边界形态）；选择器自身取消仍是 Result.ok('cancelled')。
+    // 取消沿返回值上行（Result.ok('cancelled')）；选择器/平台 IO write 回调内的取消仍 throw AbortError（DocumentIo 契约无控制流通道）。
     const abortScope = AbortScopeFactory.create();
     runtime.abortRegistry.register(ABORT_KEY.backup('local'), abortScope);
     try {
       if (abortScope.checkpoint() != null) {
-        throw AbortError.create();
+        return Result.ok('cancelled');
       }
       // 外层 acquire（计数配对，不是幂等空操作）：把选择器弹出窗口也纳入
       // 互斥——底层 exportToPath 内部另有一层自平衡的
@@ -216,7 +218,9 @@ export namespace DbBackupService {
           fileName: 'nmbackup.db',
           mimeType: 'application/octet-stream',
           copy: Platform.OS === 'ios',
-          write: destPath => exportToPath(runtime, destPath, () => abortScope.checkpoint()),
+          write: destPath => exportToPath(runtime, destPath, () => abortScope.checkpoint()).then(outcome => {
+            if (outcome.kind !== 'completed') throw AbortError.create(); // nm-throw: keep 平台强制——DocumentIo.write 契约无控制流通道，调用方 catch isAbortLikeError 收编
+          }),
         };
         const saved = await DocumentIo.exportBytes(exportOptions);
         return Result.ok(saved);
@@ -234,7 +238,7 @@ export namespace DbBackupService {
    * 大文件仅 keepLocalCopy + 路径级 cp，不读入 JS 堆。
    * 调用方须在成功后执行 `onRebootstrap`（例如 NovelMasterProvider.retry）。
    */
-  export async function importViaPicker(runtime: MobileNovelMasterRuntime, onRebootstrap: () => void): Promise<Result<void, AppError>> {
+  export async function importViaPicker(runtime: MobileNovelMasterRuntime, onRebootstrap: () => void): Promise<Result<'reloaded' | 'cancelled', AppError>> {
     if (agentActivity.isActive()) {
       return Result.err(new AppError('AGENT_BUSY', {detail: 'Agent 运行中，请稍后再导入数据库'}));
     }
@@ -245,7 +249,7 @@ export namespace DbBackupService {
     runtime.abortRegistry.register(ABORT_KEY.backup('local'), abortScope);
     try {
       if (abortScope.checkpoint() != null) {
-        throw AbortError.create();
+        return Result.ok('cancelled');
       }
       // 外层 acquire（计数配对）：把选择器窗口到 rebootstrap 完成的完整
       // 链路纳入互斥——底层 importFromPath 内部的
@@ -256,13 +260,13 @@ export namespace DbBackupService {
       try {
         const picked = await DocumentIo.pickToLocalPath({mimeTypes: [types.allFiles], localFileName: 'import.nmbackup'});
         if (picked == null) {
-          return Result.ok(undefined);
+          return Result.ok('reloaded');
         }
 
         const imported = await importFromPath(picked.fsPath);
         if (!imported.ok) return Result.err(imported.error);
         onRebootstrap();
-        return Result.ok(undefined);
+        return Result.ok('reloaded');
       } finally {
         maintenanceBusy.release();
       }
