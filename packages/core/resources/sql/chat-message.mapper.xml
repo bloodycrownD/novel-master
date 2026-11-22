@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  chat_message 表的 SQL mapper（样板，schema 见 domain/chat）。
+
+  结构约定：
+  - 一张表一个 mapper 文件；id 与 repo 方法同名（camelCase），生成器按 id 产出
+    generated TS 映射（src/infra/sql-template/generated/），repo 内只留引用。
+  - <sql id> 片段经 <include ref> 展开，生成物里每条语句都是完整字面量。
+  - XML 保留字符转义：< → &lt;（必须）；> 可保留字面量（生成器反转义由
+    fast-xml-parser 完成，生成物是普通 SQL 文本）。
+  - 动态维度只用 <if>/<where>/<foreach>/<trim>/<choose>（SqlTemplateParser
+    原生标签）；test 表达式为 JS 求值（绑定 params）。
+  - 静态查询保持静态：不为索引形态可读性合并查询模板。
+-->
+<mapper namespace="chat_message">
+
+  <sql id="selectColumns">id, session_id, seq, role, content_json, provider, provider_id, raw_json, created_at_ms, hidden, attachments_json, prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, model_name, first_token_ms, duration_ms</sql>
+
+  <sql id="headerColumns">id, session_id, seq, role, hidden, created_at_ms</sql>
+
+  <!-- 写侧 21 列：比读投影多 content_encoding / content_blob 两个存量兼容列（恒绑 NULL）。列顺序与 toMessageParams 一一对应，改一处必须同步另一处。 -->
+  <sql id="insertColumns">id, session_id, seq, role, content_json, content_encoding, content_blob, provider, provider_id, raw_json, created_at_ms, hidden, attachments_json, prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, model_name, first_token_ms, duration_ms</sql>
+
+  <select id="listBySession">
+    SELECT <include ref="selectColumns"/>
+    FROM chat_message
+    WHERE session_id = #{sessionId}<if test="includeHidden === false"> AND hidden = 0</if>
+    ORDER BY seq ASC
+  </select>
+
+  <select id="listBySessionFromSeq">
+    SELECT <include ref="selectColumns"/>
+    FROM chat_message
+    WHERE session_id = #{sessionId} AND seq &gt;= #{fromSeq}
+    ORDER BY seq ASC
+  </select>
+
+  <select id="listBySessionUpToSeq">
+    SELECT <include ref="selectColumns"/>
+    FROM chat_message
+    WHERE session_id = #{sessionId} AND seq &lt;= #{maxSeq}
+    ORDER BY seq ASC
+  </select>
+
+  <select id="listBySessionTailOfRole">
+    SELECT <include ref="selectColumns"/>
+    FROM (SELECT <include ref="selectColumns"/>
+    FROM chat_message
+    WHERE session_id = #{sessionId} AND role = #{role}
+    ORDER BY seq DESC
+    LIMIT #{limit})
+    ORDER BY seq ASC
+  </select>
+
+  <select id="listIdsBySession">
+    SELECT id FROM chat_message WHERE session_id = #{sessionId} ORDER BY seq ASC
+  </select>
+
+  <select id="listMessageHeadersBySession">
+    SELECT <include ref="headerColumns"/> FROM chat_message WHERE session_id = #{sessionId} ORDER BY seq ASC
+  </select>
+
+  <select id="countBySession">
+    SELECT COUNT(*) AS n FROM chat_message WHERE session_id = #{sessionId}
+  </select>
+
+  <select id="listBySessionOffset">
+    SELECT <include ref="headerColumns"/>
+    FROM chat_message
+    WHERE session_id = #{sessionId}
+    ORDER BY seq ASC
+    LIMIT -1 OFFSET #{offset}
+  </select>
+
+  <select id="listBySessionTail">
+    SELECT <include ref="selectColumns"/>
+    FROM (SELECT <include ref="selectColumns"/>
+    FROM chat_message
+    WHERE session_id = #{sessionId}
+    ORDER BY seq DESC
+    LIMIT #{limit})
+    ORDER BY seq ASC
+  </select>
+
+  <select id="listBySessionPage">
+    SELECT <include ref="selectColumns"/>
+    FROM (SELECT <include ref="selectColumns"/>
+    FROM chat_message
+    WHERE session_id = #{sessionId} AND (#{beforeSeq} IS NULL OR seq &lt; #{beforeSeq})
+    ORDER BY seq DESC
+    LIMIT #{limit})
+    ORDER BY seq ASC
+  </select>
+
+  <select id="nextSeq">
+    SELECT MAX(seq) AS max_seq FROM chat_message WHERE session_id = #{sessionId}
+  </select>
+
+  <select id="listIdsAfterSeq">
+    SELECT id FROM chat_message WHERE session_id = #{sessionId} AND seq &gt; #{afterSeq}
+  </select>
+
+  <!-- 21 个 ? 与 insert_columns 顺序一一对应（写侧恒绑 NULL 的两列含内）。 -->
+  <insert id="insert">
+    INSERT INTO chat_message (<include ref="insertColumns"/>)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  </insert>
+
+  <!-- 三列齐置：写新明文的同时置 NULL 旧 blob 列，避免存量压缩行被看成双形态（T-MP1）。 -->
+  <update id="updateContent">
+    UPDATE chat_message
+    SET content_json = #{json}, content_encoding = NULL, content_blob = NULL
+    WHERE id = #{id}
+  </update>
+
+  <update id="updateHidden">
+    UPDATE chat_message SET hidden = #{hidden} WHERE id = #{id}
+  </update>
+
+  <!-- prevHidden 绑「行当前状态」（目标态取反），替代原 JS 条件拼接——只更新未被同步过的行。 -->
+  <update id="updateHiddenRange">
+    UPDATE chat_message
+    SET hidden = #{hidden}
+    WHERE session_id = #{sessionId} AND seq &gt;= #{fromSeq} AND seq &lt;= #{toSeq} AND hidden = #{prevHidden}
+  </update>
+
+  <delete id="deleteBySession">
+    DELETE FROM chat_message WHERE session_id = #{sessionId}
+  </delete>
+
+  <delete id="deleteAfterSeq">
+    DELETE FROM chat_message WHERE session_id = #{sessionId} AND seq &gt; #{afterSeq}
+  </delete>
+
+</mapper>

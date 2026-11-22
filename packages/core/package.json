@@ -138,6 +138,7 @@
     }
   },
   "scripts": {
+    "gen:sql-mapper": "node scripts/gen-sql-mapper.mjs",
     "lint": "eslint src test",
     "build": "tsc --build tsconfig.json && tsc-alias -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
