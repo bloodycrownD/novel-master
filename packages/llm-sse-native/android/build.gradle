@@ -29,4 +29,6 @@ dependencies {
   implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlinVersion"
   // OkHttp 用 RN/项目现有版本（零新增依赖；SSE 帧解析在 JS 侧，不用 okhttp-sse）
   implementation "com.squareup.okhttp3:okhttp"
+  // WHATWG 解码器 JVM 单测（mobile-sse-utf8-decode-fix Phase C；先例 tokenizer-driver-rn）
+  testImplementation "junit:junit:4.13.2"
 }

@@ -407,54 +407,28 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
     }
   }
 
-  /** 读循环：字节搬进 per-request 缓冲，UTF-8 不完整尾部留在 carry 跨迭代拼接。 */
+  /** 读循环：字节喂 WHATWG 流式解码器（跨读 carry + maximal-subpart 替换，见 Utf8StreamingDecoder）。 */
   private fun pumpStream(state: StreamState, source: BufferedSource) {
-    val carry = Buffer()
+    val decoder = Utf8StreamingDecoder()
+    val sink = Buffer()
     while (true) {
-      val read = source.read(carry, READ_CHUNK_BYTES)
+      val read = source.read(sink, READ_CHUNK_BYTES)
       if (read == -1L) {
         break
       }
-      val safe = completeUtf8PrefixLength(carry)
-      if (safe > 0) {
-        val text = carry.readUtf8(safe)
-        synchronized(state) {
-          state.pending.append(text)
-        }
-        maybeFlush(state)
+      val text = decoder.feed(sink.readByteArray())
+      synchronized(state) {
+        state.pending.append(text)
       }
+      maybeFlush(state)
     }
-  }
-
-  /**
-   * 返回 buffer 中「最后一个完整 UTF-8 序列」之前的长度；不完整的多字节尾部
-   * 留在 buffer 里等下一次读拼接（防止把一个中文字符劈成两个替换符）。
-   */
-  private fun completeUtf8PrefixLength(buf: Buffer): Long {
-    val size = buf.size
-    if (size == 0L) {
-      return 0L
-    }
-    var back = 1L
-    while (back <= 4L && back <= size) {
-      val b = buf[size - back]
-      if (b.toInt() and 0x80 == 0x00) {
-        return size // 尾字节是 ASCII：全部完整
+    val tail = decoder.flush()
+    if (tail.isNotEmpty()) {
+      synchronized(state) {
+        state.pending.append(tail)
       }
-      if (b.toInt() and 0xC0 == 0xC0) {
-        // 前导字节：按其声明的序列长度判断尾部序列是否完整
-        val sequenceLength = when (b.toInt() and 0xF8) {
-          0xF0 -> 4L
-          0xE0 -> 3L
-          0xC0 -> 2L
-          else -> 2L // 非法前导（F8+ 等）：保守按 2 字节切，不阻塞流
-        }
-        return if (back >= sequenceLength) size else size - back
-      }
-      back++
+      maybeFlush(state)
     }
-    // 连续 4 个 continuation 字节仍未遇前导：非法 UTF-8，保守丢弃判定按完整处理
-    return size
   }
 
   /** 阈值先到即 flush；否则起 100ms 定时（已有 pending 定时则不重置）。 */

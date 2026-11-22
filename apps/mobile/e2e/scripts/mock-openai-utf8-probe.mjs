@@ -63,12 +63,14 @@ const server = http.createServer((req, res) => {
                 if (msgs[i]?.role === 'user') { lastUser = String(msgs[i].content ?? ''); break; }
             }
         } catch { /* 解析失败退回全文 */ lastUser = bodyText; }
-        const isModeB = lastUser.includes('modeB');
-        const isModeC = lastUser.includes('modeC');
-        const isModeD = lastUser.includes('modeD');
-        const isModeE = lastUser.includes('modeE');
-        const isModeF = lastUser.includes('modeF');
-        const isModeG = lastUser.includes('modeG');
+        // 大小写不敏感（adb input text 打不出大写字母，真机注入用小写 modeg 即可触发）
+        const probeTag = lastUser.toLowerCase();
+        const isModeB = probeTag.includes('modeb');
+        const isModeC = probeTag.includes('modec');
+        const isModeD = probeTag.includes('moded');
+        const isModeE = probeTag.includes('modee');
+        const isModeF = probeTag.includes('modef');
+        const isModeG = probeTag.includes('modeg');
         if (isModeB) console.log('[utf8-probe] mode B: gateway-corrupted text (FFFD chars embedded)');
         if (isModeC) console.log('[utf8-probe] mode C: 200KB mass + 8192-boundary aligned cuts');
         if (isModeD) console.log('[utf8-probe] mode D: historical replay (original text that previously corrupted)');
