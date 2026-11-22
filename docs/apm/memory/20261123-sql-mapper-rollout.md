@@ -59,3 +59,12 @@ core 960/0、desktop 774/0、mobile 2384/0、typecheck 15/15、nm-style 硬段 0
   具名 chat/settings 走 dist generated、jest 映射指向 dist，不受影响）。
 - 边界口径：src/ 只装 TS 代码与 generated 产物；resources/ 只装人写的非 TS 源
   （XML/SQL/YAML），不入公开面、不被 tsc/nm-style 扫。
+
+## 第 4 课：工作流产物提交前必须亲自跑全量门禁（2026-11-23 补）
+
+mapper 工作流自报 nm-style exit 0，我复核时 check . 也是 signatures=0，提交
+（66d17648c）后用户指出参数折行问题才发现：vfs-revision 有 3 处 query<{...}>
+类型字面量折行（子代理晚写入竞态，逃过 style 段与我的复核扫描）。
+**纪律：工作流产物的收尾提交前，主代理必须自己跑一次全量 check . 再 commit**；
+复核的扫描结果与提交动作之间不能再有子代理活着。
+
