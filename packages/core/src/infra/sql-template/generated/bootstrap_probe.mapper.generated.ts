@@ -20,6 +20,18 @@ export const BootstrapProbeSql = {
 `,
     alignVfsEntryHeadVersion: `UPDATE vfs_entry SET head_version = version
 `,
+    probeVfsEntryColumns: `SELECT name FROM pragma_table_info('vfs_entry')
+`,
+    probeSavedModelColumns: `SELECT name FROM pragma_table_info('llm_saved_model')
+`,
+    probeVfsEntryPkColumns: `SELECT name, pk FROM pragma_table_info('vfs_entry')
+`,
+    probeChatSessionColumns: `SELECT name FROM pragma_table_info('chat_session')
+`,
+    probeChatProjectColumns: `SELECT name FROM pragma_table_info('chat_project')
+`,
+    probeUserVersion: `PRAGMA user_version
+`,
 } as const;
 
 /** 各语句的 #{param} 参数名清单（按出现序，供调用处对参与测试断言）。 */
@@ -29,4 +41,10 @@ export const BootstrapProbeSqlParams = {
     probeTableCreateSql: ["tableName"],
     countChatProjectAgentConfigResidue: [],
     alignVfsEntryHeadVersion: [],
+    probeVfsEntryColumns: [],
+    probeSavedModelColumns: [],
+    probeVfsEntryPkColumns: [],
+    probeChatSessionColumns: [],
+    probeChatProjectColumns: [],
+    probeUserVersion: [],
 } as const;

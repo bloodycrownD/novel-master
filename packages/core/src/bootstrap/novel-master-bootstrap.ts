@@ -267,8 +267,7 @@ export const NovelMasterBootstrap = {
     const parser = new SqlTemplateParser();
     const contentHashProbeTables = await TdbcTemplate.query<{ name: string }>(tx, parser, BootstrapProbeSql.probeTable, { tableName: "vfs_entry" });
     if (contentHashProbeTables.length > 0) {
-        // pragma_table_info 表值函数参数不可绑定（表名只能字面量）——平台硬边界，不进 mapper。
-        const contentHashProbeCols = await tx.query<{ name: string }>(`SELECT name FROM pragma_table_info('vfs_entry')`);
+        const contentHashProbeCols = await TdbcTemplate.query<{ name: string }>(tx, parser, BootstrapProbeSql.probeVfsEntryColumns, {});
         if (!contentHashProbeCols.some((c) => c.name === "content_hash")) return Result.err(new AppError("INFRA_BASELINE_TOO_OLD", { descriptor: BASELINE_TOO_OLD_MESSAGE }));
     }
 
@@ -278,7 +277,7 @@ export const NovelMasterBootstrap = {
     // `llm_saved_model` 无 `id` 列 → 常见老库尚未走 saved-model-identity-v1。
     const savedModelTables = await TdbcTemplate.query<{ name: string }>(tx, parser, BootstrapProbeSql.probeTable, { tableName: "llm_saved_model" });
     if (savedModelTables.length > 0) {
-        const savedModelCols = await tx.query<{ name: string }>(`SELECT name FROM pragma_table_info('llm_saved_model')`);
+        const savedModelCols = await TdbcTemplate.query<{ name: string }>(tx, parser, BootstrapProbeSql.probeSavedModelColumns, {});
         if (!new Set(savedModelCols.map((c) => c.name)).has("id")) return Result.err(new AppError("INFRA_BASELINE_TOO_OLD", { descriptor: BASELINE_TOO_OLD_MESSAGE }));
     }
 
@@ -289,8 +288,7 @@ export const NovelMasterBootstrap = {
     // `vfs_entry` 存在但 `entry_id` 不是主键（旧形态 pk 是 `path`）→ 未走 vfs-entry-id-redesign-v1。判据与原迁移自身的探测一致。
     const vfsEntryTables = await TdbcTemplate.query<{ name: string }>(tx, parser, BootstrapProbeSql.probeTable, { tableName: "vfs_entry" });
     if (vfsEntryTables.length > 0) {
-        const vfsEntryCols = await tx.query<{ name: string; pk: number }>(`SELECT name, pk
-    FROM pragma_table_info('vfs_entry')`);
+        const vfsEntryCols = await TdbcTemplate.query<{ name: string; pk: number }>(tx, parser, BootstrapProbeSql.probeVfsEntryPkColumns, {});
         const entryId = vfsEntryCols.find((c) => c.name === "entry_id");
         if (!(entryId != null && entryId.pk > 0)) return Result.err(new AppError("INFRA_BASELINE_TOO_OLD", { descriptor: BASELINE_TOO_OLD_MESSAGE }));
     }
@@ -298,7 +296,7 @@ export const NovelMasterBootstrap = {
     // `chat_session` 存在但缺 `agent_config_json` 列 → 未走 session-agent-config-v2（该迁移/DDL 在 v1.4.21 前后引入此列）。
     const chatSessionTables = await TdbcTemplate.query<{ name: string }>(tx, parser, BootstrapProbeSql.probeTable, { tableName: "chat_session" });
     if (chatSessionTables.length > 0) {
-        const chatSessionCols = await tx.query<{ name: string }>(`SELECT name FROM pragma_table_info('chat_session')`);
+        const chatSessionCols = await TdbcTemplate.query<{ name: string }>(tx, parser, BootstrapProbeSql.probeChatSessionColumns, {});
         if (!chatSessionCols.some((c) => c.name === "agent_config_json")) return Result.err(new AppError("INFRA_BASELINE_TOO_OLD", { descriptor: BASELINE_TOO_OLD_MESSAGE }));
     }
 
@@ -312,7 +310,7 @@ export const NovelMasterBootstrap = {
     // `chat_project` 存在且 `agent_config_json` 有非 NULL 残留 → 未走 project-agent-config-cleanup-v1（该功能已下线，新库不会再写入非 NULL）。
     const chatProjectTables = await TdbcTemplate.query<{ name: string }>(tx, parser, BootstrapProbeSql.probeTable, { tableName: "chat_project" });
     if (chatProjectTables.length > 0) {
-        const chatProjectCols = await tx.query<{ name: string }>(`SELECT name FROM pragma_table_info('chat_project')`);
+        const chatProjectCols = await TdbcTemplate.query<{ name: string }>(tx, parser, BootstrapProbeSql.probeChatProjectColumns, {});
         if (chatProjectCols.some((c) => c.name === "agent_config_json")) {
             const chatProjectRows = await TdbcTemplate.query<{ cnt: number }>(tx, parser, BootstrapProbeSql.countChatProjectAgentConfigResidue, {});
             if (Number(chatProjectRows[0]?.cnt ?? 0) > 0) return Result.err(new AppError("INFRA_BASELINE_TOO_OLD", { descriptor: BASELINE_TOO_OLD_MESSAGE }));
@@ -337,8 +335,9 @@ export const NovelMasterBootstrap = {
    */
     async bootstrap(conn: TdbcConnection): Promise<void> {
         decodedContentCache.clear();
+        const parser = new SqlTemplateParser();
         await conn.transaction(async (tx) => {
-            const bootRows = await tx.query<{ user_version: number }>("PRAGMA user_version");
+            const bootRows = await TdbcTemplate.query<{ user_version: number }>(tx, parser, BootstrapProbeSql.probeUserVersion, {});
             if (Number(bootRows[0]?.user_version ?? 0) >= SCHEMA_BOOT_VERSION) {
                 // 快路径：表结构已与当前 DDL/列对齐合同一致，跳过数十次 CREATE/PRAGMA。
                 TdbcTransaction.unwrapOrRollback(await NovelMasterBootstrap.assertMinimumBaseline(tx));
@@ -360,10 +359,12 @@ export const NovelMasterBootstrap = {
             await SchemaColumnAlign.align(tx);
             // parent_session_id 索引不能放在 DDL 里——老库升级路径下 DDL 阶段该列还没被
             // ALIGN 加上，CREATE INDEX 会炸。这里在 ALIGN 之后幂等建一次，保证新老库都有。
+            // DDL 通道豁免（schema.generated / schema-migrations 同款）：对齐期补建索引不进 mapper。
             await tx.execute("CREATE INDEX IF NOT EXISTS idx_chat_session_parent ON chat_session(parent_session_id)");
             await BuiltinProviders.seed(tx);
             await BuiltinSmartSortRules.seed(tx);
             // user_version 为整数 pragma，不能参数绑定。
+            // PRAGMA 赋值不接受绑定参数（SQLite 平台限制），版本值来自程序常量——唯一保留在 TS 的 bootstrap SQL 写语句。
             await tx.execute(`PRAGMA user_version = ${SCHEMA_BOOT_VERSION}`);
         });
 

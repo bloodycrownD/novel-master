@@ -21,3 +21,6 @@ p34 验收只跑 `nm-style check --changed`（改动文件干净即 PASS），bo
 
 ## 验收
 tsc 0、core 960/0、bootstrap 64/0、skills 80/0、typecheck 15/15、desktop 774/0、mobile 2384/2384、check --changed PASS（macro 摘除后）。commit e9e71c521。
+
+## 追加（p34-c）：「不可参数化」≠「不可迁 mapper」
+用户追问 pragma 为什么不能用 TdbcTemplate——我 p34-b 的「pragma 平台硬边界保留」论证有洞：pragma_table_info 的表名确实不可**绑定参数**，但**表名字面量语句**（每表一条 `SELECT name FROM pragma_table_info('xxx')`）进 mapper 完全合法。判据修正：**平台语句能不能进 mapper 只看「语句文本能否静态确定」，不看「参数能否绑定」**。p34-c 补迁 pragma 探测 ×5 + user_version 读 ×1；唯一合法保留收敛为「PRAGMA user_version = 程序值（赋值不接受绑定参数）」与 DDL。
