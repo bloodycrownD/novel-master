@@ -35,9 +35,11 @@ description: novel-master 的代码优化与重构原则。写新代码、重构
 ## 2. 一行写完
 
 - **函数签名、调用参数列表写在一行**。参数多到一行放不下，先减少参数或缩短参数名，而不是换行。
+- **>4 个参数收 params 对象**（p30 定判据，先例 `59dcdf2af`）：依赖（repo/conn/runtime）与语义参数（scopeKey/path）收进单个 `<概念><操作>Params` 对象，字段名即文档；原 options 的可选字段展平进 params、Options interface 退役；孪生参数对（`fromScope+fromPrefix / toScope+toPrefix`）收成端点对象（如 `VfsCopyEndpoint{scope,pathPrefix}`）表达结构。**豁免**：≤4 参不动；平台契约形态（fetch init、Promise executor、原生桥协议）不动；测试工厂豁免。apps 层「依赖注入对 + 操作入参」混排的拆 `Deps`/`Req` 两对象。
 - `new AppError("KEY", {detail})` 也写一行。
 - 导入语句能一行就一行（1–3 个具名 import 不拆行）。
 - 简单表达式不要拆成多行；只有长条件确实需要分段时才换行，且每段要能独立读懂。
+- **链式调用可以折行**（每链一行），不算拆参数——参数列表折叠才违规。
 
 ## 3. 错误进 Either，不抛
 
