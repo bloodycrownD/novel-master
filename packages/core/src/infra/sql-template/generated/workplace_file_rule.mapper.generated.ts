@@ -1,5 +1,5 @@
 /**
- * 自动生成：scripts/gen-sql-mapper.mjs 从 resources/sql/workplace-file-rule.mapper.xml 生成，勿手改。
+ * 自动生成：scripts/gen-sql-mapper.mjs 从 resources/sql/mapper/workplace-file-rule.mapper.xml 生成，勿手改。
  * namespace=workplace_file_rule；语句 id 与 repo 方法同名；展开 include 后的完整模板文本。
  *
  * @module infra/sql-template/generated

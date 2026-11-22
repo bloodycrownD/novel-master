@@ -2,7 +2,7 @@
 /**
  * SQL mapper XML → generated TS 映射。
  *
- * 从 `resources/sql/*.mapper.xml` 读取 MyBatis 形态的语句定义，展开
+ * 从 `resources/sql/mapper/*.mapper.xml` 读取 MyBatis 形态的语句定义，展开
  * `<include ref>` 片段引用，产出 `src/infra/sql-template/generated/*.generated.ts`
  * 的 `as const` 模板映射 + 参数名清单。运行时零文件读取（generated 提交进仓，
  * 与 i18n catalog 同一模式）；XML 解析仅构建期使用。
@@ -27,7 +27,7 @@ const NL = String.fromCharCode(10);
 
 const here = dirname(fileURLToPath(import.meta.url));
 const coreRoot = join(here, "..");
-const mapperDir = join(coreRoot, "resources/sql");
+const mapperDir = join(coreRoot, "resources/sql/mapper");
 const outDir = join(coreRoot, "src/infra/sql-template/generated");
 
 /** snake_case namespace → PascalCase + Sql 导出名（chat_message → ChatMessageSql）。 */
@@ -116,7 +116,7 @@ for (const name of readdirSync(mapperDir).filter((f) => f.endsWith(".mapper.xml"
   if (existsSync(full)) mapperFiles.push(full);
 }
 if (mapperFiles.length === 0) {
-  console.error('resources/sql/ 下没有 mapper 文件');
+  console.error('resources/sql/mapper/ 下没有 mapper 文件');
   process.exit(1);
 }
 
@@ -158,7 +158,7 @@ for (const file of mapperFiles) {
 
   const lines = [];
   lines.push("/**");
-  lines.push(` * 自动生成：scripts/gen-sql-mapper.mjs 从 resources/sql/${basename(file)} 生成，勿手改。`);
+  lines.push(` * 自动生成：scripts/gen-sql-mapper.mjs 从 resources/sql/mapper/${basename(file)} 生成，勿手改。`);
   lines.push(` * namespace=${namespace}；语句 id 与 repo 方法同名；展开 include 后的完整模板文本。`);
   lines.push(" *");
   lines.push(" * @module infra/sql-template/generated");
