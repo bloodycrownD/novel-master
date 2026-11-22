@@ -51,22 +51,10 @@ export const SkillZip = {
         }
         const skillMdBytes = entries.get("SKILL.md");
         if (skillMdBytes == null) {
-            return Result.ok({
-                name: null,
-                description: null,
-                skillMd: null,
-                fileCount,
-                valid: false,
-            });
+            return Result.ok({name: null, description: null, skillMd: null, fileCount, valid: false,});
         }
         const skillMd = strFromU8(skillMdBytes);
         const parsed = SkillFrontMatter.parse(skillMd);
-        return Result.ok({
-            name: parsed.name,
-            description: parsed.description,
-            skillMd,
-            fileCount,
-            valid: parsed.valid,
-        });
+        return Result.ok({name: parsed.name, description: parsed.description, skillMd, fileCount, valid: parsed.valid,});
     },
 } as const;

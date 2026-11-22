@@ -311,7 +311,7 @@ export class DefaultMessageService implements MessageService {
             // 事务边界（平台协议例外）：VFS 复制与批量写入的中断/失败都必须抛错，
             // 才能让驱动整体回滚——直接 return Outcome 会 commit 半写 fork。
             const copyOptions = { contentStore: new SqliteVfsContentStore(tx), hooks };
-            const vfsCopied = await VfsTreeCopy.copyTree(r.vfs, { scopeKey: `session:${source.projectId}:${source.id}` }, "/", { scopeKey: `session:${source.projectId}:${forked.id}` }, "/", copyOptions);
+            const vfsCopied = await VfsTreeCopy.copyTree({ repo: r.vfs, from: { scope: { scopeKey: `session:${source.projectId}:${source.id}` }, pathPrefix: "/" }, to: { scope: { scopeKey: `session:${source.projectId}:${forked.id}` }, pathPrefix: "/" }, ...copyOptions });
             if (vfsCopied.kind === "failed") throw vfsCopied.error;
             if (vfsCopied.kind !== "completed") throw AbortError.create();
 

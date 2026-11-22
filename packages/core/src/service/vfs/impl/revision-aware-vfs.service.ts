@@ -62,7 +62,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
         return TdbcTransaction.runInTransactionOrConn(this.conn, async (tx) => {
             const entryRepo = new SqliteVfsEntryRepository(tx);
             const revisionRepo = new SqliteVfsRevisionRepository(tx);
-            return WriteWithRevision.write(entryRepo, revisionRepo, scopeKey, path, content);
+            return WriteWithRevision.write({ entryRepo, revisionRepo, scopeKey, path, content });
         });
     }
 
@@ -255,7 +255,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
         try {
             await TdbcTransaction.runInTransactionOrConn(this.conn, async (tx) => {
                 const entryRepo = new SqliteVfsEntryRepository(tx);
-                await VfsRenamePrimitive.renameEntry(tx, entryRepo, scopeKey, normalizedFrom, normalizedTo);
+                await VfsRenamePrimitive.renameEntry({ tx, entryRepo, scopeKey, oldPath: normalizedFrom, newPath: normalizedTo });
             });
         } catch (cause) {
             const domain = ErrorGuards.unwrapTxDomainError(cause);
@@ -279,7 +279,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
         try {
             await TdbcTransaction.runInTransactionOrConn(this.conn, async (tx) => {
                 const entryRepo = new SqliteVfsEntryRepository(tx);
-                await VfsRenamePrimitive.renameDirectory(tx, entryRepo, scopeKey, normalizedOld, normalizedNew);
+                await VfsRenamePrimitive.renameDirectory({ tx, entryRepo, scopeKey, oldDir: normalizedOld, newDir: normalizedNew });
             });
         } catch (cause) {
             const domain = ErrorGuards.unwrapTxDomainError(cause);

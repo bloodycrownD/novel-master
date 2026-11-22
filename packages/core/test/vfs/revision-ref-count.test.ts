@@ -274,7 +274,7 @@ describe("批量 ref_count 调整（batchAdjustRefCount + helpers）", () => {
         }
 
         // 批量扣减 scope 下所有 live head（每条 -1）
-        await RevisionRefCount.decrementLiveUnderScope(revisions, entries, sk, "/");
+        await RevisionRefCount.decrementLiveUnderScope({ revisionRepo: revisions, entryRepo: entries, scopeKey: sk, pathPrefix: "/" });
         for (const p of pointers) {
             // 初始 1（live head）- 1 = 0
             assert.equal(await readRefCount(ctx.conn, p.entryId, p.version), 0);

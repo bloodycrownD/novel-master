@@ -131,10 +131,10 @@ export class DefaultProjectService implements ProjectService {
             // 既不释放 live ref 也不 GC revision ⇒ 每「种下一次再删项目」就永久泄漏一批
             // revision 行 + 其 blob（两条 GC 路径都选不中，deleteGlobalOrphans 只清
             // ref_count <= 0 的 JOIN 孤儿）。改走 sweep：decrement → GC → 删 entry。
-            await VfsTreeCopy.sweepRevisionsUnderScope(r.vfs, r.revisions, `project:${id}`, "/");
+            await VfsTreeCopy.sweepRevisionsUnderScope({ repo: r.vfs, revisionRepo: r.revisions, scopeKey: `project:${id}`, pathPrefix: "/" });
             // 技能已重定位到独立 meta 域：scope_key 精确匹配，不补这条会留下
             // project:{pid}:meta 的孤儿 entry 行（同样要 sweep，见上一条注释）
-            await VfsTreeCopy.sweepRevisionsUnderScope(r.vfs, r.revisions, `project:${id}:meta`, "/");
+            await VfsTreeCopy.sweepRevisionsUnderScope({ repo: r.vfs, revisionRepo: r.revisions, scopeKey: `project:${id}:meta`, pathPrefix: "/" });
             const deleted = await r.projects.delete(id);
             if (!deleted) {
                 throw new AppError("CHAT_NOT_FOUND", { detail: `project not found: ${id}`, kind: "project", id });
@@ -218,11 +218,11 @@ export class DefaultProjectService implements ProjectService {
             // 技能已重定位到独立 meta 域（project:{id}:meta），复制时单独整树拷贝
             // （D1：项目复制携带技能文件）；负清单行不往 VFS，需按 scope_key 显式复制。
             const contentStore = new SqliteVfsContentStore(tx);
-            await VfsTreeCopy.copyTree(r.vfs, { scopeKey: `project:${id}` }, "/", { scopeKey: `project:${copy.id}` }, "/", { contentStore });
-            await VfsTreeCopy.copyTree(r.vfs, { scopeKey: `project:${id}:meta` }, "/", { scopeKey: `project:${copy.id}:meta` }, "/", { contentStore });
+            await VfsTreeCopy.copyTree({ repo: r.vfs, from: { scope: { scopeKey: `project:${id}` }, pathPrefix: "/" }, to: { scope: { scopeKey: `project:${copy.id}` }, pathPrefix: "/" }, contentStore });
+            await VfsTreeCopy.copyTree({ repo: r.vfs, from: { scope: { scopeKey: `project:${id}:meta` }, pathPrefix: "/" }, to: { scope: { scopeKey: `project:${copy.id}:meta` }, pathPrefix: "/" }, contentStore });
             await new SqliteSkillDisabledRuleRepository(tx).copyScopeRules(`project:${id}`, `project:${copy.id}`);
-            await LiveHeadRevisionSeeder.seedUnderPrefix(r.vfs, r.revisions, `project:${copy.id}`, "/", contentStore);
-            await LiveHeadRevisionSeeder.seedUnderPrefix(r.vfs, r.revisions, `project:${copy.id}:meta`, "/", contentStore);
+            await LiveHeadRevisionSeeder.seedUnderPrefix({ entryRepo: r.vfs, revisionRepo: r.revisions, scopeKey: `project:${copy.id}`, pathPrefix: "/", contentStore });
+            await LiveHeadRevisionSeeder.seedUnderPrefix({ entryRepo: r.vfs, revisionRepo: r.revisions, scopeKey: `project:${copy.id}:meta`, pathPrefix: "/", contentStore });
             return copy;
         });
         return Result.ok(await copyTransaction);

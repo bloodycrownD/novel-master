@@ -27,7 +27,7 @@ export const SessionWorkspacePush = {
         const vfs = new SqliteVfsEntryRepository(tx);
         const revisions = new SqliteVfsRevisionRepository(tx);
         const worktree = new SqliteWorkplaceRepository(tx);
-        await VfsTreeCopy.replaceSubtree(vfs, { scopeKey: `session:${projectId}:${sessionId}` }, "/", { scopeKey: `project:${projectId}` }, "/", {
+        await VfsTreeCopy.replaceSubtree({ repo: vfs, from: { scope: { scopeKey: `session:${projectId}:${sessionId}` }, pathPrefix: "/" }, to: { scope: { scopeKey: `project:${projectId}` }, pathPrefix: "/" },
             revisions,
             contentStore: new SqliteVfsContentStore(tx),
         });

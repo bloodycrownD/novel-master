@@ -219,17 +219,13 @@ describe("T-G2: 模板替换链后无 orphan blob（pullSessionTemplate 载体�
         );
 
         // 直调 replaceVfsSubtree（projectTemplatePull 拆除后的通用 sweep/GC 载体）
-        await VfsTreeCopy.replaceSubtree(
-            entryRepo,
-            { scopeKey: "global" },
-            "/repl",
-            { scopeKey: projectScope },
-            "/repl",
-            {
+        await VfsTreeCopy.replaceSubtree({
+	repo: entryRepo,
+	from: { scope: { scopeKey: "global" }, pathPrefix: "/repl" },
+	to: { scope: { scopeKey: projectScope }, pathPrefix: "/repl" },
                 revisions: new SqliteVfsRevisionRepository(ctx.conn),
                 contentStore: new SqliteVfsContentStore(ctx.conn),
-            },
-        );
+});
 
         // 前缀外保留文件：内容不变，blob 仍被 live head revision 引用，ref_count 不变
         assert.equal(

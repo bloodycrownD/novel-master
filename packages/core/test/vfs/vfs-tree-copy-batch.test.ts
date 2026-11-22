@@ -61,14 +61,12 @@ describe("replaceVfsSubtree 快慢路径 / copyVfsTree 批量", () => {
         await ctx.conn.transaction(async (tx) => {
             const vfs = new SqliteVfsEntryRepository(tx);
             const revisions = new SqliteVfsRevisionRepository(tx);
-            outcomeValue(await VfsTreeCopy.replaceSubtree(
-                vfs,
-                { scopeKey: projectScope },
-                "/",
-                { scopeKey: sessionScope },
-                "/",
-                { revisions, contentStore: new SqliteVfsContentStore(tx) },
-            ));
+            outcomeValue(await VfsTreeCopy.replaceSubtree({
+	repo: vfs,
+	from: { scope: { scopeKey: projectScope }, pathPrefix: "/" },
+	to: { scope: { scopeKey: sessionScope }, pathPrefix: "/" },
+ revisions, contentStore: new SqliteVfsContentStore(tx) ,
+}));
         });
 
         // 目标 entry：content_hash 与源一致
@@ -111,14 +109,12 @@ describe("replaceVfsSubtree 快慢路径 / copyVfsTree 批量", () => {
         await ctx.conn.transaction(async (tx) => {
             const vfs = new SqliteVfsEntryRepository(tx);
             const revisions = new SqliteVfsRevisionRepository(tx);
-            outcomeValue(await VfsTreeCopy.replaceSubtree(
-                vfs,
-                { scopeKey: projectScope },
-                "/",
-                { scopeKey: sessionScope },
-                "/",
-                { revisions, contentStore: new SqliteVfsContentStore(tx) },
-            ));
+            outcomeValue(await VfsTreeCopy.replaceSubtree({
+	repo: vfs,
+	from: { scope: { scopeKey: projectScope }, pathPrefix: "/" },
+	to: { scope: { scopeKey: sessionScope }, pathPrefix: "/" },
+ revisions, contentStore: new SqliteVfsContentStore(tx) ,
+}));
         });
 
         // 手动删掉 /a.txt 的 blob 行，破坏源侧可回退明文
@@ -138,16 +134,12 @@ describe("replaceVfsSubtree 快慢路径 / copyVfsTree 批量", () => {
             () =>
                 ctx.conn.transaction(async (tx) => {
                     const vfs = new SqliteVfsEntryRepository(tx);
-                    outcomeValue(await VfsTreeCopy.replaceSubtree(
-                        vfs,
-                        { scopeKey: projectScope },
-                        "/",
-                        { scopeKey: sessionScope },
-                        "/",
-                        {
+                    outcomeValue(await VfsTreeCopy.replaceSubtree({
+	repo: vfs,
+	from: { scope: { scopeKey: projectScope }, pathPrefix: "/" },
+	to: { scope: { scopeKey: sessionScope }, pathPrefix: "/" },
                             contentStore: new SqliteVfsContentStore(tx),
-                        },
-                    ));
+}));
                 }),
         );
 
@@ -193,20 +185,16 @@ describe("replaceVfsSubtree 快慢路径 / copyVfsTree 批量", () => {
             await targetVfs.write(targetPath, old);
         }
         let calls = 0;
-        const outcome = await VfsTreeCopy.copyTree(
-            new SqliteVfsEntryRepository(ctx.conn),
-            { scopeKey: `project:${project.id}` },
-            "/src",
-            { scopeKey: `session:${project.id}:${session.id}` },
-            "/dst",
-            {
+        const outcome = await VfsTreeCopy.copyTree({
+	repo: new SqliteVfsEntryRepository(ctx.conn),
+	from: { scope: { scopeKey: `project:${project.id}` }, pathPrefix: "/src" },
+	to: { scope: { scopeKey: `session:${project.id}:${session.id}` }, pathPrefix: "/dst" },
                 contentStore: new SqliteVfsContentStore(ctx.conn),
                 hooks: {
                     // 第 1 次在批量 INSERT 前，第 2 次起逐文件；第 3 次命中中断。
                     checkpoint: () => (++calls >= 3 ? { kind: "cancelled", reason: "user-stop" } : null),
                 },
-            },
-        );
+});
         assert.deepEqual(outcome, { kind: "cancelled", reason: "user-stop" }, "中途 abort 必须返回 Outcome.cancelled");
         assert.ok(calls >= 3, "检查点必须在逐文件边界真实触发");
         let updated = 0;
@@ -234,14 +222,12 @@ describe("replaceVfsSubtree 快慢路径 / copyVfsTree 批量", () => {
         await ctx.conn.transaction(async (tx) => {
             const vfs = new SqliteVfsEntryRepository(tx);
             const revisions = new SqliteVfsRevisionRepository(tx);
-            outcomeValue(await VfsTreeCopy.replaceSubtree(
-                vfs,
-                { scopeKey: projectScope },
-                "/",
-                { scopeKey: sessionScope },
-                "/",
-                { revisions, contentStore: new SqliteVfsContentStore(tx) },
-            ));
+            outcomeValue(await VfsTreeCopy.replaceSubtree({
+	repo: vfs,
+	from: { scope: { scopeKey: projectScope }, pathPrefix: "/" },
+	to: { scope: { scopeKey: sessionScope }, pathPrefix: "/" },
+ revisions, contentStore: new SqliteVfsContentStore(tx) ,
+}));
         });
 
         const revisionRepo = new SqliteVfsRevisionRepository(ctx.conn);
@@ -269,12 +255,7 @@ describe("replaceVfsSubtree 快慢路径 / copyVfsTree 批量", () => {
         const beforeRef = await blobRefCount(blobAE!);
 
         // 二遍 seed：已存在 (entryId, version) 的 revision 应跳过 → 返回 0，blob ref_count 不变
-        const reseeded = unwrap(await LiveHeadRevisionSeeder.seedUnderPrefix(
-            entries,
-            revisionRepo,
-            sessionScope,
-            "/",
-        ));
+        const reseeded = unwrap(await LiveHeadRevisionSeeder.seedUnderPrefix({ entryRepo: entries, revisionRepo: revisionRepo, scopeKey: sessionScope, pathPrefix: "/" }));
         assert.equal(reseeded, 0);
         assert.equal(await blobRefCount(blobAE!), beforeRef);
     });
@@ -332,18 +313,14 @@ describe("replaceVfsSubtree excludePrefixes（隔离豁免，T-SK1）", () => {
         // global 模板不含 meta/skills，replace 后其余路径照常被替换
         await ctx.globalVfs().write(`/g-${suffix}.md`, `g-${suffix}`);
         await ctx.conn.transaction(async (tx) => {
-            outcomeValue(await VfsTreeCopy.replaceSubtree(
-                new SqliteVfsEntryRepository(tx),
-                { scopeKey: "global" },
-                "/",
-                { scopeKey: projectScope },
-                "/",
-                {
+            outcomeValue(await VfsTreeCopy.replaceSubtree({
+	repo: new SqliteVfsEntryRepository(tx),
+	from: { scope: { scopeKey: "global" }, pathPrefix: "/" },
+	to: { scope: { scopeKey: projectScope }, pathPrefix: "/" },
                     revisions: new SqliteVfsRevisionRepository(tx),
                     contentStore: new SqliteVfsContentStore(tx),
                     excludePrefixes: ["meta/skills"],
-                },
-            ));
+}));
         });
 
         // 排除前缀：entry 保留、内容不变、revision/ref_count 不变
@@ -382,18 +359,14 @@ describe("replaceVfsSubtree excludePrefixes（隔离豁免，T-SK1）", () => {
         await gvfs.write(`/meta/skills-${suffix}/bar/references/timeline.md`, `timeline-${suffix}`);
 
         await ctx.conn.transaction(async (tx) => {
-            outcomeValue(await VfsTreeCopy.replaceSubtree(
-                new SqliteVfsEntryRepository(tx),
-                { scopeKey: "global" },
-                "/",
-                { scopeKey: projectScope },
-                "/",
-                {
+            outcomeValue(await VfsTreeCopy.replaceSubtree({
+	repo: new SqliteVfsEntryRepository(tx),
+	from: { scope: { scopeKey: "global" }, pathPrefix: "/" },
+	to: { scope: { scopeKey: projectScope }, pathPrefix: "/" },
                     revisions: new SqliteVfsRevisionRepository(tx),
                     contentStore: new SqliteVfsContentStore(tx),
                     excludePrefixes: [`meta/skills-${suffix}`],
-                },
-            ));
+}));
         });
 
         const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
@@ -432,18 +405,14 @@ describe("replaceVfsSubtree excludePrefixes（隔离豁免，T-SK1）", () => {
 
         await ctx.globalVfs().write(`/g-${suffix}.md`, `g-${suffix}`);
         await ctx.conn.transaction(async (tx) => {
-            outcomeValue(await VfsTreeCopy.replaceSubtree(
-                new SqliteVfsEntryRepository(tx),
-                { scopeKey: "global" },
-                "/",
-                { scopeKey: projectScope },
-                "/",
-                {
+            outcomeValue(await VfsTreeCopy.replaceSubtree({
+	repo: new SqliteVfsEntryRepository(tx),
+	from: { scope: { scopeKey: "global" }, pathPrefix: "/" },
+	to: { scope: { scopeKey: projectScope }, pathPrefix: "/" },
                     revisions: new SqliteVfsRevisionRepository(tx),
                     contentStore: new SqliteVfsContentStore(tx),
                     excludePrefixes: ["meta/skills"],
-                },
-            ));
+}));
         });
 
         // /keep.md 被 sweep（删除+重拷）后 seed 补种（重拷后是新 entry，需重查）；
@@ -480,17 +449,13 @@ describe("replaceVfsSubtree excludePrefixes（隔离豁免，T-SK1）", () => {
         await ctx.globalVfs().write(`/g-${suffix}.md`, `g-${suffix}`);
 
         await ctx.conn.transaction(async (tx) => {
-            outcomeValue(await VfsTreeCopy.replaceSubtree(
-                new SqliteVfsEntryRepository(tx),
-                { scopeKey: "global" },
-                "/",
-                { scopeKey: projectScope },
-                "/",
-                {
+            outcomeValue(await VfsTreeCopy.replaceSubtree({
+	repo: new SqliteVfsEntryRepository(tx),
+	from: { scope: { scopeKey: "global" }, pathPrefix: "/" },
+	to: { scope: { scopeKey: projectScope }, pathPrefix: "/" },
                     revisions: new SqliteVfsRevisionRepository(tx),
                     contentStore: new SqliteVfsContentStore(tx),
-                },
-            ));
+}));
         });
 
         const entryRepo = new SqliteVfsEntryRepository(ctx.conn);

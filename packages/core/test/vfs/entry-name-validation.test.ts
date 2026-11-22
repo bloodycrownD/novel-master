@@ -84,13 +84,7 @@ describe("VFS entry name validation (service)", () => {
         const vfs = VfsServiceFactory.create(ctx.conn);
         const legacyPath = scoped("/历史\n导入名.txt");
         // zip 导入同款落库路径（repo 直写，不经 service 校验）
-        await LiveHeadRevisionSeeder.insertFileSeeding(
-            new SqliteVfsEntryRepository(ctx.conn),
-            new SqliteVfsRevisionRepository(ctx.conn),
-            SCOPE,
-            legacyPath,
-            "初始内容",
-        );
+        await LiveHeadRevisionSeeder.insertFileSeeding({ entryRepo: new SqliteVfsEntryRepository(ctx.conn), revisionRepo: new SqliteVfsRevisionRepository(ctx.conn), scopeKey: SCOPE, logicalPath: legacyPath, content: "初始内容" });
         // 内容更新（非创建）不重新审判存量名字
         const updated = unwrap(await vfs.write(SCOPE, legacyPath, "new content"));
         assert.ok(updated.version >= 2);

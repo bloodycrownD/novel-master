@@ -359,7 +359,7 @@ export class SkillsService implements SkillService {
         await this.deps.conn.transaction(async (tx) => {
             const entryRepo = new SqliteVfsEntryRepository(tx);
             const revisionRepo = new SqliteVfsRevisionRepository(tx);
-            await VfsTreeCopy.sweepRevisionsUnderScope(entryRepo, revisionRepo, vfsScopeKey, prefix);
+            await VfsTreeCopy.sweepRevisionsUnderScope({ repo: entryRepo, revisionRepo, scopeKey: vfsScopeKey, pathPrefix: prefix });
 
             // 连带清理负清单行：project 域只清本项目行；global 域清所有项目行，
             // 否则会留下指向不存在技能的孤儿禁用行。

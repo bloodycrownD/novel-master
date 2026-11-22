@@ -169,14 +169,12 @@ async function main(): Promise<void> {
 
                 const vfsRepo = new SqliteVfsEntryRepository(tx);
                 t0 = performance.now();
-                await VfsTreeCopy.copyTree(
-                    vfsRepo,
-                    { scopeKey: `session:${project.id}:${session.id}` },
-                    "/",
-                    { scopeKey: `session:${project.id}:${copySession.id}` },
-                    "/",
-                    { contentStore },
-                );
+                await VfsTreeCopy.copyTree({
+	repo: vfsRepo,
+	from: { scope: { scopeKey: `session:${project.id}:${session.id}` }, pathPrefix: "/" },
+	to: { scope: { scopeKey: `session:${project.id}:${copySession.id}` }, pathPrefix: "/" },
+ contentStore ,
+});
                 phases.push(`copy-vfs-tree=${fmt(performance.now() - t0)}`);
 
                 t0 = performance.now();

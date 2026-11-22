@@ -61,7 +61,7 @@ export const SessionFsServiceFactory = {
         const sk = LogicalPath.scopeKey(sessionScope);
 
         await checkpoints.deleteCheckpointsForSession(sessionId);
-        await RevisionRefCount.decrementLiveUnderScope(revisions, entries, sk, "/");
+        await RevisionRefCount.decrementLiveUnderScope({ revisionRepo: revisions, entryRepo: entries, scopeKey: sk, pathPrefix: "/" });
         await RevisionGc.sweepSession(revisions, projectId, sessionId);
     },
 } as const;

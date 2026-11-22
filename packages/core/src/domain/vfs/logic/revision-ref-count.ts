@@ -97,23 +97,23 @@ export const RevisionRefCount = {
    * @remarks 可对任意 scope 调用；bootstrap W3 作为全局 template 兜底以 (global, /)
    * 触发，只覆盖 global scope，session/project 靠 migration 保留 ref_count。
    */
-    async repair(revisionRepo: VfsRevisionRepository, entryRepo: VfsEntryRepository, checkpoints: MessageCheckpointRepository, scopeKey: string, pathPrefix: string, sessionId: string): Promise<RepairReport> {
+    async repair(p: { revisionRepo: VfsRevisionRepository; entryRepo: VfsEntryRepository; checkpoints: MessageCheckpointRepository; scopeKey: string; pathPrefix: string; sessionId: string }): Promise<RepairReport> {
         const expected = new Map<string, number>();
 
         // 持有者一：checkpoint 文件指针。
-        const pointers = await checkpoints.listFilePointersForSession(sessionId);
+        const pointers = await p.checkpoints.listFilePointersForSession(p.sessionId);
         for (const pointer of pointers) {
             bumpExpected(expected, pointer.entryId, pointer.revisionVersion);
         }
 
         // 持有者二：live head。
-        const liveHeads = await entryRepo.listFileHeadsUnderPrefix(scopeKey, pathPrefix);
+        const liveHeads = await p.entryRepo.listFileHeadsUnderPrefix(p.scopeKey, p.pathPrefix);
         for (const head of liveHeads) {
             bumpExpected(expected, head.entryId, head.headVersion);
         }
 
         // 带回当前 ref_count 一次取齐：偏低走 floor 上调，偏高只报告。
-        const rows = await revisionRepo.listKeysWithRefCountUnderScope(scopeKey, pathPrefix);
+        const rows = await p.revisionRepo.listKeysWithRefCountUnderScope(p.scopeKey, p.pathPrefix);
         // 批量化：以前是逐条 repairRefCountFloor（每条 1 SELECT + 1 UPDATE），
         // 200 revision 会发 200 + 200 条 SQL。现在一次性把所有 (entryId, version, expected)
         // 丢给 batchRepairRefCountFloor，它内部按 500 分块批量 SELECT + conn.batch UPDATE，
@@ -123,7 +123,7 @@ export const RevisionRefCount = {
             version,
             expected: expected.get(`${entryId}:${version}`) ?? 0,
         }));
-        const rowsAdjusted = await revisionRepo.batchRepairRefCountFloor(items);
+        const rowsAdjusted = await p.revisionRepo.batchRepairRefCountFloor(items);
 
         // 偏高泄漏检测（T-RR13）：ref_count 超过两类期望值之和——不自动修
         //（只增不减：泄漏方向可接受，误删不可恢复），交给报告方决定处置。
@@ -142,11 +142,11 @@ export const RevisionRefCount = {
     /** scope + path 前缀下全部 live file head 批量 −1（会话删除 Step 2）。
    *
    * `excludePrefixes` 非空时，排除前缀下的 live head 引用不减（隔离豁免）。 */
-    async decrementLiveUnderScope(revisionRepo: VfsRevisionRepository, entryRepo: VfsEntryRepository, scopeKey: string, pathPrefix: string, excludePrefixes?: readonly string[]): Promise<void> {
-        const excludes = excludePrefixes ?? [];
-        const liveHeads = await entryRepo.listFileHeadsUnderPrefix(scopeKey, pathPrefix);
+    async decrementLiveUnderScope(p: { revisionRepo: VfsRevisionRepository; entryRepo: VfsEntryRepository; scopeKey: string; pathPrefix: string; excludePrefixes?: readonly string[] }): Promise<void> {
+        const excludes = p.excludePrefixes ?? [];
+        const liveHeads = await p.entryRepo.listFileHeadsUnderPrefix(p.scopeKey, p.pathPrefix);
         // 批量减引用，避免对每个 live head 发一条 SQL（会话删除场景下文件多会卡）
         const pointers = liveHeads.filter((h) => !VfsExcludePrefixes.isPathExcluded(h.path, excludes)).map((h) => ({ entryId: h.entryId, version: h.headVersion }));
-        await revisionRepo.batchAdjustRefCount(pointers, -1);
+        await p.revisionRepo.batchAdjustRefCount(pointers, -1);
     },
 } as const;

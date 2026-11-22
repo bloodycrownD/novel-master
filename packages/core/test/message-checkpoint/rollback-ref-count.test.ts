@@ -212,14 +212,7 @@ describe("rollback ref_count + deferred blob gc", () => {
             [eid, version],
         );
 
-        const report = await RevisionRefCount.repair(
-            revisions,
-            entries,
-            checkpoints,
-            sk,
-            "/",
-            session.id,
-        );
+        const report = await RevisionRefCount.repair({ revisionRepo: revisions, entryRepo: entries, checkpoints, scopeKey: sk, pathPrefix: "/", sessionId: session.id });
         assert.ok(report.rowsAdjusted >= 1);
 
         await RevisionGc.sweepSession(revisions, project.id, session.id);

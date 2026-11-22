@@ -22,7 +22,7 @@ import { RevisionRefCount } from "./revision-ref-count.js";
 import type { VfsEntryRepository } from "../repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "../repositories/vfs-revision.port.js";
 
-interface WriteWithRevisionOptions {
+type WriteWithRevisionParams = {
     /**
    * 跳过「文件名合法性」校验（`EntryNameValidator.assertValid`）。
    *
@@ -36,7 +36,13 @@ interface WriteWithRevisionOptions {
    * 更新不重新审判名字。
    */
     readonly skipNameValidation?: boolean;
-}
+} & {
+    readonly entryRepo: VfsEntryRepository;
+    readonly revisionRepo: VfsRevisionRepository;
+    readonly scopeKey: string;
+    readonly path: string;
+    readonly content: string;
+};
 
 export const WriteWithRevision = {
     /**
@@ -44,11 +50,11 @@ export const WriteWithRevision = {
    *
    * 零 service 层依赖（只吃两个 repo），故下沉不违反分层。
    */
-    async write(entryRepo: VfsEntryRepository, revisionRepo: VfsRevisionRepository, scopeKey: string, path: string, content: string, options: WriteWithRevisionOptions = {}): Promise<Result<{ version: number }, AppError>> {
-        const resolved = PathNormalizer.normalize(path);
+    async write(p: WriteWithRevisionParams): Promise<Result<{ version: number }, AppError>> {
+        const resolved = PathNormalizer.normalize(p.path);
         if (!resolved.ok) return Result.err(resolved.error);
         const normalized = resolved.value;
-        const found = await entryRepo.findByPath(scopeKey, normalized);
+        const found = await p.entryRepo.findByPath(p.scopeKey, normalized);
         if (!found.ok) return Result.err(found.error);
         const existing = found.value;
         if (existing?.entryKind === "directory") {
@@ -60,11 +66,11 @@ export const WriteWithRevision = {
 
         if (existing == null) {
             // 只拦「创建」：存量条目（含 zip 导入的历史名）内容更新不重新审判名字
-            if (options.skipNameValidation !== true) {
+            if (p.skipNameValidation !== true) {
                 const nameCheck = EntryNameValidator.assertValid(normalized);
                 if (!nameCheck.ok) return Result.err(nameCheck.error);
             }
-            const parentCheck = await ParentDirs.ensure(entryRepo, scopeKey, normalized);
+            const parentCheck = await ParentDirs.ensure(p.entryRepo, p.scopeKey, normalized);
             if (!parentCheck.ok) return Result.err(parentCheck.error);
             // ⚠️ 本分支只在 entry 尚不存在时进入 ⇒ 版本号只能是 1。
             // 曾经的「entry 已删但 revision 历史保留 ⇒ 接着历史最大号往下写」那条边界
@@ -74,41 +80,41 @@ export const WriteWithRevision = {
             // 另注：core1 修好 sweep 之后，项目删除链三步同事务清干净，「entry 删了而同
             // scope 的 revision 历史还在」这个状态本身也不再产生。存量历史版本的续号
             // 语义由 update 路径的 `nextVersionFor`（`max(head, MAX(version)) + 1`）保证。
-            const inserted = await entryRepo.insert(scopeKey, normalized, content);
+            const inserted = await p.entryRepo.insert(p.scopeKey, normalized, p.content);
             if (!inserted.ok) return Result.err(inserted.error);
             version = inserted.value.version;
-            const entry = await entryRepo.findByPath(scopeKey, normalized);
+            const entry = await p.entryRepo.findByPath(p.scopeKey, normalized);
             if (!entry.ok) return Result.err(entry.error);
             const entryId = entry.value!.entryId;
-            await revisionRepo.append({
+            await p.revisionRepo.append({
                 entryId,
                 version,
-                content,
+                content: p.content,
                 status: "active",
                 mtimeMs,
             });
-            await RevisionRefCount.adjust(revisionRepo, entryId, version, +1);
+            await RevisionRefCount.adjust(p.revisionRepo, entryId, version, +1);
             return Result.ok({ version });
         }
 
         // 同文短路：相对 live 明文全等 → 不 bump、不 append
-        if (existing.content === content) {
+        if (existing.content === p.content) {
             return Result.ok({ version: existing.version });
         }
 
         // 统一分配器：max(head, MAX(version)) + 1，避开 head 回拨后历史占号段
-        const nextVersion = await WriteWithRevision.nextVersionFor(revisionRepo, existing.entryId, existing.version);
-        const updated = await entryRepo.update(scopeKey, normalized, content, nextVersion);
+        const nextVersion = await WriteWithRevision.nextVersionFor(p.revisionRepo, existing.entryId, existing.version);
+        const updated = await p.entryRepo.update(p.scopeKey, normalized, p.content, nextVersion);
         if (!updated.ok) return Result.err(updated.error);
         version = updated.value.version;
-        await revisionRepo.append({
+        await p.revisionRepo.append({
             entryId: existing.entryId,
             version,
-            content,
+            content: p.content,
             status: "active",
             mtimeMs,
         });
-        await RevisionRefCount.transferLive(revisionRepo, existing.entryId, existing.version, version);
+        await RevisionRefCount.transferLive(p.revisionRepo, existing.entryId, existing.version, version);
         return Result.ok({ version });
     },
 

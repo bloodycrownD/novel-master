@@ -359,7 +359,7 @@ export class DefaultSessionService implements SessionService {
             // 事务边界（平台协议例外）：VFS 复制与批量写入的中断/失败都必须抛错，
             // 才能让驱动整体回滚——直接 return Outcome 会 commit 半写 copy。
             const copyOptions = { contentStore: new SqliteVfsContentStore(tx), hooks };
-            const vfsCopied = await VfsTreeCopy.copyTree(r.vfs, { scopeKey: `session:${src.projectId}:${src.id}` }, "/", { scopeKey: `session:${src.projectId}:${copy.id}` }, "/", copyOptions);
+            const vfsCopied = await VfsTreeCopy.copyTree({ repo: r.vfs, from: { scope: { scopeKey: `session:${src.projectId}:${src.id}` }, pathPrefix: "/" }, to: { scope: { scopeKey: `session:${src.projectId}:${copy.id}` }, pathPrefix: "/" }, ...copyOptions });
             if (vfsCopied.kind === "failed") throw vfsCopied.error;
             if (vfsCopied.kind !== "completed") throw AbortError.create();
             const inserted = await r.messages.batchInsert(copyMessages, hooks);

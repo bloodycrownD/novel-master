@@ -80,7 +80,7 @@ describe("CS-04: sweepRevisionsUnderScope 的 GC 步必须在删 entry 之前", 
             "前置条件：live-head revision 行存在",
         );
 
-        await VfsTreeCopy.sweepRevisionsUnderScope(entryRepo, revisionRepo, scopeKey, "/");
+        await VfsTreeCopy.sweepRevisionsUnderScope({ repo: entryRepo, revisionRepo, scopeKey, pathPrefix: "/" });
 
         assert.equal(
             await revisionRowCount(entryId, version),
@@ -133,9 +133,7 @@ describe("CS-04: sweepRevisionsUnderScope 的 GC 步必须在删 entry 之前", 
             "前置条件：非豁免侧 revision 初始存在",
         );
 
-        await VfsTreeCopy.sweepRevisionsUnderScope(entryRepo, revisionRepo, scopeKey, "/", [
-            "/meta/skills",
-        ]);
+        await VfsTreeCopy.sweepRevisionsUnderScope({ repo: entryRepo, revisionRepo, scopeKey, pathPrefix: "/", excludePrefixes: ["/meta/skills"] });
 
         // 豁免侧：entry 与 revision 都还在
         assert.notEqual(
@@ -202,7 +200,7 @@ describe("CS-04: sweepRevisionsUnderScope 的 GC 步必须在删 entry 之前", 
         assert.ok(dirVersion != null);
 
         await VfsTreeCopy.releaseAndDeletePrefix(fwdEntryRepo, fwdRevRepo, fwdScope, "/");
-        await VfsTreeCopy.sweepRevisionsUnderScope(dirEntryRepo, dirRevRepo, dirScope, "/");
+        await VfsTreeCopy.sweepRevisionsUnderScope({ repo: dirEntryRepo, revisionRepo: dirRevRepo, scopeKey: dirScope, pathPrefix: "/" });
 
         // 两个入口的 entry / revision 侧计数逐项相等
         assert.equal(

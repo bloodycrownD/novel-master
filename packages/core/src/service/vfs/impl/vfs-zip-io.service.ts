@@ -215,7 +215,7 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
                         }
                         // 解包走 unwrapOrRollback（事务回调，总纲 §五例外 2）：失败靠抛错回滚。
                         TdbcTransaction.unwrapOrRollback(await ParentDirs.ensure(repoTx, sk, logical));
-                        await LiveHeadRevisionSeeder.insertFileSeeding(repoTx, revisionTx, sk, logical, content);
+                        await LiveHeadRevisionSeeder.insertFileSeeding({ entryRepo: repoTx, revisionRepo: revisionTx, scopeKey: sk, logicalPath: logical, content });
                     }
                 });
                 committedShards += 1;

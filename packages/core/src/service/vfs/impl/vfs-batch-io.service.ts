@@ -245,7 +245,7 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
                             // 文件名**；`validate-entry-name.ts` 的 JSDoc 明确导入链路不走名校验
                             // （外部文件名可先导入再用改名纠正）。传 false 会把「以前能导入的外部文件名」
                             // 变成「导入失败」，改变一条已拍板的导入语义。
-                            TdbcTransaction.unwrapOrRollback(await WriteWithRevision.write(repoTx, revisionTx, sk, logical, write.content, { skipNameValidation: true }));
+                            TdbcTransaction.unwrapOrRollback(await WriteWithRevision.write({ entryRepo: repoTx, revisionRepo: revisionTx, scopeKey: sk, path: logical, content: write.content, skipNameValidation: true }));
                             shardWritten.push(logical);
                         }
                     });

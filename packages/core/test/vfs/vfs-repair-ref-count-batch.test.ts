@@ -72,14 +72,7 @@ describe("T-RP1 RevisionRefCount.repair 批量化", () => {
         const entryRepo = new SqliteVfsEntryRepository(c.conn);
         const checkpoints = new SqliteMessageCheckpointRepository(c.conn);
 
-        const report = await RevisionRefCount.repair(
-            revisionRepo,
-            entryRepo,
-            checkpoints,
-            sk,
-            "/",
-            "",
-        );
+        const report = await RevisionRefCount.repair({ revisionRepo: revisionRepo, entryRepo: entryRepo, checkpoints: checkpoints, scopeKey: sk, pathPrefix: "/", sessionId: "" })
 
         // 200 条 revision 的 ref_count 都被 0 → 1 上调。
         assert.equal(
@@ -145,14 +138,7 @@ describe("T-RP1 RevisionRefCount.repair 批量化", () => {
         const entryRepo = new SqliteVfsEntryRepository(c.conn);
         const checkpoints = new SqliteMessageCheckpointRepository(c.conn);
 
-        const report = await RevisionRefCount.repair(
-            revisionRepo,
-            entryRepo,
-            checkpoints,
-            sk,
-            "/",
-            "",
-        );
+        const report = await RevisionRefCount.repair({ revisionRepo: revisionRepo, entryRepo: entryRepo, checkpoints: checkpoints, scopeKey: sk, pathPrefix: "/", sessionId: "" })
 
         // 没有偏差，一条都不该上调。
         assert.equal(report.rowsAdjusted, 0, `不应有上调，实际 ${report.rowsAdjusted}`);
