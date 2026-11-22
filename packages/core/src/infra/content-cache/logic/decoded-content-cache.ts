@@ -13,7 +13,7 @@
  * ## 单池：内容正文池（decodedContentCache）
  *
  * 键 = 明文 sha256 hex。`vfs_content_blob` 与 `session_file_cache_blob`
- * 的 content_hash 都是 `ContentHash.hash(明文)`（同一个纯函数），所以同一位文件
+ * 的 content_hash 都是 `Hash.sha256Hex(明文)`（同一个纯函数），所以同一位文件
  * 正文在两套存储里天然同键——一份内存同时服务 vfs.read（文件预览 / 工具
  * 读盘 / workplace 冷回填）与 file_cache 读链。**这池不需要任何失效
  * 机制**：键是内容的密码学哈希，同键必同值（value 是 key 的函数），不存在
@@ -176,7 +176,7 @@ const CONTENT_BODY_POOL_MAX_ENTRIES = 1024;
  * 键 = 明文 sha256 hex（`vfs_content_blob` 与 `session_file_cache_blob` 的
  * content_hash 同源），同键必同值，因此**不需要任何失效机制**；`clear()`
  * 只在 bootstrap 换库与测试隔离时调用。调用方保证
- * `contentHash === ContentHash.hash(body)`；喂错键等于投毒，本层不做校验（校验
+ * `contentHash === Hash.sha256Hex(body)`；喂错键等于投毒，本层不做校验（校验
  * 就得再哈希一遍，正是本层要消灭的线性成本）。
  *
  * @remarks 传 `vfs_content_blob` / `session_file_cache_blob` 的 content_hash；

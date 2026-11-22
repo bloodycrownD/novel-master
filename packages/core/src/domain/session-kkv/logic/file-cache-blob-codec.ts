@@ -2,14 +2,14 @@
  * file_cache 域 blob 编解码：FileCachePayload JSON 字符串 ↔ 两表写库字段。
  *
  * 压缩 / 哈希 / 字节收整（ZlibCodec.tightBytes、ZlibCodec.decodeCompressedBytes 等）
- * 全部复用 vfs ContentStore 侧共享模块（hash-content / zlib-codec），
+ * 哈希复用 common/hash.ts 的 Hash.sha256Hex（原 vfs hash-content 上收），
  * 落库形态与存量兼容口径对齐
  * SqliteVfsContentStore，不另起实现。
  *
  * @module domain/session-kkv/logic/file-cache-blob-codec
  */
 
-import { ContentHash } from "@/domain/vfs/content-store/logic/hash-content.js";
+import { Hash } from "@/common/hash.js";
 import { ZlibCodec, VFS_CONTENT_ENCODING_ZLIB } from "@/domain/vfs/content-store/logic/zlib-codec.js";
 import { RuleSnapshotCodec } from "@/domain/workplace/logic/rule-snapshot-codec.js";
 import { AppError } from "@/errors/app-error.js";
@@ -41,7 +41,7 @@ export const FileCacheBlobCodec = {
             return null;
         }
         return {
-            contentHash: ContentHash.hash(payload.value.body),
+            contentHash: Hash.sha256Hex(payload.value.body),
             mtimeMs: payload.value.mtimeMs,
             body: payload.value.body,
         };

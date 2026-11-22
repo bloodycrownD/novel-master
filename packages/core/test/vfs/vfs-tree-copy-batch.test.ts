@@ -17,7 +17,7 @@ import {  outcomeValue  } from "../helpers/outcome-value.js";
 import assert from "node:assert/strict";
 import {  describe, it  } from "node:test";
 import {  SqliteVfsContentStore  } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
-import {  ContentHash  } from "@/domain/vfs/content-store/logic/hash-content.js";
+import { Hash } from "@/common/hash.js";
 import {  SqliteVfsEntryRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import {  SqliteVfsRevisionRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import {  VfsTreeCopy  } from "@/domain/vfs/logic/vfs-tree-copy.js";
@@ -54,9 +54,9 @@ describe("replaceVfsSubtree 快慢路径 / copyVfsTree 批量", () => {
 
         const projectScope = `project:${project.id}`;
         const sessionScope = `session:${project.id}:${session.id}`;
-        const hashShared = ContentHash.hash(`shared-${suffix}`);
-        const hashOther = ContentHash.hash(`other-${suffix}`);
-        const hashNested = ContentHash.hash(`nested-${suffix}`);
+        const hashShared = Hash.sha256Hex(`shared-${suffix}`);
+        const hashOther = Hash.sha256Hex(`other-${suffix}`);
+        const hashNested = Hash.sha256Hex(`nested-${suffix}`);
 
         await ctx.conn.transaction(async (tx) => {
             const vfs = new SqliteVfsEntryRepository(tx);
@@ -103,7 +103,7 @@ describe("replaceVfsSubtree 快慢路径 / copyVfsTree 批量", () => {
 
         const projectScope = `project:${project.id}`;
         const sessionScope = `session:${project.id}:${session.id}`;
-        const hashA = ContentHash.hash(`a-${suffix}`);
+        const hashA = Hash.sha256Hex(`a-${suffix}`);
 
         // 第一次正常拷贝（源→目标）
         await ctx.conn.transaction(async (tx) => {
@@ -152,7 +152,7 @@ describe("replaceVfsSubtree 快慢路径 / copyVfsTree 批量", () => {
         );
         assert.equal(
             (unwrap(await vfsCheck.findContentHash(sessionScope, "/b.txt")))!,
-            ContentHash.hash(`b-${suffix}`),
+            Hash.sha256Hex(`b-${suffix}`),
             "回滚后 /b.txt 应保留",
         );
         // 回滚后已删的 blob 行仍保持缺失（未因拷贝把脏 hash 拉回来）
@@ -307,7 +307,7 @@ describe("replaceVfsSubtree excludePrefixes（隔离豁免，T-SK1）", () => {
         assert.equal(refsBefore.size, 2, "技能文件应有 v1/v2 两条 revision");
         assert.equal(refsBefore.get(1), 0);
         assert.equal(refsBefore.get(2), 1);
-        const skillHash = ContentHash.hash(`skill-v2-${suffix}`);
+        const skillHash = Hash.sha256Hex(`skill-v2-${suffix}`);
         assert.equal(await blobRefCount(skillHash), 1, "live head revision 引用技能 blob");
 
         // global 模板不含 meta/skills，replace 后其余路径照常被替换

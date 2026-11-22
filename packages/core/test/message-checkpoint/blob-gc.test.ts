@@ -16,7 +16,7 @@ import {  RevisionGc  } from "@/domain/message-checkpoint/logic/revision-gc.js";
 import {  DeferredBlobGc  } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import {  SqliteVfsRevisionRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import {  SqliteVfsContentStore  } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
-import {  ContentHash  } from "@/domain/vfs/content-store/logic/hash-content.js";
+import { Hash } from "@/common/hash.js";
 import {  LogicalPath  } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import {  SqliteVfsEntryRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import {  decodedContentCache  } from "@/infra/content-cache/logic/decoded-content-cache.js";
@@ -73,7 +73,7 @@ describe("RevisionGc.sweepSession + blob gc", () => {
             sessionId: session.id,
         };
         const physical = LogicalPath.toPhysical(scope, "/gc1.md");
-        const orphanHash = ContentHash.hash("orphan-mid");
+        const orphanHash = Hash.sha256Hex("orphan-mid");
 
         // 确认 orphan-mid revision 存在且 blob 在
         const midKeys = await revisions.listKeysUnderScope(
@@ -120,8 +120,8 @@ describe("RevisionGc.sweepSession + blob gc", () => {
         const revisions = new SqliteVfsRevisionRepository(ctx.conn);
         const contentStore = new SqliteVfsContentStore(ctx.conn);
 
-        const onlyAHash = ContentHash.hash(onlyA);
-        const sharedHash = ContentHash.hash(sharedPlain);
+        const onlyAHash = Hash.sha256Hex(onlyA);
+        const sharedHash = Hash.sha256Hex(sharedPlain);
 
         // A 的 v1(onlyA) 在 live 已是 sharedPlain 且无 checkpoint → sweep A 应删 onlyA revision+blob
         await RevisionGc.sweepSession(revisions, project.id, sessionA.id);

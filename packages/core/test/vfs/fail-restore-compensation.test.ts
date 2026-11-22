@@ -9,7 +9,7 @@ import {  describe, it  } from "node:test";
 import {  MutatingPathHeads  } from "../../src/domain/vfs/logic/restore-mutating-path-heads.js";
 import {  RevisionGc  } from "../../src/domain/message-checkpoint/logic/revision-gc.js";
 import {  DeferredBlobGc  } from "../../src/domain/vfs/logic/deferred-blob-gc.js";
-import {  ContentHash  } from "../../src/domain/vfs/content-store/logic/hash-content.js";
+import { Hash } from "@/common/hash.js";
 import {  SqliteVfsContentStore  } from "../../src/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import {  SqliteVfsRevisionRepository  } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";

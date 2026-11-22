@@ -10,7 +10,7 @@ import { Result } from "@/errors/either.js";
 import type { SqlValue } from "@/infra/tdbc/types.js";
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
 import { TdbcTemplate } from "@/infra/tdbc/logic/template-helper.js";
-import { ContentHash } from "../logic/hash-content.js";
+import { Hash } from "@/common/hash.js";
 import { PackCodec, type VfsPackSpan } from "../logic/pack-codec.js";
 import { ZlibCodec, VFS_CONTENT_ENCODING_ZLIB } from "../logic/zlib-codec.js";
 import { decodedContentCache } from "@/infra/content-cache/logic/decoded-content-cache.js";
@@ -42,7 +42,7 @@ export class SqliteVfsContentStore implements VfsContentStore {
     constructor(private readonly conn: TdbcConnection) {}
 
     async put(plain: string): Promise<string> {
-        const contentHash = ContentHash.hash(plain);
+        const contentHash = Hash.sha256Hex(plain);
         const existing = await TdbcTemplate.query<{ content_hash: string }>(this.conn, this.parser, VfsContentStoreSql.putSelectExisting, { contentHash });
         if (existing.length > 0) {
             // 同 hash 复用已有行，不改 encoding / bytes：存量行可能是 `zlib-b64`
@@ -88,7 +88,7 @@ export class SqliteVfsContentStore implements VfsContentStore {
     async get(contentHash: string): Promise<Result<string, AppError>> {
         // 进程内解压产物层（infra/content-cache）：内容是内容寻址的，同 hash
         // 必同正文，命中即免掉「读压缩字节 + inflate」两笔钱。本层的键与
-        // session-kkv file_cache 的 content_hash 同一个算法（ContentHash.hash(明文)），
+        // session-kkv file_cache 的 content_hash 同一个算法（Hash.sha256Hex(明文)），
         // 两套存储共享同一份内存条目。
         const cached = decodedContentCache.get(contentHash);
         if (cached != null) {
@@ -121,7 +121,7 @@ export class SqliteVfsContentStore implements VfsContentStore {
         if (!decoded.ok) return Result.err(decoded.error);
         const plainUtf8 = decoded.value[0]!;
         const plain = new TextDecoder().decode(plainUtf8);
-        // member 的 content_hash 与 blob 同一个键空间（ContentHash.hash(明文)），
+        // member 的 content_hash 与 blob 同一个键空间（Hash.sha256Hex(明文)），
         // 解码产物同样进进程内缓存层。
         decodedContentCache.set(contentHash, plain);
         return Result.ok(plain);

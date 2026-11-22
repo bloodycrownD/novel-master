@@ -39,7 +39,7 @@
 
 import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import type { AgentPromptLayout } from "@/domain/prompt/model/agent-prompt-layout.js";
-import { ContentHash } from "@/domain/vfs/content-store/logic/hash-content.js";
+import { Hash } from "@/common/hash.js";
 
 /** 记忆条目：与 `ResolvedPromptTokens` 的 local 分支同构（source 恒 local）。 */
 interface ChatTokenEstimateMemoEntry {
@@ -59,7 +59,7 @@ const memo = new Map<string, {key: string; entry: ChatTokenEstimateMemoEntry}>()
  */
 const MEMO_MAX_SESSIONS = 64;
 
-/** layout 摘要取 `ContentHash.hash` 前 16 hex（与 L1/L2 的截断口径一致）。 */
+/** layout 摘要取 `Hash.sha256Hex` 前 16 hex（与 L1/L2 的截断口径一致）。 */
 const LAYOUT_DIGEST_HEX_LENGTH = 16;
 
 /**
@@ -184,7 +184,7 @@ export const ChatTokenEstimateMemo = {
             skillsEnabled: layout.skillsEnabled,
             skillsPrefix: layout.skillsPrefix,
         });
-        return ContentHash.hash(serialized).slice(0, LAYOUT_DIGEST_HEX_LENGTH);
+        return Hash.sha256Hex(serialized).slice(0, LAYOUT_DIGEST_HEX_LENGTH);
     },
 
     /**

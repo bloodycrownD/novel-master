@@ -13,7 +13,7 @@ import {  RevisionRefCount  } from "@/domain/vfs/logic/revision-ref-count.js";
 
 import {  SqliteMessageCheckpointRepository  } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import {  SqliteVfsContentStore  } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
-import {  ContentHash  } from "@/domain/vfs/content-store/logic/hash-content.js";
+import { Hash } from "@/common/hash.js";
 import {  LogicalPath  } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import {  RevisionPairKey  } from "@/domain/vfs/logic/revision-pair-key.js";
 import {  SqliteVfsEntryRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
@@ -354,7 +354,7 @@ describe("rollback ref_count + deferred blob gc", () => {
         await svfs.write("/defer.md", "keep-final", { versionCheck: false });
         unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant.id));
 
-        const orphanHash = ContentHash.hash(orphanContent);
+        const orphanHash = Hash.sha256Hex(orphanContent);
         const entry = unwrap(await entries.findByPath(LogicalPath.scopeKey({kind:"session",projectId:project.id,sessionId:session.id}), "/defer.md"));
         assert.ok(entry != null);
         // 确认 orphan revision 存在
@@ -367,7 +367,7 @@ describe("rollback ref_count + deferred blob gc", () => {
         const afterSweep = unwrap(await revisions.findByEntryAndVersion(entry.entryId, 2));
         assert.equal(afterSweep, null, "orphan revision 应在 sweep 后被删除");
 
-        // content_hash 列始终存 ContentHash.hash() 输出的 hex 格式（SHA-256 hex），
+        // content_hash 列始终存 Hash.sha256Hex() 输出的 hex 格式（SHA-256 hex），
         // zlib b64 只影响 bytes 列编码，不影响 content_hash 列。可直接精确验证 blob gc。
         await DeferredBlobGc.run(ctx.conn);
         // 观测面（2026-09-30 换）：读路径已接进程内解压产物层（按内容哈希索引、

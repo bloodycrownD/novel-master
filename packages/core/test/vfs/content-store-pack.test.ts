@@ -9,7 +9,7 @@ import {  describe, it  } from "node:test";
 import {  SqliteVfsContentStore  } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import {  PackCodec, VFS_PACK_FORMAT_FOSSIL_CHAIN_V1, VFS_PACK_FORMAT_ZLIB_CONCAT_V1, type VfsPackFormat  } from "@/domain/vfs/content-store/logic/pack-codec.js";
 import {  encodeFossilChainPack, encodeZlibConcatPack  } from "../helpers/pack-fixtures.js";
-import {  ContentHash  } from "@/domain/vfs/content-store/logic/hash-content.js";
+import { Hash } from "@/common/hash.js";
 import {  ZlibCodec  } from "@/domain/vfs/content-store/logic/zlib-codec.js";
 import {  SqliteVfsEntryRepository  } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import {  CHARACTER_CARD_BLOB_COMPRESSED_GATE_BYTES  } from "@/domain/character-card/logic/character-card-limits.js";
@@ -75,7 +75,7 @@ async function insertPackRows(conn: TdbcConnection, entryId: number, format: Vfs
     for (let index = 0; index < utf8s.length; index++) {
         const plain = plains[index]!;
         const span = encoded.spans[index]!;
-        const contentHash = ContentHash.hash(plain);
+        const contentHash = Hash.sha256Hex(plain);
         const compressedByteLen = ZlibCodec.compress(utf8s[index]!).byteLength;
         await conn.execute(
             `INSERT INTO vfs_content_pack_member (content_hash, pack_id, offset, length, compressed_byte_len)
@@ -425,8 +425,8 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
         const pA = plainChunk(`pack-a`, suffix, 120);
         const pB = plainChunk(`pack-b`, suffix, 90);
         const pHead = plainChunk(`pack-head`, suffix, 60);
-        const hA = ContentHash.hash(pA);
-        const hB = ContentHash.hash(pB);
+        const hA = Hash.sha256Hex(pA);
+        const hB = Hash.sha256Hex(pB);
         const hHead = await store.put(pHead);
 
         const pathPack = `/tvp1/pack-${suffix}.md`;
@@ -450,9 +450,9 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
 
         // —— fossil 组：三版本链（局部修改 + 追加），head 独立保留 blob ——
         const [f0, f1, f2] = fossilVersions(suffix);
-        const hf0 = ContentHash.hash(f0);
-        const hf1 = ContentHash.hash(f1);
-        const hf2 = ContentHash.hash(f2);
+        const hf0 = Hash.sha256Hex(f0);
+        const hf1 = Hash.sha256Hex(f1);
+        const hf2 = Hash.sha256Hex(f2);
         const pHeadF = plainChunk(`fossil-head`, suffix, 40);
         const hHeadF = await store.put(pHeadF);
 
@@ -618,7 +618,7 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
         assert.equal(await store.ensureBlob(members[0]!.contentHash, null), members[0]!.contentHash);
         assert.equal(await store.ensureBlob(members[1]!.contentHash, null), members[1]!.contentHash);
 
-        const hMissing = ContentHash.hash(`tvp5-missing-${suffix}`);
+        const hMissing = Hash.sha256Hex(`tvp5-missing-${suffix}`);
         const existing = await store.findExistingBlobHashes([members[0]!.contentHash, members[1]!.contentHash, hMissing]);
         assert.equal(existing.size, 2);
         assert.ok(existing.has(members[0]!.contentHash));
@@ -638,7 +638,7 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
         // 直接填合法值即可。
         const [f0] = fossilVersions(suffix);
         const { packId } = await insertPackRows(conn, /* entryId 无引用语义，占位即可 */ 987654322, VFS_PACK_FORMAT_FOSSIL_CHAIN_V1, [f0]);
-        const bulkHashes = Array.from({ length: 500 }, (_, index) => ContentHash.hash(`tvp5b-bulk-${suffix}-${index}`));
+        const bulkHashes = Array.from({ length: 500 }, (_, index) => Hash.sha256Hex(`tvp5b-bulk-${suffix}-${index}`));
         await conn.batch(
             `INSERT INTO vfs_content_pack_member (content_hash, pack_id, offset, length, compressed_byte_len)
     VALUES (?, ?, ?, ?, ?)`,
@@ -673,7 +673,7 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
 
         // 再加 1 个真缺失的 hash → 逼出第二条（长度为 1 的）chunk 语句，两条都 ≤500。
         probe.statements.length = 0;
-        const hMissing = ContentHash.hash(`tvp5b-missing-${suffix}`);
+        const hMissing = Hash.sha256Hex(`tvp5b-missing-${suffix}`);
         const mixed = await store.findExistingBlobHashes([...bulkHashes, hMissing]);
         assert.equal(mixed.size, 500);
         assert.ok(!mixed.has(hMissing), "真缺失的 hash 不得误报已存在（互斥）");
@@ -728,7 +728,7 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
 
         // 真 hash 无 blob 亦无 member → 维持 null（探测不到）。
         const pathGhost = `/tvp6/ghost-${suffix}.md`;
-        const hGhost = ContentHash.hash(`tvp6-ghost-${suffix}`);
+        const hGhost = Hash.sha256Hex(`tvp6-ghost-${suffix}`);
         await entryRepo.insertWithContentHash(sk, pathGhost, hGhost);
         assert.equal(unwrapResult(await entryRepo.findContentSizeByPath(sk, pathGhost)), null);
     });
@@ -838,7 +838,7 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
         const { conn } = getNovelMasterTestContext();
         const store = new SqliteVfsContentStore(conn);
         const suffix = testIsolationSuffix();
-        const hGhost = ContentHash.hash(`no-blob-no-member-${suffix}`);
+        const hGhost = Hash.sha256Hex(`no-blob-no-member-${suffix}`);
         const ghostResult = await store.get(hGhost);
         assert.ok(!ghostResult.ok, "预期 Err 分支（get 已改返回 Result，不再 throw）");
         assert.ok(ghostResult.error instanceof Error);

@@ -4,7 +4,7 @@ import {  SessionKkvServiceFactory  } from "../../src/service/session-kkv/create
 import {  SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY  } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
 import {  RuleSnapshotCodec  } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
 import {  FileCacheBlobCodec  } from "../../src/domain/session-kkv/logic/file-cache-blob-codec.js";
-import {  ContentHash  } from "../../src/domain/vfs/content-store/logic/hash-content.js";
+import { Hash } from "@/common/hash.js";
 import {  VFS_CONTENT_ENCODING_ZLIB_B64  } from "../../src/domain/vfs/content-store/logic/blob-bytes-codec.js";
 import {  VFS_CONTENT_ENCODING_ZLIB  } from "../../src/domain/vfs/content-store/logic/zlib-codec.js";
 import type { TdbcConnection } from "@novel-master/core";
@@ -62,7 +62,7 @@ describe("file-cache-blob-codec 拆分（先哈希后压缩）", () => {
         assert.notEqual(hashed, null);
         assert.equal(hashed!.mtimeMs, 42);
         assert.equal(hashed!.body, "正文");
-        assert.equal(hashed!.contentHash, ContentHash.hash("正文"), "hash 与 vfs 共享 ContentHash.hash 同源（sha256(body)，mtime 不参与）");
+        assert.equal(hashed!.contentHash, Hash.sha256Hex("正文"), "hash 与 vfs 共享 Hash.sha256Hex 同源（sha256(body)，mtime 不参与）");
         assert.equal(FileCacheBlobCodec.hashPayload("not-a-payload"), null);
     });
 

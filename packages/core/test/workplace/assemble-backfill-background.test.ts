@@ -23,7 +23,7 @@ import type { SessionKkvService } from "../../src/service/session-kkv/session-kk
 import {  SESSION_KKV_DOMAIN_FILE_CACHE  } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
 import {  FileCache  } from "../../src/domain/workplace/logic/load-or-fill-file-cache.js";
 import {  RuleSnapshotCodec  } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
-import {  ContentHash  } from "../../src/domain/vfs/content-store/logic/hash-content.js";
+import { Hash } from "@/common/hash.js";
 import type { VfsService } from "../../src/domain/vfs/ports/vfs-service.port.js";
 import type { AgentPromptLayout } from "../../src/domain/prompt/model/agent-prompt-layout.js";
 import {  SessionKkvServiceFactory  } from "../../src/service/session-kkv/create-session-kkv-service.js";
@@ -191,7 +191,7 @@ describe("workplace 冷 miss 回填后台化", () => {
         // body 带 testIsolationSuffix 唯一 → 按 hash 计数与「本用例只落 1 行」等价
         // （夹具内存库由本文件所有用例共享，全表 COUNT(*) 不可用）
         const blobCountFor = async (): Promise<number> => {
-            const rows = await ctx.conn.query<{ n: number }>("SELECT COUNT(*) AS n FROM session_file_cache_blob WHERE content_hash = ?", [ContentHash.hash(body)]);
+            const rows = await ctx.conn.query<{ n: number }>("SELECT COUNT(*) AS n FROM session_file_cache_blob WHERE content_hash = ?", [Hash.sha256Hex(body)]);
             return Number(rows[0]!.n);
         };
 

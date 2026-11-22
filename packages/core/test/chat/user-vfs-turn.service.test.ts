@@ -21,7 +21,7 @@ import {  SqliteMessageCheckpointRepository as CheckpointRepo  } from "../../src
 import {  SqliteVfsRevisionRepository  } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import {  VfsServiceFactory  } from "../../src/service/vfs/vfs-service-factory.js";
 import {  LogicalPath  } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
-import {  ContentHash  } from "../../src/domain/vfs/content-store/logic/hash-content.js";
+import { Hash } from "@/common/hash.js";
 import {  UserVfsTurnOps  } from "../../src/service/vfs/build-user-vfs-turn-op.js";
 import {  MessageCheckpointFactory  } from "../../src/service/message-checkpoint/message-checkpoint-factory.js";
 import type { UserVfsTurnServiceDeps } from "../../src/service/chat/impl/user-vfs-turn.service.js";
@@ -234,9 +234,9 @@ describe("UserVfsTurnService", () => {
         const keys = await revisions.listKeysUnderScope(sk, "/");
         // entry 已被回滚清理，scope 下的 revision 均不可达，应全部被 sweep
         assert.equal(keys.filter((k) => k.entryId !== undefined).length, 0, "失败回滚后 scope 下不应有残留 revision");
-        // content_hash 列始终存 ContentHash.hash() 输出的 hex 格式（SHA-256 hex），
+        // content_hash 列始终存 Hash.sha256Hex() 输出的 hex 格式（SHA-256 hex），
         // zlib b64 只影响 bytes 列编码，不影响 content_hash 列。可直接精确验证。
-        const orphanHash = ContentHash.hash("A-orphan-body");
+        const orphanHash = Hash.sha256Hex("A-orphan-body");
         const hashRows = await ctx.conn.query<{ content_hash: string }>(`SELECT content_hash FROM vfs_content_blob`, []);
         assert.equal(
             hashRows.some((r) => String(r.content_hash) === orphanHash),
