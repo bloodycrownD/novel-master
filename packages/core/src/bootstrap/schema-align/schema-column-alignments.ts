@@ -4,6 +4,9 @@
  * @module bootstrap/schema-align/schema-column-alignments
  */
 
+import { SqlTemplateParser } from "@/infra/sql-template/index.js";
+import { TdbcTemplate } from "@/infra/tdbc/logic/template-helper.js";
+import { BootstrapProbeSql } from "@/infra/sql-template/generated/bootstrap_probe.mapper.generated.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 
 /**
@@ -110,7 +113,7 @@ export const SCHEMA_COLUMN_ALIGNMENTS: readonly SchemaColumnAlignment[] = [
         column: "head_version",
         addColumnSql: "ALTER TABLE vfs_entry ADD COLUMN head_version INTEGER NOT NULL DEFAULT 1",
         afterAdd: async (tx) => {
-            await tx.execute("UPDATE vfs_entry SET head_version = version");
+            await TdbcTemplate.execute(tx, new SqlTemplateParser(), BootstrapProbeSql.alignVfsEntryHeadVersion, {});
         },
     },
     {

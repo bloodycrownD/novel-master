@@ -20,6 +20,9 @@
  * @module bootstrap/skills/seed-builtin-skills
  */
 
+import { SqlTemplateParser } from "@/infra/sql-template/index.js";
+import { TdbcTemplate } from "@/infra/tdbc/logic/template-helper.js";
+import { KkvSql } from "@/infra/sql-template/generated/kkv.mapper.generated.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SkillsServiceFactory } from "@/service/skills/create-skills-service.js";
 import { AppErrorOps, type AppError } from "@/errors/app-error.js";
@@ -166,7 +169,8 @@ export const BuiltinSkills = {
    */
     async seed(conn: TdbcConnection): Promise<Result<void, AppError>> {
         // 台账快路径：已应用当前版本 → 本次启动无事可做（稳态单次 kkv 读）。
-        const ledgerRows = await conn.query("SELECT value FROM kkv_entry WHERE module = ? AND key = ?", [SEEDS_MODULE, AGENT_CONFIG_LEDGER_KEY]);
+        const parser = new SqlTemplateParser();
+        const ledgerRows = await TdbcTemplate.query<{ value: string }>(conn, parser, KkvSql.getValueByKey, { module: SEEDS_MODULE, key: AGENT_CONFIG_LEDGER_KEY });
         const appliedVersion = ledgerRows.length === 0 ? null : Number.parseInt(String(ledgerRows[0]!.value), 10);
         if (appliedVersion != null && appliedVersion >= AGENT_CONFIG_SEED_VERSION) {
             return Result.ok(undefined);
@@ -188,7 +192,7 @@ export const BuiltinSkills = {
         if (!written.ok) {
             return Result.err(written.error);
         }
-        await conn.execute("INSERT OR REPLACE INTO kkv_entry (module, key, value) VALUES (?, ?, ?)", [SEEDS_MODULE, AGENT_CONFIG_LEDGER_KEY, String(AGENT_CONFIG_SEED_VERSION)]);
+        await TdbcTemplate.execute(conn, parser, KkvSql.upsert, { module: SEEDS_MODULE, key: AGENT_CONFIG_LEDGER_KEY, value: String(AGENT_CONFIG_SEED_VERSION) });
         return Result.ok(undefined);
     },
 } as const;
