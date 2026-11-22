@@ -56,3 +56,35 @@
    （throw 点翻译自 Outcome 检查、catch 点转回控制流）。
 4. 新坑：**async try-finally 裸 `return promise` 的 finally 先于 settle 执行**（release 提前放行
    busy，被 ic-20 busy 采样测试抓回）——try-finally 中必须 `return await`。
+
+## 后补：SQL mapper 样板 + i18n 双轨收敛（ffbad2fa4 / 964cbab6e / a8a449982）
+用户裁决 SQL 抽离（MyBatis XML 形态）与 i18n 双轨收敛同批落地：
+
+### SQL mapper（样板 chat_message，18 条语句）
+- 载体 `resources/sql/*.mapper.xml`（src 外 = Java resources 语义，tsc/nm-style 天然不扫）；
+  生成器 `gen-sql-mapper.mjs`（fast-xml-parser preserveOrder）→ generated TS 进仓；
+  运行时零文件读取、XML 不进 bundle。求值链路零改动（生成物原样进既有 SqlTemplateParser）。
+- 动态标签（if/where/foreach/trim/choose）在 XML 里是**结构化元素**，生成器要还原成文本
+  形态 `<if test="...">`（preserveOrder 的 childNodes 递归序列化）——XML 保留字符 `<=`
+  写 `&lt;=`，解析器自动反转义，生成物是普通 SQL。
+- `<sql id>` 片段 + `<include ref>` 展开解决列清单插值；INSERT 21 占位符写死（程序生成退役）；
+  hiddenFilter 条件拼接收 `<if test>`（updateHiddenRange 改参数化 prevHidden）。
+- 坑：python heredoc（<<'PYEOF'）在环境里会吃双反斜杠——**跨语言转义一律落临时 .py 文件
+  再执行**（本段第三次踩）。
+
+### i18n 双轨收敛（locales JSON 退役）
+- 事实双轨：core 段走 yaml→gen-i18n-catalog→generated-catalog.ts；chat/settings 段是后加的
+  手工 JSON（./locales exports）。收敛：JSON 并入 yaml（顶层 chat/settings 段）→ 生成器按
+  前缀分拆三产物（CHAT_CATALOGS / SETTINGS_CATALOGS，as const）→ 双端 4 消费文件改道 →
+  撤 ./locales exports → 删 4 JSON。
+- 三个坑：
+  1. **伪嵌套键**：`chat.rollback.confirm.backfill` 既是叶子又是 `.file`/`.tail.*` 的键前缀——
+     YAML 真嵌套表达不了（同段叶子与子树并存），解法=段内扁平点分键（flatten 的 path 拼接
+     天然支持键含点，生成器零改动）。
+  2. **generated 产物别加显式宽注解**：`Readonly<Record<string, ...>>` 把 locale 字面量键
+     宽化 → 下游 createTranslator 泛型推断塌 → mobile 测试组件 props 塌 never。域产物用
+     `as const` 保推断强度。
+  3. **域子路径只导出 CATALOGS**：createTranslator 在 @novel-master/core/common——mobile
+     入口 import 错位（从域子路径 import createTranslator）会 TS2305。
+- parseCore 跳过顶层域段（core 组装载器不管域键）；catalog.test 同步断言扩三组；键全集
+  编译期断言（satisfies Record<ChatMessageKey,...>）——域 keys 联合与 yaml 键集实测完全同步。
