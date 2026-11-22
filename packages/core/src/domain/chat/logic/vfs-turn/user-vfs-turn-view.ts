@@ -48,9 +48,10 @@ export type UserVfsTurnView = {
 export const USER_VFS_TURN_SPAN = 2 as const;
 
 /** 用户 VFS UA 两段领域服务。 */
-export namespace UserVfsTurns {
+export const UserVfsTurns = {
+
     /** 解析文本中全部 `<action name="…">`。 */
-    export function parseActions(text: string): readonly ParsedUserVfsAction[] {
+    parseActions(text: string): readonly ParsedUserVfsAction[] {
         return UserVfsActionXml.parseFromText(text).map(({name, params}) => {
             let resolvedName = name;
             if (name === "rename" || name === "move") {
@@ -71,11 +72,12 @@ export namespace UserVfsTurns {
                 hunks,
             };
         });
-    }
+    },
+
 
     /** 从已解析的 action 还原 flush 前的完整 tool input。 */
     /** nm-style: keep-public — UserVfsTurns 派生工具入口，保留服务组合。 */
-    export function deriveToolUses(actions: readonly ParsedUserVfsAction[]): readonly DerivedToolUseInput[] {
+    deriveToolUses(actions: readonly ParsedUserVfsAction[]): readonly DerivedToolUseInput[] {
         if (actions.length === 0) {
             return [];
         }
@@ -90,11 +92,12 @@ export namespace UserVfsTurns {
             xmlParts.push(UserVfsActionXml.build(action.name || action.kind, params));
         }
         return ActionXmlToolUses.toToolUses(xmlParts.join("\n"));
-    }
+    },
+
 
     /** 从 `startIndex` 起是否为完整的用户 VFS UA 两段（均未 hidden）。 */
     /** nm-style: keep-public — core-shim / UI 测试的 VFS 两段匹配入口。 */
-    export function matchAt(messages: readonly ChatMessageData[], startIndex: number): readonly [ChatMessageData, ChatMessageData] | null {
+    matchAt(messages: readonly ChatMessageData[], startIndex: number): readonly [ChatMessageData, ChatMessageData] | null {
         const m0 = messages[startIndex];
         const m1 = messages[startIndex + 1];
         if (m0 == null || m1 == null) return null;
@@ -108,15 +111,16 @@ export namespace UserVfsTurns {
         if (ackBlocks.some((block) => block.type !== "text")) return null;
         if (MessageBodyText.fromBlocks(ackBlocks) !== USER_VFS_TURN_ACK_TEXT) return null;
         return [m0, m1];
-    }
+    },
+
 
     /** 从已匹配的 UA 两段构建视图。 */
     /** nm-style: keep-public — core-shim / UI 测试的 VFS 视图构建入口。 */
-    export function buildView(turn: readonly [ChatMessageData, ChatMessageData]): UserVfsTurnView {
+    buildView(turn: readonly [ChatMessageData, ChatMessageData]): UserVfsTurnView {
         const [actionMsg, ackMsg] = turn;
         const actionText = MessageBodyText.fromBlocks(actionMsg.content.blocks);
-        const actions = parseActions(actionText);
-        const toolUses = deriveToolUses(actions).map((toolUse, index) => ({
+        const actions = UserVfsTurns.parseActions(actionText);
+        const toolUses = UserVfsTurns.deriveToolUses(actions).map((toolUse, index) => ({
             type: "tool_use" as const,
             id: `vfs-tu-${index}`,
             name: toolUse.name,
@@ -135,5 +139,6 @@ export namespace UserVfsTurns {
             })),
             bridgeText: MessageBodyText.fromBlocks(ackMsg.content.blocks),
         };
-    }
-}
+    },
+} as const;
+

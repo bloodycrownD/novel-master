@@ -37,7 +37,8 @@ const ROLLBACK_CONFIRM_KEYS = {
     },
 } as const satisfies Record<"primary" | "degraded", Record<RollbackMode, RollbackConfirmKey>>;
 
-export namespace RollbackConfirmView {
+export const RollbackConfirmView = {
+
     /**
    * 解析回滚确认 Alert 的 descriptor。
    *
@@ -45,7 +46,7 @@ export namespace RollbackConfirmView {
    * @param kind - primary / degraded / backfill
    * @param ctx - backfill 时需提供缺失快照路径
    */
-    export function descriptor(mode: RollbackMode, kind: RollbackConfirmKind, ctx?: { missingPaths?: readonly string[] }): RollbackConfirmDescriptor {
+    descriptor(mode: RollbackMode, kind: RollbackConfirmKind, ctx?: { missingPaths?: readonly string[] }): RollbackConfirmDescriptor {
         if (kind === "backfill") {
             const missingPaths = ctx?.missingPaths ?? [];
             const files: ChatMessageDescriptor[] = [];
@@ -60,5 +61,6 @@ export namespace RollbackConfirmView {
             return { key: "chat.rollback.confirm.backfill", params: { files, tail: { key: tailKey } } };
         }
         return { key: ROLLBACK_CONFIRM_KEYS[kind][mode] };
-    }
-}
+    },
+} as const;
+

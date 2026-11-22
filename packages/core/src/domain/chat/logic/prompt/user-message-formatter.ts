@@ -12,11 +12,13 @@
 
 import type {MessageAttachment} from "../../model/message-attachment.schema.js";
 
-export namespace UserMessageFormatter {
+export const UserMessageFormatter = {
+
     /** 送 LLM 时对 body 每行非空前缀 4 空格（落库 XML 仍顶格）。 */
-    function indentUserOpsBody(body: string): string {
+    indentUserOpsBody(body: string): string {
         return body.split("\n").map((line) => (line.length === 0 ? line : `    ${line}`)).join("\n");
-    }
+    },
+
 
     /**
      * 无附件 → 恒等原文；有附件 → `<attachment>…</attachment><user-input>…</user-input>`。
@@ -35,7 +37,7 @@ export namespace UserMessageFormatter {
      * `user_ops` 的 `content` 为 action XML。
      */
     /** nm-style: keep-public — LLM wrap 唯一入口；测试直接锁 XML 形态。 */
-    export function wrapForLlm(plainText: string, attachments: readonly MessageAttachment[] | undefined | null, extraInfo?: string): string {
+    wrapForLlm(plainText: string, attachments: readonly MessageAttachment[] | undefined | null, extraInfo?: string): string {
         const hasAttachments = attachments != null && attachments.length > 0;
         let body = "";
         if (hasAttachments) {
@@ -47,7 +49,7 @@ export namespace UserMessageFormatter {
             body = [...attach, ...workplace, ...annotate].map((a) => (a.content ?? "").trim()).filter((s) => s.length > 0).join("\n\n");
         }
 
-        const extraInfoBody = typeof extraInfo === "string" && extraInfo.trim().length > 0 ? [`  <extra-info>`, indentUserOpsBody(extraInfo.trim()), `  </extra-info>`].join("\n") : null;
+        const extraInfoBody = typeof extraInfo === "string" && extraInfo.trim().length > 0 ? [`  <extra-info>`, UserMessageFormatter.indentUserOpsBody(extraInfo.trim()), `  </extra-info>`].join("\n") : null;
 
         // 无附件 body 且无 extra-info：恒等原文，不包空 `<attachment>`
         if (body === "" && extraInfoBody == null) {
@@ -57,7 +59,7 @@ export namespace UserMessageFormatter {
         const lines: string[] = ["<attachment>"];
         if (body !== "") {
             lines.push(`  <user-ops>`);
-            lines.push(indentUserOpsBody(body));
+            lines.push(UserMessageFormatter.indentUserOpsBody(body));
             lines.push(`  </user-ops>`);
         }
         if (extraInfoBody != null) {
@@ -65,5 +67,6 @@ export namespace UserMessageFormatter {
         }
         lines.push("</attachment>", "<user-input>", plainText, "</user-input>");
         return lines.join("\n");
-    }
-}
+    },
+} as const;
+

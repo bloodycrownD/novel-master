@@ -17,12 +17,15 @@ import { promptPathSeen } from "./prompt-path-seen.js";
 type ChatLogicError = AppError<"CHAT_INVALID_ARGUMENT">;
 
 /** 附件领域服务：扫描、物化、按 path/skillName 去重。 */
-export namespace AttachmentScanner {
-    const AT_PATH_TOKEN_RE = /@([^\s@]+)/g;
-    const SKILL_TOKEN_RE = /(?<!\S)\$([^\s$/@]+)/g;
+export const AT_PATH_TOKEN_RE = /@([^\s@]+)/g;
+
+export const SKILL_TOKEN_RE = /(?<!\S)\$([^\s$/@]+)/g;
+
+export const AttachmentScanner = {
+
 
     /** 从正文扫描 `@path` token，生成 `source:attach` 附件（按规范化 seen key 去重）。 */
-    export function scanAtPaths(text: string): MessageAttachment[] {
+    scanAtPaths(text: string): MessageAttachment[] {
         if (text === "") {
             return [];
         }
@@ -40,18 +43,20 @@ export namespace AttachmentScanner {
                 continue;
             }
             seen.add(seenKey);
-            out.push(attachFromPath(raw, seenKey));
+            out.push(AttachmentScanner.attachFromPath(raw, seenKey));
         }
         return out;
-    }
+    },
+
 
     /** 技能 seen / 去重 key。 */
-    export function skillKey(name: string): string {
+    skillKey(name: string): string {
         return `skill:${name}`;
-    }
+    },
+
 
     /** 从正文扫描 `$技能名` token，生成 skillAttach 附件（按 skillName 去重）。 */
-    export function scanSkills(text: string): MessageAttachment[] {
+    scanSkills(text: string): MessageAttachment[] {
         if (text === "") {
             return [];
         }
@@ -64,7 +69,7 @@ export namespace AttachmentScanner {
             if (!SKILL_NAME_PATTERN.test(name)) {
                 continue;
             }
-            const key = skillKey(name);
+            const key = AttachmentScanner.skillKey(name);
             if (seen.has(key)) {
                 continue;
             }
@@ -79,24 +84,27 @@ export namespace AttachmentScanner {
             });
         }
         return out;
-    }
+    },
+
 
     /** nm-style: keep-public — run-agent-turn 发送编排的统一合并入口；测试锁顺序。 */
-    export function mergeScannedAtPaths(text: string, existing: readonly MessageAttachment[]): MessageAttachment[] {
-        return mergeByPath(existing, scanAtPaths(text));
-    }
+    mergeScannedAtPaths(text: string, existing: readonly MessageAttachment[]): MessageAttachment[] {
+        return AttachmentScanner.mergeByPath(existing, AttachmentScanner.scanAtPaths(text));
+    },
+
 
     /** nm-style: keep-public — run-agent-turn 发送编排的统一合并入口；测试锁顺序。 */
-    export function mergeScannedSkills(text: string, existing: readonly MessageAttachment[]): MessageAttachment[] {
-        return mergeByPath(existing, scanSkills(text));
-    }
+    mergeScannedSkills(text: string, existing: readonly MessageAttachment[]): MessageAttachment[] {
+        return AttachmentScanner.mergeByPath(existing, AttachmentScanner.scanSkills(text));
+    },
+
 
     /** 按 path（或 user_ops name / skillName）去重合并；已有优先。 */
-    export function mergeByPath(existing: readonly MessageAttachment[], incoming: readonly MessageAttachment[]): MessageAttachment[] {
+    mergeByPath(existing: readonly MessageAttachment[], incoming: readonly MessageAttachment[]): MessageAttachment[] {
         const out = [...existing];
-        const seen = new Set(existing.map((a) => attachmentDedupeKey(a)).filter((k): k is string => k != null));
+        const seen = new Set(existing.map((a) => AttachmentScanner.attachmentDedupeKey(a)).filter((k): k is string => k != null));
         for (const item of incoming) {
-            const key = attachmentDedupeKey(item);
+            const key = AttachmentScanner.attachmentDedupeKey(item);
             if (key != null && seen.has(key)) {
                 continue;
             }
@@ -106,10 +114,11 @@ export namespace AttachmentScanner {
             out.push(item);
         }
         return out;
-    }
+    },
+
 
     /** nm-style: keep-public — task 工具 fileAttachment 单点入口；失败以 CHAT_INVALID_ARGUMENT 返回。 */
-    export function fromPaths(paths: readonly string[]): Result<MessageAttachment[], ChatLogicError> {
+    fromPaths(paths: readonly string[]): Result<MessageAttachment[], ChatLogicError> {
         const materialized: MessageAttachment[] = [];
         for (const raw of paths) {
             if (typeof raw !== "string" || raw.trim() === "") {
@@ -117,19 +126,19 @@ export namespace AttachmentScanner {
             }
             const resolved = LogicalPath.resolve(raw);
             if (!resolved.ok) return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { detail: resolved.error.message, path: raw }));
-            const base = attachFromPath(raw, resolved.value);
+            const base = AttachmentScanner.attachFromPath(raw, resolved.value);
             materialized.push({
                 ...base,
                 name: MessageAttachmentSchema.storageName(base.path),
                 action: "userAttach",
             });
         }
-        return Result.ok(mergeByPath([], materialized));
-    }
+        return Result.ok(AttachmentScanner.mergeByPath([], materialized));
+    },
 
-    function attachmentDedupeKey(a: MessageAttachment): string | null {
+    attachmentDedupeKey(a: MessageAttachment): string | null {
         if (a.action === "skillAttach") {
-            return typeof a.skillName === "string" && a.skillName !== "" ? skillKey(a.skillName) : null;
+            return typeof a.skillName === "string" && a.skillName !== "" ? AttachmentScanner.skillKey(a.skillName) : null;
         }
         if (a.path != null && a.path !== "") {
             const seenKey = promptPathSeen.tryNormalize(a.path);
@@ -139,9 +148,9 @@ export namespace AttachmentScanner {
             return `user_ops:${a.name}`;
         }
         return null;
-    }
+    },
 
-    function attachFromPath(rawPath: string, seenKey: string): MessageAttachment {
+    attachFromPath(rawPath: string, seenKey: string): MessageAttachment {
         const isDir = promptPathSeen.isDirToken(rawPath);
         const storePath = isDir && seenKey !== "/" ? `${seenKey}/` : seenKey;
         const basename = seenKey.split("/").filter(Boolean).pop() ?? seenKey;
@@ -155,5 +164,6 @@ export namespace AttachmentScanner {
             return { name: basename, source: "attach", type: "text", content: null, path: storePath };
         }
         return { name: basename, source: "attach", type: "text", content: null, path: storePath };
-    }
-}
+    },
+} as const;
+

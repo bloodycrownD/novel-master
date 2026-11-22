@@ -15,9 +15,10 @@ import {UserVfsTurns} from "../vfs-turn/user-vfs-turn-view.js";
 type AttachmentDisplayKind = "full" | "filename" | "header";
 
 /** 附件 XML 编解码器。 */
-export namespace AttachmentXmlCodec {
+export const AttachmentXmlCodec = {
+
     /** `userAttach` / `workplaceChange`：全文 / filename / header（行号正文）。 */
-    export function encodeFileRef(params: {
+    encodeFileRef(params: {
         readonly action: "userAttach" | "workplaceChange";
         readonly path: string;
         readonly content: string;
@@ -28,19 +29,21 @@ export namespace AttachmentXmlCodec {
             content: params.content,
             display: params.display,
         });
-    }
+    },
+
 
     /** 目录树：`kind: "dirTree"`，content = ASCII 树（无外层 `<dir>`）。 */
-    export function encodeDirTree(path: string, treeBody: string): string {
+    encodeDirTree(path: string, treeBody: string): string {
         return UserVfsActionXml.build("userAttach", {
             path,
             content: treeBody,
             kind: "dirTree",
         });
-    }
+    },
+
 
     /** 由文件形批注草稿构造落库附件（`source:user_ops` + `action:annotate`）。 */
-    export function encodeAnnotateAttachment(draft: AnnotateDraft): MessageAttachment {
+    encodeAnnotateAttachment(draft: AnnotateDraft): MessageAttachment {
         const path = draft.path;
         const params: Record<string, unknown> = {
             path,
@@ -68,10 +71,11 @@ export namespace AttachmentXmlCodec {
             path,
             action: "annotate",
         };
-    }
+    },
+
 
     /** 从消息 attachments 解析可 Undo 恢复的工作区批注草稿；每条新 mint id。 */
-    export function decodeAnnotateDrafts(attachments: readonly MessageAttachment[] | null | undefined): AnnotateDraft[] {
+    decodeAnnotateDrafts(attachments: readonly MessageAttachment[] | null | undefined): AnnotateDraft[] {
         if (attachments == null || attachments.length === 0) {
             return [];
         }
@@ -129,5 +133,6 @@ export namespace AttachmentXmlCodec {
             });
         }
         return out;
-    }
-}
+    },
+} as const;
+

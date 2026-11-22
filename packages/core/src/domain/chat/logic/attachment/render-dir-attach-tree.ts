@@ -43,9 +43,10 @@ function entryDisplayName(entryPath: string, kind: "file" | "directory"): string
  * ```
  * nm-style: keep-local — 目录树格式化独立纯函数，prepare 单点调用但含截断/排序/根标签逻辑。
  */
-export namespace DirAttachTreeRenderer {
+export const DirAttachTreeRenderer = {
+
     /** nm-style: keep-public — prepare 目录附件单点渲染入口；测试直接锁 ASCII 树。 */
-    export async function render(rootDir: string, deps: RenderDirAttachTreeDeps): Promise<string> {
+    async render(rootDir: string, deps: RenderDirAttachTreeDeps): Promise<string> {
         const maxBytes = deps.maxUtf8Bytes ?? ATTACH_DIR_TREE_MAX_UTF8_BYTES;
         const normalizedRoot = rootDir.replace(/\/+$/, "") || "/";
         let rootLine = "/";
@@ -96,5 +97,6 @@ export namespace DirAttachTreeRenderer {
             treeBody = `${treeBody}\n<!-- [truncated] -->`;
         }
         return treeBody;
-    }
-}
+    },
+} as const;
+

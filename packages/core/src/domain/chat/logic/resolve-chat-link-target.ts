@@ -29,11 +29,13 @@ const HTTPS_PATTERN = /^https?:\/\//i;
 /** 省略显示长度门槛（字符数）：路径超过该长度且层数 >2 才做中间省略。 */
 const ELIDE_PATH_MIN_LENGTH = 20;
 
-export namespace ChatLinkResolver {
+export const ChatLinkResolver = {
+
     /** 判定 href 是否为 http(s) 外部链接。 */
-    export function isHttp(href: string): boolean {
+    isHttp(href: string): boolean {
         return HTTPS_PATTERN.test(href);
-    }
+    },
+
 
     /**
      * 识别聊天链接 href 是否指向工作区文件。
@@ -41,7 +43,7 @@ export namespace ChatLinkResolver {
      * @param href - `<a>` 元素的原始 href（未解码）
      * @returns 归一化后的工作区逻辑路径（如 `/笔记/大纲.md`）；非工作区目标返回 null
      */
-    export function resolve(href: string): string | null {
+    resolve(href: string): string | null {
         const trimmed = href.trim();
         if (trimmed.length === 0) {
             return null;
@@ -78,7 +80,8 @@ export namespace ChatLinkResolver {
             return null;
         }
         return resolved.value;
-    }
+    },
+
 
     /**
      * 超长路径省略显示：保留首段目录 + `...` + 文件名（对齐工作区路径中省
@@ -89,16 +92,18 @@ export namespace ChatLinkResolver {
      * nm-style: keep-local — ChatLinkResolver.notFoundMessage 复用；测试直接锁省略规则。
      */
     /** nm-style: keep-public — ChatLinkResolver.notFoundMessage 复用；测试直接锁省略规则。 */
-    export function elidePath(path: string): string {
+    elidePath(path: string): string {
         const parts = path.split("/").filter((part) => part.length > 0);
         if (parts.length <= 2 || path.length <= ELIDE_PATH_MIN_LENGTH) {
             return path;
         }
         return `/${parts[0]!}.../${parts[parts.length - 1]!}`;
-    }
+    },
+
 
     /** 聊天路径链接未命中的提示文案（descriptor，宿主 translator 渲染）。 */
-    export function notFoundMessage(path: string): CoreMessageDescriptor {
-        return { key: "label.chat.link_not_found", params: { path: elidePath(path) } };
-    }
-}
+    notFoundMessage(path: string): CoreMessageDescriptor {
+        return { key: "label.chat.link_not_found", params: { path: ChatLinkResolver.elidePath(path) } };
+    },
+} as const;
+

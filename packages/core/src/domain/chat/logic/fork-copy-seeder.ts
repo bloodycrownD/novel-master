@@ -40,9 +40,10 @@ interface SeedForkCopyParityInput {
  *
  * @remarks 禁止嵌套调用 MessageCheckpointService.capture；禁止指望 backfill 播种。
  */
-export namespace ForkCopySeeder {
+export const ForkCopySeeder = {
+
     /** 缺 blob 是可恢复失败（事务由调用方回滚），返回 `Err`；copyScope 的失败（含 mapper 路径非法）同样经 `Err` 透传，由事务回调解包抛出触发回滚（总纲 §五例外 2）。 */
-    export async function seed(tx: TdbcConnection, input: SeedForkCopyParityInput): Promise<Result<void, ForkCopySeedError>> {
+    async seed(tx: TdbcConnection, input: SeedForkCopyParityInput): Promise<Result<void, ForkCopySeedError>> {
         const entries = new SqliteVfsEntryRepository(tx);
         const contentStore = new SqliteVfsContentStore(tx);
         const revisions = new SqliteVfsRevisionRepository(tx);
@@ -117,5 +118,6 @@ export namespace ForkCopySeeder {
         // 替代逐条 insertCheckpoint 循环。200 文件 × 500 消息从 ~1.8s 降到百毫秒级。
         await checkpoints.seedCheckpoints(targetSessionId, newMessages, files, createdAtMs);
         return Result.ok(undefined);
-    }
-}
+    },
+} as const;
+

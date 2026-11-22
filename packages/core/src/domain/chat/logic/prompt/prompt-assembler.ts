@@ -65,8 +65,9 @@ interface PrepareUserMessagesForPromptRuntime extends AttachmentHydratorRuntime 
  * 宏展开失败（`PROMPT_INVALID_MACRO`）走返回值通道，由调用方接力决定
  * （错误通道迁移四期门：throw x.error 清零）——prepare 不再原样上抛。
  */
-export namespace PromptAssembler {
-    export async function prepare(messages: readonly ChatMessageData[], runtime: PrepareUserMessagesForPromptRuntime): Promise<Result<ChatMessageData[], AppError>> {
+export const PromptAssembler = {
+
+    async prepare(messages: readonly ChatMessageData[], runtime: PrepareUserMessagesForPromptRuntime): Promise<Result<ChatMessageData[], AppError>> {
         const seen = promptPathSeen.createSet(runtime.seenPaths);
         const attachBudget = new AttachBudget();
         const workplaceSeen = promptPathSeen.createSet(runtime.workplaceSeenPaths ?? runtime.seenPaths);
@@ -116,5 +117,6 @@ export namespace PromptAssembler {
             out.push(await hydrator.hydrateMessage(message, i === latestUserInputIndex));
         }
         return Result.ok(out);
-    }
-}
+    },
+} as const;
+

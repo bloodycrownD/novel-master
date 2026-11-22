@@ -13,20 +13,22 @@
 
 import type {SkillToolRef} from "@/domain/chat/model/content-block.js";
 
-export namespace SkillToolRefResolver {
-    /** 与 `domain/tool/builtin/skill-tool.ts` 的注册名同字符串（四处同名字符串之一）。 */
-    const SKILL_TOOL_NAME = "skill";
+/** 与 `domain/tool/builtin/skill-tool.ts` 的注册名同字符串（四处同名字符串之一）。 */
+    export const SKILL_TOOL_NAME = "skill";
 
-    /** 输入里可解析出跳转三元组的 action（list 无目标技能，不产生跳转）。 */
-    const REF_ACTIONS: ReadonlySet<string> = new Set(["load", "read", "write", "edit"]);
+/** 输入里可解析出跳转三元组的 action（list 无目标技能，不产生跳转）。 */
+    export const REF_ACTIONS: ReadonlySet<string> = new Set(["load", "read", "write", "edit"]);
 
-    function parseDomain(raw: unknown): "global" | "project" | undefined {
+export const SkillToolRefResolver = {
+
+    parseDomain(raw: unknown): "global" | "project" | undefined {
         return raw === "global" || raw === "project" ? raw : undefined;
-    }
+    },
 
-    function parseName(raw: unknown): string | undefined {
+    parseName(raw: unknown): string | undefined {
         return typeof raw === "string" && raw.length > 0 ? raw : undefined;
-    }
+    },
+
 
     /**
      * 从 tool_use 输入解析技能跳转三元组（供 UI 卡片「跳详情」门控使用）。
@@ -36,22 +38,23 @@ export namespace SkillToolRefResolver {
      *   实际命中域只有工具输出知道——此时返回 undefined，等 `meta.skillRef`。
      * - `projectId` 仅 project 域携带（global 域剥离，避免误导跳转）。
      */
-    export function fromInput(toolName: string, input: Record<string, unknown> | null | undefined, projectId?: string): SkillToolRef | undefined {
+    fromInput(toolName: string, input: Record<string, unknown> | null | undefined, projectId?: string): SkillToolRef | undefined {
         if (toolName !== SKILL_TOOL_NAME) return undefined;
         const action = input?.action;
         if (typeof action !== "string" || !REF_ACTIONS.has(action)) return undefined;
-        const name = parseName(input?.name);
+        const name = SkillToolRefResolver.parseName(input?.name);
         if (name == null) return undefined;
         // load / read 缺省读生效副本，实际命中域只有工具输出知道——返回
         // undefined 等 meta.skillRef；write/edit 补工具同款默认 project。
-        const domain = parseDomain(input?.domain) ?? (action === "load" || action === "read" ? undefined : "project");
+        const domain = SkillToolRefResolver.parseDomain(input?.domain) ?? (action === "load" || action === "read" ? undefined : "project");
         if (domain == null) return undefined;
         return {
             domain,
             name,
             ...(domain === "project" && projectId != null ? {projectId} : {}),
         };
-    }
+    },
+
 
     /**
      * 从 skill 工具输出解析跳转三元组（供 `ToolResultBlock.build` 自动检测
@@ -63,7 +66,7 @@ export namespace SkillToolRefResolver {
 
     /** nm-style: keep-local — ToolResultBlock.build 单点解析入口，测试直接锁三元组输出；保持纯函数边界。 */
     /** nm-style: keep-public — ToolResultBlock.build 唯一输出侧解析入口；测试锁三元组。 */
-    export function fromOutput(toolName: string, output: unknown, projectId?: string): SkillToolRef | undefined {
+    fromOutput(toolName: string, output: unknown, projectId?: string): SkillToolRef | undefined {
         if (toolName !== SKILL_TOOL_NAME) return undefined;
         if (output == null || typeof output !== "object" || Array.isArray(output)) {
             return undefined;
@@ -72,13 +75,14 @@ export namespace SkillToolRefResolver {
         if (record.action !== "load" && record.action !== "read" && record.action !== "write" && record.action !== "edit") {
             return undefined;
         }
-        const domain = parseDomain(record.domain);
-        const name = parseName(record.name);
+        const domain = SkillToolRefResolver.parseDomain(record.domain);
+        const name = SkillToolRefResolver.parseName(record.name);
         if (domain == null || name == null) return undefined;
         return {
             domain,
             name,
             ...(domain === "project" && projectId != null ? {projectId} : {}),
         };
-    }
-}
+    },
+} as const;
+
