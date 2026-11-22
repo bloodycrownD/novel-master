@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  schema_migrations 登记表的 SQL mapper。
+
+  结构约定与 chat-message.mapper.xml 一致：语句 id 与 repo 方法同名（camelCase），
+  生成器按 id 产出 generated TS 映射（src/infra/sql-template/generated/），
+  schema-migrations-table 内只留引用。
+
+  注意：ensure 的 CREATE TABLE DDL 不在此 mapper——它经 tx.execute 裸执行（不走
+  TdbcTemplate），且按约定不入 NOVEL_MASTER_SCHEMA_STATEMENTS（迁移器先建表再跑
+  迁移），保持原样。
+-->
+<mapper namespace="schema_migrations">
+
+  <!-- 一次读出全部已 apply 的 migration id（供 runner 避免 N+1）。 -->
+  <select id="listAppliedIds">
+    SELECT id FROM schema_migrations
+  </select>
+
+  <!-- 登记 migration 已 apply（调用方须在同一事务内保证幂等）。 -->
+  <insert id="markApplied">
+    INSERT INTO schema_migrations (id, applied_at_ms)
+    VALUES (#{id}, #{appliedAtMs})
+  </insert>
+
+</mapper>

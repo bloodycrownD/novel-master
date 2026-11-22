@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  sksp_secrets 表的 SQL mapper（schema 见 resources/sql/schema/sksp.sql）。
+
+  结构约定与 chat-message.mapper.xml 一致：
+  - 语句 id 与 repo 方法同名（camelCase），生成器按 id 产出 generated TS 映射
+    （src/infra/sql-template/generated/），repo 内只留引用。
+  - set 是固定文本的 upsert（原 insertSqlParts 逐行拼装退役），#{} 占位与列序一一对应。
+-->
+<mapper namespace="sksp">
+
+  <!-- 取密文行：algo/version 供子类策略校验算法版本后再解密。 -->
+  <select id="get">
+    SELECT ciphertext, iv, algo, version
+    FROM sksp_secrets
+    WHERE ref = #{ref}
+  </select>
+
+  <select id="has">
+    SELECT 1 AS n
+    FROM sksp_secrets
+    WHERE ref = #{ref}
+    LIMIT 1
+  </select>
+
+  <!-- 按 ref 的幂等 upsert（三端 set 共用）：iv 允许绑定 null（Windows DPAPI），#{iv} 原样绑定。 -->
+  <insert id="set">
+    INSERT INTO sksp_secrets (ref, ciphertext, iv, algo, version, updated_at_ms)
+       VALUES (#{ref}, #{ciphertext}, #{iv}, #{algo}, 1, #{updatedAtMs})
+       ON CONFLICT(ref) DO UPDATE SET
+         ciphertext = excluded.ciphertext,
+         iv = excluded.iv,
+         algo = excluded.algo,
+         version = excluded.version,
+         updated_at_ms = excluded.updated_at_ms
+  </insert>
+
+  <delete id="delete">
+    DELETE
+    FROM sksp_secrets
+    WHERE ref = #{ref}
+  </delete>
+
+</mapper>

@@ -1,0 +1,243 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  vfs_entry 表的 SQL mapper（schema 见 resources/sql/schema/vfs.sql）。
+
+  结构约定与 chat-message.mapper.xml 一致：
+  - 语句 id 与 repo 方法同名（camelCase）；一个方法发出多条语句时，主语句取方法名，
+    配角用「方法名 + 语义后缀」（如 updateWithContentHash / selectHeadVersionByPath）。
+  - 生成物在 src/infra/sql-template/generated/vfs_entry.mapper.generated.ts，repo 内只留引用。
+  - entry_id 化后所有语句带 scope_key；点查询统一 WHERE scope_key = ? AND path = ?，
+    前缀扫描统一 WHERE scope_key = ? AND (path = ? OR path LIKE ? ESCAPE '\\')。
+  - 动态 IN 清单走 <foreach>（集合吃 params，空集合不渲染），调用处仍按 200 分片。
+  - 条件拼接（原 ?: 拼 " AND ..."）收 <if test="...">，test 表达式为 JS 求值（绑定 params）。
+  - INSERT 的 ? 占位符写死（batch 口按位置绑参），不用程序生成。
+  - 反斜杠走 JS 模板字面量载体：XML 里写两个反斜杠（ESCAPE '\\'），生成物运行时还原成
+    单字符转义符（与 workplace 系列 mapper 同一约定）。
+  - 静态查询保持静态：同构 SELECT 各自独立成句，不为索引形态可读性合并成万能模板。
+-->
+<mapper namespace="vfs_entry">
+
+  <!-- 前缀扫描：pattern 由 childLikePattern 生成（base 为 / 时是 /%）。 -->
+  <select id="list">
+    SELECT path, entry_kind, head_version FROM vfs_entry
+       WHERE scope_key = #{scopeKey}
+         AND path LIKE #{pattern} ESCAPE '\\'
+  </select>
+
+  <select id="findByPath">
+    SELECT entry_id, scope_key, path, content, content_hash, head_version, mtime_ms, entry_kind
+       FROM vfs_entry WHERE scope_key = #{scopeKey} AND path = #{path}
+  </select>
+
+  <select id="findContentHash">
+    SELECT content_hash, entry_kind FROM vfs_entry
+       WHERE scope_key = #{scopeKey} AND path = #{path}
+  </select>
+
+  <!-- 批量点查：调用处按 200 分片，paths 是已归一化去重的路径数组。 -->
+  <select id="findContentHashesByPaths">
+    SELECT path, content_hash, entry_kind
+    FROM vfs_entry
+    WHERE scope_key = #{scopeKey} AND path IN (<foreach collection="paths" item="p" separator=", ">#{p}</foreach>)
+  </select>
+
+  <!-- 只取长度不解正文：length(content) 为字符数（NULL 行不拉正文）；mtime 随行带回供占位块渲染真实时间。 -->
+  <select id="findContentSizeByPath">
+    SELECT length(content) AS inline_chars, content_hash, entry_kind, mtime_ms
+       FROM vfs_entry
+       WHERE scope_key = #{scopeKey} AND path = #{path}
+  </select>
+
+  <select id="selectHeadVersionByPath">
+    SELECT head_version FROM vfs_entry
+       WHERE scope_key = #{scopeKey} AND path = #{path}
+  </select>
+
+  <select id="selectEntryIdByPath">
+    SELECT entry_id FROM vfs_entry
+       WHERE scope_key = #{scopeKey} AND path = #{path}
+  </select>
+
+  <insert id="insertWithContentHash">
+    INSERT INTO vfs_entry (scope_key, path, content, content_hash, head_version, mtime_ms, entry_kind)
+       VALUES (#{scopeKey}, #{path}, NULL, #{contentHash}, #{version}, #{mtimeMs}, 'file')
+  </insert>
+
+  <insert id="insertAtVersion">
+    INSERT INTO vfs_entry (scope_key, path, content, content_hash, head_version, mtime_ms, entry_kind)
+       VALUES (#{scopeKey}, #{path}, NULL, #{contentHash}, #{version}, #{mtimeMs}, 'file')
+  </insert>
+
+  <insert id="insertDirectory">
+    INSERT INTO vfs_entry (scope_key, path, content, content_hash, head_version, mtime_ms, entry_kind)
+       VALUES (#{scopeKey}, #{path}, NULL, NULL, 1, #{mtimeMs}, 'directory')
+  </insert>
+
+  <!-- 显式 entry_id 重建行（revive 路径要保住原 entry_id，绕开 AUTOINCREMENT 重新分配）。 -->
+  <insert id="reviveEntryAtVersion">
+    INSERT INTO vfs_entry (entry_id, scope_key, path, content, content_hash, head_version, mtime_ms, entry_kind)
+       VALUES (#{entryId}, #{scopeKey}, #{path}, NULL, #{contentHash}, #{headVersion}, #{mtimeMs}, 'file')
+  </insert>
+
+  <update id="updateWithContentHash">
+    UPDATE vfs_entry
+       SET content = NULL,
+           content_hash = #{contentHash},
+           head_version = #{nextVersion},
+           mtime_ms = #{mtimeMs}
+       WHERE scope_key = #{scopeKey} AND path = #{path} AND entry_kind = 'file'
+  </update>
+
+  <update id="setHeadContentHash">
+    UPDATE vfs_entry
+         SET content = NULL,
+             content_hash = #{contentHash},
+             head_version = #{version},
+             mtime_ms = #{mtimeMs},
+             entry_kind = 'file'
+         WHERE scope_key = #{scopeKey} AND path = #{path}
+  </update>
+
+  <insert id="setHeadContentHashInsert">
+    INSERT INTO vfs_entry (scope_key, path, content, content_hash, head_version, mtime_ms, entry_kind)
+       VALUES (#{scopeKey}, #{path}, NULL, #{contentHash}, #{version}, #{mtimeMs}, 'file')
+  </insert>
+
+  <!-- 非递归删除前探测子项：命中即 DIRECTORY_NOT_EMPTY（path <> 自身那一条不算子项）。 -->
+  <select id="deleteChildProbe">
+    SELECT 1 FROM vfs_entry
+         WHERE scope_key = #{scopeKey}
+           AND path LIKE #{pattern} ESCAPE '\\'
+           AND path &lt;&gt; #{path}
+         LIMIT 1
+  </select>
+
+  <delete id="deleteExact">
+    DELETE
+    FROM vfs_entry
+    WHERE scope_key = #{scopeKey} AND path = #{path}
+  </delete>
+
+  <delete id="deleteRecursive">
+    DELETE FROM vfs_entry
+       WHERE scope_key = #{scopeKey}
+         AND (path = #{path} OR path LIKE #{pattern} ESCAPE '\\')
+  </delete>
+
+  <select id="listAllPaths">
+    SELECT path FROM vfs_entry
+       WHERE scope_key = #{scopeKey} AND entry_kind = 'file'
+       ORDER BY path
+  </select>
+
+  <select id="listDirectoryPathsUnderPrefix">
+    SELECT path FROM vfs_entry
+       WHERE scope_key = #{scopeKey}
+         AND entry_kind = 'directory'
+         AND (path = #{path} OR path LIKE #{pattern} ESCAPE '\\')
+       ORDER BY path
+  </select>
+
+  <select id="listDirectoryMetaUnderPrefix">
+    SELECT path, mtime_ms FROM vfs_entry
+       WHERE scope_key = #{scopeKey}
+         AND entry_kind = 'directory'
+         AND (path = #{path} OR path LIKE #{pattern} ESCAPE '\\')
+       ORDER BY path
+  </select>
+
+  <select id="listEntriesUnderPrefix">
+    SELECT path, entry_kind FROM vfs_entry
+       WHERE scope_key = #{scopeKey}
+         AND (path = #{path} OR path LIKE #{pattern} ESCAPE '\\')
+       ORDER BY path
+  </select>
+
+  <select id="listFileMetaUnderPrefix">
+    SELECT path, mtime_ms FROM vfs_entry
+       WHERE scope_key = #{scopeKey}
+         AND entry_kind = 'file'
+         AND (path = #{path} OR path LIKE #{pattern} ESCAPE '\\')
+       ORDER BY path
+  </select>
+
+  <!-- 全 scope 聚合签名：count 天然隔离拼接歧义（不同行数的集合必不同串）。 -->
+  <select id="computeEntrySignature">
+    SELECT count(*) AS entry_count, group_concat(s, char(31)) AS sig
+       FROM (SELECT path || ':' || head_version || ':' || mtime_ms AS s
+             FROM vfs_entry
+             WHERE scope_key = #{scopeKey}
+             ORDER BY path)
+  </select>
+
+  <select id="listFileHeadsUnderPrefix">
+    SELECT entry_id, path, head_version, mtime_ms FROM vfs_entry
+       WHERE scope_key = #{scopeKey}
+         AND entry_kind = 'file'
+         AND (path = #{path} OR path LIKE #{pattern} ESCAPE '\\')
+       ORDER BY path
+  </select>
+
+  <!-- scanContents 两个变体保持独立语句（无前缀 / 前缀），不合并成动态模板。 -->
+  <select id="scanContents">
+    SELECT entry_id, path, content_hash FROM vfs_entry
+         WHERE scope_key = #{scopeKey} AND entry_kind = 'file'
+  </select>
+
+  <select id="scanContentsUnderPrefix">
+    SELECT entry_id, path, content_hash FROM vfs_entry
+       WHERE scope_key = #{scopeKey}
+         AND entry_kind = 'file'
+         AND (path = #{path} OR path LIKE #{pattern} ESCAPE '\\')
+  </select>
+
+  <select id="scanFileEntriesWithMeta">
+    SELECT entry_id, path, content_hash, head_version, mtime_ms FROM vfs_entry
+       WHERE scope_key = #{scopeKey} AND entry_kind = 'file'
+  </select>
+
+  <select id="scanFileEntriesWithMetaUnderPrefix">
+    SELECT entry_id, path, content_hash, head_version, mtime_ms FROM vfs_entry
+       WHERE scope_key = #{scopeKey}
+         AND entry_kind = 'file'
+         AND (path = #{path} OR path LIKE #{pattern} ESCAPE '\\')
+  </select>
+
+  <!-- 批量存在性：paths 与 findContentHashesByPaths 同口径（调用处按 200 分片、已去重归一化）。 -->
+  <select id="findExistingPaths">
+    SELECT path
+    FROM vfs_entry
+    WHERE scope_key = #{scopeKey} AND path IN (<foreach collection="paths" item="p" separator=", ">#{p}</foreach>)
+  </select>
+
+  <!-- 4 个 ? 与列清单顺序一一对应；走 conn.batch，占位符按位置绑定。 -->
+  <insert id="batchInsertFileEntriesWithHash">
+    INSERT INTO vfs_entry (scope_key, path, content, content_hash, head_version, mtime_ms, entry_kind)
+    VALUES (?, ?, NULL, ?, 1, ?, 'file')
+  </insert>
+
+  <!-- 3 个 ?：scopeKey / path / mtimeMs（content、content_hash、head_version 是字面量 NULL/NULL/1）。 -->
+  <insert id="batchInsertDirectoryEntries">
+    INSERT INTO vfs_entry (scope_key, path, content, content_hash, head_version, mtime_ms, entry_kind)
+    VALUES (?, ?, NULL, NULL, 1, ?, 'directory')
+  </insert>
+
+  <update id="renamePathInScope">
+    UPDATE vfs_entry SET path = #{newPath}
+       WHERE scope_key = #{scopeKey} AND path = #{oldPath}
+  </update>
+
+  <!-- 前缀重命名：剥定长前缀 + 拼新前缀的定点写法（substr），不能用 REPLACE（同名目录会二次替换）。 -->
+  <update id="renamePrefixInScope">
+    UPDATE vfs_entry
+       SET path = #{newWithSlash} || substr(path, length(#{oldWithSlash}) + 1)
+       WHERE scope_key = #{scopeKey}
+         AND path LIKE #{pattern} ESCAPE '\\'
+  </update>
+
+  <update id="renamePrefixInScopeRoot">
+    UPDATE vfs_entry SET path = #{newBase}
+       WHERE scope_key = #{scopeKey} AND path = #{oldBase}
+  </update>
+
+</mapper>

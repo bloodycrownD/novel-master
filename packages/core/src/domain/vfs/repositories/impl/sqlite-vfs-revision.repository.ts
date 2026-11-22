@@ -21,6 +21,7 @@ import { Result } from "@/errors/either.js";
 import { RevisionPairKey } from "../../logic/revision-pair-key.js";
 import { ScopePrefix } from "./scope-prefix-helpers.js";
 import { Path } from "@/common/path.js";
+import { VfsRevisionSql } from "@/infra/sql-template/generated/vfs_revision.mapper.generated.js";
 
 /** 批量 SQL 的分块大小（避免单条语句过长）。 */
 const REVISION_BATCH_CHUNK_SIZE = 100;
@@ -31,20 +32,6 @@ const REVISION_REPAIR_CHUNK_SIZE = 500;
 /**
  * TDBC-backed vfs_revision repository（append-only；正文经 ContentStore）。
  */
-/**
- * 全局清扫孤儿 revision 的 DELETE SQL（运行期 deleteGlobalOrphans 使用）。
- *
- * 语义：删掉 ref_count<=0 且 entry_id 已不在 vfs_entry 的 revision 孤儿。revision DELETE
- * 触发器会连带维护 vfs_content_blob.ref_count，归零的 blob 会被触发器自动删除，所以这一条
- * SQL 同时回收 revision 和 blob 两类孤儿。
- *
- * 历史：曾与 orphan-revision-gc-v1 migration（一次性回扫存量，v1.4.28 退役）共享同一
- * 常量；migration 退役后运行期独占，语义不变。
- */
-const ORPHAN_REVISION_GC_SQL = `DELETE
-    FROM vfs_revision
-    WHERE ref_count <= 0 AND entry_id NOT IN (SELECT entry_id
-    FROM vfs_entry)`.trim();
 
 export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
   private readonly parser = new SqlTemplateParser();
@@ -55,9 +42,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
   }
 
   async findMaxVersionForEntry(entryId: number): Promise<number | null> {
-    const rows = await TdbcTemplate.query<{ max_version: number | null }>(this.conn, this.parser, `SELECT MAX(version) AS max_version
-    FROM vfs_revision
-    WHERE entry_id = #{entryId}`, { entryId });
+    const rows = await TdbcTemplate.query<{ max_version: number | null }>(this.conn, this.parser, VfsRevisionSql.findMaxVersionForEntry, { entryId });
     const max = rows[0]?.max_version;
     return max == null ? null : Number(max);
   }
@@ -70,17 +55,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     }
     for (let offset = 0; offset < entryIds.length; offset += REVISION_BATCH_CHUNK_SIZE) {
       const chunk = entryIds.slice(offset, offset + REVISION_BATCH_CHUNK_SIZE);
-      const bindings: Record<string, number> = {};
-      const placeholders = chunk.map((entryId, index) => {
-        bindings[`entryId${index}`] = entryId;
-        return `#{entryId${index}}`;
-      });
-      const inList = placeholders.join(", ");
-      const sql52 = `SELECT entry_id, MAX(version) AS max_version
-    FROM vfs_revision
-    WHERE entry_id IN (${inList})
-    GROUP BY entry_id`;
-      const rows = await TdbcTemplate.query<{ entry_id: number; max_version: number }>(this.conn, this.parser, sql52, bindings);
+      const rows = await TdbcTemplate.query<{ entry_id: number; max_version: number }>(this.conn, this.parser, VfsRevisionSql.findMaxVersionsForEntries, { entryIds: chunk });
       for (const row of rows) {
         result.set(Number(row.entry_id), Number(row.max_version));
       }
@@ -89,8 +64,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
   }
 
   async findByEntryAndVersion(entryId: number, version: number): Promise<Result<VfsRevision | null, AppError>> {
-    const sql53 = "SELECT entry_id, version, content_hash, status, mtime_ms\n       FROM vfs_revision\n       WHERE entry_id = #{entryId} AND version = #{version}";
-    const rows = await TdbcTemplate.query(this.conn, this.parser, sql53, { entryId, version });
+    const rows = await TdbcTemplate.query(this.conn, this.parser, VfsRevisionSql.findByEntryAndVersion, { entryId, version });
     if (rows.length === 0) {
       return Result.ok(null);
     }
@@ -110,14 +84,12 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
 
   /** nm-style: keep-public — 实现 VfsRevisionRepository.existsByEntryAndVersion 端口方法；内联会把查询 SQL 搬进调用层。 */
   async existsByEntryAndVersion(entryId: number, version: number): Promise<boolean> {
-    const sql54 = "SELECT 1 AS one FROM vfs_revision\n       WHERE entry_id = #{entryId} AND version = #{version}\n       LIMIT 1";
-    const rows = await TdbcTemplate.query<{ one: number }>(this.conn, this.parser, sql54, { entryId, version });
+    const rows = await TdbcTemplate.query<{ one: number }>(this.conn, this.parser, VfsRevisionSql.existsByEntryAndVersion, { entryId, version });
     return rows.length > 0;
   }
 
   async findMetaByEntryAndVersion(entryId: number, version: number): Promise<VfsRevisionPointerMeta | null> {
-    const sql55 = "SELECT status, content_hash FROM vfs_revision\n       WHERE entry_id = #{entryId} AND version = #{version}\n       LIMIT 1";
-    const rows = await TdbcTemplate.query<{ status: string; content_hash: string | null }>(this.conn, this.parser, sql55, { entryId, version });
+    const rows = await TdbcTemplate.query<{ status: string; content_hash: string | null }>(this.conn, this.parser, VfsRevisionSql.findMetaByEntryAndVersion, { entryId, version });
     const row = rows[0];
     if (row == null) {
       return null;
@@ -135,17 +107,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     }
     for (let offset = 0; offset < pairs.length; offset += REVISION_BATCH_CHUNK_SIZE) {
       const chunk = pairs.slice(offset, offset + REVISION_BATCH_CHUNK_SIZE);
-      const bindings: Record<string, string | number> = {};
-      const placeholders = chunk.map((pair, index) => {
-        bindings[`entryId${index}`] = pair.entryId;
-        bindings[`version${index}`] = pair.version;
-        return `(entry_id = #{entryId${index}} AND version = #{version${index}})`;
-      });
-      const conditions = placeholders.join(" OR ");
-      const sql56 = `SELECT entry_id, version, status, content_hash
-    FROM vfs_revision
-    WHERE ${conditions}`;
-      const rows = await TdbcTemplate.query<{ entry_id: number; version: number; status: string; content_hash: string | null }>(this.conn, this.parser, sql56, bindings);
+      const rows = await TdbcTemplate.query<{ entry_id: number; version: number; status: string; content_hash: string | null }>(this.conn, this.parser, VfsRevisionSql.findMetasByEntryVersions, { pairs: chunk });
       for (const row of rows) {
         result.set(RevisionPairKey.build(Number(row.entry_id), Number(row.version)), {
           status: row.status as VfsRevisionStatus,
@@ -164,14 +126,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     const CHUNK_SIZE = 500;
     for (let offset = 0; offset < pairs.length; offset += CHUNK_SIZE) {
       const chunk = pairs.slice(offset, offset + CHUNK_SIZE);
-      const placeholders = chunk.map(() => `(?,?)`).join(`,`);
-      const params: unknown[] = [];
-      for (const pair of chunk) {
-        params.push(pair.entryId, pair.version);
-      }
-      const rows = await this.conn.query<{ entry_id: number; version: number }>(`SELECT entry_id, version
-    FROM vfs_revision
-    WHERE (entry_id, version) IN (${placeholders})`, params);
+      const rows = await TdbcTemplate.query<{ entry_id: number; version: number }>(this.conn, this.parser, VfsRevisionSql.findExistingEntryVersionKeys, { pairs: chunk });
       for (const row of rows) {
         result.add(RevisionPairKey.build(Number(row.entry_id), Number(row.version)));
       }
@@ -188,10 +143,8 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
       readonly refCount: number;
     }>): Promise<void> {
     if (items.length === 0) return;
-    const sql = `INSERT INTO vfs_revision (entry_id, version, content_hash, status, mtime_ms, ref_count)
-    VALUES (?, ?, ?, ?, ?, ?)`;
     const paramsList = items.map((i) => [i.entryId, i.version, i.contentHash, i.status, i.mtimeMs, i.refCount]);
-    await this.conn.batch(sql, paramsList);
+    await this.conn.batch(VfsRevisionSql.batchAppendWithRefCount, paramsList);
   }
 
   async append(input: VfsRevisionAppendInput): Promise<void> {
@@ -204,8 +157,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
       }
     }
 
-    const sql23 = "INSERT INTO vfs_revision\n       (entry_id, version, content_hash, status, mtime_ms)\n       VALUES (#{entryId}, #{version}, #{contentHash}, #{status}, #{mtimeMs})";
-    await TdbcTemplate.execute(this.conn, this.parser, sql23, {
+    await TdbcTemplate.execute(this.conn, this.parser, VfsRevisionSql.append, {
       entryId: input.entryId,
       version: input.version,
       contentHash,
@@ -219,8 +171,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     const base = Path.stripTrailingSlash(pathPrefix);
     const escaped = ScopePrefix.escapeLike(base);
     const pattern = base === "/" ? "/%" : `${escaped}/%`;
-    const sql57 = "SELECT r.entry_id AS entry_id, r.version AS version\n       FROM vfs_revision r\n       JOIN vfs_entry e ON e.entry_id = r.entry_id\n       WHERE e.scope_key = #{scopeKey}\n         AND (e.path = #{path} OR e.path LIKE #{pattern} ESCAPE '\\')\n       ORDER BY r.entry_id, r.version";
-    const rows = await TdbcTemplate.query<{ entry_id: number; version: number }>(this.conn, this.parser, sql57, { scopeKey, path: base, pattern });
+    const rows = await TdbcTemplate.query<{ entry_id: number; version: number }>(this.conn, this.parser, VfsRevisionSql.listKeysUnderScope, { scopeKey, path: base, pattern });
     return rows.map((row) => ({
       entryId: Number(row.entry_id),
       version: Number(row.version),
@@ -232,8 +183,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     const base = Path.stripTrailingSlash(pathPrefix);
     const escaped = ScopePrefix.escapeLike(base);
     const pattern = base === "/" ? "/%" : `${escaped}/%`;
-    const sql58 = "SELECT r.entry_id AS entry_id, r.version AS version, r.ref_count AS ref_count\n       FROM vfs_revision r\n       JOIN vfs_entry e ON e.entry_id = r.entry_id\n       WHERE e.scope_key = #{scopeKey}\n         AND (e.path = #{path} OR e.path LIKE #{pattern} ESCAPE '\\')\n       ORDER BY r.entry_id, r.version";
-    const rows = await TdbcTemplate.query<{ entry_id: number; version: number; ref_count: number }>(this.conn, this.parser, sql58, { scopeKey, path: base, pattern });
+    const rows = await TdbcTemplate.query<{ entry_id: number; version: number; ref_count: number }>(this.conn, this.parser, VfsRevisionSql.listKeysWithRefCountUnderScope, { scopeKey, path: base, pattern });
     return rows.map((row) => ({
       entryId: Number(row.entry_id),
       version: Number(row.version),
@@ -251,14 +201,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     let deleted = 0;
     for (let offset = 0; offset < toDelete.length; offset += REVISION_BATCH_CHUNK_SIZE) {
       const chunk = toDelete.slice(offset, offset + REVISION_BATCH_CHUNK_SIZE);
-      const bindings: Record<string, string | number> = {};
-      const placeholders = chunk.map(({ entryId, version }, index) => {
-        bindings[`entryId${index}`] = entryId;
-        bindings[`version${index}`] = version;
-        return `(entry_id = #{entryId${index}} AND version = #{version${index}})`;
-      });
-      const conditions = placeholders.join(" OR ");
-      await TdbcTemplate.execute(this.conn, this.parser, `DELETE FROM vfs_revision WHERE ${conditions}`, bindings);
+      await TdbcTemplate.execute(this.conn, this.parser, VfsRevisionSql.deleteExceptReachable, { pairs: chunk });
       deleted += chunk.length;
     }
     return deleted;
@@ -269,8 +212,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     if (delta === 0) {
       return;
     }
-    const sql24 = "UPDATE vfs_revision SET ref_count = ref_count + #{delta}\n       WHERE entry_id = #{entryId} AND version = #{version}";
-    const result = await TdbcTemplate.execute(this.conn, this.parser, sql24, { entryId, version, delta });
+    const result = await TdbcTemplate.execute(this.conn, this.parser, VfsRevisionSql.adjustRefCount, { entryId, version, delta });
     if (delta > 0 && result.changes === 0) {
       // 记录缺失而非路径缺失，无 path 可挂；走旧签名过渡保 details 一层形态（与旧 VfsError 一致）。
       // nm-throw: keep — port 契约锁定：vfs-revision.port.ts adjustRefCount 声明 Promise<void> 且 @throws
@@ -309,32 +251,23 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
 
     // 按 500 分块发 UPDATE，复用 findExistingEntryVersionKeys 的 (entry_id, version) IN (...) 写法
     const CHUNK_SIZE = 500;
-    const deltaLiteral = delta > 0 ? `+ ${delta}` : `${delta}`;
-    // delta < 0 的下限夹逼（D15）：`ref_count` 误减会把计数打到负数，而负数与
+    // 分支标志与 |delta| 在 JS 侧算好：正向累加 / 负向累减，负向再加下限夹逼（D15）。
+    // delta < 0 的下限夹逼：`ref_count` 误减会把计数打到负数，而负数与
     // 0 在 `deleteUnreferencedUnderScope`（`ref_count <= 0` 判删）眼里一样是
-    // 「无持有者」——误减活 revision 是不可恢复方向。夹逼**必须按 |delta| 量级**，
-    // 不能用 `> 0`：本口是通用批量口，delta 幅值不限于 1（历史 read 引用聚合
-    // 曾产 −2/−3，该机制已随 E1 清理版退役；checkpoint 的按消息数批量口
-    // `batchAdjustRefCountWithDelta` 同样是幅值参数），`ref_count = 1, delta = −2`
-    // 在 `> 0` 夹逼下照样写出 −1。前值不足时 UPDATE 命不中 → 计数保持原样。
-    const clamp = delta < 0 ? ` AND ref_count >= ${Math.abs(delta)}` : "";
+    // 「无持有者」——误减活 revision 是不可恢复方向。夹逼**必须按 |delta| 量级**
+    // （前值不足时 UPDATE 命不中 → 计数保持原样）。
+    const positive = delta > 0;
+    const negative = delta < 0;
+    const absDelta = Math.abs(delta);
     for (let offset = 0; offset < pointers.length; offset += CHUNK_SIZE) {
       const chunk = pointers.slice(offset, offset + CHUNK_SIZE);
-      const placeholders = chunk.map(() => `(?,?)`).join(",");
-      const params: unknown[] = [];
-      for (const pair of chunk) {
-        params.push(pair.entryId, pair.version);
-      }
-      await this.conn.execute(`UPDATE vfs_revision
-    SET ref_count = ref_count ${deltaLiteral}
-    WHERE (entry_id, version) IN (${placeholders})${clamp}`, params);
+      await TdbcTemplate.execute(this.conn, this.parser, VfsRevisionSql.batchAdjustRefCountWithDelta, { positive, negative, delta, absDelta, pointers: chunk });
     }
   }
 
   /** nm-style: keep-public — 实现 VfsRevisionRepository.repairRefCountFloor 端口方法；integrity-repair 注明保留逐条版，生产对账走 batchRepairRefCountFloor，端口契约仍在且端口文件不在本轮范围。 */
   async repairRefCountFloor(entryId: number, version: number, expected: number): Promise<boolean> {
-    const sql59 = "SELECT ref_count FROM vfs_revision\n       WHERE entry_id = #{entryId} AND version = #{version}";
-    const rows = await TdbcTemplate.query<{ ref_count: number }>(this.conn, this.parser, sql59, { entryId, version });
+    const rows = await TdbcTemplate.query<{ ref_count: number }>(this.conn, this.parser, VfsRevisionSql.repairRefCountFloorSelect, { entryId, version });
     const row = rows[0];
     if (row == null) {
       return false;
@@ -343,8 +276,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     if (current >= expected) {
       return false;
     }
-    const sql25 = "UPDATE vfs_revision SET ref_count = #{expected}\n       WHERE entry_id = #{entryId} AND version = #{version}";
-    await TdbcTemplate.execute(this.conn, this.parser, sql25, { entryId, version, expected });
+    await TdbcTemplate.execute(this.conn, this.parser, VfsRevisionSql.repairRefCountFloor, { entryId, version, expected });
     return true;
   }
 
@@ -364,14 +296,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     const currentMap = new Map<string, number>();
     for (let offset = 0; offset < items.length; offset += REVISION_REPAIR_CHUNK_SIZE) {
       const chunk = items.slice(offset, offset + REVISION_REPAIR_CHUNK_SIZE);
-      const placeholders = chunk.map(() => `(?,?)`).join(`,`);
-      const params: unknown[] = [];
-      for (const item of chunk) {
-        params.push(item.entryId, item.version);
-      }
-      const rows = await this.conn.query<{ entry_id: number; version: number; ref_count: number }>(`SELECT entry_id, version, ref_count
-    FROM vfs_revision
-    WHERE (entry_id, version) IN (${placeholders})`, params);
+      const rows = await TdbcTemplate.query<{ entry_id: number; version: number; ref_count: number }>(this.conn, this.parser, VfsRevisionSql.batchRepairRefCountFloorSelect, { pairs: chunk });
       for (const row of rows) {
         currentMap.set(RevisionPairKey.build(Number(row.entry_id), Number(row.version)), Number(row.ref_count));
       }
@@ -396,11 +321,10 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     // `UPDATE ... SET ref_count = ? WHERE entry_id = ? AND version = ?`。batch 把
     // N 行压成一次原生调用，counter 侧只计 1 条 SQL（同文本）。同样按 500 分块，
     // 避免单次 batch 参数列表过长。
-    const sql = `UPDATE vfs_revision SET ref_count = ? WHERE entry_id = ? AND version = ?`;
     let adjusted = 0;
     for (let offset = 0; offset < toUpdate.length; offset += REVISION_REPAIR_CHUNK_SIZE) {
       const chunk = toUpdate.slice(offset, offset + REVISION_REPAIR_CHUNK_SIZE);
-      await this.conn.batch(sql, chunk);
+      await this.conn.batch(VfsRevisionSql.batchRepairRefCountFloor, chunk);
       adjusted += chunk.length;
     }
     return adjusted;
@@ -413,39 +337,26 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     const pattern = base === "/" ? "/%" : `${escaped}/%`;
     // 隔离豁免：排除前缀下的 revision 不参与 GC（NOT (path = excl OR path LIKE excl/%)）
     const excludes = excludePrefixes ?? [];
-    const excludeClauses: string[] = [];
-    const bindings: Record<string, string | number> = {
+    const excludeParams = excludes.map((exclRaw) => {
+      const excl = Path.stripTrailingSlash(exclRaw.startsWith("/") ? exclRaw : `/${exclRaw}`);
+      return { path: excl, pattern: `${ScopePrefix.escapeLike(excl)}/%` };
+    });
+    const bindings = {
       scopeKey,
       path: base,
       pattern,
+      hasExcludes: excludeParams.length > 0,
+      excludes: excludeParams,
     };
-    for (let i = 0; i < excludes.length; i++) {
-      const exclRaw = excludes[i]!;
-      const excl = Path.stripTrailingSlash(exclRaw.startsWith("/") ? exclRaw : `/${exclRaw}`);
-      bindings[`exclPath${i}`] = excl;
-      bindings[`exclPattern${i}`] = `${ScopePrefix.escapeLike(excl)}/%`;
-      excludeClauses.push(`(e.path = #{exclPath${i}} OR e.path LIKE #{exclPattern${i}} ESCAPE '\\')`);
-    }
-    const excludeSql = excludeClauses.length > 0 ? ` AND NOT (${excludeClauses.join(" OR ")})` : "";
-    const sql26 = `SELECT COUNT(*) AS n
-    FROM vfs_revision r
-    JOIN vfs_entry e ON e.entry_id = r.entry_id
-    WHERE e.scope_key = #{scopeKey} AND (e.path = #{path} OR e.path LIKE #{pattern} ESCAPE '\\')${excludeSql} AND r.ref_count <= 0`;
-    const before = await TdbcTemplate.query<{ n: number }>(this.conn, this.parser, sql26, bindings);
+    const before = await TdbcTemplate.query<{ n: number }>(this.conn, this.parser, VfsRevisionSql.deleteUnreferencedUnderScopeCount, bindings);
     const count = Number(before[0]?.n ?? 0);
     if (count === 0) {
       return 0;
     }
-    const sql27 = `DELETE
-    FROM vfs_revision
-    WHERE (entry_id, version) IN ( SELECT r.entry_id, r.version
-    FROM vfs_revision r
-    JOIN vfs_entry e ON e.entry_id = r.entry_id
-    WHERE e.scope_key = #{scopeKey} AND (e.path = #{path} OR e.path LIKE #{pattern} ESCAPE '\\')${excludeSql} AND r.ref_count <= 0 )`;
     // 用复合 PK (entry_id, version) 寻址而非 rowid，这样 vfs_revision 可以安全地
     // 切换到 WITHOUT ROWID（决策 4）。rowid 表和 WITHOUT ROWID 表都支持这种写法，
     // 所以这条改动本身不改变 rowid 表上的行为。
-    await TdbcTemplate.execute(this.conn, this.parser, sql27, bindings);
+    await TdbcTemplate.execute(this.conn, this.parser, VfsRevisionSql.deleteUnreferencedUnderScope, bindings);
     return count;
   }
 
@@ -453,8 +364,8 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     // 不依赖 vfs_entry JOIN（孤儿 revision 的 entry 已删，JOIN 不到），
     // 直接按「ref_count<=0 且 entry_id 不存在」全表清扫。
     // revision DELETE 触发器会连带维护 vfs_content_blob.ref_count 并回收归零 blob。
-    // 常量即上方 ORPHAN_REVISION_GC_SQL（migration 退役后运行期独占）。
-    const result = await TdbcTemplate.execute(this.conn, this.parser, ORPHAN_REVISION_GC_SQL, {});
+    // 语句与语义见 vfs-revision.mapper.xml 的 deleteGlobalOrphans（migration 退役后运行期独占）。
+    const result = await TdbcTemplate.execute(this.conn, this.parser, VfsRevisionSql.deleteGlobalOrphans, {});
     return Number(result.changes);
   }
 }

@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  smart_sort_rule 表的 SQL mapper（DDL 见 resources/sql/schema/smart-sort-rule.sql）。
+
+  结构约定（与 chat-message.mapper.xml 样板一致）：
+  - 语句 id 与 SqliteSmartSortRuleRepository 方法同名（camelCase）；列清单走
+    <sql id> 片段 + <include ref> 展开，生成物里每条语句都是完整字面量。
+  - updateSortOrders 的动态维度走 <foreach>：分片仍由 repo 侧按 200 对切（老版本
+    SQLite 999 变量上限），mapper 只负责把一片 pairs 展开成 CASE 与 IN 列表。
+-->
+<mapper namespace="smart_sort_rule">
+
+  <sql id="selectColumns">rule_id, name, pattern, flags, capture_kind, description, enabled, sort_order, created_at_ms, updated_at_ms</sql>
+
+  <select id="listOrdered">
+    SELECT <include ref="selectColumns"/>
+    FROM smart_sort_rule
+    ORDER BY sort_order ASC, rule_id ASC
+  </select>
+
+  <select id="find">
+    SELECT <include ref="selectColumns"/>
+    FROM smart_sort_rule
+    WHERE rule_id = #{ruleId}
+  </select>
+
+  <insert id="insert">
+    INSERT INTO smart_sort_rule (rule_id, name, pattern, flags, capture_kind, description, enabled, sort_order,
+    created_at_ms, updated_at_ms)
+    VALUES (#{ruleId}, #{name}, #{pattern}, #{flags}, #{captureKind}, #{description}, #{enabled}, #{sortOrder},
+    #{createdAtMs}, #{updatedAtMs})
+  </insert>
+
+  <update id="update">
+    UPDATE smart_sort_rule
+    SET name = #{name}, pattern = #{pattern}, flags = #{flags}, capture_kind = #{captureKind},
+    description = #{description}, enabled = #{enabled}, sort_order = #{sortOrder}, updated_at_ms = #{updatedAtMs}
+    WHERE rule_id = #{ruleId}
+  </update>
+
+  <!-- 占位符按出现顺序绑定：CASE 里先绑每对 rid/ord，WHERE 的 IN 再绑一遍 rid。 -->
+  <update id="updateSortOrders">
+    UPDATE smart_sort_rule
+    SET sort_order = CASE rule_id <foreach collection="pairs" item="pair">WHEN #{pair.ruleId} THEN #{pair.sortOrder} </foreach>ELSE sort_order END
+    WHERE rule_id IN (<foreach collection="pairs" item="pair" separator=", ">#{pair.ruleId}</foreach>)
+  </update>
+
+  <delete id="delete">
+    DELETE
+    FROM smart_sort_rule
+    WHERE rule_id = #{ruleId}
+  </delete>
+
+  <delete id="deleteAll">
+    DELETE FROM smart_sort_rule
+  </delete>
+
+  <select id="nextSortOrder">
+    SELECT COALESCE(MAX(sort_order), 0) AS max_sort
+    FROM smart_sort_rule
+  </select>
+
+</mapper>

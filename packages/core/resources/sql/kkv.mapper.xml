@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  kkv 表的 SQL mapper（schema 见 resources/sql/schema/kkv.sql）。
+
+  结构约定与 chat-message.mapper.xml 一致：语句 id 与 repo 方法同名（camelCase），
+  生成物在 src/infra/sql-template/generated/，repo 内只留引用。
+-->
+<mapper namespace="kkv">
+
+  <select id="listKeysByModule">
+    SELECT key
+    FROM kkv_entry
+    WHERE module = #{module}
+    ORDER BY key
+  </select>
+
+  <select id="getByKey">
+    SELECT module, key, value FROM kkv_entry WHERE module = #{module} AND key = #{key}
+  </select>
+
+  <!-- 窄投影（只取 value）：find-saved-model-references 的引用扫描用。 -->
+  <select id="getValueByKey">
+    SELECT value FROM kkv_entry WHERE module = #{module} AND key = #{key}
+  </select>
+
+  <insert id="upsert">
+    INSERT INTO kkv_entry (module, key, value)
+    VALUES (#{module}, #{key}, #{value})
+    ON CONFLICT(module, key) DO UPDATE
+    SET value = excluded.value
+  </insert>
+
+  <delete id="deleteByKey">
+    DELETE
+    FROM kkv_entry
+    WHERE module = #{module} AND key = #{key}
+  </delete>
+
+</mapper>

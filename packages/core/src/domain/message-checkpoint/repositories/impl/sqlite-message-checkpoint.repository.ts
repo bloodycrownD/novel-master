@@ -16,6 +16,7 @@ import { RevisionRefCount } from "@/domain/vfs/logic/revision-ref-count.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import type { MessageCheckpointFile } from "../../model/message-checkpoint.js";
 import type { CheckpointFilePointer, MessageCheckpointDistinctPointer, MessageCheckpointInsertInput, MessageCheckpointRepository } from "../message-checkpoint.port.js";
+import { MessageCheckpointSql } from "@/infra/sql-template/generated/message_checkpoint.mapper.generated.js";
 
 function rowToFilePointer(row: Row): MessageCheckpointFile {
   return {
@@ -33,52 +34,39 @@ const MULTI_VALUES_MAX_VARS = 900;
 const IN_LIST_MAX_VARS = 900;
 
 /**
- * 一块 IN 查询：`{ ids, bindings, inClause }`。
- *
- * `fixedVars` 是块内除 id 列表之外的固定变量数（本仓三处都是 1 个 sessionId）
- * ⇒ 块大小 = `IN_LIST_MAX_VARS - fixedVars`，含 sessionId 共 ≤900 个变量。
- * 块内绑定名重新从 `id0` 起编号，每块都是**同一种**模板串。
+ * IN 列表分块：每块 ≤ `IN_LIST_MAX_VARS - 1` 个 id（固定变量是本仓三处都带的
+ * 1 个 sessionId）⇒ 含 sessionId 每块 ≤900 个绑定变量。块内占位符序列由 mapper
+ * 的 `<foreach collection="ids" item="id">` 展开，每块都是**同一种**模板串。
  */
-function* chunkIdList(ids: ReadonlyArray<string>, fixedVars: number): Generator<{
-  readonly ids: ReadonlyArray<string>;
-  readonly bindings: Record<string, string>;
-  readonly inClause: string;
-}> {
-  const chunkSize = Math.max(1, IN_LIST_MAX_VARS - fixedVars);
+function* chunkIdList(ids: ReadonlyArray<string>): Generator<ReadonlyArray<string>> {
+  const chunkSize = Math.max(1, IN_LIST_MAX_VARS - 1);
   for (let offset = 0; offset < ids.length; offset += chunkSize) {
-    const chunk = ids.slice(offset, offset + chunkSize);
-    const bindings: Record<string, string> = {};
-    const placeholders: string[] = [];
-    for (let i = 0; i < chunk.length; i++) {
-      bindings[`id${i}`] = chunk[i]!;
-      placeholders.push(`#{id${i}}`);
-    }
-    yield { ids: chunk, bindings, inClause: placeholders.join(", ") };
+    yield ids.slice(offset, offset + chunkSize);
   }
 }
 
 /**
- * 分块多值 INSERT：`INSERT INTO … VALUES (?,?,…),(?,?,…)…`。
+ * 分块多值 INSERT：mapper 语句内 `<foreach collection="rows">` 按块内行数展开
+ * `(?,?,…)` 行组，这里只负责按 900 变量上限切块、扁平化参数并下发。
  *
  * 逐行 conn.batch 在驱动层是逐行 JSI 往返（better-sqlite3 / op-sqlite 均如此），
  * 行数平方级增长的批量播种场景下往返开销远超 SQLite 执行本身。
  * 块内失败时抛错，由外层事务整体回滚（调用方均在事务内）。
  */
-async function insertMultiValues(conn: TdbcConnection, insertPrefix: string, rows: ReadonlyArray<readonly unknown[]>): Promise<void> {
+async function insertMultiValues(conn: TdbcConnection, parser: SqlTemplateParser, template: string, rows: ReadonlyArray<readonly unknown[]>): Promise<void> {
   if (rows.length === 0) {
     return;
   }
   const paramsPerRow = rows[0]!.length;
   const chunkSize = Math.max(1, Math.floor(MULTI_VALUES_MAX_VARS / paramsPerRow));
-  const rowPlaceholder = `(${Array.from({ length: paramsPerRow }, () => "?").join(",")})`;
   for (let offset = 0; offset < rows.length; offset += chunkSize) {
     const chunk = rows.slice(offset, offset + chunkSize);
-    const placeholders = chunk.map(() => rowPlaceholder).join(",");
     const params: unknown[] = [];
     for (const row of chunk) {
       params.push(...row);
     }
-    await conn.execute(`${insertPrefix} VALUES ${placeholders}`, params);
+    const rendered = parser.parse(template, { rows: chunk });
+    await conn.execute(rendered.sql, params);
   }
 }
 
@@ -91,15 +79,13 @@ export class SqliteMessageCheckpointRepository implements MessageCheckpointRepos
   constructor(private readonly conn: TdbcConnection) {}
 
   async hasCheckpoint(sessionId: string, messageId: string): Promise<boolean> {
-    const sql1 = "SELECT 1 AS one FROM message_checkpoint\n       WHERE session_id = #{sessionId} AND message_id = #{messageId}\n       LIMIT 1";
-    const rows = await TdbcTemplate.query<{ one: number }>(this.conn, this.parser, sql1, { sessionId, messageId });
+    const rows = await TdbcTemplate.query<{ one: number }>(this.conn, this.parser, MessageCheckpointSql.hasCheckpoint, { sessionId, messageId });
     return rows.length > 0;
   }
 
   /** nm-style: keep-public — 实现 MessageCheckpointRepository.hasAnyCheckpointForSession 端口方法；内联会把 SQL 搬进调用层。 */
   async hasAnyCheckpointForSession(sessionId: string): Promise<boolean> {
-    const sql2 = "SELECT 1 AS one FROM message_checkpoint\n       WHERE session_id = #{sessionId}\n       LIMIT 1";
-    const rows = await TdbcTemplate.query<{ one: number }>(this.conn, this.parser, sql2, { sessionId });
+    const rows = await TdbcTemplate.query<{ one: number }>(this.conn, this.parser, MessageCheckpointSql.hasAnyCheckpointForSession, { sessionId });
     return rows.length > 0;
   }
 
@@ -112,11 +98,8 @@ export class SqliteMessageCheckpointRepository implements MessageCheckpointRepos
     // COUNT(*) 即有 checkpoint 的消息数；id 列表来自 chat_message 主键、无重复
     // ⇒ 各块之和 == 整段计数。
     let total = 0;
-    for (const chunk of chunkIdList(messageIds, 1)) {
-      const sql3 = `SELECT COUNT(*) AS n
-    FROM message_checkpoint
-    WHERE session_id = #{sessionId} AND message_id IN (${chunk.inClause})`;
-      const rows = await TdbcTemplate.query<{ n: number }>(this.conn, this.parser, sql3, { sessionId, ...chunk.bindings });
+    for (const chunk of chunkIdList(messageIds)) {
+      const rows = await TdbcTemplate.query<{ n: number }>(this.conn, this.parser, MessageCheckpointSql.countCheckpointsForMessages, { sessionId, ids: chunk });
       // COUNT(*) 恒返回一行；SQLite 下 COUNT 结果是 INTEGER，Number() 安全。
       total += Number(rows[0]!.n);
     }
@@ -126,19 +109,15 @@ export class SqliteMessageCheckpointRepository implements MessageCheckpointRepos
   async insertCheckpoint(input: MessageCheckpointInsertInput): Promise<void> {
     const revisionRepo = new SqliteVfsRevisionRepository(this.conn);
 
-    const sql4 = "SELECT session_id, message_id, entry_id, revision_version\n       FROM message_checkpoint_file\n       WHERE session_id = #{sessionId} AND message_id = #{messageId}";
-    const oldRows = await TdbcTemplate.query(this.conn, this.parser, sql4, { sessionId: input.sessionId, messageId: input.messageId });
+    const oldRows = await TdbcTemplate.query(this.conn, this.parser, MessageCheckpointSql.insertCheckpointSelectOldFiles, { sessionId: input.sessionId, messageId: input.messageId });
     if (oldRows.length > 0) {
       const oldPointers = oldRows.map((row) => rowToFilePointer(row));
       await RevisionRefCount.decrementForCheckpointFiles(revisionRepo, oldPointers);
     }
 
-    const sql5 = "DELETE FROM message_checkpoint_file\n       WHERE session_id = #{sessionId} AND message_id = #{messageId}";
-    await TdbcTemplate.execute(this.conn, this.parser, sql5, { sessionId: input.sessionId, messageId: input.messageId });
-    const sql6 = "DELETE FROM message_checkpoint\n       WHERE session_id = #{sessionId} AND message_id = #{messageId}";
-    await TdbcTemplate.execute(this.conn, this.parser, sql6, { sessionId: input.sessionId, messageId: input.messageId });
-    const sql7 = "INSERT INTO message_checkpoint (session_id, message_id, created_at_ms)\n       VALUES (#{sessionId}, #{messageId}, #{createdAtMs})";
-    await TdbcTemplate.execute(this.conn, this.parser, sql7, {
+    await TdbcTemplate.execute(this.conn, this.parser, MessageCheckpointSql.insertCheckpointDeleteOldFiles, { sessionId: input.sessionId, messageId: input.messageId });
+    await TdbcTemplate.execute(this.conn, this.parser, MessageCheckpointSql.insertCheckpointDeleteCheckpoint, { sessionId: input.sessionId, messageId: input.messageId });
+    await TdbcTemplate.execute(this.conn, this.parser, MessageCheckpointSql.insertCheckpointInsertCheckpoint, {
       sessionId: input.sessionId,
       messageId: input.messageId,
       createdAtMs: input.createdAtMs,
@@ -147,10 +126,8 @@ export class SqliteMessageCheckpointRepository implements MessageCheckpointRepos
     // 会变成 N 次 SQL 往返，seed-fork 500 消息 × 200 文件就是 10 万次，相当卡。
     // 这里切到 conn.batch（位置占位符 ?），一次调用处理整批。
     if (input.files.length > 0) {
-      const sql = `INSERT INTO message_checkpoint_file (session_id, message_id, entry_id, revision_version, path)
-    VALUES (?, ?, ?, ?, ?)`;
       const paramsList = input.files.map((f) => [input.sessionId, input.messageId, f.entryId, f.revisionVersion, f.path]);
-      await this.conn.batch(sql, paramsList);
+      await this.conn.batch(MessageCheckpointSql.insertCheckpointInsertFiles, paramsList);
     }
 
     if (input.files.length > 0) {
@@ -172,16 +149,15 @@ export class SqliteMessageCheckpointRepository implements MessageCheckpointRepos
     //（200 文件 × 500 消息 = 10 万行）往返开销淹没 SQLite 本身。改为
     // 每 chunk 一条多值 INSERT，往返次数从 O(行数) 降到 O(行数/块)。
     // 块大小按 900 变量上限切（≤999，老版 SQLITE_MAX_VARIABLE_NUMBER 也安全）。
-    const sqlInsertCheckpoints = `INSERT INTO message_checkpoint (session_id, message_id, created_at_ms)`;
     const checkpointRows = messages.map((m) => [sessionId, m.id, createdAtMs]);
-    await insertMultiValues(this.conn, sqlInsertCheckpoints, checkpointRows);
+    await insertMultiValues(this.conn, this.parser, MessageCheckpointSql.seedCheckpointsInsertCheckpoints, checkpointRows);
     const fileRows: unknown[][] = [];
     for (const msg of messages) {
       for (const file of files) {
         fileRows.push([sessionId, msg.id, file.entryId, file.revisionVersion, file.path]);
       }
     }
-    await insertMultiValues(this.conn, `INSERT INTO message_checkpoint_file (session_id, message_id, entry_id, revision_version, path)`, fileRows);
+    await insertMultiValues(this.conn, this.parser, MessageCheckpointSql.seedCheckpointsInsertFiles, fileRows);
 
     // 批量递增 ref_count：每个文件指针的 revision ref_count 加 msgCount。
     // 直接用 IN 子句 + 固定 delta，比 expand 成 N 份再调 batchAdjustRefCount 更高效——
@@ -217,8 +193,7 @@ export class SqliteMessageCheckpointRepository implements MessageCheckpointRepos
     // targetTree，这是 rollback-restore-deleted-entry 的修复核心）；快照 NULL
     // 的存量行回退现路径（rename 后跟随新路径，等同旧 JOIN 形态行为）；
     // 两者皆 NULL（entry 已删且无快照）跳过——无路径可寻址，无法恢复。
-    const sql8 = "SELECT mcf.path AS snapshot_path, e.path AS live_path,\n              mcf.entry_id AS entry_id, mcf.revision_version AS revision_version\n       FROM message_checkpoint_file mcf\n       LEFT JOIN vfs_entry e ON e.entry_id = mcf.entry_id\n       WHERE mcf.session_id = #{sessionId} AND mcf.message_id = #{messageId}";
-    const rows = await TdbcTemplate.query<{ snapshot_path: string | null; live_path: string | null; entry_id: number; revision_version: number }>(this.conn, this.parser, sql8, { sessionId, messageId });
+    const rows = await TdbcTemplate.query<{ snapshot_path: string | null; live_path: string | null; entry_id: number; revision_version: number }>(this.conn, this.parser, MessageCheckpointSql.loadFilePointerTree, { sessionId, messageId });
     const tree = new Map<string, CheckpointFilePointer>();
     for (const row of rows) {
       const path = row.snapshot_path ?? row.live_path;
@@ -235,8 +210,7 @@ export class SqliteMessageCheckpointRepository implements MessageCheckpointRepos
   }
 
   async findCheckpointMessageIdAtOrBefore(sessionId: string, maxSeq: number): Promise<string | null> {
-    const sql9 = "SELECT mc.message_id\n       FROM message_checkpoint mc\n       JOIN chat_message cm\n         ON cm.id = mc.message_id AND cm.session_id = mc.session_id\n       WHERE mc.session_id = #{sessionId} AND cm.seq <= #{maxSeq}\n       ORDER BY cm.seq DESC\n       LIMIT 1";
-    const rows = await TdbcTemplate.query<{ message_id: string }>(this.conn, this.parser, sql9, { sessionId, maxSeq });
+    const rows = await TdbcTemplate.query<{ message_id: string }>(this.conn, this.parser, MessageCheckpointSql.findCheckpointMessageIdAtOrBefore, { sessionId, maxSeq });
     return rows.length === 0 ? null : String(rows[0]!.message_id);
   }
 
@@ -245,22 +219,19 @@ export class SqliteMessageCheckpointRepository implements MessageCheckpointRepos
     // 形态照抄 findCheckpointMessageIdAtOrBefore，只是去掉 `cm.seq <= #{maxSeq}`
     // 条件（不拿 Number.MAX_SAFE_INTEGER 顶替——那会把一个巨大数字绑进模板，
     // 且与该方法的语义耦合）。
-    const sql10 = "SELECT mc.message_id\n       FROM message_checkpoint mc\n       JOIN chat_message cm\n         ON cm.id = mc.message_id AND cm.session_id = mc.session_id\n       WHERE mc.session_id = #{sessionId}\n       ORDER BY cm.seq DESC\n       LIMIT 1";
-    const rows = await TdbcTemplate.query<{ message_id: string }>(this.conn, this.parser, sql10, { sessionId });
+    const rows = await TdbcTemplate.query<{ message_id: string }>(this.conn, this.parser, MessageCheckpointSql.findLastCheckpointedMessageId, { sessionId });
     return rows.length === 0 ? null : String(rows[0]!.message_id);
   }
 
   /** nm-style: keep-public — 实现 MessageCheckpointRepository.listFilePointersForSession 端口方法；内联会把查询 SQL 搬进调用层。 */
   async listFilePointersForSession(sessionId: string): Promise<ReadonlyArray<MessageCheckpointFile>> {
-    const sql11 = "SELECT session_id, message_id, entry_id, revision_version\n       FROM message_checkpoint_file\n       WHERE session_id = #{sessionId}";
-    const rows = await TdbcTemplate.query(this.conn, this.parser, sql11, { sessionId });
+    const rows = await TdbcTemplate.query(this.conn, this.parser, MessageCheckpointSql.listFilePointersForSession, { sessionId });
     return rows.map((row) => rowToFilePointer(row));
   }
 
   /** nm-style: keep-public — 实现 MessageCheckpointRepository.listDistinctCheckpointPointersForSession 端口方法；生产零调用，但端口契约仍在且端口文件不在本轮范围，测试经端口直接覆盖。 */
   async listDistinctCheckpointPointersForSession(sessionId: string): Promise<ReadonlyArray<MessageCheckpointDistinctPointer>> {
-    const sql12 = "SELECT DISTINCT entry_id, revision_version\n       FROM message_checkpoint_file\n       WHERE session_id = #{sessionId}";
-    const rows = await TdbcTemplate.query<{ entry_id: number; revision_version: number }>(this.conn, this.parser, sql12, { sessionId });
+    const rows = await TdbcTemplate.query<{ entry_id: number; revision_version: number }>(this.conn, this.parser, MessageCheckpointSql.listDistinctCheckpointPointersForSession, { sessionId });
     return rows.map((row) => ({
       entryId: Number(row.entry_id),
       revisionVersion: Number(row.revision_version),
@@ -274,11 +245,8 @@ export class SqliteMessageCheckpointRepository implements MessageCheckpointRepos
     }
     // 分块顺序 concat：块顺序 == id 顺序 ⇒ 返回行集合与顺序都与整段版一致。
     const out: MessageCheckpointFile[] = [];
-    for (const chunk of chunkIdList(messageIds, 1)) {
-      const sql13 = `SELECT session_id, message_id, entry_id, revision_version
-    FROM message_checkpoint_file
-    WHERE session_id = #{sessionId} AND message_id IN (${chunk.inClause})`;
-      const rows = await TdbcTemplate.query(this.conn, this.parser, sql13, { sessionId, ...chunk.bindings });
+    for (const chunk of chunkIdList(messageIds)) {
+      const rows = await TdbcTemplate.query(this.conn, this.parser, MessageCheckpointSql.listFilePointersForMessages, { sessionId, ids: chunk });
       for (const row of rows) {
         out.push(rowToFilePointer(row));
       }
@@ -295,12 +263,9 @@ export class SqliteMessageCheckpointRepository implements MessageCheckpointRepos
     // 一次性 RevisionRefCount.decrementForCheckpointFiles（ref −1 必须先于行删除），
     // 再逐块执行那两条 DELETE。块内读失败会抛 ⇒ 整批不动（调用方在事务内）。
     const fileRows: MessageCheckpointFile[] = [];
-    const chunks = [...chunkIdList(messageIds, 1)];
+    const chunks = [...chunkIdList(messageIds)];
     for (const chunk of chunks) {
-      const sql14 = `SELECT session_id, message_id, entry_id, revision_version
-    FROM message_checkpoint_file
-    WHERE session_id = #{sessionId} AND message_id IN (${chunk.inClause})`;
-      const rows = await TdbcTemplate.query(this.conn, this.parser, sql14, { sessionId, ...chunk.bindings });
+      const rows = await TdbcTemplate.query(this.conn, this.parser, MessageCheckpointSql.deleteCheckpointsForMessagesSelectFiles, { sessionId, ids: chunk });
       for (const row of rows) {
         fileRows.push(rowToFilePointer(row));
       }
@@ -310,32 +275,21 @@ export class SqliteMessageCheckpointRepository implements MessageCheckpointRepos
     }
 
     for (const chunk of chunks) {
-      const sql15 = `DELETE
-    FROM message_checkpoint_file
-    WHERE session_id = #{sessionId} AND message_id IN (${chunk.inClause})`;
-      await TdbcTemplate.execute(this.conn, this.parser, sql15, { sessionId, ...chunk.bindings });
-      const sql16 = `DELETE
-    FROM message_checkpoint
-    WHERE session_id = #{sessionId} AND message_id IN (${chunk.inClause})`;
-      await TdbcTemplate.execute(this.conn, this.parser, sql16, { sessionId, ...chunk.bindings });
+      await TdbcTemplate.execute(this.conn, this.parser, MessageCheckpointSql.deleteCheckpointsForMessagesDeleteFiles, { sessionId, ids: chunk });
+      await TdbcTemplate.execute(this.conn, this.parser, MessageCheckpointSql.deleteCheckpointsForMessagesDeleteCheckpoints, { sessionId, ids: chunk });
     }
   }
 
   /** nm-style: keep-public — 实现 MessageCheckpointRepository.deleteCheckpointsForSession 端口方法；内联会把多表删除 + ref 递减搬进调用层。 */
   async deleteCheckpointsForSession(sessionId: string): Promise<void> {
     const revisionRepo = new SqliteVfsRevisionRepository(this.conn);
-    const sql17 = "SELECT session_id, message_id, entry_id, revision_version\n       FROM message_checkpoint_file\n       WHERE session_id = #{sessionId}";
-    const fileRows = await TdbcTemplate.query(this.conn, this.parser, sql17, { sessionId });
+    const fileRows = await TdbcTemplate.query(this.conn, this.parser, MessageCheckpointSql.deleteCheckpointsForSessionSelectFiles, { sessionId });
     if (fileRows.length > 0) {
       const pointers = fileRows.map((row) => rowToFilePointer(row));
       await RevisionRefCount.decrementForCheckpointFiles(revisionRepo, pointers);
     }
 
-    await TdbcTemplate.execute(this.conn, this.parser, `DELETE
-    FROM message_checkpoint_file
-    WHERE session_id = #{sessionId}`, { sessionId });
-    await TdbcTemplate.execute(this.conn, this.parser, `DELETE
-    FROM message_checkpoint
-    WHERE session_id = #{sessionId}`, { sessionId });
+    await TdbcTemplate.execute(this.conn, this.parser, MessageCheckpointSql.deleteCheckpointsForSessionDeleteFiles, { sessionId });
+    await TdbcTemplate.execute(this.conn, this.parser, MessageCheckpointSql.deleteCheckpointsForSessionDeleteCheckpoints, { sessionId });
   }
 }

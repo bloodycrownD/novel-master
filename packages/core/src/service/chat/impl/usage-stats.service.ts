@@ -5,6 +5,7 @@
  */
 
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
+import { UsageStatsSql } from "@/infra/sql-template/generated/usage_stats.mapper.generated.js";
 import { TdbcTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { Row } from "@/infra/tdbc/types.js";
@@ -30,74 +31,6 @@ import type {
 } from "../usage-stats.port.js";
 
 const log = LogFactory.create("chat.usage-stats");
-
-/**
- * 命中率分母（计费口径全部输入）的 SUM 表达式：
- * anthropic 行 `input_tokens` 不含 cache，须加回 cache_read 与 cache_creation；
- * 其余协议 prompt 已含 cached。FILTER 只对 cache 列非 NULL 的行求和——
- * 缺失行不入分母（PRD 口径，避免拉低命中率）。
- */
-const BILLED_INPUT_SUM_SQL = `
-  SUM(CASE WHEN provider = 'anthropic'
-    THEN prompt_tokens + COALESCE(cache_read_tokens, 0) + COALESCE(cache_creation_tokens, 0)
-    ELSE prompt_tokens
-  END) FILTER (WHERE cache_read_tokens IS NOT NULL OR cache_creation_tokens IS NOT NULL)`;
-
-/**
- * 速率聚合的有效行 FILTER（summary 与桶查询共用）：token 三列与耗时两列
- * 均非 NULL，且 duration_ms > first_token_ms（非流式行 first=duration
- * 与时钟毛刺行不入分母，避免除零与负速率）。
- */
-const RATE_FILTER_SQL = `
-  WHERE completion_tokens IS NOT NULL
-    AND first_token_ms IS NOT NULL
-    AND duration_ms IS NOT NULL AND duration_ms > first_token_ms`;
-
-/** 聚合 SELECT 列表（bucket 复用后丢弃 total_tokens）。 */
-const AGG_SELECT_SQL = `
-  COUNT(*) AS calls,
-  COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
-  COALESCE(SUM(completion_tokens), 0) AS completion_tokens,
-  COALESCE(SUM(total_tokens), 0) AS total_tokens,
-  COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens,
-  COALESCE(SUM(cache_creation_tokens), 0) AS cache_creation_tokens,
-  COALESCE(${BILLED_INPUT_SUM_SQL}, 0) AS billed_input_tokens,
-  AVG(first_token_ms) AS avg_first_token_ms,
-  CAST(SUM(completion_tokens) FILTER (${RATE_FILTER_SQL}) AS REAL)
-    / (SUM(duration_ms - first_token_ms) FILTER (${RATE_FILTER_SQL}) / 1000.0) AS avg_tokens_per_second`;
-
-/**
- * 账本有效行判据（公共片断）：prompt / completion 至少一侧非空。
- *
- * 统计唯一数据源是 usage_record（独立用量账本，按请求粒度，账本与内容
- * 分离——删除会话/消息/回滚截尾都不删本表行）。新表只在记账点插入，写入端
- * 按同判据把关（无 token 真值的请求不入账本），此处保留 token 非空判据作为
- * 写入契约的防御性复核；旧口径的 `role = 'assistant'` 判据随之退役（账本表
- * 不存在非 assistant 行，hidden 维度也不存在——hidden 只是内容侧可见性）。
- */
-const USAGE_NOT_NULL_SQL = `
-  (prompt_tokens IS NOT NULL OR completion_tokens IS NOT NULL)`;
-
-/**
- * 动态筛选模板片断（原三函数迁 SqlTemplate `<if>`，绑定值传原始入参，
- * 由 test 表达式分派三态）：
- *
- * - 模型：undefined = 全部（无谓词）；null = 「其他」桶（未记录 + 不在
- *   已保存模型集合内）；字符串 = 指定模型。子查询免动态参数。
- * - 服务商：undefined = 全部；null = 「其他」桶（provider_id IS NULL 的
- *   历史行）；字符串 = 指定服务商配置 id（写入时快照，服务商已删除也照常
- *   按 id 匹配——解析不到展示名是 UI 层的事）。
- * - 时间谓词：fromMs/toMs 任一为 null 时不限时间（全历史），非空时拼
- *   [fromMs, toMs) 半开区间条件（与 range 可选语义配套）。
- */
-const MODEL_FILTER_SQL = `<if test="model === null">
-  AND (model_name IS NULL OR model_name NOT IN (SELECT DISTINCT vendor_model_id FROM llm_saved_model))</if><if test="model !== undefined and model !== null">
-  AND model_name = #{model}</if>`;
-const PROVIDER_FILTER_SQL = `<if test="providerId === null">
-  AND provider_id IS NULL</if><if test="providerId !== undefined and providerId !== null">
-  AND provider_id = #{providerId}</if>`;
-const TIME_RANGE_SQL = `<if test="fromMs != null and toMs != null">
-  AND created_at_ms >= #{fromMs} AND created_at_ms < #{toMs}</if>`;
 
 /** 解析 `YYYY-MM-DD` 为本地日期分量（拒绝溢出日期如 02-30；`label` 用于报错指认字段）。 */
 function parseDayLocalDate(dayLocalDate: string, label = "dayLocalDate"): Result<{ year: number; month: number; day: number }, AppError> {
@@ -163,11 +96,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
     // 单条 GROUP BY 查询替代旧实现的逐日 N+1：strftime 的 localtime 与
     // JS Date 同用进程本地时区，DST 日按挂钟日归桶；整数除法截到秒不影响
     // 日归属（日界切换发生在整秒的 0 点，毫秒截断不可能跨日）。
-    const dailyBucketsSql = `SELECT strftime('%Y-%m-%d', created_at_ms / 1000, 'unixepoch', 'localtime') AS day_key, ${AGG_SELECT_SQL}
-    FROM usage_record
-    WHERE ${USAGE_NOT_NULL_SQL} AND created_at_ms >= #{fromMs} AND created_at_ms < #{toMs} ${MODEL_FILTER_SQL} ${PROVIDER_FILTER_SQL}
-    GROUP BY day_key`;
-    const rows = await TdbcTemplate.query<Row>(this.conn, this.parser, dailyBucketsSql, { fromMs, toMs, model: filter.model, providerId: filter.providerId });
+    const rows = await TdbcTemplate.query<Row>(this.conn, this.parser, UsageStatsSql.dailyBuckets, { fromMs, toMs, model: filter.model, providerId: filter.providerId });
     const rowByDay = new Map<string, Row>();
     for (const row of rows) {
       rowByDay.set(String(row.day_key), row);
@@ -207,11 +136,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
     const range = this.resolveOptionalRange(filter.range);
     if (!range.ok) return Result.err(range.error);
     const { fromMs, toMs } = range.value;
-    const modelBreakdownSql = `SELECT provider_id, model_name, ${AGG_SELECT_SQL}
-    FROM usage_record
-    WHERE ${USAGE_NOT_NULL_SQL} ${TIME_RANGE_SQL} ${MODEL_FILTER_SQL} ${PROVIDER_FILTER_SQL}
-    GROUP BY provider_id, model_name -- 不排序：输出顺序由 JS 归并后的 sort 保证（SQL 序会被归并架空）`;
-    const rows = await TdbcTemplate.query<Row>(this.conn, this.parser, modelBreakdownSql, { fromMs, toMs, model: filter.model, providerId: filter.providerId });
+    const rows = await TdbcTemplate.query<Row>(this.conn, this.parser, UsageStatsSql.modelBreakdown, { fromMs, toMs, model: filter.model, providerId: filter.providerId });
     const mapped = rows.map((row) => ({
       providerId: row.provider_id == null ? null : String(row.provider_id),
       modelName: row.model_name == null ? null : String(row.model_name),
@@ -263,11 +188,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
     const range = this.resolveOptionalRange(filter.range);
     if (!range.ok) return Result.err(range.error);
     const { fromMs, toMs } = range.value;
-    // total 与行集同用 where 片段：range 缺省时两者都不含时间谓词（全历史）。
-    const whereSql = `WHERE ${USAGE_NOT_NULL_SQL}
-         ${TIME_RANGE_SQL}
-         ${MODEL_FILTER_SQL}
-         ${PROVIDER_FILTER_SQL}`;
+    // total 与行集同用一组筛选谓词：range 缺省时两者都不含时间谓词（全历史）。
     const params = {
       fromMs,
       toMs,
@@ -276,14 +197,8 @@ export class DefaultUsageStatsService implements UsageStatsService {
       offset,
       limit,
     };
-    const totalRows = await TdbcTemplate.query<{ n: number }>(this.conn, this.parser, `SELECT COUNT(*) AS n
-    FROM usage_record ${whereSql}`, params);
-    const requestRowsSql = `SELECT created_at_ms, model_name, prompt_tokens, completion_tokens, total_tokens, cache_read_tokens,
-    cache_creation_tokens, first_token_ms, duration_ms
-    FROM usage_record ${whereSql}
-    ORDER BY created_at_ms DESC, id ASC
-    LIMIT #{limit} OFFSET #{offset}`;
-    const rows = await TdbcTemplate.query<Row>(this.conn, this.parser, requestRowsSql, params);
+    const totalRows = await TdbcTemplate.query<{ n: number }>(this.conn, this.parser, UsageStatsSql.countRequestUsage, params);
+    const rows = await TdbcTemplate.query<Row>(this.conn, this.parser, UsageStatsSql.listRequestUsage, params);
     return Result.ok({
       rows: rows.map(
         (row): UsageStatsRequestRow => ({
@@ -305,7 +220,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
   async listModels(): Promise<string[]> {
     // 选项与服务商配置的模型列表同源（vendor_model_id 去重），
     // 不从 chat_message 历史记录 distinct——历史模型会随模型更替不断堆积。
-    const rows = await TdbcTemplate.query<{ vendor_model_id: string }>(this.conn, this.parser, "SELECT DISTINCT vendor_model_id FROM llm_saved_model ORDER BY vendor_model_id ASC", {});
+    const rows = await TdbcTemplate.query<{ vendor_model_id: string }>(this.conn, this.parser, UsageStatsSql.listModels, {});
     return rows.map((row) => String(row.vendor_model_id));
   }
 
@@ -323,16 +238,9 @@ export class DefaultUsageStatsService implements UsageStatsService {
     // fork 新会话天然 miss 重算）；miss 时解压 assistant 行现算并回填——
     // 大会话这笔现算数百毫秒量级，由失效挂点保证只在「真的变了之后」付
     // 一次。会话累计输入/输出已移除（含 hidden 的累计对用户无意义）。
-    const lastRequestSql = `SELECT message_seq, model_name, provider, prompt_tokens, completion_tokens, cache_read_tokens, cache_creation_tokens,
-    created_at_ms
-    FROM usage_record
-    WHERE ${USAGE_NOT_NULL_SQL} AND session_id = #{sessionId}
-    ORDER BY created_at_ms DESC, id DESC
-    LIMIT 1`;
-    const visibleCountSql = "SELECT COUNT(*) AS n FROM chat_message WHERE session_id = #{sessionId} AND hidden = 0";
     const sessionUsageQueries = Promise.all([
-      TdbcTemplate.query<Row>(this.conn, this.parser, lastRequestSql, { sessionId }),
-      TdbcTemplate.query<{ n: number }>(this.conn, this.parser, visibleCountSql, { sessionId }),
+      TdbcTemplate.query<Row>(this.conn, this.parser, UsageStatsSql.lastRequest, { sessionId }),
+      TdbcTemplate.query<{ n: number }>(this.conn, this.parser, UsageStatsSql.visibleMessageCount, { sessionId }),
       SessionKkvServiceFactory.create(this.conn).get(sessionId, SESSION_KKV_DOMAIN_USAGE_STATS, USAGE_STATS_TOOL_USE_COUNT_KEY),
     ]);
     const [lastRows, visibleRows, cachedToolUseCount] = await sessionUsageQueries;
@@ -360,8 +268,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
     // tool_result 不计）。只投影 content 列，不选 raw_json/attachments。
     // 坏行（parse 失败）按 0 计并 warn：计数是统计读数，单条历史坏行
     // 不该让整个弹窗报错。
-    const assistantRowsSql = "SELECT id, content_json FROM chat_message WHERE session_id = #{sessionId} AND role = 'assistant'";
-    const assistantRows = await TdbcTemplate.query<Row>(this.conn, this.parser, assistantRowsSql, { sessionId });
+    const assistantRows = await TdbcTemplate.query<Row>(this.conn, this.parser, UsageStatsSql.listAssistantMessageContents, { sessionId });
     let toolUseCount = 0;
     // 无 keyword 语义，无粗筛面：全量 parse 为固有成本
     for (const row of assistantRows) {
@@ -429,10 +336,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
    * null 时不加时间谓词 = 全历史）。
    */
   private async queryAggregateRow(fromMs: number | null, toMs: number | null, model: string | null | undefined, providerId: string | null | undefined): Promise<Row> {
-    const aggregateSql = `SELECT ${AGG_SELECT_SQL}
-    FROM usage_record
-    WHERE ${USAGE_NOT_NULL_SQL} ${TIME_RANGE_SQL} ${MODEL_FILTER_SQL} ${PROVIDER_FILTER_SQL}`;
-    const rows = await TdbcTemplate.query<Row>(this.conn, this.parser, aggregateSql, { fromMs, toMs, model, providerId });
+    const rows = await TdbcTemplate.query<Row>(this.conn, this.parser, UsageStatsSql.aggregate, { fromMs, toMs, model, providerId });
     return rows[0] ?? ZERO_AGG_ROW;
   }
 

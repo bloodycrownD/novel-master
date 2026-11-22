@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  agent_definition 表的 SQL mapper（schema 见 resources/sql/schema/agent.sql）。
+
+  共用方：domain/agent/repositories/impl/sqlite-agent-definition.repository（6 条 CRUD）
+  与 domain/provider/logic/find-saved-model-references（1 条引用扫描）——同一 namespace。
+  扫描语句 id 取 `listAgentPrompts`（含它的方法名是 find，同方法还要摸别的表，故按语句语义命名）。
+-->
+<mapper namespace="agent_definition">
+
+  <select id="listIds">
+    SELECT agent_id
+    FROM agent_definition
+    ORDER BY agent_id ASC
+  </select>
+
+  <select id="getRawWire">
+    SELECT prompts_json
+    FROM agent_definition
+    WHERE agent_id = #{agentId}
+  </select>
+
+  <select id="exists">
+    SELECT 1
+    FROM agent_definition
+    WHERE agent_id = #{agentId}
+    LIMIT 1
+  </select>
+
+  <insert id="upsert">
+    INSERT INTO agent_definition (agent_id, prompts_json, created_at_ms, updated_at_ms)
+    VALUES (#{agentId}, #{promptsJson}, #{now}, #{now})
+    ON CONFLICT(agent_id) DO UPDATE
+    SET prompts_json = excluded.prompts_json, updated_at_ms = excluded.updated_at_ms
+  </insert>
+
+  <delete id="delete">
+    DELETE
+    FROM agent_definition
+    WHERE agent_id = #{agentId}
+  </delete>
+
+  <select id="list">
+    SELECT prompts_json
+    FROM agent_definition
+    ORDER BY agent_id ASC
+  </select>
+
+  <!-- saved_model 引用扫描：全表取 agent_id + prompts_json，由调用方逐行解 JSON。 -->
+  <select id="listAgentPrompts">
+    SELECT agent_id, prompts_json
+    FROM agent_definition
+  </select>
+
+</mapper>

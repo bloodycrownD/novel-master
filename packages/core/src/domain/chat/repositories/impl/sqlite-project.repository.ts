@@ -11,11 +11,7 @@ import { Coerce } from "@/common/coerce.js";
 import type { ChatProject } from "../../model/project.js";
 import type { ProjectRepository } from "../project.port.js";
 import { BaseSqliteChatRepository } from "./base-sqlite-chat-repository.js";
-
-const PROJECT_COLUMNS = "id, name, created_at_ms, updated_at_ms";
-
-const PROJECT_INSERT_SQL = `INSERT INTO chat_project (${PROJECT_COLUMNS})
-    VALUES (${PROJECT_COLUMNS.split(", ").map(() => "?").join(", ")})`;
+import { ChatProjectSql, ChatProjectSqlFragments } from "@/infra/sql-template/generated/chat_project.mapper.generated.js";
 
 function rowToProject(row: Row): ChatProject {
   return {
@@ -31,29 +27,26 @@ export class SqliteProjectRepository extends BaseSqliteChatRepository<ChatProjec
   constructor(conn: TdbcConnection) {
     super(conn, {
       table: "chat_project",
-      columns: PROJECT_COLUMNS,
-      insertSql: PROJECT_INSERT_SQL,
+      columns: ChatProjectSqlFragments.selectColumns,
+      insertSql: ChatProjectSql.insert,
       entityFromRow: rowToProject,
       insertParams: (project) => [project.id, project.name, project.createdAtMs, project.updatedAtMs],
     });
   }
 
   async list(): Promise<ChatProject[]> {
-    const sql = `SELECT ${PROJECT_COLUMNS} FROM chat_project ORDER BY created_at_ms`;
-    const rows = await TdbcTemplate.query(this.conn, this.parser, sql, {});
+    const rows = await TdbcTemplate.query(this.conn, this.parser, ChatProjectSql.list, {});
     return rows.map(rowToProject);
   }
 
   /** nm-style: keep-public — ProjectRepository 端口方法；project.service 单点调用。 */
   async updateName(id: string, name: string, updatedAtMs: number): Promise<boolean> {
-    const sql = `UPDATE chat_project SET name = #{name}, updated_at_ms = #{updatedAtMs} WHERE id = #{id}`;
-    const result = await TdbcTemplate.execute(this.conn, this.parser, sql, { id, name, updatedAtMs });
+    const result = await TdbcTemplate.execute(this.conn, this.parser, ChatProjectSql.updateName, { id, name, updatedAtMs });
     return result.changes > 0;
   }
 
   async getAgentConfig(id: string): Promise<string | null> {
-    const sql = "SELECT agent_config_json FROM chat_project WHERE id = #{id}";
-    const rows = await TdbcTemplate.query(this.conn, this.parser, sql, { id });
+    const rows = await TdbcTemplate.query(this.conn, this.parser, ChatProjectSql.getAgentConfig, { id });
     if (rows.length === 0) {
       return null;
     }
@@ -61,10 +54,7 @@ export class SqliteProjectRepository extends BaseSqliteChatRepository<ChatProjec
   }
 
   async updateAgentConfig(id: string, configJson: string | null, updatedAtMs: number): Promise<boolean> {
-    const sql = `UPDATE chat_project
-    SET agent_config_json = #{configJson}, updated_at_ms = #{updatedAtMs}
-    WHERE id = #{id}`;
-    const result = await TdbcTemplate.execute(this.conn, this.parser, sql, { id, configJson, updatedAtMs });
+    const result = await TdbcTemplate.execute(this.conn, this.parser, ChatProjectSql.updateAgentConfig, { id, configJson, updatedAtMs });
     return result.changes > 0;
   }
 

@@ -104,13 +104,19 @@ if (!existsSync(mapperDir)) {
   process.exit(1);
 }
 
+// --only <base>（可多次）：只处理指定 mapper（并行分片各自重生成互不干扰）；缺省全量。
+const onlyArgs = [];
+process.argv.slice(2).forEach((arg, i, arr) => {
+  if (arg === "--only") onlyArgs.push(arr[i + 1]);
+});
 const mapperFiles = [];
-for (const name of ["chat-message.mapper.xml"]) {
+for (const name of readdirSync(mapperDir).filter((f) => f.endsWith(".mapper.xml")).sort()) {
+  if (onlyArgs.length > 0 && !onlyArgs.includes(name.replace(".mapper.xml", ""))) continue;
   const full = join(mapperDir, name);
   if (existsSync(full)) mapperFiles.push(full);
 }
 if (mapperFiles.length === 0) {
-  console.error(`resources/sql/ 下没有 mapper 文件`);
+  console.error('resources/sql/ 下没有 mapper 文件');
   process.exit(1);
 }
 

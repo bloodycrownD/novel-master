@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  vfs 内容寻址存储的 SQL mapper（schema 见 resources/sql/schema/vfs-content-blob.sql
+  与 vfs-content-pack.sql）。
+
+  namespace 取逻辑表名 vfs_content_store（与 SqliteVfsContentStore 对应），实体覆盖三张
+  物理表：vfs_content_blob / vfs_content_pack / vfs_content_pack_member。此外
+  SqliteVfsEntryRepository.findContentSizeByPath 的两条跨表探测语句（blob.byte_len /
+  member.compressed_byte_len）也归本 mapper，语句 id 带方法前缀以示归属。
+
+  结构约定与 chat-message.mapper.xml 一致：
+  - 语句 id 与 repo 方法同名（camelCase）；一个方法发出多条语句时，主语句取方法名，
+    配角用「方法名 + 语义后缀」（如 putSelectExisting / getMember / gcBlobs）。
+  - 生成物在 src/infra/sql-template/generated/vfs_content_store.mapper.generated.ts，repo 内只留引用。
+  - 批量 IN 清单走 <foreach>；调用处仍按 500 分片（老版 SQLite 的 999 变量上限）。
+  - INSERT 的 ? 占位符写死；put 的 ref_count 初值为参数化子查询（仅 member 抽回分支）。
+-->
+<mapper namespace="vfs_content_store">
+
+  <select id="putSelectExisting">
+    SELECT content_hash
+    FROM vfs_content_blob
+    WHERE content_hash = #{contentHash}
+  </select>
+
+  <!-- 抽回分支：绕过 revision 触发器新建的 blob 行必须现场重算 ref_count，否则初值 0 会误删仍被引用的行。 -->
+  <insert id="putInsertRecomputedRefCount">
+    INSERT INTO vfs_content_blob (content_hash, encoding, bytes, byte_len, ref_count)
+         VALUES (#{contentHash}, #{encoding}, #{bytes}, #{byteLen},
+           (SELECT COUNT(*) FROM vfs_revision WHERE content_hash = #{contentHash}))
+  </insert>
+
+  <!-- 全新内容沿 DEFAULT 0：vfs_revision 无 content_hash 索引，COUNT 子查询不得挂进 put 热路径。 -->
+  <insert id="putInsert">
+    INSERT INTO vfs_content_blob (content_hash, encoding, bytes, byte_len)
+         VALUES (#{contentHash}, #{encoding}, #{bytes}, #{byteLen})
+  </insert>
+
+  <select id="get">
+    SELECT encoding, bytes
+    FROM vfs_content_blob
+    WHERE content_hash = #{contentHash}
+  </select>
+
+  <!-- blob 未命中时的打包副本：JOIN pack 取 format + bytes，按 format 分派解码。 -->
+  <select id="getMember">
+    SELECT m.offset, m.length, p.format, p.bytes
+       FROM vfs_content_pack_member m
+       JOIN vfs_content_pack p ON p.pack_id = m.pack_id
+       WHERE m.content_hash = #{contentHash}
+  </select>
+
+  <select id="getMany">
+    SELECT content_hash, encoding, bytes
+    FROM vfs_content_blob
+    WHERE content_hash IN (<foreach collection="hashes" item="h" separator=",">#{h}</foreach>)
+  </select>
+
+  <select id="getManyMember">
+    SELECT content_hash, pack_id, offset, length
+    FROM vfs_content_pack_member
+    WHERE content_hash IN (<foreach collection="hashes" item="h" separator=",">#{h}</foreach>)
+  </select>
+
+  <select id="getManyPack">
+    SELECT pack_id, format, bytes
+    FROM vfs_content_pack
+    WHERE pack_id IN (<foreach collection="packIds" item="packId" separator=",">#{packId}</foreach>)
+  </select>
+
+  <!-- UNION 判定「已存在」（blob 行或 pack member 行）；IN 过滤外提，单语句只绑一份 chunk。 -->
+  <select id="findExistingBlobHashes">
+    SELECT content_hash
+    FROM ( SELECT content_hash
+    FROM vfs_content_blob UNION ALL SELECT content_hash
+    FROM vfs_content_pack_member )
+    WHERE content_hash IN (<foreach collection="hashes" item="h" separator=",">#{h}</foreach>)
+  </select>
+
+  <select id="ensureBlob">
+    SELECT content_hash FROM vfs_content_blob WHERE content_hash = #{contentHash}
+       UNION ALL
+       SELECT content_hash FROM vfs_content_pack_member WHERE content_hash = #{contentHash}
+  </select>
+
+  <!-- 全库回收：引用集口径统一为 entry ∪ revision（NOT IN 子查询显式过滤 NULL content_hash）。 -->
+  <delete id="gcBlobs">
+    DELETE FROM vfs_content_blob WHERE content_hash NOT IN (
+        SELECT content_hash FROM vfs_entry WHERE content_hash IS NOT NULL
+        UNION
+        SELECT content_hash FROM vfs_revision WHERE content_hash IS NOT NULL
+      )
+  </delete>
+
+  <delete id="gcPackMembers">
+    DELETE FROM vfs_content_pack_member WHERE content_hash NOT IN (
+        SELECT content_hash FROM vfs_entry WHERE content_hash IS NOT NULL
+        UNION
+        SELECT content_hash FROM vfs_revision WHERE content_hash IS NOT NULL
+      )
+  </delete>
+
+  <!-- 空 pack 清扫按 member 表实际行数判定，不信任 pack.member_count 快照列。 -->
+  <delete id="gcPacks">
+    DELETE FROM vfs_content_pack
+       WHERE pack_id NOT IN (SELECT pack_id FROM vfs_content_pack_member)
+  </delete>
+
+  <!-- put 抽回：删同 hash 的 member 行（无行时是一次点查零成本）。 -->
+  <delete id="deleteMemberRow">
+    DELETE
+    FROM vfs_content_pack_member
+    WHERE content_hash = #{contentHash}
+  </delete>
+
+  <!-- 跨表（SqliteVfsEntryRepository.findContentSizeByPath）：独立 blob 行的压缩字节长度。 -->
+  <select id="findContentSizeByPathBlobBytes">
+    SELECT byte_len FROM vfs_content_blob
+         WHERE content_hash = #{contentHash}
+  </select>
+
+  <!-- 跨表：blob 行缺失时回退 member.compressed_byte_len（恒为被替换 blob 行原样复制的 byte_len）。 -->
+  <select id="findContentSizeByPathMemberBytes">
+    SELECT compressed_byte_len FROM vfs_content_pack_member
+         WHERE content_hash = #{contentHash}
+  </select>
+
+</mapper>

@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  skill_disabled_rule 表的 SQL mapper（DDL 见 resources/sql/schema/skills.sql）。
+
+  结构约定（与 chat-message.mapper.xml 样板一致）：
+  - 语句 id 与 SqliteSkillDisabledRuleRepository 方法同名（camelCase）；生成物里
+    每条语句都是完整字面量，repo 内只留引用。
+  - renameByName 一个方法发两条语句（UPDATE OR IGNORE 改名 + 清旧行），id 以
+    Update / Delete 后缀区分，同参数同条件。
+  - scopeKey 为空时 scope 过滤整段不渲染（<if test> 吃 params，undefined/null 为假）。
+-->
+<mapper namespace="skill_disabled_rule">
+
+  <select id="listDisabledNames">
+    SELECT skill_name
+    FROM skill_disabled_rule
+    WHERE scope_key = #{scopeKey}
+    ORDER BY skill_name
+  </select>
+
+  <insert id="upsert">
+    INSERT OR IGNORE INTO skill_disabled_rule (scope_key, skill_name)
+    VALUES (#{scopeKey}, #{skillName})
+  </insert>
+
+  <delete id="remove">
+    DELETE
+    FROM skill_disabled_rule
+    WHERE scope_key = #{scopeKey} AND skill_name = #{skillName}
+  </delete>
+
+  <delete id="removeScope">
+    DELETE FROM skill_disabled_rule WHERE scope_key = #{scopeKey}
+  </delete>
+
+  <delete id="removeAllScopesByName">
+    DELETE FROM skill_disabled_rule WHERE skill_name = #{skillName}
+  </delete>
+
+  <update id="renameByNameUpdate">
+    UPDATE OR IGNORE skill_disabled_rule
+    SET skill_name = #{to}
+    WHERE skill_name = #{from}<if test="scopeKey != null"> AND scope_key = #{scopeKey}</if>
+  </update>
+
+  <delete id="renameByNameDelete">
+    DELETE
+    FROM skill_disabled_rule
+    WHERE skill_name = #{from}<if test="scopeKey != null"> AND scope_key = #{scopeKey}</if>
+  </delete>
+
+  <insert id="copyScopeRules">
+    INSERT OR IGNORE INTO skill_disabled_rule (scope_key, skill_name) SELECT #{toScopeKey}, skill_name
+    FROM skill_disabled_rule
+    WHERE scope_key = #{fromScopeKey}
+  </insert>
+
+</mapper>

@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  chat_session 表的 SQL mapper（schema 见 domain/chat；会话元数据 + 草稿/智能体配置列）。
+
+  结构约定与 chat-message.mapper.xml 一致：
+  - 语句 id 与 repo 方法同名（camelCase），生成器按 id 产出 generated TS 映射
+    （src/infra/sql-template/generated/），repo 内只留引用。
+  - <sql id="selectColumns"> 经 <include ref> 展开，生成物里每条语句都是完整字面量；
+    同一片段也作为 base repository 的 columns 选项（findById 的结构化拼装消费）。
+  - INSERT 的 ? 占位符写死，不用程序生成——列清单改动时必须同步占位符数量。
+-->
+<mapper namespace="chat_session">
+
+  <sql id="selectColumns">id, project_id, title, parent_session_id, created_at_ms, updated_at_ms</sql>
+
+  <select id="listByProject">
+    SELECT <include ref="selectColumns"/>
+    FROM chat_session
+    WHERE project_id = #{projectId} AND parent_session_id IS NULL
+    ORDER BY created_at_ms
+  </select>
+
+  <select id="listByParentSession">
+    SELECT <include ref="selectColumns"/>
+    FROM chat_session
+    WHERE parent_session_id = #{parentSessionId}
+    ORDER BY created_at_ms
+  </select>
+
+  <update id="updateTitle">
+    UPDATE chat_session SET title = #{title}, updated_at_ms = #{updatedAtMs} WHERE id = #{id}
+  </update>
+
+  <delete id="deleteByProject">
+    DELETE FROM chat_session WHERE project_id = #{projectId}
+  </delete>
+
+  <select id="getComposerDraftJson">
+    SELECT composer_draft_json FROM chat_session WHERE id = #{id}
+  </select>
+
+  <update id="setComposerDraftJson">
+    UPDATE chat_session SET composer_draft_json = #{draftJson} WHERE id = #{id}
+  </update>
+
+  <select id="getSessionAgentConfig">
+    SELECT agent_config_json FROM chat_session WHERE id = #{id}
+  </select>
+
+  <!-- 绑定切换是会话活动（区别于高频草稿写），同步更新 updated_at_ms。 -->
+  <update id="setSessionAgentConfig">
+    UPDATE chat_session SET agent_config_json = #{agentConfigJson}, updated_at_ms = #{updatedAtMs} WHERE id = #{id}
+  </update>
+
+  <!-- 6 个 ? 与 selectColumns 顺序一一对应；base repository 走原始 execute，占位符按位置绑定。 -->
+  <insert id="insert">
+    INSERT INTO chat_session (<include ref="selectColumns"/>)
+    VALUES (?, ?, ?, ?, ?, ?)
+  </insert>
+
+
+  <!-- 全表扫描（引用扫描）：find-saved-model-references 用。 -->
+  <select id="listAgentConfigs">
+    SELECT id, agent_config_json
+    FROM chat_session
+  </select>
+</mapper>

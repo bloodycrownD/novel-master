@@ -7,6 +7,7 @@
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
 import { TdbcTemplate } from "@/infra/tdbc/logic/template-helper.js";
+import { LlmProviderSql } from "@/infra/sql-template/generated/llm_provider.mapper.generated.js";
 import type { Row } from "@/infra/tdbc/types.js";
 import type { LlmProtocolKind } from "@/infra/llm-protocol/ports/adapter.port.js";
 import { Coerce } from "@/common/coerce.js";
@@ -14,18 +15,6 @@ import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { LlmProvider } from "../../model/provider.js";
 import type { ProviderRepository } from "../provider.port.js";
-
-const PROVIDER_COLUMNS = "id, builtin_key, protocol, base_url, display_name, secret_ref, headers_json, body_params_json, is_builtin, created_at_ms, updated_at_ms";
-const SELECT_ALL_SQL = `SELECT ${PROVIDER_COLUMNS} FROM llm_provider ORDER BY id`;
-const SELECT_BY_ID_SQL = `SELECT ${PROVIDER_COLUMNS} FROM llm_provider WHERE id = #{id}`;
-const INSERT_SQL = `INSERT INTO llm_provider (${PROVIDER_COLUMNS})
-    VALUES ( #{id}, #{builtinKey}, #{protocol}, #{baseUrl}, #{displayName}, #{secretRef}, #{headersJson},
-    #{bodyParamsJson}, #{isBuiltin}, #{createdAtMs}, #{updatedAtMs} )`;
-const UPDATE_SQL = `UPDATE llm_provider
-    SET protocol = #{protocol}, base_url = #{baseUrl}, display_name = #{displayName}, secret_ref = #{secretRef},
-    headers_json = #{headersJson}, body_params_json = #{bodyParamsJson}, updated_at_ms = #{updatedAtMs}
-    WHERE id = #{id}`;
-const DELETE_SQL = "DELETE FROM llm_provider WHERE id = #{id}";
 
 /** 列 JSON 根必须是对象；根非法（非对象/解析失败）降级 {}，不抛错。 */
 function parseJsonObject(json: string): Record<string, unknown> {
@@ -64,7 +53,7 @@ export class SqliteProviderRepository implements ProviderRepository {
   constructor(private readonly conn: TdbcConnection) {}
 
   async list(): Promise<Result<LlmProvider[], AppError>> {
-    const rows = await TdbcTemplate.query(this.conn, this.parser, SELECT_ALL_SQL, {});
+    const rows = await TdbcTemplate.query(this.conn, this.parser, LlmProviderSql.list, {});
     const providers: LlmProvider[] = [];
     for (const row of rows) {
       const mapped = rowToProvider(row);
@@ -75,13 +64,13 @@ export class SqliteProviderRepository implements ProviderRepository {
   }
 
   async findById(id: string): Promise<Result<LlmProvider | null, AppError>> {
-    const rows = await TdbcTemplate.query(this.conn, this.parser, SELECT_BY_ID_SQL, { id });
+    const rows = await TdbcTemplate.query(this.conn, this.parser, LlmProviderSql.findById, { id });
     if (rows.length === 0) return Result.ok(null);
     return rowToProvider(rows[0]!);
   }
 
   async insert(provider: LlmProvider): Promise<void> {
-    await TdbcTemplate.execute(this.conn, this.parser, INSERT_SQL, {
+    await TdbcTemplate.execute(this.conn, this.parser, LlmProviderSql.insert, {
       id: provider.id,
       builtinKey: provider.builtinKey,
       protocol: provider.protocol,
@@ -97,7 +86,7 @@ export class SqliteProviderRepository implements ProviderRepository {
   }
 
   async update(provider: LlmProvider): Promise<void> {
-    await TdbcTemplate.execute(this.conn, this.parser, UPDATE_SQL, {
+    await TdbcTemplate.execute(this.conn, this.parser, LlmProviderSql.update, {
       id: provider.id,
       protocol: provider.protocol,
       baseUrl: provider.baseUrl,
@@ -110,7 +99,7 @@ export class SqliteProviderRepository implements ProviderRepository {
   }
 
   async delete(id: string): Promise<boolean> {
-    const result = await TdbcTemplate.execute(this.conn, this.parser, DELETE_SQL, { id });
+    const result = await TdbcTemplate.execute(this.conn, this.parser, LlmProviderSql.delete, { id });
     return result.changes > 0;
   }
 }
