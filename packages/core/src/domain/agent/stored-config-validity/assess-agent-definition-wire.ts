@@ -4,6 +4,8 @@
  * @module domain/agent/stored-config-validity/assess-agent-definition-wire
  */
 
+import { Coerce } from "@/common/coerce.js";
+import { Guards } from "@/common/guards.js";
 import { agentDefinitionSchema } from "@/domain/agent/model/agent-definition.schema.js";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import { AgentPromptLayoutNormalize } from "@/domain/prompt/logic/normalize-agent-prompt-layout.js";
@@ -49,7 +51,7 @@ export const AgentDefinitionWire = {
   resolveFromStorage(stored: unknown): StoredConfigHealth<AgentDefinition> {
     if (stored != null && typeof stored === "object" && !Array.isArray(stored) && !("schemaVersion" in stored)) {
       const record = stored as AgentDefinition;
-      if (typeof record.name === "string" && record.name.trim().length > 0 && record.prompts != null && typeof record.prompts === "object" && !Array.isArray(record.prompts) && Array.isArray(record.prompts.persist) && Array.isArray(record.prompts.dynamic)) {
+      if (Coerce.nonEmptyText(record.name) != null && Guards.isRecord(record.prompts) && Array.isArray(record.prompts.persist) && Array.isArray(record.prompts.dynamic)) {
         return { status: "valid", value: { ...record, prompts: AgentPromptLayoutNormalize.normalizeDomain(record.prompts) } };
       }
     }
