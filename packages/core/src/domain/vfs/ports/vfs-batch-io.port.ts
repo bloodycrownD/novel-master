@@ -105,6 +105,19 @@ export interface BatchApplyOptions {
     readonly overwriteConfirmed: boolean;
 }
 
+/** session 通道批量 apply 参数对象（>4 参收口，{@link VfsBatchIoService.applyBatchIngestWithWriter}）。 */
+export type BatchApplyWithWriterParams = {
+    /**
+   * ⚠️ 必传：只有它能判出 session 作用域，导入成功后要清空该 session 的
+   * 提示词缓存（`rule_snapshot` + `file_cache`）。
+   */
+    readonly scope: VfsScope;
+    readonly targetDir: string;
+    readonly plan: BatchIngestPlan;
+    readonly options: BatchApplyOptions;
+    readonly writer: BatchIngestWriter;
+};
+
 /**
  * 逐文件写入执行器（session + user-vfs-turn 通道）。
  * 每成功一项即落库/进 pending；失败不整批回滚。
@@ -140,18 +153,8 @@ export interface VfsBatchIoService {
 
     /**
    * session 通道：按 writer 逐文件执行；部分失败保留已成功项并汇总 Report。
-   *
-   * ⚠️ `scope` 是**必传**首参：只有它能判出 session 作用域，导入成功后要清空该
-   * session 的提示词缓存（`rule_snapshot` + `file_cache`）。旧签名（无 scope）
-   * 无法判 session，调用方必须一并迁移。
    */
-    applyBatchIngestWithWriter(
-        scope: VfsScope,
-        targetDir: string,
-        plan: BatchIngestPlan,
-        options: BatchApplyOptions,
-        writer: BatchIngestWriter
-    ): Promise<Result<BatchApplyReport, AppError>>;
+    applyBatchIngestWithWriter(p: BatchApplyWithWriterParams): Promise<Result<BatchApplyReport, AppError>>;
 
     planBatchExport(
         scope: VfsScope,

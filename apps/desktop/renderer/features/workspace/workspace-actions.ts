@@ -63,7 +63,20 @@ export async function saveFileInclusion( target: WorkspaceContextTarget, inclusi
     return result.ok ? { ok: true } : { ok: false, message: result.error.message };
 }
 
-export async function createWorkspaceEntry( target: WorkspaceContextTarget, kind: "file" | "folder", name: string, projectId?: string, sessionId?: string ): Promise<VfsActionResult> {
+/**
+ * createWorkspaceEntry 的参数对象（>4 参签名收口）：目标位置与新建入参同对象，
+ * 字段名即文档；projectId / sessionId 缺省时按 target 自身的 panelScope 解析。
+ */
+export type CreateWorkspaceEntryParams = {
+    readonly target: WorkspaceContextTarget;
+    readonly kind: "file" | "folder";
+    readonly name: string;
+    readonly projectId?: string;
+    readonly sessionId?: string;
+};
+
+export async function createWorkspaceEntry(p: CreateWorkspaceEntryParams): Promise<VfsActionResult> {
+    const { target, kind, name, projectId, sessionId } = p;
     // 与 core 服务层同规则的前置校验（控制字符/纯空白/首尾空格/./..），
     // 不合法时直接返回中文 reason，不发 IPC；main 进程侧仍会兕底拦。
     const nameCheck = validateVfsEntryName(name);

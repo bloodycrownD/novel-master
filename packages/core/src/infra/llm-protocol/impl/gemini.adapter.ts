@@ -47,7 +47,7 @@ export class GeminiProtocolAdapter implements LlmProtocolAdapter {
             try {
                 const headers = { "Content-Type": "application/json", ...req.extraHeaders };
                 const init = { method: "POST", headers, body: JSON.stringify(this.buildRequestBody(req)), signal: req.scope?.signal };
-                await LlmSseTransport.post(url, init, (chunk) => parser.feed(chunk), undefined, { fetchFn: this.fetchFn, signal: req.scope?.signal });
+                await LlmSseTransport.post({ url, init, onChunk: (chunk) => parser.feed(chunk), fetchFn: this.fetchFn, signal: req.scope?.signal });
             } catch (error) {
                 if (!RequestAbort.isAborted(error, req.scope?.signal)) {
                     throw error;

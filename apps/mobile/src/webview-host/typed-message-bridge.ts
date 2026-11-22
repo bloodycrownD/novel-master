@@ -23,7 +23,22 @@ export interface TypedMessageBridge<ToClient, ToHost> {
 }
 
 /** 解析并校验信封：v 不符 → versionError，type 缺失 / payload 非对象（requirePayload）→ shapeError。 */
-function decodeEnvelope(raw: string, requirePayload: boolean, version: number, versionError: string, shapeError: string): unknown {
+/** decodeEnvelope 的参数对象（>4 参签名收口）：信封原文与校验口径同对象，字段名即文档。 */
+type DecodeEnvelopeParams = {
+    /** webview → 宿主的原始 JSON 文本。 */
+    readonly raw: string;
+    /** true = webview → 宿主方向（校验 payload 为对象）；false = 宿主 → webview 方向（不校验）。 */
+    readonly requirePayload: boolean;
+    /** 信封版本（各桥自己的 BRIDGE_V，web 侧同值）。 */
+    readonly version: number;
+    /** v 不符时的错误文案（带域 label）。 */
+    readonly versionError: string;
+    /** type 缺失 / payload 非对象时的错误文案（带域 label）。 */
+    readonly shapeError: string;
+};
+
+function decodeEnvelope(p: DecodeEnvelopeParams): unknown {
+    const {raw, requirePayload, version, versionError, shapeError} = p;
     const parsed: unknown = JSON.parse(raw);
     if (!Guards.isRecord(parsed) || parsed.v !== version) {
         // nm-throw: keep — webview bridge 边界：坏信封由宿主 onMessage catch 后静默丢弃
@@ -48,8 +63,8 @@ export const TypedMessageBridge = {
         return {
             encodeToClient: message => JSON.stringify(message),
             encodeToHost: message => JSON.stringify(message),
-            decodeToHost: raw => decodeEnvelope(raw, true, version, versionError, shapeError) as ToHost,
-            decodeToClient: raw => decodeEnvelope(raw, false, version, versionError, shapeError) as ToClient,
+            decodeToHost: raw => decodeEnvelope({raw, requirePayload: true, version, versionError, shapeError}) as ToHost,
+            decodeToClient: raw => decodeEnvelope({raw, requirePayload: false, version, versionError, shapeError}) as ToClient,
         };
     },
 } as const;

@@ -154,7 +154,7 @@ function ChatTabScreenContent({sessionBatch}: {sessionBatch: ReturnType<typeof u
             // 预处理），允许下一次水化兜底扫描一次（与旧版本草稿同语义）。
             promptEditorOnSavedSlot.set(text => {
                 const previous = ChatComposerDraft.readState(targetSessionId);
-                ChatComposerDraft.write(targetSessionId, text, runtime.sessions, previous.tokenRanges !== undefined ? TokenRanges.remapTokenRanges(previous.text, text, previous.tokenRanges) : undefined);
+                ChatComposerDraft.write(targetSessionId, text, runtime.sessions, previous.tokenRanges !== undefined ? TokenRanges.remapTokenRanges({prev: previous.text, next: text, ranges: previous.tokenRanges}) : undefined);
                 setDraftRestoreToken(token => token + 1);
             });
             // D10 全屏守卫：进入全屏时的确认胶囊区间随路由带入（与 initialText 同一
@@ -168,7 +168,7 @@ function ChatTabScreenContent({sessionBatch}: {sessionBatch: ReturnType<typeof u
             // 不合法的（旧格式 / 半截 / 越界）就地丢弃，全屏侧无需额外改动。
             let remappedRanges: ReturnType<typeof TokenRanges.remapTokenRanges> | undefined;
             if (entryDraft.tokenRanges !== undefined) {
-                remappedRanges = TokenRanges.remapTokenRanges(entryDraft.text, payload.text, entryDraft.tokenRanges).filter(range => ComposerHighlight.isValidTokenRangeText(payload.text, range));
+                remappedRanges = TokenRanges.remapTokenRanges({prev: entryDraft.text, next: payload.text, ranges: entryDraft.tokenRanges}).filter(range => ComposerHighlight.isValidTokenRangeText(payload.text, range));
             }
             navigation.navigate('PromptEditor', {
                 title: coreT({key: "ui.chat.edit_message_title"}),

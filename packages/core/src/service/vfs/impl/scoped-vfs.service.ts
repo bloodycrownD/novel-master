@@ -81,7 +81,7 @@ export class ScopedVfsService implements VfsService {
         const logical = resolved.value;
         const allowed = LogicalPath.validate(this.scope, logical);
         if (!allowed.ok) return Result.err(allowed.error);
-        return this.inner.replace(this.scopeKeyStr, logical, oldString, newString, options);
+        return this.inner.replace({ scopeKey: this.scopeKeyStr, path: logical, oldString, newString, replaceAll: options?.replaceAll });
     }
 
     async glob(pattern: string, options?: { cwd?: string }): Promise<Result<string[], AppError>> {

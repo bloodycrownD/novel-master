@@ -33,7 +33,7 @@ describe("技能存储重定位（T-SR1）", () => {
         const suffix = testIsolationSuffix();
         const name = `g-relocate-${suffix}`;
 
-        unwrap(await skills.writeSkillFile("global", name, undefined, entry(name, "全局")));
+        unwrap(await skills.writeSkillFile({ domain: "global", name, content: entry(name, "全局") }));
 
         const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
         const rows = await entryRepo.listEntriesUnderPrefix(
@@ -68,13 +68,7 @@ describe("技能存储重定位（T-SR1）", () => {
         const project = unwrap(await ctx.projects.create(`P-sr1-${suffix}`));
         const name = `p-relocate-${suffix}`;
 
-        unwrap(await skills.writeSkillFile(
-            "project",
-            name,
-            undefined,
-            entry(name, "项目"),
-            project.id,
-        ));
+        unwrap(await skills.writeSkillFile({ domain: "project", name, content: entry(name, "项目"), projectId: project.id }));
 
         const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
         const metaRows = await entryRepo.listEntriesUnderPrefix(
@@ -97,12 +91,7 @@ describe("技能存储重定位（T-SR1）", () => {
 
         // 上层行为不变：合并视图可见；域缺省读取项目副本优先、无副本回落 global
         const globalName = `g-fallback-${suffix}`;
-        unwrap(await skills.writeSkillFile(
-            "global",
-            globalName,
-            undefined,
-            entry(globalName, "全局回落"),
-        ));
+        unwrap(await skills.writeSkillFile({ domain: "global", name: globalName, content: entry(globalName, "全局回落") }));
         const view = unwrap(await skills.effectiveSkills(project.id));
         assert.ok(view.find((s) => s.name === name)?.effective);
         const fallback = unwrap(await skills.readSkillFile(
@@ -128,13 +117,7 @@ describe("技能存储重定位（T-SR1）", () => {
         const project = unwrap(await ctx.projects.create(`P-del2-${suffix}`));
         const name = `del-meta-${suffix}`;
 
-        unwrap(await skills.writeSkillFile(
-            "project",
-            name,
-            undefined,
-            entry(name, "待删"),
-            project.id,
-        ));
+        unwrap(await skills.writeSkillFile({ domain: "project", name, content: entry(name, "待删"), projectId: project.id }));
         unwrap(await skills.setDisabled(project.id, name, true));
 
         unwrap(await skills.deleteSkill({ domain: "project", projectId: project.id, name }));
@@ -157,13 +140,7 @@ describe("技能存储重定位（T-SR1）", () => {
         assert.equal(rows.length, 0, "删除技能后禁用行应清理");
 
         // 重建同名技能：默认生效
-        unwrap(await skills.writeSkillFile(
-            "project",
-            name,
-            undefined,
-            entry(name, "重建"),
-            project.id,
-        ));
+        unwrap(await skills.writeSkillFile({ domain: "project", name, content: entry(name, "重建"), projectId: project.id }));
         const view = unwrap(await skills.effectiveSkills(project.id));
         const rebuilt = view.find((s) => s.name === name);
         assert.ok(rebuilt != null);
@@ -180,13 +157,7 @@ describe("项目删除无孤儿（T-SR3）", () => {
 
         // 三域都种上内容：template 文件、meta 技能、session 文件
         await ctx.projectVfs(project.id).write("/novel.md", "正文");
-        unwrap(await skills.writeSkillFile(
-            "project",
-            `sr3-skill-${suffix}`,
-            undefined,
-            entry(`sr3-skill-${suffix}`, "随项目删除"),
-            project.id,
-        ));
+        unwrap(await skills.writeSkillFile({ domain: "project", name: `sr3-skill-${suffix}`, content: entry(`sr3-skill-${suffix}`, "随项目删除"), projectId: project.id }));
         const session = unwrap(await ctx.sessions.create(project.id));
         await ctx.sessionVfs(project.id, session.id).write("/draft.md", "草稿");
 

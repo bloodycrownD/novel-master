@@ -590,26 +590,20 @@ describe('NativeChatComposer（T-NC1~T-NC6）', () => {
 
     describe('remapTokenRanges 纯函数（编辑侧语义单测）', () => {
         it('同文本返回拷贝', () => {
-            expect(TokenRanges.remapTokenRanges('abc', 'abc', [{ start: 0, end: 1 }])).toEqual([
+            expect(TokenRanges.remapTokenRanges({ prev: 'abc', next: 'abc', ranges: [{ start: 0, end: 1 }] })).toEqual([
                 { start: 0, end: 1 },
             ]);
         });
 
         it('token 中段删一字 → 该区间摘除、右侧区间平移', () => {
             expect(
-                TokenRanges.remapTokenRanges('$aa$ $bb$', '$a$ $bb$', [
-                    { start: 0, end: 4 },
-                    { start: 5, end: 9 },
-                ]),
+                TokenRanges.remapTokenRanges({ prev: '$aa$ $bb$', next: '$a$ $bb$', ranges: [{ start: 0, end: 4 }, { start: 5, end: 9 }] }),
             ).toEqual([{ start: 4, end: 8 }]);
         });
 
         it('头部插入 → 区间整体右移', () => {
             expect(
-                TokenRanges.remapTokenRanges('$a$ x', 'w$a$ x', [
-                    { start: 0, end: 3 },
-                    { start: 4, end: 5 },
-                ]),
+                TokenRanges.remapTokenRanges({ prev: '$a$ x', next: 'w$a$ x', ranges: [{ start: 0, end: 3 }, { start: 4, end: 5 }] }),
             ).toEqual([
                 { start: 1, end: 4 },
                 { start: 5, end: 6 },
@@ -618,10 +612,7 @@ describe('NativeChatComposer（T-NC1~T-NC6）', () => {
 
         it('多处差异折叠为单编辑区：跨编辑区的区间保守摘除', () => {
             expect(
-                TokenRanges.remapTokenRanges('x$a$ y$b$ z', 'w$a$ y$b$!', [
-                    { start: 1, end: 4 },
-                    { start: 6, end: 9 },
-                ]),
+                TokenRanges.remapTokenRanges({ prev: 'x$a$ y$b$ z', next: 'w$a$ y$b$!', ranges: [{ start: 1, end: 4 }, { start: 6, end: 9 }] }),
             ).toEqual([]);
         });
 
@@ -630,20 +621,18 @@ describe('NativeChatComposer（T-NC1~T-NC6）', () => {
             // 公共前缀咬住 `$`，对齐插入点=1（旧区间内部）→ 误摘（真机「连插
             // 两颗只剩一颗」缺陷的根因面）。
             expect(
-                TokenRanges.remapTokenRanges('$agent-config$ ', '$节拍成章$ $agent-config$ ', [
-                    { start: 0, end: 14 },
-                ]),
+                TokenRanges.remapTokenRanges({ prev: '$agent-config$ ', next: '$节拍成章$ $agent-config$ ', ranges: [{ start: 0, end: 14 }] }),
             ).toEqual([]);
         });
 
         it('纯插入光标锚：给编辑后光标（插入段末尾）→ 反推真实插入点 0，旧区间右移保真', () => {
             expect(
-                TokenRanges.remapTokenRanges(
-                    '$agent-config$ ',
-                    '$节拍成章$ $agent-config$ ',
-                    [{ start: 0, end: 14 }],
-                    7, // 光标落在插入段 `$节拍成章$ ` 末尾
-                ),
+                TokenRanges.remapTokenRanges({
+                    prev: '$agent-config$ ',
+                    next: '$节拍成章$ $agent-config$ ',
+                    ranges: [{ start: 0, end: 14 }],
+                    nextCursor: 7, // 光标落在插入段 `$节拍成章$ ` 末尾
+                }),
             ).toEqual([{ start: 7, end: 21 }]);
         });
 
@@ -651,13 +640,13 @@ describe('NativeChatComposer（T-NC1~T-NC6）', () => {
             // next=`abXbc` 光标 5 反推 t=3：`abc` 非 next 前缀 → 守卫拒收，
             // 用对齐点 2（区间 {0,3} 内）→ 摘除。
             expect(
-                TokenRanges.remapTokenRanges('abc', 'abXbc', [{ start: 0, end: 3 }], 5),
+                TokenRanges.remapTokenRanges({ prev: 'abc', next: 'abXbc', ranges: [{ start: 0, end: 3 }], nextCursor: 5 }),
             ).toEqual([]);
         });
 
         it('纯插入光标锚：反推点与对齐点一致 → 与既有头部插入语义等价', () => {
             expect(
-                TokenRanges.remapTokenRanges('$a$ x', 'w$a$ x', [{ start: 0, end: 3 }], 1),
+                TokenRanges.remapTokenRanges({ prev: '$a$ x', next: 'w$a$ x', ranges: [{ start: 0, end: 3 }], nextCursor: 1 }),
             ).toEqual([{ start: 1, end: 4 }]);
         });
 
@@ -666,96 +655,80 @@ describe('NativeChatComposer（T-NC1~T-NC6）', () => {
             // 对齐编辑区 [1,4) 同时咬住 A 尾与 B 头 → 两颗一并摘除（[]）。
             // 编辑前光标 3（A 右缘）反推删除段 [0,3) → 只摘 A、B 平移至 [0,3)。
             expect(
-                TokenRanges.remapTokenRanges(
-                    '$A$$B$',
-                    '$B$',
-                    [
+                TokenRanges.remapTokenRanges({
+                    prev: '$A$$B$',
+                    next: '$B$',
+                    ranges: [
                         { start: 0, end: 3 },
                         { start: 3, end: 6 },
                     ],
-                    undefined,
-                    3,
-                ),
+                    prevCursor: 3,
+                }),
             ).toEqual([{ start: 0, end: 3 }]);
         });
 
         it('T-CA10 删除锚：显式编辑后光标同样构成删除段（命令通道形态）', () => {
             expect(
-                TokenRanges.remapTokenRanges(
-                    '$A$$B$',
-                    '$B$',
-                    [
-                        { start: 0, end: 3 },
-                        { start: 3, end: 6 },
-                    ],
-                    0,
-                    3,
-                ),
+                TokenRanges.remapTokenRanges({ prev: '$A$$B$', next: '$B$', ranges: [{ start: 0, end: 3 }, { start: 3, end: 6 }], nextCursor: 0, prevCursor: 3 }),
             ).toEqual([{ start: 0, end: 3 }]);
         });
 
         it('T-CA10 删除锚：删普通尾字符不摘相邻胶囊（端点相触不算公共字符）', () => {
             // D=[3,4) 与 A=[0,3) 只在端点 3 相触，无公共字符 → A 幸存。
             expect(
-                TokenRanges.remapTokenRanges('$A$x', '$A$', [{ start: 0, end: 3 }], undefined, 4),
+                TokenRanges.remapTokenRanges({ prev: '$A$x', next: '$A$', ranges: [{ start: 0, end: 3 }], prevCursor: 4 }),
             ).toEqual([{ start: 0, end: 3 }]);
         });
 
         it('T-CA10 删除锚：删右颗胶囊——幸存 A 原位保留', () => {
             expect(
-                TokenRanges.remapTokenRanges(
-                    '$A$$B$',
-                    '$A$',
-                    [
+                TokenRanges.remapTokenRanges({
+                    prev: '$A$$B$',
+                    next: '$A$',
+                    ranges: [
                         { start: 0, end: 3 },
                         { start: 3, end: 6 },
                     ],
-                    undefined,
-                    6,
-                ),
+                    prevCursor: 6,
+                }),
             ).toEqual([{ start: 0, end: 3 }]);
         });
 
         it('T-CA10 删除锚：文本中段删胶囊——删除段按光标定位，右侧幸存区间平移', () => {
             expect(
-                TokenRanges.remapTokenRanges(
-                    'x$A$$B$',
-                    'x$B$',
-                    [
+                TokenRanges.remapTokenRanges({
+                    prev: 'x$A$$B$',
+                    next: 'x$B$',
+                    ranges: [
                         { start: 1, end: 4 },
                         { start: 4, end: 7 },
                     ],
-                    undefined,
-                    4,
-                ),
+                    prevCursor: 4,
+                }),
             ).toEqual([{ start: 1, end: 4 }]);
         });
 
         it('T-CA10 删除锚：前向删除（光标在删除段左侧）同语义——无需方向信号', () => {
             // 光标 0、Delete 向前删掉 A：删除段 [0,3)，与退格路径结果一致。
             expect(
-                TokenRanges.remapTokenRanges(
-                    '$A$$B$',
-                    '$B$',
-                    [
+                TokenRanges.remapTokenRanges({
+                    prev: '$A$$B$',
+                    next: '$B$',
+                    ranges: [
                         { start: 0, end: 3 },
                         { start: 3, end: 6 },
                     ],
-                    undefined,
-                    0,
-                ),
+                    prevCursor: 0,
+                }),
             ).toEqual([{ start: 0, end: 3 }]);
         });
 
         it('T-CA10 无编辑前光标：维持现状保守口径（对齐区咬住两颗 → 一并摘除）', () => {
             expect(
-                TokenRanges.remapTokenRanges('$A$$B$', '$B$', [
-                    { start: 0, end: 3 },
-                    { start: 3, end: 6 },
-                ]),
+                TokenRanges.remapTokenRanges({ prev: '$A$$B$', next: '$B$', ranges: [{ start: 0, end: 3 }, { start: 3, end: 6 }] }),
             ).toEqual([]);
             // 删普通尾字符的现状结果本来就是幸存（端点贴边不并入），一并锁住。
-            expect(TokenRanges.remapTokenRanges('$A$x', '$A$', [{ start: 0, end: 3 }])).toEqual([
+            expect(TokenRanges.remapTokenRanges({ prev: '$A$x', next: '$A$', ranges: [{ start: 0, end: 3 }] })).toEqual([
                 { start: 0, end: 3 },
             ]);
         });
@@ -763,33 +736,31 @@ describe('NativeChatComposer（T-NC1~T-NC6）', () => {
         it('T-CA10 删除锚守卫：光标越界 / 非整数 / 非纯删除替换 → 回退现状差分口径', () => {
             // 越界光标不可信 → 对齐编辑区 [1,4) → 两颗摘除（现状）。
             expect(
-                TokenRanges.remapTokenRanges(
-                    '$A$$B$',
-                    '$B$',
-                    [
+                TokenRanges.remapTokenRanges({
+                    prev: '$A$$B$',
+                    next: '$B$',
+                    ranges: [
                         { start: 0, end: 3 },
                         { start: 3, end: 6 },
                     ],
-                    undefined,
-                    99,
-                ),
+                    prevCursor: 99,
+                }),
             ).toEqual([]);
             // 净缩短但含替换（ab → c）：删 D 一致性守卫不过 → 对齐编辑区 [0,2) → 摘除。
             expect(
-                TokenRanges.remapTokenRanges('ab', 'c', [{ start: 0, end: 2 }], undefined, 2),
+                TokenRanges.remapTokenRanges({ prev: 'ab', next: 'c', ranges: [{ start: 0, end: 2 }], prevCursor: 2 }),
             ).toEqual([]);
             // 非整数光标 → 同守卫拒收。
             expect(
-                TokenRanges.remapTokenRanges(
-                    '$A$$B$',
-                    '$B$',
-                    [
+                TokenRanges.remapTokenRanges({
+                    prev: '$A$$B$',
+                    next: '$B$',
+                    ranges: [
                         { start: 0, end: 3 },
                         { start: 3, end: 6 },
                     ],
-                    undefined,
-                    1.5,
-                ),
+                    prevCursor: 1.5,
+                }),
             ).toEqual([]);
         });
     });

@@ -53,6 +53,20 @@ function failedOutcome(error: unknown): ParallelToolOutcome {
     return AppErrorOps.is(error, "TOOL_CANCELLED") ? { ok: false, error, kind: "cancelled", reason: "user-stop" } : { ok: false, error };
 }
 
+/** {@link ToolRunner.drainQueue} 入参：runParallel 的共享进行态（游标 + 队列 + 上下文 + 串行化链 + 结果槽）。 */
+type DrainQueueParams<Ctx> = {
+    /** N 个并发 worker 共享的取号游标（对象槽承载，逐个取号、不回退）。 */
+    readonly cursor: { current: number };
+    /** 待执行的工具调用队列（outcomes 按下标对齐）。 */
+    readonly calls: readonly ToolCall[];
+    /** 工具执行上下文（透传给 tool.run）。 */
+    readonly ctx: Ctx;
+    /** 同 path 突变调用的串行化 tail promise 链。 */
+    readonly pathTail: Map<string, Promise<void>>;
+    /** 结果槽（按下标落位，顺序与 calls 对齐）。 */
+    readonly outcomes: ParallelToolOutcome[];
+};
+
 /**
  * Executes tools from a registry with schema validation and consistent errors.
  *
@@ -149,12 +163,13 @@ export class ToolRunner<Ctx = unknown> {
         const pathTail = new Map<string, Promise<void>>();
         // 取号游标：N 个并发 worker 共享的进行态，对象槽承载（逐个取号、不回退）。
         const cursor = { current: 0 };
-        await Promise.all(Array.from({ length: concurrency }, () => this.drainQueue(cursor, calls, ctx, pathTail, outcomes)));
+        await Promise.all(Array.from({ length: concurrency }, () => this.drainQueue({ cursor, calls, ctx, pathTail, outcomes })));
         return outcomes;
     }
 
     /** 并发 worker 主循环：共享 cursor 取号，同 path 经 pathTail 串行化，结果落 outcomes。 */
-    private async drainQueue(cursor: {current: number}, calls: readonly ToolCall[], ctx: Ctx, pathTail: Map<string, Promise<void>>, outcomes: ParallelToolOutcome[]): Promise<void> {
+    private async drainQueue(p: DrainQueueParams<Ctx>): Promise<void> {
+        const { cursor, calls, ctx, pathTail, outcomes } = p;
         while (true) {
             const index = cursor.current;
             cursor.current += 1;

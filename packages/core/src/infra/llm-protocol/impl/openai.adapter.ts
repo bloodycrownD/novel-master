@@ -73,7 +73,7 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
             try {
                 const headers = { Authorization: `Bearer ${req.apiKey}`, "Content-Type": "application/json", ...req.extraHeaders };
                 const init = { method: "POST", headers, body: JSON.stringify(this.buildBody(req, true)), signal: req.scope?.signal };
-                await LlmSseTransport.post(url, init, (chunk) => parser.feed(chunk), undefined, { fetchFn: this.fetchFn, signal: req.scope?.signal });
+                await LlmSseTransport.post({ url, init, onChunk: (chunk) => parser.feed(chunk), fetchFn: this.fetchFn, signal: req.scope?.signal });
             } catch (error) {
                 if (!RequestAbort.isAborted(error, req.scope?.signal)) {
                     throw error;

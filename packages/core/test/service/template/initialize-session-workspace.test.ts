@@ -183,13 +183,7 @@ describe("session create / workspace initialize (core 层)", () => {
 
         // 技能经 SkillService 落独立 meta 域，project template 域不再有 /meta/skills 内容
         const skills = SkillsServiceFactory.create(ctx.conn);
-        unwrap(await skills.writeSkillFile(
-            "project",
-            "my-skill",
-            undefined,
-            `---\nname: my-skill\ndescription: 演示\n---\n\nskill-${suffix}`,
-            project.id,
-        ));
+        unwrap(await skills.writeSkillFile({ domain: "project", name: "my-skill", content: `---\nname: my-skill\ndescription: 演示\n---\n\nskill-${suffix}`, projectId: project.id }));
         const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
         const templateSkillRows = await entryRepo.listEntriesUnderPrefix(
             `project:${project.id}`,

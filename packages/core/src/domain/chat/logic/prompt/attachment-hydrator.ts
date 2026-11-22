@@ -57,32 +57,43 @@ function isBinaryOrImageAttach(attachment: MessageAttachment): boolean {
     return Guards.isBinaryFilePath(path);
 }
 
-/** {@link fileRefAction} 的可选正文口径开关。 */
-interface FileRefActionOpts {
+/** {@link fileRefAction} 入参：来源/路径/展示档与正文，可选字段为正文口径开关（原 FileRefActionOpts 展平）。 */
+type FileRefActionParams = {
+    /** 附件来源：workplace → workplaceChange，attach → userAttach。 */
+    readonly source: "attach" | "workplace";
+    /** 会话内逻辑路径（XML path 字段）。 */
+    readonly logicalPath: string;
+    /** 展示档（full / filename 等，透传进 XML display）。 */
+    readonly display: WorkplaceDisplayStatus;
+    /** 原始正文（未经行号重排的明文或已渲染正文）。 */
+    readonly rawContent: string;
+    /** 替代正文（二进制占位文案等）：非空时直接作正文，跳过渲染。 */
     readonly noteText?: string;
+    /** 正文已渲染（legacy `<file>` 外壳剥出的行号正文）：跳过重排。 */
     readonly bodyIsRendered?: boolean;
+    /** 超预算降级：正文换 OVERSIZED_ATTACH_NOTE 且压到 filename 档。 */
     readonly oversized?: boolean;
-}
+};
 
 /**
  * 文件附件的唯一 action XML 出口：正文口径（行号正文 / 二进制文案 / 超限降级）
  * 全部集中于此，避免各分支各写一份 `buildFileRefActionXml` 走形。
  */
-function fileRefAction(source: "attach" | "workplace", logicalPath: string, display: WorkplaceDisplayStatus, rawContent: string, opts?: FileRefActionOpts): string {
-    const action = source === "workplace" ? ("workplaceChange" as const) : ("userAttach" as const);
-    if (opts?.noteText != null) {
-        return AttachmentXmlCodec.encodeFileRef({ action, path: logicalPath, content: opts.noteText, display });
+function fileRefAction(p: FileRefActionParams): string {
+    const action = p.source === "workplace" ? ("workplaceChange" as const) : ("userAttach" as const);
+    if (p.noteText != null) {
+        return AttachmentXmlCodec.encodeFileRef({ action, path: p.logicalPath, content: p.noteText, display: p.display });
     }
-    if (opts?.oversized === true) {
+    if (p.oversized === true) {
         return AttachmentXmlCodec.encodeFileRef({
             action,
-            path: logicalPath,
+            path: p.logicalPath,
             content: OVERSIZED_ATTACH_NOTE,
             display: "filename",
         });
     }
-    const lineBody = opts?.bodyIsRendered === true ? rawContent : WorkplaceDisplay.renderFileBlockBody({ logicalPath, display, content: rawContent });
-    return AttachmentXmlCodec.encodeFileRef({ action, path: logicalPath, content: lineBody, display });
+    const lineBody = p.bodyIsRendered === true ? p.rawContent : WorkplaceDisplay.renderFileBlockBody({ logicalPath: p.logicalPath, display: p.display, content: p.rawContent });
+    return AttachmentXmlCodec.encodeFileRef({ action, path: p.logicalPath, content: lineBody, display: p.display });
 }
 
 function isOversizedAttach(attachment: MessageAttachment, plainLength: number, budget: AttachBudget): boolean {
@@ -281,8 +292,7 @@ export class AttachmentHydrator {
             }
             const oversized = isOversizedAttach(attachment, plainLength, this.budget);
             const noteText = attachBinaryNote(attachment, status);
-            const refOpts: FileRefActionOpts = wasLegacyFile ? { bodyIsRendered: true, oversized, noteText } : { oversized, noteText };
-            const content = fileRefAction(attachment.source === "workplace" ? "workplace" : "attach", logicalPath, status, fileBody, refOpts);
+            const content = fileRefAction({ source: attachment.source === "workplace" ? "workplace" : "attach", logicalPath, display: status, rawContent: fileBody, bodyIsRendered: wasLegacyFile || undefined, oversized, noteText });
             return { ...attachment, path: logicalPath, action, content };
         }
 
@@ -296,15 +306,18 @@ export class AttachmentHydrator {
         };
         const cached = await FileCache.loadOrFill(cacheRequest);
         const noteText = attachBinaryNote(attachment, status);
-        const refOpts: FileRefActionOpts = {
-            oversized: isOversizedAttach(attachment, cached.body.length, this.budget),
-            noteText,
-        };
         return {
             ...attachment,
             path: logicalPath,
             action,
-            content: fileRefAction(attachment.source === "workplace" ? "workplace" : "attach", logicalPath, status, cached.body, refOpts),
+            content: fileRefAction({
+                source: attachment.source === "workplace" ? "workplace" : "attach",
+                logicalPath,
+                display: status,
+                rawContent: cached.body,
+                oversized: isOversizedAttach(attachment, cached.body.length, this.budget),
+                noteText,
+            }),
         };
     }
 }

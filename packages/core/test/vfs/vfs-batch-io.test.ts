@@ -311,12 +311,12 @@ describe("VfsBatchIoService", () => {
         ]));
 
         const writtenViaWriter: string[] = [];
-        const report = unwrap(await batch.applyBatchIngestWithWriter(
+        const report = unwrap(await batch.applyBatchIngestWithWriter({
             scope,
-            "/chap",
+            targetDir: "/chap",
             plan,
-            { overwriteConfirmed: false },
-            {
+            options: { overwriteConfirmed: false },
+            writer: {
                 async mkdir() {
                     return Result.ok(undefined);
                 },
@@ -329,7 +329,7 @@ describe("VfsBatchIoService", () => {
                     return Result.ok(undefined);
                 },
             },
-        ));
+        }));
 
         assert.deepEqual(report.written, ["/chap/a.md"]);
         assert.equal(report.failed.length, 1);
@@ -658,13 +658,7 @@ describe("VfsBatchIoService 导入后清 session 提示词缓存", () => {
 
         // 零写入（冲突未确认早退）⇒ 不清
         await seedDirtyCaches(session.id, "tc6-early");
-        const zeroWritten = unwrap(await batch.applyBatchIngestWithWriter(
-            scope,
-            "/导入",
-            plan,
-            { overwriteConfirmed: false },
-            { async mkdir() { return Result.ok(undefined); }, async writeFile() { return Result.ok(undefined); } },
-        ));
+        const zeroWritten = unwrap(await batch.applyBatchIngestWithWriter({ scope, targetDir: "/导入", plan, options: { overwriteConfirmed: false }, writer: { async mkdir() { return Result.ok(undefined); }, async writeFile() { return Result.ok(undefined); } } }));
         assert.deepEqual(zeroWritten.written, []);
         assert.deepEqual(
             await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT),
@@ -674,12 +668,12 @@ describe("VfsBatchIoService 导入后清 session 提示词缓存", () => {
         // 真写入 ⇒ 清（这条链自身不清缓存：user-vfs-turn + vfs write 工具只 upsert
         // 单条 file_cache，不清 rule_snapshot）
         await seedDirtyCaches(session.id, "tc6");
-        const report = unwrap(await batch.applyBatchIngestWithWriter(
+        const report = unwrap(await batch.applyBatchIngestWithWriter({
             scope,
-            "/导入",
+            targetDir: "/导入",
             plan,
-            { overwriteConfirmed: true },
-            {
+            options: { overwriteConfirmed: true },
+            writer: {
                 async mkdir() {
                     return Result.ok(undefined);
                 },
@@ -688,7 +682,7 @@ describe("VfsBatchIoService 导入后清 session 提示词缓存", () => {
                     return Result.ok(undefined);
                 },
             },
-        ));
+        }));
 
         assert.deepEqual(report.written, ["/导入/a.md"]);
         assert.equal(unwrap(await vfs.read("/导入/a.md")).content, "A");
@@ -713,12 +707,12 @@ describe("VfsBatchIoService 导入后清 session 提示词缓存", () => {
             { kind: "file", relativePath: "b.md", bytes: enc("B2") },
         ]));
         assert.equal(partialPlan.writes.length, 2);
-        const partial = unwrap(await batch.applyBatchIngestWithWriter(
+        const partial = unwrap(await batch.applyBatchIngestWithWriter({
             scope,
-            "/导入2",
-            partialPlan,
-            { overwriteConfirmed: false },
-            {
+            targetDir: "/导入2",
+            plan: partialPlan,
+            options: { overwriteConfirmed: false },
+            writer: {
                 async mkdir() {
                     return Result.ok(undefined);
                 },
@@ -730,7 +724,7 @@ describe("VfsBatchIoService 导入后清 session 提示词缓存", () => {
                     return Result.ok(undefined);
                 },
             },
-        ));
+        }));
 
         assert.deepEqual(partial.written, ["/导入2/a.md"]);
         assert.equal(partial.failed.length, 1);

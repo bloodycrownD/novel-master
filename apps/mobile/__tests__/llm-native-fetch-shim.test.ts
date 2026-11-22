@@ -27,11 +27,7 @@ import {LLM_NATIVE_FETCH_CALL_TIMEOUT_MS, type LlmNativeRequestFn, LlmNativeFetc
 const sseTransport = require('../../../packages/core/dist/infra/llm-protocol/logic/llm-sse-transport.js') as {
     LlmSseTransport: {
         post: (
-            url: string,
-            init: RequestInit,
-            onChunk: (chunk: string) => void,
-            providerId?: string,
-            options?: {fetchFn?: typeof globalThis.fetch},
+            p: {url: string; init: RequestInit; onChunk: (chunk: string) => void; fetchFn?: typeof globalThis.fetch},
         ) => Promise<{status: number; contentType: string | null}>;
         setShouldUseXhrOverrideForTests: (value: boolean | undefined) => void;
         resetShouldUseXhrCacheForTests: () => void;
@@ -423,13 +419,12 @@ describe('llm-native-fetch-shim (T-N4)', () => {
 
             const chunks: string[] = [];
             await expect(
-                sseTransport.LlmSseTransport.post(
-                    'https://api.example.com/v1/chat/completions',
-                    {method: 'POST', headers: {Authorization: 'Bearer sk'}, body: '{}'},
-                    chunk => chunks.push(chunk),
-                    undefined,
-                    {fetchFn: shim},
-                ),
+                sseTransport.LlmSseTransport.post({
+                    url: 'https://api.example.com/v1/chat/completions',
+                    init: {method: 'POST', headers: {Authorization: 'Bearer sk'}, body: '{}'},
+                    onChunk: chunk => chunks.push(chunk),
+                    fetchFn: shim,
+                }),
             ).rejects.toThrow('Empty streaming response body');
 
             // 误用不产生任何 chunk 投递（防御在 reader 建立前抛出）。

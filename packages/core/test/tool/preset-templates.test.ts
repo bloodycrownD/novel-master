@@ -25,7 +25,7 @@ async function runPreset(
         });
     }) as typeof globalThis.fetch;
     const template = PRESET_ENGINE_TEMPLATES[id];
-    const out = unwrap(await TemplateEngine.run(template, { engine: id, template, ...extra }, QUERY, options, params, fetchFn));
+    const out = unwrap(await TemplateEngine.run({ template, resolved: { engine: id, template, ...extra }, query: QUERY, options, params, fetch: fetchFn }));
     return { call: calls[0]!, out };
 }
 

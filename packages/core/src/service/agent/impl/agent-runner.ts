@@ -179,7 +179,7 @@ export class DefaultAgentRunner implements AgentRunnerPort {
         // run 级 usage 累计基线（跨 step 存活）：前序 step 请求 done 后并入的
         // 输出侧终值之和。每 step 流中 usage 事件是 step 口径累计，透传前以
         // 该基线换算为 run 级（多 step 累加），payload 直接带 run 级值、消费端
-        // 零算术。经 wrapStreamForBus 的 deps 传入（每 step 重建的包装闭包共享
+        // 零算术。经 wrapStreamForBus 的 params 传入（每 step 重建的包装闭包共享
         // 同一可变基线）。
         const runUsageBase = { completionTokens: 0 };
 
@@ -478,10 +478,9 @@ export class DefaultAgentRunner implements AgentRunnerPort {
                 // 非流式（无 onStream）时 firstContentAtMs 保持 null，TTFT 取完成时刻。
                 const requestStartedAtMs = Date.now();
                 let firstContentAtMs: number | null = null;
-                const streamBusDeps = { streamRegistry: this.deps.streamRegistry, usageBase: runUsageBase };
                 let innerOnStream: StreamEventListener | undefined;
                 if (options.stream) {
-                    innerOnStream = publishRunLifecycle ? AgentRunner.wrapStreamForBus(bus, sessionId, runId, streamBusDeps, options.onStream) : options.onStream;
+                    innerOnStream = publishRunLifecycle ? AgentRunner.wrapStreamForBus({ bus, sessionId, runId, streamRegistry: this.deps.streamRegistry, usageBase: runUsageBase, userOnStream: options.onStream }) : options.onStream;
                 }
                 // 在 bus 分发层之外再包一层 timing onStream：只记首个内容事件时刻，
                 // 不改变事件流向内层回调；wrapStreamForBus 本身不动。
@@ -886,15 +885,21 @@ export class DefaultAgentRunner implements AgentRunnerPort {
     }
 }
 
-/** {@link wrapStreamForBus} 的依赖切片。 */
-interface StreamBusDeps {
+/** {@link AgentRunner.wrapStreamForBus} 的参数对象（>4 参收口）：原 StreamBusDeps 字段展平，userOnStream 并列同对象。 */
+type StreamBusWrapParams = {
+    readonly bus: SimpleEventBus;
+    readonly sessionId: string;
+    readonly runId: string;
+    /** 按 sessionId 累积 in-flight 流式 partial，供子会话首次进入查询。 */
     readonly streamRegistry?: AgentStreamRegistry;
     /**
    * run 级 usage 累计基线（跨 step 存活；step 循环外创建、随 run 生命周期
    * 存取）。流中 usage 事件是 step 口径累计，换算 run 级 = 基线 + step 累计。
    */
     readonly usageBase?: { completionTokens: number };
-}
+    /** 用户自有 onStream；缺省只发 bus。 */
+    readonly userOnStream?: StreamEventListener;
+};
 
 /** 流式事件监听回调（bus 合批包装与 userOnStream 共用同一形状）。 */
 type StreamEventListener = (event: LlmStreamEvent) => void;
@@ -909,7 +914,7 @@ type StreamEventListener = (event: LlmStreamEvent) => void;
  */
 interface AgentRunnerHelpers {
     raiseRunError(error: unknown): never;
-    wrapStreamForBus(bus: SimpleEventBus, sessionId: string, runId: string, deps?: StreamBusDeps, userOnStream?: StreamEventListener): StreamEventListener | undefined;
+    wrapStreamForBus(p: StreamBusWrapParams): StreamEventListener | undefined;
 }
 
 /** agent-runner 模块级 helper 集合（run 主循环外的错误转抛与流式事件合批包装）。 */
@@ -939,7 +944,8 @@ export const AgentRunner: AgentRunnerHelpers = {
    * 批次间也只有一个微任务槽位，跨批次顺序不会被随机插入打乱。bus.publish 仍然不在调用方
    * 同步执行（避免订阅者中途回访 runner 产生的重入）。
    */
-    wrapStreamForBus(bus: SimpleEventBus, sessionId: string, runId: string, deps: StreamBusDeps = {}, userOnStream?: StreamEventListener): StreamEventListener | undefined {
+    wrapStreamForBus(p: StreamBusWrapParams): StreamEventListener | undefined {
+    const { bus, sessionId, runId, streamRegistry, usageBase, userOnStream } = p;
     // 待发布的 bus event 列表；同一同步批次内累积，由唯一一个 microtask 一次性 flush。
     const pendingQueue: Array<() => void> = [];
     let flushScheduled = false;
@@ -964,7 +970,7 @@ export const AgentRunner: AgentRunnerHelpers = {
     // nm-style: keep-closure — 逃逸闭包：它就是 wrapStreamForBus 返回的 StreamEventListener（API 契约要求闭包形态），拆成模块函数后返回点仍需一层包装闭包，闭包只是换位置。
     const scheduleStreamPublish = (ev: LlmStreamEvent): void => {
         if (ev.type === "text-delta") {
-            deps.streamRegistry?.append(sessionId, { text: ev.text });
+            streamRegistry?.append(sessionId, { text: ev.text });
             enqueuePublish(() =>
                 bus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
                     sessionId,
@@ -973,7 +979,7 @@ export const AgentRunner: AgentRunnerHelpers = {
                 })
             );
         } else if (ev.type === "thinking-delta") {
-            deps.streamRegistry?.append(sessionId, { thinking: ev.text });
+            streamRegistry?.append(sessionId, { thinking: ev.text });
             enqueuePublish(() =>
                 bus.publish(EVENT_AGENT_STREAM_THINKING_DELTA, {
                     sessionId,
@@ -996,7 +1002,7 @@ export const AgentRunner: AgentRunnerHelpers = {
             // 基线随每 step done 后的补发并基线推进（见 run() 内 done 补发）。
             const stepCompletion = ev.usage.completionTokens;
             if (stepCompletion != null) {
-                const runCompletion = (deps.usageBase?.completionTokens ?? 0) + stepCompletion;
+                const runCompletion = (usageBase?.completionTokens ?? 0) + stepCompletion;
                 enqueuePublish(() =>
                     bus.publish(EVENT_AGENT_STREAM_USAGE, {
                         sessionId,

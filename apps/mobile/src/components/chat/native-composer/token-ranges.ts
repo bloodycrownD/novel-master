@@ -92,7 +92,22 @@ export namespace TokenRanges {
    * 或未传编辑前光标则**回退原差分口径**（只增强不回退）。删除锚与插入锚按
    * `delta` 符号分流，互不干扰。
    */
-    export function remapTokenRanges(prev: string, next: string, ranges: readonly TokenRange[], nextCursor?: number, prevCursor?: number): TokenRange[] {
+    /** remapTokenRanges 的参数对象（>4 参签名收口）：编辑前后全文 + 现存区间 + 可选双端光标锚，字段名即文档。 */
+    type RemapTokenRangesParams = {
+        /** 编辑前明文。 */
+        readonly prev: string;
+        /** 编辑后明文。 */
+        readonly next: string;
+        /** 编辑前的现存胶囊区间。 */
+        readonly ranges: readonly TokenRange[];
+        /** 编辑后光标（纯插入锚：引用落文 / 命令式提交恒有；打字路径不传）。 */
+        readonly nextCursor?: number;
+        /** 编辑前光标（删除锚 D11：净删除时用光标差反推真实删除段）。 */
+        readonly prevCursor?: number;
+    };
+
+    export function remapTokenRanges(p: RemapTokenRangesParams): TokenRange[] {
+        const {prev, next, ranges, nextCursor, prevCursor} = p;
         if (prev === next) {
             return [...ranges];
         }

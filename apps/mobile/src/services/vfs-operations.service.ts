@@ -18,10 +18,36 @@ export {createVfsDirectory, createVfsFile, renameVfsDirectory, renameVfsFile};
 
 type MobileRuntime = MobileNovelMasterRuntime;
 
-type DeleteScopedOptions = {
-    recursive?: boolean;
-    useUserVfsTurn: boolean;
-    sessionId?: string;
+/** 会话 scope 保存的参数对象（>4 参签名收口）：依赖与语义参数同对象，字段名即文档。 */
+type SessionSaveFileParams = {
+    readonly runtime: MobileRuntime;
+    readonly vfs: VfsService;
+    readonly sessionId: string;
+    readonly path: string;
+    readonly content: string;
+    /** 外部漂移检测基线：与 userVfsTurn 基线不一致时打 external_drift_detected 日志。 */
+    readonly lastKnownContent?: string | null;
+};
+
+/** 工作区删除的参数对象：原 DeleteScopedOptions 已展平进 params。 */
+type DeleteScopedEntryParams = {
+    readonly runtime: MobileRuntime;
+    readonly scope: VfsScope;
+    readonly vfs: VfsService;
+    readonly path: string;
+    readonly recursive?: boolean;
+    readonly useUserVfsTurn: boolean;
+    /** 传入且 useUserVfsTurn 时走会话 userVfsTurn 删除通道。 */
+    readonly sessionId?: string;
+};
+
+/** 会话 scope 重命名的参数对象。 */
+type SessionRenameFileParams = {
+    readonly runtime: MobileRuntime;
+    readonly sessionId: string;
+    readonly oldPath: string;
+    readonly newPath: string;
+    readonly options?: ExecuteSessionUserVfsOpOptions;
 };
 
 export namespace VfsOperationsService {
@@ -39,10 +65,11 @@ export namespace VfsOperationsService {
     }
 
     /** 工作区文件管理器删除：VFS 变更 + worktree 规则清理（与 Desktop handleVfsDelete 对齐）。 */
-    export async function deleteScopedEntry(runtime: MobileRuntime, scope: VfsScope, vfs: VfsService, path: string, options: DeleteScopedOptions): Promise<Result<void, unknown>> {
-        const recursive = options.recursive ?? true;
-        if (options.useUserVfsTurn && options.sessionId != null) {
-            const deleted = await UserVfsTurnExecuteService.executeSessionOp(runtime, options.sessionId, UserVfsTurnOps.buildDelete(path, recursive));
+    export async function deleteScopedEntry(p: DeleteScopedEntryParams): Promise<Result<void, unknown>> {
+        const {runtime, scope, vfs, path} = p;
+        const recursive = p.recursive ?? true;
+        if (p.useUserVfsTurn && p.sessionId != null) {
+            const deleted = await UserVfsTurnExecuteService.executeSessionOp(runtime, p.sessionId, UserVfsTurnOps.buildDelete(path, recursive));
             if (!deleted.ok) return deleted;
         } else {
             // 错误通道迁移四期：vfs.delete 失败沿 Result 接力，不再静默吞掉
@@ -55,20 +82,22 @@ export namespace VfsOperationsService {
     }
 
     /** 会话 scope：重命名文件经 userVfsTurn。 */
-    export async function sessionRenameFile(runtime: MobileRuntime, sessionId: string, oldPath: string, newPath: string, options?: ExecuteSessionUserVfsOpOptions): Promise<Result<void, unknown>> {
+    export async function sessionRenameFile(p: SessionRenameFileParams): Promise<Result<void, unknown>> {
+        const {runtime, sessionId, oldPath, newPath, options} = p;
         return UserVfsTurnExecuteService.executeSessionOp(runtime, sessionId, UserVfsTurnOps.buildRename(oldPath, newPath), options);
     }
 
     /** 会话 scope：保存文件经 userVfsTurn（含锚点 diff）。 */
     // nm-style: keep-public — vfs-operations.service.test.ts / file-editor-screen.test.tsx 直接 import 与断言，测试锁名
-    export async function sessionSaveFile(runtime: MobileRuntime, sessionId: string, vfs: VfsService, path: string, content: string, lastKnownContent?: string | null): Promise<Result<void, unknown>> {
+    export async function sessionSaveFile(p: SessionSaveFileParams): Promise<Result<void, unknown>> {
+        const {runtime, sessionId, vfs, path, content, lastKnownContent} = p;
         const baselineResult = await UserVfsSaveBaseline.read(vfs, path);
         if (!baselineResult.ok) return Result.err(baselineResult.error);
         const baseline = baselineResult.value;
         if (lastKnownContent != null && baseline != null && lastKnownContent !== baseline) {
             console.info('[user-vfs-turn] external_drift_detected', {path});
         }
-        const op = UserVfsTurnOps.buildSave(baseline, content, path, content);
+        const op = UserVfsTurnOps.buildSave({ baseline, path, fileContentAtSave: content });
         if (op == null) {
             return Result.ok(undefined);
         }

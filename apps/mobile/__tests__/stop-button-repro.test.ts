@@ -67,13 +67,12 @@ describe('stop-button 复现：native 分支挂死 + abort 传导', () => {
 
         const controller = new AbortController();
         let rejection: unknown;
-        const p = LlmSseTransport.post(
-            'http://mock-dead/chat/completions',
-            {method: 'POST', headers: {}, body: '{}'},
-            () => undefined,
-            undefined,
-            {signal: controller.signal},
-        ).catch((e: unknown) => {
+        const p = LlmSseTransport.post({
+            url: 'http://mock-dead/chat/completions',
+            init: {method: 'POST', headers: {}, body: '{}'},
+            onChunk: () => undefined,
+            signal: controller.signal,
+        }).catch((e: unknown) => {
             rejection = e;
             return undefined;
         });

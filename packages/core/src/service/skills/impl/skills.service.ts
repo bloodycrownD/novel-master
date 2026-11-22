@@ -35,7 +35,7 @@ import { SqliteSkillDisabledRuleRepository } from "@/domain/skills/repositories/
 import type { SkillDisabledRuleRepository } from "@/domain/skills/repositories/skill-disabled-rule.port.js";
 import { VfsServiceFactory } from "@/service/vfs/vfs-service-factory.js";
 import { TdbcTransaction } from "@/infra/tdbc/logic/transaction-helper.js";
-import type { SkillEditMatch, SkillFileContent, SkillInfoChanges, SkillListItem, SkillListScope, SkillLocation, SkillService, SkillWriteOptions } from "../skills.port.js";
+import type { SkillEditParams, SkillFileContent, SkillInfoChanges, SkillListItem, SkillListScope, SkillLocation, SkillService, SkillWriteParams } from "../skills.port.js";
 
 /** Dependencies for {@link SkillsService}。 */
 interface SkillsServiceDeps {
@@ -104,6 +104,15 @@ function assertValidSkillName(name: string): Result<void, AppError> {
 type WriteSkillResult = Promise<Result<{ version: number }, AppError>>;
 type EditSkillResult = Promise<Result<{ version: number; replacements: number }, AppError>>;
 
+/** 写路径 NOT_FOUND 转换的探测参数：原错误 + 命中域定位（另一域存在性探测所需全量上下文）。 */
+type SkillNotFoundProbeParams = {
+    readonly error: unknown;
+    readonly name: string;
+    readonly path: string;
+    readonly domain: SkillDomain;
+    readonly projectId?: string;
+};
+
 /**
  * Default {@link SkillService}。
  */
@@ -135,7 +144,8 @@ export class SkillsService implements SkillService {
    * 域缺 projectId 时无从探测）。把「查不了」说成「没有」会误导调用方去错误的
    * 方向新建，所以三态不可并成两态。
    */
-    private async toWriteNotFoundError(error: unknown, name: string, path: string, domain: SkillDomain, projectId?: string): Promise<AppError<"SKILL_NOT_FOUND">> {
+    private async toWriteNotFoundError(p: SkillNotFoundProbeParams): Promise<AppError<"SKILL_NOT_FOUND">> {
+        const { error, name, path, domain, projectId } = p;
         if (!AppErrorOps.is(error, "VFS_NOT_FOUND")) {
             throw error;
         }
@@ -278,7 +288,8 @@ export class SkillsService implements SkillService {
         return Result.err(new AppError("SKILL_NOT_FOUND", { detail: `Skill file not found: ${name}/${relPath}`, skillName: name, path: relPath }));
     }
 
-    async writeSkillFile(domain: SkillDomain | undefined, name: string, path: string | undefined, content: string, projectId?: string, options?: SkillWriteOptions): WriteSkillResult {
+    async writeSkillFile(p: SkillWriteParams): WriteSkillResult {
+        const { domain, name, path, content, projectId, builtinSeed } = p;
         if (domain == null) {
             return Result.err(new AppError("SKILL_MISSING_DOMAIN", { descriptor: { key: "error.skill.missing_domain", params: { skill_name: name } }, skillName: name }));
         }
@@ -293,7 +304,7 @@ export class SkillsService implements SkillService {
         // 内置本体或历史副本，放行）。seed 通道带 builtinSeed 豁免首次种入；
         // 判定逻辑抽至 assertSkillNameNotReservedForCreate（ZIP 导入等第二条
         // 新建通道复用同一道门）。
-        if (BUILTIN_SKILL_NAMES.has(name) && options?.builtinSeed !== true) {
+        if (BUILTIN_SKILL_NAMES.has(name) && builtinSeed !== true) {
             const reserved = await this.assertSkillNameNotReservedForCreate(domain, name, projectId);
             if (!reserved.ok) return Result.err(reserved.error);
         }
@@ -303,11 +314,12 @@ export class SkillsService implements SkillService {
         if (written.ok) {
             return Result.ok(written.value);
         }
-        return Result.err(await this.toWriteNotFoundError(written.error, name, rel.value, domain, projectId));
+        return Result.err(await this.toWriteNotFoundError({ error: written.error, name, path: rel.value, domain, projectId }));
     }
 
     /** nm-style: keep-public — SkillService 端口方法；skill-tool 的 edit 动作单点消费。 */
-    async editSkillFile(domain: SkillDomain | undefined, name: string, path: string | undefined, match: SkillEditMatch, projectId?: string): EditSkillResult {
+    async editSkillFile(p: SkillEditParams): EditSkillResult {
+        const { domain, name, path, match, projectId } = p;
         if (domain == null) {
             return Result.err(new AppError("SKILL_MISSING_DOMAIN", { descriptor: { key: "error.skill.missing_domain", params: { skill_name: name } }, skillName: name }));
         }
@@ -324,7 +336,7 @@ export class SkillsService implements SkillService {
         if (replaced.ok) {
             return Result.ok(replaced.value);
         }
-        return Result.err(await this.toWriteNotFoundError(replaced.error, name, rel.value, domain, projectId));
+        return Result.err(await this.toWriteNotFoundError({ error: replaced.error, name, path: rel.value, domain, projectId }));
     }
 
     async setDisabled(projectId: string, name: string, disabled: boolean): Promise<Result<void, AppError>> {

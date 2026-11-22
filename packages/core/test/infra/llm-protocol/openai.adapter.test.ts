@@ -10,12 +10,10 @@ const sseChunks = [
 
 const postSseMock = mock.fn(
     async (
-        _url: string,
-        _init: RequestInit,
-        onChunk: (chunk: string) => void,
+        p: { onChunk: (chunk: string) => void },
     ): Promise<{ status: number; contentType: string | null }> => {
         for (const chunk of sseChunks) {
-            onChunk(chunk);
+            p.onChunk(chunk);
         }
         return { status: 200, contentType: "text/event-stream" };
     },
@@ -63,12 +61,12 @@ describe("OpenAiProtocolAdapter chatStream", () => {
         });
 
         assert.equal(postSseMock.mock.calls.length, 1);
-        const [url, init, onChunkHandler] = postSseMock.mock.calls[0]!.arguments;
-        assert.equal(url, "https://api.example.com/v1/chat/completions");
-        assert.equal((init as RequestInit).method, "POST");
-        assert.equal(typeof onChunkHandler, "function");
+        const call = postSseMock.mock.calls[0]!.arguments[0] as { url: string; init: RequestInit; onChunk: unknown };
+        assert.equal(call.url, "https://api.example.com/v1/chat/completions");
+        assert.equal(call.init.method, "POST");
+        assert.equal(typeof call.onChunk, "function");
 
-        const body = JSON.parse(String((init as RequestInit).body)) as {
+        const body = JSON.parse(String(call.init.body)) as {
             stream?: boolean;
             stream_options?: { include_usage?: boolean };
         };
@@ -122,7 +120,7 @@ describe("OpenAiProtocolAdapter extraBody 合并", () => {
         });
 
         assert.equal(postSseMock.mock.calls.length, 1);
-        const init = postSseMock.mock.calls[0]!.arguments[1] as RequestInit;
+        const init = (postSseMock.mock.calls[0]!.arguments[0] as { init: RequestInit }).init;
         const body = JSON.parse(String(init.body)) as Record<string, unknown>;
         // 用户显式配置的 tool_stream 原样进入请求体（智谱官方直连的自定义参数场景）
         assert.equal(body.tool_stream, true);
@@ -147,7 +145,7 @@ describe("OpenAiProtocolAdapter extraBody 合并", () => {
             extraBody: { temperature: 0.9 },
         });
 
-        const init = postSseMock.mock.calls[0]!.arguments[1] as RequestInit;
+        const init = (postSseMock.mock.calls[0]!.arguments[0] as { init: RequestInit }).init;
         const body = JSON.parse(String(init.body)) as { temperature?: number };
         assert.equal(body.temperature, 0.9);
     });
@@ -168,7 +166,7 @@ describe("OpenAiProtocolAdapter extraBody 合并", () => {
             tools: [...sampleTools],
         });
 
-        const init = postSseMock.mock.calls[0]!.arguments[1] as RequestInit;
+        const init = (postSseMock.mock.calls[0]!.arguments[0] as { init: RequestInit }).init;
         const body = JSON.parse(String(init.body)) as Record<string, unknown>;
         assert.equal("tool_stream" in body, false);
         // 基础字段仍齐全

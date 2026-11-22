@@ -69,7 +69,7 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
             try {
                 const headers = { "x-api-key": req.apiKey, "anthropic-version": ANTHROPIC_API_VERSION, "Content-Type": "application/json", ...req.extraHeaders };
                 const init = { method: "POST", headers, body: JSON.stringify(this.buildBody(req, true, toolNames)), signal: req.scope?.signal };
-                await LlmSseTransport.post(url, init, (chunk) => parser.feed(chunk), undefined, { fetchFn: this.fetchFn, signal: req.scope?.signal });
+                await LlmSseTransport.post({ url, init, onChunk: (chunk) => parser.feed(chunk), fetchFn: this.fetchFn, signal: req.scope?.signal });
             } catch (error) {
                 if (!RequestAbort.isAborted(error, req.scope?.signal)) {
                     throw error;

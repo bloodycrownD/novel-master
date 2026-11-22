@@ -264,15 +264,7 @@ describe('vfs-operations 批量删除部分失败', () => {
             // 模拟文件管理器批量删除循环（fail-fast，失败中断批次；错误通道迁移
             // 四期后失败沿 Result 接力，不再 throw）。
             // eslint-disable-next-line no-await-in-loop
-            const outcome = await VfsOperationsService.deleteScopedEntry(
-                runtime,
-                scope,
-                vfs as unknown as VfsService,
-                path,
-                {
-                    useUserVfsTurn: false,
-                },
-            );
+            const outcome = await VfsOperationsService.deleteScopedEntry({runtime, scope, vfs: vfs as unknown as VfsService, path, useUserVfsTurn: false});
             if (!outcome.ok) {
                 failure = outcome;
                 break;
@@ -298,15 +290,7 @@ describe('vfs-operations 批量删除部分失败', () => {
             sessionId: 's1',
         } as VfsScope;
 
-        const denied = await VfsOperationsService.deleteScopedEntry(
-            runtime,
-            scope,
-            vfs as unknown as VfsService,
-            '/a.md',
-            {
-                useUserVfsTurn: false,
-            },
-        );
+        const denied = await VfsOperationsService.deleteScopedEntry({runtime, scope, vfs: vfs as unknown as VfsService, path: '/a.md', useUserVfsTurn: false});
         // 错误通道迁移后失败载荷沿 Result 接力（AppError：name=key、code=段号数字）。
         expect(denied.ok).toBe(false);
         if (!denied.ok) {
@@ -314,15 +298,7 @@ describe('vfs-operations 批量删除部分失败', () => {
         }
         expect(deleteRulesCalls).toEqual([]);
 
-        await VfsOperationsService.deleteScopedEntry(
-            runtime,
-            scope,
-            vfs as unknown as VfsService,
-            '/b.md',
-            {
-                useUserVfsTurn: false,
-            },
-        );
+        await VfsOperationsService.deleteScopedEntry({runtime, scope, vfs: vfs as unknown as VfsService, path: '/b.md', useUserVfsTurn: false});
         expect(deleteRulesCalls).toEqual([{scope, path: '/b.md'}]);
     });
 
@@ -335,17 +311,7 @@ describe('vfs-operations 批量删除部分失败', () => {
             sessionId: 's1',
         } as VfsScope;
 
-        await VfsOperationsService.deleteScopedEntry(
-            runtime,
-            scope,
-            vfs as unknown as VfsService,
-            '/old',
-            {
-                useUserVfsTurn: true,
-                sessionId: 's1',
-                recursive: false,
-            },
-        );
+        await VfsOperationsService.deleteScopedEntry({runtime, scope, vfs: vfs as unknown as VfsService, path: '/old', useUserVfsTurn: true, sessionId: 's1', recursive: false});
 
         expect(executedOps).toHaveLength(1);
         expect(executedOps[0]!.sessionId).toBe('s1');
@@ -383,7 +349,7 @@ describe('vfs-operations 会话 scope 编排（mock userVfsTurn 端口）', () =
 
     it('sessionRenameVfsFile 发 mv op（from/to 透传）', async () => {
         const {runtime, executedOps} = makeRuntime();
-        await VfsOperationsService.sessionRenameFile(runtime, 's1', '/a.md', '/b/c.md');
+        await VfsOperationsService.sessionRenameFile({runtime, sessionId: 's1', oldPath: '/a.md', newPath: '/b/c.md'});
         expect(executedOps[0]!.op.tools[0]).toMatchObject({
             name: 'fs',
             input: {action: 'mv', from: '/a.md', to: '/b/c.md'},
@@ -394,22 +360,10 @@ describe('vfs-operations 会话 scope 编排（mock userVfsTurn 端口）', () =
         const vfs = seededVfs();
         const {runtime, executedOps} = makeRuntime();
 
-        await VfsOperationsService.sessionSaveFile(
-            runtime,
-            's1',
-            vfs as unknown as VfsService,
-            '/a.md',
-            'content-a',
-        );
+        await VfsOperationsService.sessionSaveFile({runtime, sessionId: 's1', vfs: vfs as unknown as VfsService, path: '/a.md', content: 'content-a'});
         expect(executedOps).toHaveLength(0);
 
-        await VfsOperationsService.sessionSaveFile(
-            runtime,
-            's1',
-            vfs as unknown as VfsService,
-            '/a.md',
-            'content-a2',
-        );
+        await VfsOperationsService.sessionSaveFile({runtime, sessionId: 's1', vfs: vfs as unknown as VfsService, path: '/a.md', content: 'content-a2'});
         expect(executedOps).toHaveLength(1);
         expect(executedOps[0]!.op.tools.length).toBeGreaterThan(0);
     });

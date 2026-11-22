@@ -29,31 +29,14 @@ describe("项目复制携带技能与负清单（T-SK6 / D1）", () => {
         const source = unwrap(await ctx.projects.create(`P-${suffix}`));
 
         // 项目域技能（SKILL.md + 辅助文件，辅助文件直接写 meta 域 vfs）
-        unwrap(await skills.writeSkillFile(
-            "project",
-            "novel-helper",
-            undefined,
-            entry("novel-helper", "项目技能"),
-            source.id,
-        ));
+        unwrap(await skills.writeSkillFile({ domain: "project", name: "novel-helper", content: entry("novel-helper", "项目技能"), projectId: source.id }));
         await ctx.projectMetaVfs(source.id).write(
             "/meta/skills/novel-helper/prompt.md",
             "辅助提示词",
         );
         // 同名 global 技能被项目副本覆盖 + 一条禁用行 + 一条无关禁用行
-        unwrap(await skills.writeSkillFile(
-            "global",
-            "shared-tool",
-            undefined,
-            entry("shared-tool", "全局版"),
-        ));
-        unwrap(await skills.writeSkillFile(
-            "project",
-            "shared-tool",
-            undefined,
-            entry("shared-tool", "项目覆盖版"),
-            source.id,
-        ));
+        unwrap(await skills.writeSkillFile({ domain: "global", name: "shared-tool", content: entry("shared-tool", "全局版") }));
+        unwrap(await skills.writeSkillFile({ domain: "project", name: "shared-tool", content: entry("shared-tool", "项目覆盖版"), projectId: source.id }));
         unwrap(await skills.setDisabled(source.id, "shared-tool", true));
         unwrap(await skills.setDisabled(source.id, "novel-helper", true));
 
@@ -99,13 +82,7 @@ describe("项目复制携带技能与负清单（T-SK6 / D1）", () => {
         const suffix = testIsolationSuffix();
         const source = unwrap(await ctx.projects.create(`P-ns-${suffix}`));
         unwrap(await ctx.sessions.create(source.id, "源会话"));
-        unwrap(await skills.writeSkillFile(
-            "project",
-            "solo-skill",
-            undefined,
-            entry("solo-skill", "只有源项目有"),
-            source.id,
-        ));
+        unwrap(await skills.writeSkillFile({ domain: "project", name: "solo-skill", content: entry("solo-skill", "只有源项目有"), projectId: source.id }));
 
         const copy = unwrap(await ctx.projects.copy(source.id));
 
@@ -133,13 +110,7 @@ describe("项目复制携带技能与负清单（T-SK6 / D1）", () => {
         const skills = SkillsServiceFactory.create(ctx.conn);
         const suffix = testIsolationSuffix();
         const project = unwrap(await ctx.projects.create(`P-del-${suffix}`));
-        unwrap(await skills.writeSkillFile(
-            "project",
-            "doomed-skill",
-            undefined,
-            entry("doomed-skill", "随项目删除"),
-            project.id,
-        ));
+        unwrap(await skills.writeSkillFile({ domain: "project", name: "doomed-skill", content: entry("doomed-skill", "随项目删除"), projectId: project.id }));
         unwrap(await skills.setDisabled(project.id, "doomed-skill", true));
 
         unwrap(await ctx.projects.delete(project.id));

@@ -259,9 +259,9 @@ function DesktopOverlays() {
             }
             let result: { ok: true } | { ok: false; message: string };
             if (prompt.kind === 'create-file') {
-                result = await createWorkspaceEntry( prompt.target, 'file', value, projectId, workspaceSessionId );
+                result = await createWorkspaceEntry({ target: prompt.target, kind: "file", name: value, projectId, sessionId: workspaceSessionId });
             } else if (prompt.kind === 'create-folder') {
-                result = await createWorkspaceEntry( prompt.target, 'folder', value, projectId, workspaceSessionId );
+                result = await createWorkspaceEntry({ target: prompt.target, kind: "folder", name: value, projectId, sessionId: workspaceSessionId });
             } else {
                 result = await renameWorkspaceEntry( prompt.target, value, projectId, workspaceSessionId );
                 if (result.ok && prompt.target.kind === 'row') {

@@ -94,18 +94,7 @@ describe("llm-stream-timeout XHR 集成（回炉版）", () => {
         LlmSseTransport.setShouldUseXhrOverrideForTests(true);
         const instances = installXhr();
 
-        const promise = LlmSseTransport.post(
-            SSE_URL,
-            {
-                method: "POST",
-                body: "{}",
-                headers: {
-                    Authorization: "Bearer k",
-                    Connection: "keep-alive",
-                },
-            },
-            () => {},
-        );
+        const promise = LlmSseTransport.post({ url: SSE_URL, init: { method: "POST", body: "{}", headers: { Authorization: "Bearer k", Connection: "keep-alive" } }, onChunk: () => {} });
         await settleAsync();
 
         const xhr = instances[0]!;
@@ -138,7 +127,7 @@ describe("llm-stream-timeout XHR 集成（回炉版）", () => {
         LlmSseTransport.setShouldUseXhrOverrideForTests(true);
         const instances = installXhr();
 
-        const promise = LlmSseTransport.post(SSE_URL, { method: "POST", body: "{}" }, () => {});
+        const promise = LlmSseTransport.post({ url: SSE_URL, init: { method: "POST", body: "{}" }, onChunk: () => {} });
         await settleAsync();
 
         const xhr = instances[0]!;
@@ -155,7 +144,7 @@ describe("llm-stream-timeout XHR 集成（回炉版）", () => {
         LlmSseTransport.setShouldUseXhrOverrideForTests(true);
         const instances = installXhr();
 
-        const promise = LlmSseTransport.post(SSE_URL, { method: "POST", body: "{}" }, () => {});
+        const promise = LlmSseTransport.post({ url: SSE_URL, init: { method: "POST", body: "{}" }, onChunk: () => {} });
         let rejected = false;
         promise.catch(() => {
             rejected = true;
@@ -187,7 +176,7 @@ describe("llm-stream-timeout XHR 集成（回炉版）", () => {
         LlmSseTransport.setShouldUseXhrOverrideForTests(true);
         const instances = installXhr();
 
-        const promise = LlmSseTransport.post(SSE_URL, { method: "POST", body: "{}" }, () => {});
+        const promise = LlmSseTransport.post({ url: SSE_URL, init: { method: "POST", body: "{}" }, onChunk: () => {} });
         await settleAsync();
 
         const xhr = instances[0]!;
@@ -209,11 +198,7 @@ describe("llm-stream-timeout XHR 集成（回炉版）", () => {
         const instances = installXhr();
 
         const chunks: string[] = [];
-        const promise = LlmSseTransport.post(
-            SSE_URL,
-            { method: "POST", body: "{}" },
-            (chunk) => chunks.push(chunk),
-        );
+        const promise = LlmSseTransport.post({ url: SSE_URL, init: { method: "POST", body: "{}" }, onChunk: (chunk) => chunks.push(chunk) });
         let rejected = false;
         promise.catch(() => {
             rejected = true;
@@ -248,11 +233,7 @@ describe("llm-stream-timeout XHR 集成（回炉版）", () => {
         const instances = installXhr();
 
         const chunks: string[] = [];
-        const promise = LlmSseTransport.post(
-            SSE_URL,
-            { method: "POST", body: "{}" },
-            (chunk) => chunks.push(chunk),
-        );
+        const promise = LlmSseTransport.post({ url: SSE_URL, init: { method: "POST", body: "{}" }, onChunk: (chunk) => chunks.push(chunk) });
         let settledError: unknown;
         promise.catch((err: unknown) => {
             settledError = err;
@@ -297,11 +278,7 @@ describe("llm-stream-timeout XHR 集成（回炉版）", () => {
         const instances = installXhr();
 
         const chunks: string[] = [];
-        const promise = LlmSseTransport.post(
-            SSE_URL,
-            { method: "POST", body: "{}" },
-            (chunk) => chunks.push(chunk),
-        );
+        const promise = LlmSseTransport.post({ url: SSE_URL, init: { method: "POST", body: "{}" }, onChunk: (chunk) => chunks.push(chunk) });
         let rejected = false;
         promise.catch(() => {
             rejected = true;
@@ -339,11 +316,7 @@ describe("llm-stream-timeout XHR 集成（回炉版）", () => {
         const instances = installXhr();
 
         const chunks: string[] = [];
-        const promise = LlmSseTransport.post(
-            SSE_URL,
-            { method: "POST", body: "{}" },
-            (chunk) => chunks.push(chunk),
-        );
+        const promise = LlmSseTransport.post({ url: SSE_URL, init: { method: "POST", body: "{}" }, onChunk: (chunk) => chunks.push(chunk) });
         await settleAsync();
 
         const xhr = instances[0]!;
@@ -391,13 +364,7 @@ describe("llm-stream-timeout fetch 集成（回炉版）", () => {
             });
         });
 
-        const promise = LlmSseTransport.post(
-            SSE_URL,
-            { method: "POST", body: "{}" },
-            () => {},
-            undefined,
-            { fetchFn: fetchFn as typeof fetch },
-        );
+        const promise = LlmSseTransport.post({ url: SSE_URL, init: { method: "POST", body: "{}" }, onChunk: () => {}, fetchFn: fetchFn as typeof fetch });
         await settleAsync();
 
         mock.timers.tick(SSE_WHOLE_CALL_TIMEOUT_MS);
@@ -432,13 +399,7 @@ describe("llm-stream-timeout fetch 集成（回炉版）", () => {
             });
         });
 
-        const promise = LlmSseTransport.post(
-            SSE_URL,
-            { method: "POST", body: "{}" },
-            () => {},
-            undefined,
-            { fetchFn: fetchFn as typeof fetch },
-        );
+        const promise = LlmSseTransport.post({ url: SSE_URL, init: { method: "POST", body: "{}" }, onChunk: () => {}, fetchFn: fetchFn as typeof fetch });
         // 让首帧 read() 返回
         await settleAsync();
 
@@ -523,11 +484,7 @@ describe("llm-stream-timeout 观测打点", () => {
         LogFactory.setDefaultSink({ write: (record) => records.push(record) });
 
         try {
-            const promise = LlmSseTransport.post(
-                SSE_URL,
-                { method: "POST", body: "{}" },
-                () => {},
-            );
+            const promise = LlmSseTransport.post({ url: SSE_URL, init: { method: "POST", body: "{}" }, onChunk: () => {} });
             await settleAsync();
 
             const xhr = instances[0]!;
@@ -599,13 +556,7 @@ describe("llm-stream-timeout 观测打点", () => {
                 });
             });
 
-            const promise = LlmSseTransport.post(
-                SSE_URL,
-                { method: "POST", body: "{}" },
-                () => {},
-                undefined,
-                { fetchFn: fetchFn as typeof fetch },
-            );
+            const promise = LlmSseTransport.post({ url: SSE_URL, init: { method: "POST", body: "{}" }, onChunk: () => {}, fetchFn: fetchFn as typeof fetch });
             await settleAsync();
 
             // 整调用预算到点（fetch 分支经公共层 whole-call 定时器）

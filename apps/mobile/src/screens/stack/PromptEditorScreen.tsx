@@ -136,7 +136,7 @@ export function PromptEditorScreen() {
    * 反推真实删除段，幸存区间才不会被子差分对齐误摘——与 dock 语义一致。
    */
     const advanceConfirmedRanges = useCallback((prevText: string, nextText: string, inserted: readonly ComposerDraftTokenRange[] = [], nextCursor?: number, prevCursor?: number) => {
-        const remapped = TokenRanges.remapTokenRanges(prevText, nextText, confirmedRangesRef.current, nextCursor, prevCursor);
+        const remapped = TokenRanges.remapTokenRanges({prev: prevText, next: nextText, ranges: confirmedRangesRef.current, nextCursor, prevCursor});
         confirmedRangesRef.current = inserted.length > 0 ? [...remapped, ...inserted].sort((a, b) => a.start - b.start) : remapped;
     }, []);
 

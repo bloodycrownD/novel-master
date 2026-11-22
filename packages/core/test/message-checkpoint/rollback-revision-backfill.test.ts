@@ -148,13 +148,8 @@ describe("MessageRollbackService (revision head backfill)", () => {
         const { LogicalPath } = await import("../../src/domain/vfs/logic/vfs-path-mapper.js");
         const sk = LogicalPath.scopeKey(scope);
 
-        const backfilled = unwrap(await BackfillMissingRevision.backfillIfNeeded(
-            { revisionRepo: revisions, entryRepo: entries },
-            sk,
-            "/ghost.md",
-            null,  // entryId = null → entry not exist
-            7,
-        ));
+        // entryId = null → entry not exist
+        const backfilled = unwrap(await BackfillMissingRevision.backfillIfNeeded({ revisionRepo: revisions, entryRepo: entries, scopeKey: sk, logicalPath: "/ghost.md", entryId: null, targetVersion: 7 }));
 
         assert.equal(backfilled, false);
     });
@@ -340,13 +335,7 @@ describe("MessageRollbackService (revision head backfill)", () => {
             [entry.entryId],
         );
 
-        const backfilled = unwrap(await BackfillMissingRevision.backfillIfNeeded(
-            { revisionRepo: revisions, entryRepo: entries },
-            sk,
-            "/exists.md",
-            entry.entryId,
-            1,
-        ));
+        const backfilled = unwrap(await BackfillMissingRevision.backfillIfNeeded({ revisionRepo: revisions, entryRepo: entries, scopeKey: sk, logicalPath: "/exists.md", entryId: entry.entryId, targetVersion: 1 }));
 
         assert.equal(backfilled, false);
         const after = await ctx.conn.query<{ version: number }>(

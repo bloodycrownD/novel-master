@@ -55,10 +55,7 @@ describe("内置 agent-config 技能 seed（T-AS1）", () => {
         const skills = SkillsServiceFactory.create(conn);
         // 用户在种入版之上编辑（目录已存在，编辑路径放行；整文件覆盖有乐观锁墙，
         // 走 editSkillFile 的 replace 语义）
-        unwrap(await skills.editSkillFile("global", "agent-config", undefined, {
-            oldString: "agent 配置指南",
-            newString: USER_EDITED_HEADING,
-        }));
+        unwrap(await skills.editSkillFile({ domain: "global", name: "agent-config", match: { oldString: "agent 配置指南", newString: USER_EDITED_HEADING } }));
 
         // 模拟下次启动重跑 seed：已存在即跳过，不得覆盖用户改动
         await BuiltinSkills.seed(conn);
@@ -87,10 +84,7 @@ describe("内置 agent-config 技能 seed 版本化升级（T-AS4）", () => {
         const skills = SkillsServiceFactory.create(conn);
 
         // 模拟版本落后的存量库：内容回写成任意旧态（v1 文案 / 用户改过版均同语义）
-        unwrap(await skills.editSkillFile("global", "agent-config", undefined, {
-            oldString: "agent 配置指南",
-            newString: USER_EDITED_HEADING,
-        }));
+        unwrap(await skills.editSkillFile({ domain: "global", name: "agent-config", match: { oldString: "agent 配置指南", newString: USER_EDITED_HEADING } }));
         await clearSeedLedger(conn);
 
         await BuiltinSkills.seed(conn);
@@ -106,9 +100,7 @@ describe("内置 agent-config 技能 seed 版本化升级（T-AS4）", () => {
         const skills = SkillsServiceFactory.create(conn);
 
         // 台账已=当前版（bootstrap 首种即写入）：篡改内容后 seed 不得回写。
-        unwrap(await skills.writeSkillFile(
-            "global", "agent-config", undefined, "稳态脏文本", undefined,
-        ));
+        unwrap(await skills.writeSkillFile({ domain: "global", name: "agent-config", content: "稳态脏文本" }));
         await BuiltinSkills.seed(conn);
         const read = unwrap(await skills.readSkillFile("global", "agent-config"));
         assert.equal(read.content, "稳态脏文本");

@@ -22,13 +22,13 @@ import { VfsImportChunk, ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK } from "@/domain/vfs
 import type {
     BatchApplyOptions,
     BatchApplyReport,
+    BatchApplyWithWriterParams,
     BatchConflict,
     BatchExportPlan,
     BatchExportSkip,
     BatchIngestPlan,
     BatchIngestPlanEntry,
     BatchIngestRawEntry,
-    BatchIngestWriter,
     VfsBatchIoService,
 } from "@/domain/vfs/ports/vfs-batch-io.port.js";
 
@@ -292,7 +292,8 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
     }
 
     /** nm-style: keep-public — VfsBatchIoService 端口方法；desktop session 通道经 IPC 单点消费，内联会拆散跨层契约。 */
-    async applyBatchIngestWithWriter(scope: VfsScope, targetDir: string, plan: BatchIngestPlan, options: BatchApplyOptions, writer: BatchIngestWriter): Promise<Result<BatchApplyReport, AppError>> {
+    async applyBatchIngestWithWriter(p: BatchApplyWithWriterParams): Promise<Result<BatchApplyReport, AppError>> {
+        const { scope, targetDir, plan, options, writer } = p;
         const skipped: string[] = [...plan.skippedBinary];
 
         if (plan.typeConflicts.length > 0) {

@@ -68,16 +68,10 @@ describe("写操作域内未找到（回归：skill 工具 edit 报裸 VFS 路�
         const name = `global-only-${suffix}`;
         const project = unwrap(await ctx.projects.create(`P-${suffix}`));
 
-        unwrap(await skills.writeSkillFile("global", name, undefined, entry(name, "全局技能")));
+        unwrap(await skills.writeSkillFile({ domain: "global", name, content: entry(name, "全局技能") }));
 
         const raw = await captureError(() =>
-            skills.editSkillFile(
-                "project",
-                name,
-                undefined,
-                { oldString: "正文", newString: "改写" },
-                project.id
-            )
+            skills.editSkillFile({ domain: "project", name, match: { oldString: "正文", newString: "改写" }, projectId: project.id })
         );
         const error = asSkillError(raw, "edit 落 project 域");
 
@@ -100,23 +94,11 @@ describe("写操作域内未找到（回归：skill 工具 edit 报裸 VFS 路�
         const name = `project-only-${suffix}`;
         const project = unwrap(await ctx.projects.create(`P-${suffix}`));
 
-        unwrap(await skills.writeSkillFile(
-            "project",
-            name,
-            undefined,
-            entry(name, "项目技能"),
-            project.id
-        ));
+        unwrap(await skills.writeSkillFile({ domain: "project", name, content: entry(name, "项目技能"), projectId: project.id }));
 
         // projectId 必须传：skill 工具的 edit/write 恒定透传 ctx.skills.projectId
         const raw = await captureError(() =>
-            skills.editSkillFile(
-                "global",
-                name,
-                undefined,
-                { oldString: "正文", newString: "改写" },
-                project.id
-            )
+            skills.editSkillFile({ domain: "global", name, match: { oldString: "正文", newString: "改写" }, projectId: project.id })
         );
         const error = asSkillError(raw, "edit 落 global 域");
 
@@ -129,12 +111,7 @@ describe("写操作域内未找到（回归：skill 工具 edit 报裸 VFS 路�
         const name = `no-projid-${testIsolationSuffix()}`;
 
         const raw = await captureError(() =>
-            skills.editSkillFile(
-                "global",
-                name,
-                undefined,
-                { oldString: "正文", newString: "改写" }
-            )
+            skills.editSkillFile({ domain: "global", name, match: { oldString: "正文", newString: "改写" } })
         );
         const error = asSkillError(raw, "global 域无 projectId");
 
@@ -153,13 +130,7 @@ describe("写操作域内未找到（回归：skill 工具 edit 报裸 VFS 路�
         const project = unwrap(await ctx.projects.create(`P-${suffix}`));
 
         const raw = await captureError(() =>
-            skills.editSkillFile(
-                "project",
-                name,
-                undefined,
-                { oldString: "正文", newString: "改写" },
-                project.id
-            )
+            skills.editSkillFile({ domain: "project", name, match: { oldString: "正文", newString: "改写" }, projectId: project.id })
         );
         const error = asSkillError(raw, "两域皆无");
 
@@ -177,8 +148,8 @@ describe("写操作域内未找到（回归：skill 工具 edit 报裸 VFS 路�
         const name = `global-only-w-${suffix}`;
         const project = unwrap(await ctx.projects.create(`P-${suffix}`));
 
-        unwrap(await skills.writeSkillFile("global", name, undefined, entry(name, "全局技能")));
-        unwrap(await skills.writeSkillFile("project", name, undefined, "覆盖", project.id));
+        unwrap(await skills.writeSkillFile({ domain: "global", name, content: entry(name, "全局技能") }));
+        unwrap(await skills.writeSkillFile({ domain: "project", name, content: "覆盖", projectId: project.id }));
 
         // write 语义 = 向新目录写即新建（tools.port 既有约定），不是「找到生效副本改」
         const projectCopy = unwrap(await skills.readSkillFile(
@@ -199,14 +170,9 @@ describe("写操作域内未找到（回归：skill 工具 edit 报裸 VFS 路�
         const skills = SkillsServiceFactory.create(ctx.conn);
         const name = `global-ok-${testIsolationSuffix()}`;
 
-        unwrap(await skills.writeSkillFile("global", name, undefined, entry(name, "全局技能")));
+        unwrap(await skills.writeSkillFile({ domain: "global", name, content: entry(name, "全局技能") }));
 
-        const result = unwrap(await skills.editSkillFile(
-            "global",
-            name,
-            undefined,
-            { oldString: "正文", newString: "改写后的正文" }
-        ));
+        const result = unwrap(await skills.editSkillFile({ domain: "global", name, match: { oldString: "正文", newString: "改写后的正文" } }));
 
         assert.ok(result.replacements > 0);
         const read = unwrap(await skills.readSkillFile("global", name));
@@ -218,16 +184,11 @@ describe("写操作域内未找到（回归：skill 工具 edit 报裸 VFS 路�
         const skills = SkillsServiceFactory.create(ctx.conn);
         const name = `nomatch-${testIsolationSuffix()}`;
 
-        unwrap(await skills.writeSkillFile("global", name, undefined, entry(name, "全局技能")));
+        unwrap(await skills.writeSkillFile({ domain: "global", name, content: entry(name, "全局技能") }));
 
         // oldString 匹配不到 = VFS 侧的其它错误码，不应被 rethrowWriteNotFound 吞成域错误
         const error = await captureError(() =>
-            skills.editSkillFile(
-                "global",
-                name,
-                undefined,
-                { oldString: "绝对不存在的匹配串", newString: "x" }
-            )
+            skills.editSkillFile({ domain: "global", name, match: { oldString: "绝对不存在的匹配串", newString: "x" } })
         );
 
         assert.ok(

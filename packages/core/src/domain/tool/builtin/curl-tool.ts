@@ -116,6 +116,20 @@ interface CurlToolOutput {
 /** 非 `text/` 主类型里按文本处理的 subtype 关键字（与工具描述同口径）。 */
 const TEXTUAL_CONTENT_TYPE_HINTS = ["json", "xml", "javascript", "svg", "yaml", "urlencoded"];
 
+/** {@link curlPhaseError} 入参：两阶段 catch 现场快照（错误、超时控制器与父信号、超时时长与目标 URL）。 */
+type CurlPhaseErrorParams = {
+    /** catch 到的原始错误（非 abort 时作 TOOL_FAILED.cause 透传）。 */
+    readonly e: unknown;
+    /** 本请求的超时控制器（signal.aborted 区分取消/超时路径）。 */
+    readonly controller: AbortController;
+    /** 父级回合取消信号（aborted 即取消，优先于超时判定）。 */
+    readonly parentSignal: AbortSignal | undefined;
+    /** 超时时长（毫秒，进超时错误文案）。 */
+    readonly timeoutMs: number;
+    /** 归一化目标 URL（进超时错误文案）。 */
+    readonly normalizedUrl: string;
+};
+
 /**
  * fetch / text() 两阶段的错误统一映射：父级取消走 TOOL_CANCELLED（控制流信号，
  * 工具结果块呈现为 cancelled、UI 不弹错误文案），超时保留 TOOL_FAILED 失败语义
@@ -123,10 +137,10 @@ const TEXTUAL_CONTENT_TYPE_HINTS = ["json", "xml", "javascript", "svg", "yaml", 
  * TOOL_FAILED 原样透传——ToolOutput.formatErrorForLlm 会解 cause 给模型可读文案。
  * 七期起取消/失败都沿 Result.err 返回值传播，不再 throw。
  */
-function curlPhaseError(e: unknown, controller: AbortController, parentSignal: AbortSignal | undefined, timeoutMs: number, normalizedUrl: string): Result<never, AppError> {
-    if (!controller.signal.aborted) return Result.err(new AppError("TOOL_FAILED", {toolName: "curl", cause: e, detail: `Tool failed: curl`}));
-    if (parentSignal?.aborted === true) return Result.err(new AppError("TOOL_CANCELLED", {toolName: "curl"}));
-    return Result.err(new AppError("TOOL_FAILED", {toolName: "curl", cause: new Error(`Request timed out after ${timeoutMs}ms: ${normalizedUrl}`), detail: `Tool failed: curl`}));
+function curlPhaseError(p: CurlPhaseErrorParams): Result<never, AppError> {
+    if (!p.controller.signal.aborted) return Result.err(new AppError("TOOL_FAILED", {toolName: "curl", cause: p.e, detail: `Tool failed: curl`}));
+    if (p.parentSignal?.aborted === true) return Result.err(new AppError("TOOL_CANCELLED", {toolName: "curl"}));
+    return Result.err(new AppError("TOOL_FAILED", {toolName: "curl", cause: new Error(`Request timed out after ${p.timeoutMs}ms: ${p.normalizedUrl}`), detail: `Tool failed: curl`}));
 }
 
 /**
@@ -300,7 +314,7 @@ export const curlTool: Tool<CurlToolInput, CurlToolOutput, BuiltinToolContext> =
                 };
                 response = await doFetch(normalizedUrl, requestInit);
             } catch (e) {
-                return curlPhaseError(e, controller, parentSignal, timeoutMs, normalizedUrl);
+                return curlPhaseError({ e, controller, parentSignal, timeoutMs, normalizedUrl });
             }
 
             const contentType = response.headers.get("content-type") ?? "";
@@ -347,7 +361,7 @@ export const curlTool: Tool<CurlToolInput, CurlToolOutput, BuiltinToolContext> =
             } catch (e) {
                 // 超时 / 取消 abort 后 text() 会 reject（undici 对 body 读取同样响应 signal），
                 // curlPhaseError 给出与 fetch 阶段一致的分派（取消 TOOL_CANCELLED / 超时 TOOL_FAILED）。
-                return curlPhaseError(e, controller, parentSignal, timeoutMs, normalizedUrl);
+                return curlPhaseError({ e, controller, parentSignal, timeoutMs, normalizedUrl });
             }
 
             const originalBytes = Encoding.utf8ByteLength(text);

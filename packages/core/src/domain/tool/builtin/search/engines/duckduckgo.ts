@@ -44,6 +44,20 @@ interface AnchorMatch {
     readonly innerHtml: string;
 }
 
+/** {@link Duckduckgo.search} 入参：`resolved` 仅保持与模板执行器统一的签名形状（DDG 无凭据，不读）。 */
+type DuckduckgoSearchParams = {
+    /** 链解析结果（占位字段，dispatch 按 engine id 统一路由所需）。 */
+    readonly resolved: ResolvedEngineConfig;
+    /** 搜索词（GET 端点无条数参数，直接作 `q` query 参数）。 */
+    readonly query: string;
+    /** 工具层选项（maxResults → 客户端截断，HTML 端点无条数参数）。 */
+    readonly options: SearchToolOptions;
+    /** fetch 注入：生产经 ctx.fetchFn，测试注入假 fetch。 */
+    readonly fetch: FetchFn;
+    /** 回合取消信号：在途请求同步 abort。 */
+    readonly signal?: AbortSignal;
+};
+
 export const Duckduckgo = {
     /**
    * 锚文本清洗：去内嵌标签（snippet 内的 `<b>` 高亮等）→ 实体解码 →
@@ -68,17 +82,17 @@ export const Duckduckgo = {
   },
 
   /**
-   * DuckDuckGo 搜索适配器：无任何凭据依赖（`_resolved` 仅保持与模板执行器
-   * 统一的签名，dispatch 统一按 id 路由）；超时 30s；maxResults 客户端截断。
+   * DuckDuckGo 搜索适配器：无任何凭据依赖（`resolved` 仅保持与模板执行器
+   * 统一的签名形状，dispatch 统一按 id 路由）；超时 30s；maxResults 客户端截断。
    *
    * 已知失败走返回值通道（四期门⑦）：引擎失败收 `Result.err`；未知异常
    * （非 abort 的 fetch 错误）仍抛，search-tool 的降级 catch 收口。
    */
-  async search(_resolved: ResolvedEngineConfig, query: string, options: SearchToolOptions, fetch: FetchFn, signal?: AbortSignal): Promise<Result<SearchResponse, AppError>> {
-    const numResults = SearchEngine.normalizeMaxResults(options.maxResults);
+  async search(p: DuckduckgoSearchParams): Promise<Result<SearchResponse, AppError>> {
+    const numResults = SearchEngine.normalizeMaxResults(p.options.maxResults);
 
     const url = new URL(DUCKDUCKGO_SEARCH_URL);
-    url.searchParams.set("q", query);
+    url.searchParams.set("q", p.query);
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), DUCKDUCKGO_TIMEOUT_MS);
@@ -92,7 +106,7 @@ export const Duckduckgo = {
       controller.abort();
     };
     // 父级取消（用户点停止 / 回合中断）立即 aborts 在途请求，别让 fetch 挂满超时。
-    signal?.addEventListener("abort", onParentAbort, { once: true });
+    p.signal?.addEventListener("abort", onParentAbort, { once: true });
     try {
       let response: Response;
       try {
@@ -101,7 +115,7 @@ export const Duckduckgo = {
           headers: { Accept: "text/html", "User-Agent": DUCKDUCKGO_USER_AGENT },
           signal: controller.signal,
         };
-        response = await fetch(url.toString(), requestInit);
+        response = await p.fetch(url.toString(), requestInit);
       } catch (e) {
         // 父级取消 → TOOL_CANCELLED 控制流码；其余 aborted 是 30s 计时器触发，
         // SearchEngine.timeoutError 保留超时失败语义（与 template-engine 同口径）。
@@ -167,7 +181,7 @@ export const Duckduckgo = {
       return Result.ok({ engine: "duckduckgo", results });
     } finally {
       clearTimeout(timer);
-      signal?.removeEventListener("abort", onParentAbort);
+      p.signal?.removeEventListener("abort", onParentAbort);
     }
   },
 } as const;

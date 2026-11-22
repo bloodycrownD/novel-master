@@ -179,10 +179,10 @@ export function NewSkillModal({visible, domain, defaultProjectId, onClose, onCre
                 });
                 if (imported.preview.name !== name || imported.preview.description !== description) {
                     const skillDoc = SkillFrontMatterValues.rewrite(imported.preview.skillMd!, {name, description});
-                    await runtime.skills().writeSkillFile(domain, name, 'SKILL.md', skillDoc, domain === 'project' ? projectId : undefined);
+                    await runtime.skills().writeSkillFile({ domain, name, path: 'SKILL.md', content: skillDoc, projectId: domain === 'project' ? projectId : undefined });
                 }
             } else {
-                await runtime.skills().writeSkillFile(domain, name, 'SKILL.md', NewSkillDoc.build(name, description, 'mobile'), domain === 'project' ? projectId : undefined);
+                await runtime.skills().writeSkillFile({ domain, name, path: 'SKILL.md', content: NewSkillDoc.build(name, description, 'mobile'), projectId: domain === 'project' ? projectId : undefined });
             }
             onCreated({
                 domain,

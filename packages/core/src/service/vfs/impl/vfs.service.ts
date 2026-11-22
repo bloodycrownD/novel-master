@@ -19,7 +19,7 @@ import { ReplaceResult } from "@/domain/vfs/logic/compute-replace-result.js";
 import { PathNormalizer } from "@/domain/vfs/repositories/impl/normalize-path.js";
 import { GlobMatch } from "../glob-match.js";
 import type { VfsGrepMatch, VfsGrepOptions, VfsListEntry, VfsReadResult } from "../internal-vfs.port.js";
-import type { InternalVfsService } from "../internal-vfs.port.js";
+import type { InternalVfsService, VfsReplaceParams } from "../internal-vfs.port.js";
 import { VfsGrep } from "@/domain/vfs/logic/vfs-grep.js";
 
 /**
@@ -128,10 +128,11 @@ export class DefaultVfsService implements InternalVfsService {
         return this.repo.update(scopeKey, normalized, content, existing.value.version + 1);
     }
 
-    async replace(scopeKey: string, path: string, oldString: string, newString: string, options?: { replaceAll?: boolean }): Promise<Result<{ version: number; replacements: number }, AppError>> {
+    async replace(p: VfsReplaceParams): Promise<Result<{ version: number; replacements: number }, AppError>> {
+        const { scopeKey, path, oldString, newString } = p;
         const current = await this.read(scopeKey, path);
         if (!current.ok) return Result.err(current.error);
-        const computed = ReplaceResult.compute(path, current.value.content, oldString, newString, options);
+        const computed = ReplaceResult.compute(path, current.value.content, oldString, newString, { replaceAll: p.replaceAll });
         if (!computed.ok) return Result.err(computed.error);
         const { nextContent, replacements } = computed.value;
 

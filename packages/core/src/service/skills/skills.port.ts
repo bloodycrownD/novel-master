@@ -49,13 +49,27 @@ export interface SkillLocation {
 }
 
 /**
- * writeSkillFile 选项。
- *
- * builtinSeed 仅供 core 内置技能 seed 通道（bootstrap）使用：绕过内置保留名
- * 的新建拦截完成首次种入。用户路径（UI / IPC / LLM 工具）一律不传。
+ * writeSkillFile 参数：显式域 + 定位（技能名/相对路径，path 缺省写 SKILL.md）
+ * + 整文件内容；projectId 仅 project 域需要；builtinSeed 仅供 core 内置技能
+ * seed 通道（bootstrap）使用——绕过内置保留名的新建拦截完成首次种入，
+ * 用户路径（UI / IPC / LLM 工具）一律不传。
  */
-export interface SkillWriteOptions {
+export interface SkillWriteParams {
+    readonly domain?: SkillDomain;
+    readonly name: string;
+    readonly path?: string;
+    readonly content: string;
+    readonly projectId?: string;
     readonly builtinSeed?: boolean;
+}
+
+/** editSkillFile 参数：定位字段同 write，match 为局部修改的匹配参数。 */
+export interface SkillEditParams {
+    readonly domain?: SkillDomain;
+    readonly name: string;
+    readonly path?: string;
+    readonly match: SkillEditMatch;
+    readonly projectId?: string;
 }
 
 /** updateSkillInfo 的变更字段：至少一项，未提交字段不动。 */
@@ -112,16 +126,9 @@ export interface SkillService {
    * 目录写 SKILL.md，技能名须过 SKILL_NAME_PATTERN 校验。内置保留名在
    * 目录不存在（= 新建）时返回 `Result.err(SKILL_BUILTIN_NAME_RESERVED)`；
    * 目录已存在（内置本体 / 历史副本）的编辑放行；seed 通道传
-   * `options.builtinSeed` 豁免新建拦截。
+   * `builtinSeed: true` 豁免新建拦截。
    */
-    writeSkillFile(
-        domain: SkillDomain | undefined,
-        name: string,
-        path: string | undefined,
-        content: string,
-        projectId?: string,
-        options?: SkillWriteOptions
-    ): Promise<Result<{ version: number }, AppError>>;
+    writeSkillFile(p: SkillWriteParams): Promise<Result<{ version: number }, AppError>>;
 
     /**
    * 新建语义的内置保留名校验（D2② 门独立暴露，供 ZIP 导入等不经
@@ -139,13 +146,7 @@ export interface SkillService {
    * 局部修改技能文件（匹配语义复用 normalize-for-match，同 edit 工具）。
    * 与 write 一致须显式域。
    */
-    editSkillFile(
-        domain: SkillDomain | undefined,
-        name: string,
-        path: string | undefined,
-        match: SkillEditMatch,
-        projectId?: string
-    ): Promise<Result<{ version: number; replacements: number }, AppError>>;
+    editSkillFile(p: SkillEditParams): Promise<Result<{ version: number; replacements: number }, AppError>>;
 
     /** 负清单读写：disabled=true 落行、false 删行（只影响当前项目）。 */
     setDisabled(

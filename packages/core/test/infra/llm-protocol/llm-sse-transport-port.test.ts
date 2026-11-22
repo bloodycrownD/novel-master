@@ -165,11 +165,7 @@ describe("T-N3: 三分支逐请求择优（registered native > XHR > fetch）", 
         LlmSseTransport.register(fake.transport);
 
         const chunks: string[] = [];
-        const promise = LlmSseTransport.post(
-            SSE_URL,
-            { method: "POST", headers: { Authorization: "Bearer k" }, body: "{}" },
-            (chunk) => chunks.push(chunk),
-        );
+        const promise = LlmSseTransport.post({ url: SSE_URL, init: { method: "POST", headers: { Authorization: "Bearer k" }, body: "{}" }, onChunk: (chunk) => chunks.push(chunk) });
         await settleAsync();
         fake.emit('data: {"x":1}\n\n');
         fake.resolve({ status: 200, contentType: "text/event-stream" });
@@ -202,13 +198,7 @@ describe("T-N3: 三分支逐请求择优（registered native > XHR > fetch）", 
             throw new Error("fetch must not be called when XHR selected");
         });
 
-        const promise = LlmSseTransport.post(
-            SSE_URL,
-            { method: "POST", body: "{}" },
-            () => {},
-            undefined,
-            { fetchFn: fetchFn as unknown as typeof fetch },
-        );
+        const promise = LlmSseTransport.post({ url: SSE_URL, init: { method: "POST", body: "{}" }, onChunk: () => {}, fetchFn: fetchFn as unknown as typeof fetch });
         await settleAsync();
 
         assert.equal(instances.length, 1, "未注册 native 时回落 XHR");
@@ -236,13 +226,7 @@ describe("T-N3: 三分支逐请求择优（registered native > XHR > fetch）", 
             });
         });
 
-        const result = await LlmSseTransport.post(
-            SSE_URL,
-            { method: "POST", body: "{}" },
-            () => {},
-            undefined,
-            { fetchFn: fetchFn as unknown as typeof fetch },
-        );
+        const result = await LlmSseTransport.post({ url: SSE_URL, init: { method: "POST", body: "{}" }, onChunk: () => {}, fetchFn: fetchFn as unknown as typeof fetch });
         assert.equal(result.status, 200);
         assert.equal(fetchFn.mock.calls.length, 1, "fetch 兜底分支被选中");
     });
@@ -253,7 +237,7 @@ describe("T-N3: 三分支逐请求择优（registered native > XHR > fetch）", 
         LlmSseTransport.register(real.transport);
 
         LlmSseTransport.setOverrideForTests(override.transport);
-        const first = LlmSseTransport.post(SSE_URL, { method: "POST", body: "{}" }, () => {});
+        const first = LlmSseTransport.post({ url: SSE_URL, init: { method: "POST", body: "{}" }, onChunk: () => {} });
         await settleAsync();
         override.resolve({ status: 200, contentType: "text/event-stream" });
         await first;
@@ -261,7 +245,7 @@ describe("T-N3: 三分支逐请求择优（registered native > XHR > fetch）", 
         assert.equal(real.calls.length, 0, "真实注册位被强制位遮蔽");
 
         LlmSseTransport.setOverrideForTests(undefined);
-        const second = LlmSseTransport.post(SSE_URL, { method: "POST", body: "{}" }, () => {});
+        const second = LlmSseTransport.post({ url: SSE_URL, init: { method: "POST", body: "{}" }, onChunk: () => {} });
         await settleAsync();
         real.resolve({ status: 200, contentType: "text/event-stream" });
         await second;
@@ -276,15 +260,7 @@ describe("T-N3: Connection: close 条件化（spec §7）", () => {
         const fake = createHangingTransport();
         LlmSseTransport.register(fake.transport);
 
-        const promise = LlmSseTransport.post(
-            SSE_URL,
-            {
-                method: "POST",
-                headers: { Authorization: "Bearer k" },
-                body: "{}",
-            },
-            () => {},
-        );
+        const promise = LlmSseTransport.post({ url: SSE_URL, init: { method: "POST", headers: { Authorization: "Bearer k" }, body: "{}" }, onChunk: () => {} });
         await settleAsync();
         fake.resolve({ status: 200, contentType: "text/event-stream" });
         await promise;
@@ -310,15 +286,7 @@ describe("T-N3: Connection: close 条件化（spec §7）", () => {
         LlmSseTransport.register(fake.transport);
         LlmSseTransport.register(undefined);
 
-        const promise = LlmSseTransport.post(
-            SSE_URL,
-            {
-                method: "POST",
-                body: "{}",
-                headers: { Authorization: "Bearer k", Connection: "keep-alive" },
-            },
-            () => {},
-        );
+        const promise = LlmSseTransport.post({ url: SSE_URL, init: { method: "POST", body: "{}", headers: { Authorization: "Bearer k", Connection: "keep-alive" } }, onChunk: () => {} });
         await settleAsync();
 
         assert.equal(fake.calls.length, 0, "注销后不再走 transport");
@@ -348,7 +316,7 @@ describe("T-N2: transport 超时错误映射 PROVIDER_STREAM_TIMEOUT 分级", ()
         const fake = createHangingTransport();
         LlmSseTransport.register(fake.transport);
 
-        const promise = LlmSseTransport.post(SSE_URL, { method: "POST", body: "{}" }, () => {});
+        const promise = LlmSseTransport.post({ url: SSE_URL, init: { method: "POST", body: "{}" }, onChunk: () => {} });
         await settleAsync();
 
         // native callTimeout 到点：无任何 onChunk 投递（首字黑洞形态）
@@ -381,11 +349,7 @@ describe("T-N2: transport 超时错误映射 PROVIDER_STREAM_TIMEOUT 分级", ()
         LlmSseTransport.register(fake.transport);
 
         const chunks: string[] = [];
-        const promise = LlmSseTransport.post(
-            SSE_URL,
-            { method: "POST", body: "{}" },
-            (chunk) => chunks.push(chunk),
-        );
+        const promise = LlmSseTransport.post({ url: SSE_URL, init: { method: "POST", body: "{}" }, onChunk: (chunk) => chunks.push(chunk) });
         await settleAsync();
         fake.emit('data: {"x":1}\n\n');
         fake.reject(kindTimeoutError());
@@ -402,7 +366,7 @@ describe("T-N2: transport 超时错误映射 PROVIDER_STREAM_TIMEOUT 分级", ()
         const fake = createHangingTransport();
         LlmSseTransport.register(fake.transport);
 
-        const promise = LlmSseTransport.post(SSE_URL, { method: "POST", body: "{}" }, () => {});
+        const promise = LlmSseTransport.post({ url: SSE_URL, init: { method: "POST", body: "{}" }, onChunk: () => {} });
         await settleAsync();
         fake.reject(new Error("boom: network down"));
 
@@ -421,7 +385,7 @@ describe("native 分支时序（公共层上移后与 XHR/fetch 同一套语义�
         const fake = createHangingTransport();
         LlmSseTransport.register(fake.transport);
 
-        const promise = LlmSseTransport.post(SSE_URL, { method: "POST", body: "{}" }, () => {});
+        const promise = LlmSseTransport.post({ url: SSE_URL, init: { method: "POST", body: "{}" }, onChunk: () => {} });
         let settledFlag = false;
         promise.then(
             () => {
@@ -459,7 +423,7 @@ describe("native 分支时序（公共层上移后与 XHR/fetch 同一套语义�
         const fake = createHangingTransport();
         LlmSseTransport.register(fake.transport);
 
-        const promise = LlmSseTransport.post(SSE_URL, { method: "POST", body: "{}" }, () => {});
+        const promise = LlmSseTransport.post({ url: SSE_URL, init: { method: "POST", body: "{}" }, onChunk: () => {} });
         let settledFlag = false;
         promise.then(
             () => {
@@ -506,13 +470,7 @@ describe("native 分支时序（公共层上移后与 XHR/fetch 同一套语义�
         };
         LlmSseTransport.register(fake);
 
-        const promise = LlmSseTransport.post(
-            SSE_URL,
-            { method: "POST", body: "{}" },
-            () => {},
-            "test-provider",
-            { signal: userController.signal },
-        );
+        const promise = LlmSseTransport.post({ url: SSE_URL, init: { method: "POST", body: "{}" }, onChunk: () => {}, providerId: "test-provider", signal: userController.signal });
         await settleAsync();
         userController.abort();
 

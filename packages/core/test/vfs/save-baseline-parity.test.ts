@@ -17,8 +17,8 @@ describe("save baseline parity", () => {
         } as VfsService;
 
         const baseline = unwrap(await UserVfsSaveBaseline.read(vfs, "/note.md"));
-        const fromDisk = UserVfsSaveMapping.mapToToolUses(baseline, contentC, "/note.md", contentC);
-        const fromMemory = UserVfsSaveMapping.mapToToolUses(memoryA, contentC, "/note.md", contentC);
+        const fromDisk = UserVfsSaveMapping.mapToToolUses({ baseline, path: "/note.md", fileContentAtSave: contentC });
+        const fromMemory = UserVfsSaveMapping.mapToToolUses({ baseline: memoryA, path: "/note.md", fileContentAtSave: contentC });
 
         assert.notDeepEqual(fromDisk, fromMemory);
         assert.equal(fromDisk.kind, "edit");
@@ -27,7 +27,7 @@ describe("save baseline parity", () => {
     it("T-BL-02: disk baseline small edit maps to edit", () => {
         const baseline = "line1\nline2\nline3";
         const content = "line1\nLINE2\nline3";
-        const mapped = UserVfsSaveMapping.mapToToolUses(baseline, content, "/a.txt", content);
+        const mapped = UserVfsSaveMapping.mapToToolUses({ baseline, path: "/a.txt", fileContentAtSave: content });
         assert.equal(mapped.kind, "edit");
     });
 });

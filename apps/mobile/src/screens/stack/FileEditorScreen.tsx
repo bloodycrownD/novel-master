@@ -171,7 +171,7 @@ export function FileEditorScreen() {
         try {
             const vfs = resolveWritableVfs();
             if (scopeKind === 'session' && sessionId && userVfsUnifiedToolTurnFlag.isEnabled()) {
-                const saved = await VfsOperationsService.sessionSaveFile(runtime, sessionId, vfs, path, content, savedContent);
+                const saved = await VfsOperationsService.sessionSaveFile({runtime, sessionId, vfs, path, content, lastKnownContent: savedContent});
                 if (!saved.ok) {
                     showToast(ToastMessage.toast(coreT({key: "ui.common.save_failed"}), saved.error));
                     return;

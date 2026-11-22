@@ -59,7 +59,7 @@ describe("模板执行器：占位符替换与 params 合并（T-E1）", () => {
         const fetchFn = makeFetch([jsonOk([])]);
         const tpl = template({ url: "https://api.example.com/search?q={{query}}&count={{count}}&key={{apiKey}}&base={{baseUrl}}", headers: { Authorization: "Bearer {{apiKey}}" } });
         const query = '唐 诗&x="1"';
-        await TemplateEngine.run(tpl, resolved("test", { apiKey: "secret-key", baseUrl: "https://base.example.com" }), query, { maxResults: 3 }, {}, fetchFn);
+        await TemplateEngine.run({ template: tpl, resolved: resolved("test", { apiKey: "secret-key", baseUrl: "https://base.example.com" }), query, options: { maxResults: 3 }, params: {}, fetch: fetchFn });
 
         const call = fetchFn.calls[0]!;
         const url = new URL(call.url);
@@ -73,12 +73,12 @@ describe("模板执行器：占位符替换与 params 合并（T-E1）", () => {
 
     it("占位符缺值（baseUrl / apiKey）→ 抛可读错误（防御兜底）", async () => {
         const baseTpl = template({ url: "{{baseUrl}}/search?q={{query}}" });
-        await rejectsErr(TemplateEngine.run(baseTpl, resolved("searxng"), "q", {}, {}, makeFetch([jsonOk([])])), (e: { message: string }) => {
+        await rejectsErr(TemplateEngine.run({ template: baseTpl, resolved: resolved("searxng"), query: "q", options: {}, params: {}, fetch: makeFetch([jsonOk([])]) }), (e: { message: string }) => {
             assert.match(e.message, /测试引擎 template requires \{\{baseUrl\}\} but no base URL is configured/);
         });
 
         const keyTpl = template({ url: "https://api.example.com/search", headers: { "X-Key": "{{apiKey}}" } });
-        await rejectsErr(TemplateEngine.run(keyTpl, resolved("bocha"), "q", {}, {}, makeFetch([jsonOk([])])), (e: { message: string }) => {
+        await rejectsErr(TemplateEngine.run({ template: keyTpl, resolved: resolved("bocha"), query: "q", options: {}, params: {}, fetch: makeFetch([jsonOk([])]) }), (e: { message: string }) => {
             assert.match(e.message, /测试引擎 template requires \{\{apiKey\}\} but no key is configured/);
         });
     });
@@ -86,7 +86,7 @@ describe("模板执行器：占位符替换与 params 合并（T-E1）", () => {
     it("GET params 合并：追加/覆盖同名 query 参数，非字符串值 JSON 序列化，undefined 跳过", async () => {
         const fetchFn = makeFetch([jsonOk({ results: [] })]);
         const tpl = template({ url: "https://api.example.com/search?q={{query}}&count={{count}}" });
-        await TemplateEngine.run(tpl, resolved("test"), "q", { maxResults: 5 }, { count: 2, freshness: "day", nested: { a: 1 }, arr: [1, 2], drop: undefined }, fetchFn);
+        await TemplateEngine.run({ template: tpl, resolved: resolved("test"), query: "q", options: { maxResults: 5 }, params: { count: 2, freshness: "day", nested: { a: 1 }, arr: [1, 2], drop: undefined }, fetch: fetchFn });
 
         const params = new URL(fetchFn.calls[0]!.url).searchParams;
         assert.equal(params.get("q"), "q");
@@ -107,7 +107,7 @@ describe("模板执行器：body 结构化替换与 POST params 浅合并三级�
             defaultBody: '{"query":"{{query}}","note":"plain","count":"{{count}}","nested":{"items":["{{query}}","{{count}}"]}}',
         });
         const query = '他说："你好"\\世界';
-        await TemplateEngine.run(tpl, resolved("test"), query, { maxResults: 4 }, {}, fetchFn);
+        await TemplateEngine.run({ template: tpl, resolved: resolved("test"), query, options: { maxResults: 4 }, params: {}, fetch: fetchFn });
 
         const body = JSON.parse(fetchFn.calls[0]!.init.body as string) as Record<string, unknown>;
         assert.equal(body.query, query);
@@ -120,7 +120,7 @@ describe("模板执行器：body 结构化替换与 POST params 浅合并三级�
     it("浅合并三级之全覆盖：params 带全部字段时默认值全被覆盖（params 为字面值，不做占位符替换）", async () => {
         const fetchFn = makeFetch([jsonOk({ results: [] })]);
         const tpl = template({ method: "POST", url: "https://api.example.com/search", defaultBody: '{"query":"{{query}}","count":"{{count}}","note":"plain"}' });
-        await TemplateEngine.run(tpl, resolved("test"), "原始query", { maxResults: 5 }, { query: "override", count: 9, note: "mine" }, fetchFn);
+        await TemplateEngine.run({ template: tpl, resolved: resolved("test"), query: "原始query", options: { maxResults: 5 }, params: { query: "override", count: 9, note: "mine" }, fetch: fetchFn });
 
         assert.deepEqual(JSON.parse(fetchFn.calls[0]!.init.body as string), { query: "override", count: 9, note: "mine" });
     });
@@ -128,7 +128,7 @@ describe("模板执行器：body 结构化替换与 POST params 浅合并三级�
     it("浅合并三级之部分传参：未覆盖字段补默认（{{query}}/{{count}} 仍替换）", async () => {
         const fetchFn = makeFetch([jsonOk({ results: [] })]);
         const tpl = template({ method: "POST", url: "https://api.example.com/search", defaultBody: '{"query":"{{query}}","count":"{{count}}","note":"plain"}' });
-        await TemplateEngine.run(tpl, resolved("test"), "剩余字段", { maxResults: 7 }, { note: "mine" }, fetchFn);
+        await TemplateEngine.run({ template: tpl, resolved: resolved("test"), query: "剩余字段", options: { maxResults: 7 }, params: { note: "mine" }, fetch: fetchFn });
 
         assert.deepEqual(JSON.parse(fetchFn.calls[0]!.init.body as string), { query: "剩余字段", count: 7, note: "mine" });
     });
@@ -136,7 +136,7 @@ describe("模板执行器：body 结构化替换与 POST params 浅合并三级�
     it("浅合并三级之纯默认：params 为空对象时 defaultBody 原样替换后透传", async () => {
         const fetchFn = makeFetch([jsonOk({ results: [] })]);
         const tpl = template({ method: "POST", url: "https://api.example.com/search", defaultBody: '{"query":"{{query}}","count":"{{count}}"}' });
-        await TemplateEngine.run(tpl, resolved("test"), "纯默认", { maxResults: 6 }, {}, fetchFn);
+        await TemplateEngine.run({ template: tpl, resolved: resolved("test"), query: "纯默认", options: { maxResults: 6 }, params: {}, fetch: fetchFn });
 
         assert.deepEqual(JSON.parse(fetchFn.calls[0]!.init.body as string), { query: "纯默认", count: 6 });
     });
@@ -144,7 +144,7 @@ describe("模板执行器：body 结构化替换与 POST params 浅合并三级�
     it("defaultBody 与 params 均空 → POST {}（引擎自行报错，走链降级）", async () => {
         const fetchFn = makeFetch([jsonOk({ results: [] })]);
         const tpl = template({ method: "POST", url: "https://api.example.com/search" });
-        await TemplateEngine.run(tpl, resolved("test"), "q", {}, {}, fetchFn);
+        await TemplateEngine.run({ template: tpl, resolved: resolved("test"), query: "q", options: {}, params: {}, fetch: fetchFn });
 
         assert.equal(fetchFn.calls[0]!.init.body, "{}");
     });
@@ -152,7 +152,7 @@ describe("模板执行器：body 结构化替换与 POST params 浅合并三级�
     it("defaultBody 缺失但 params 非空：params 独立成 body（可选语义，不再要求 POST 必有默认 body）", async () => {
         const fetchFn = makeFetch([jsonOk({ results: [] })]);
         const tpl = template({ method: "POST", url: "https://api.example.com/search" });
-        await TemplateEngine.run(tpl, resolved("test"), "q", {}, { query: "only-params" }, fetchFn);
+        await TemplateEngine.run({ template: tpl, resolved: resolved("test"), query: "q", options: {}, params: { query: "only-params" }, fetch: fetchFn });
 
         assert.deepEqual(JSON.parse(fetchFn.calls[0]!.init.body as string), { query: "only-params" });
     });
@@ -161,41 +161,41 @@ describe("模板执行器：body 结构化替换与 POST params 浅合并三级�
 describe("模板执行器：最长对象数组提取（T-E3 透传响应）", () => {
     it("多数组取最长：嵌套更深的对象数组胜出", async () => {
         const items = [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }, { id: 5 }];
-        const out = unwrap(await TemplateEngine.run(
-            template({ url: "https://api.example.com/search" }),
-            resolved("test"),
-            "q",
-            {},
-            {},
-            makeFetch([jsonOk({ shallow: [{ id: 0 }], deep: { pages: { items } }, tags: ["a", "b", "c", "d", "e", "f"] })])
-        ));
+        const out = unwrap(await TemplateEngine.run({
+            template: template({ url: "https://api.example.com/search" }),
+            resolved: resolved("test"),
+            query: "q",
+            options: {},
+            params: {},
+            fetch: makeFetch([jsonOk({ shallow: [{ id: 0 }], deep: { pages: { items } }, tags: ["a", "b", "c", "d", "e", "f"] })]),
+        }));
         assert.deepEqual(parseResults(out), items);
     });
 
     it("平局取先出现：同长数组按深度先序（JSON 键插入序）取首个", async () => {
         const firstSeen = [{ id: "first-seen" }];
-        const out = unwrap(await TemplateEngine.run(template({ url: "https://api.example.com/search" }), resolved("test"), "q", {}, {}, makeFetch([jsonOk({ firstSeen, second: [{ id: "second" }] })])));
+        const out = unwrap(await TemplateEngine.run({ template: template({ url: "https://api.example.com/search" }), resolved: resolved("test"), query: "q", options: {}, params: {}, fetch: makeFetch([jsonOk({ firstSeen, second: [{ id: "second" }] })]) }));
         assert.deepEqual(parseResults(out), firstSeen);
     });
 
     it("string[] / number[] 不算对象数组：混响应里只认元素为 object 的数组", async () => {
         const results = [{ id: "only-object-array" }];
-        const out = unwrap(await TemplateEngine.run(
-            template({ url: "https://api.example.com/search" }),
-            resolved("test"),
-            "q",
-            {},
-            {},
-            makeFetch([jsonOk({ tags: ["a", "b", "c"], nums: [1, 2, 3, 4], results })])
-        ));
+        const out = unwrap(await TemplateEngine.run({
+            template: template({ url: "https://api.example.com/search" }),
+            resolved: resolved("test"),
+            query: "q",
+            options: {},
+            params: {},
+            fetch: makeFetch([jsonOk({ tags: ["a", "b", "c"], nums: [1, 2, 3, 4], results })]),
+        }));
         assert.deepEqual(parseResults(out), results);
     });
 
     it('空数组 = 成功空结果（根数组与嵌套空数组皆然），文本为 "[]"', async () => {
-        const root = unwrap(await TemplateEngine.run(template({ url: "https://api.example.com/search" }), resolved("custom:root"), "q", {}, {}, makeFetch([jsonOk([])])));
+        const root = unwrap(await TemplateEngine.run({ template: template({ url: "https://api.example.com/search" }), resolved: resolved("custom:root"), query: "q", options: {}, params: {}, fetch: makeFetch([jsonOk([])]) }));
         assert.deepEqual(root, { engine: "custom:root", results: "[]" });
 
-        const nested = unwrap(await TemplateEngine.run(template({ url: "https://api.example.com/search" }), resolved("custom:nested"), "q", {}, {}, makeFetch([jsonOk({ data: { items: [] } })])));
+        const nested = unwrap(await TemplateEngine.run({ template: template({ url: "https://api.example.com/search" }), resolved: resolved("custom:nested"), query: "q", options: {}, params: {}, fetch: makeFetch([jsonOk({ data: { items: [] } })]) }));
         assert.deepEqual(nested, { engine: "custom:nested", results: "[]" });
     });
 });
@@ -205,24 +205,24 @@ describe("模板执行器：无数组降级与业务码失败（T-E4）", () => 
 
     it("响应无对象数组 → 链降级失败（错误附脱敏响应摘录）", async () => {
         await rejectsErr(
-            TemplateEngine.run(template({ url: "https://api.example.com/search" }), resolved("custom:none"), "q", {}, {}, makeFetch([jsonOk({})])),
+            TemplateEngine.run({ template: template({ url: "https://api.example.com/search" }), resolved: resolved("custom:none"), query: "q", options: {}, params: {}, fetch: makeFetch([jsonOk({})]) }),
             (e: { message: string }) => { assert.match(e.message, /测试引擎 API returned no results array/); }
         );
 
-        await rejectsErr(TemplateEngine.run(template({ url: "https://api.example.com/search" }), resolved("custom:prim"), "q", {}, {}, makeFetch([jsonOk("plain string")])), (e: { message: string }) => { assert.match(e.message, /no results array/); });
+        await rejectsErr(TemplateEngine.run({ template: template({ url: "https://api.example.com/search" }), resolved: resolved("custom:prim"), query: "q", options: {}, params: {}, fetch: makeFetch([jsonOk("plain string")]) }), (e: { message: string }) => { assert.match(e.message, /no results array/); });
 
-        await rejectsErr(TemplateEngine.run(template({ url: "https://api.example.com/search" }), resolved("custom:nums"), "q", {}, {}, makeFetch([jsonOk({ nums: [1, 2, 3] })])), (e: { message: string }) => { assert.match(e.message, /no results array/); });
+        await rejectsErr(TemplateEngine.run({ template: template({ url: "https://api.example.com/search" }), resolved: resolved("custom:nums"), query: "q", options: {}, params: {}, fetch: makeFetch([jsonOk({ nums: [1, 2, 3] })]) }), (e: { message: string }) => { assert.match(e.message, /no results array/); });
     });
 
     it("bocha 业务码失败（HTTP 200 + body code 401）：无数组判据接住，msg 回显的 key 明文先脱敏", async () => {
-        const out = TemplateEngine.run(
-            template({ name: "博查搜索", url: "https://api.example.com/search" }),
-            resolved("bocha", { apiKey: KEY }),
-            "q",
-            {},
-            {},
-            makeFetch([jsonOk({ code: 401, msg: `invalid token ${KEY} rejected` })])
-        );
+        const out = TemplateEngine.run({
+            template: template({ name: "博查搜索", url: "https://api.example.com/search" }),
+            resolved: resolved("bocha", { apiKey: KEY }),
+            query: "q",
+            options: {},
+            params: {},
+            fetch: makeFetch([jsonOk({ code: 401, msg: `invalid token ${KEY} rejected` })]),
+        });
         await rejectsErr(out, (error: unknown) => {
             const message = error instanceof Error ? error.message : String(error);
             assert.match(message, /博查搜索 API returned no results array/);
@@ -240,7 +240,7 @@ describe("模板执行器：错误通道与脱敏（T-E5）", () => {
     it("非 2xx → 可读错误（文案用 template.name 显示名，含 status），body 回显 key 脱敏且截断 300 字符", async () => {
         const tpl = template({ name: "博查搜索", url: "https://api.example.com/search" });
         const longBody = `token ${KEY} rejected ${"x".repeat(400)}`;
-        await rejectsErr(TemplateEngine.run(tpl, resolved("bocha", { apiKey: KEY }), "q", {}, {}, makeFetch([new Response(longBody, { status: 401 })])), (error: unknown) => {
+        await rejectsErr(TemplateEngine.run({ template: tpl, resolved: resolved("bocha", { apiKey: KEY }), query: "q", options: {}, params: {}, fetch: makeFetch([new Response(longBody, { status: 401 })]) }), (error: unknown) => {
             const message = error instanceof Error ? error.message : String(error);
             assert.equal((error as { key?: string }).key, "TOOL_SEARCH_FAILED", "运行时错误走 SearchEngine.failed 通道供串行降级");
             assert.match(message, /博查搜索 API error 401: /);
@@ -253,13 +253,13 @@ describe("模板执行器：错误通道与脱敏（T-E5）", () => {
 
     it("JSON parse 失败 → 可读错误；e.message 内嵌 body 片段回显 key 时过 redactSecret 脱敏（FIX-6）", async () => {
         const tpl = template({ url: "https://api.example.com/search" });
-        await rejectsErr(TemplateEngine.run(tpl, resolved("searxng"), "q", {}, {}, makeFetch([new Response("not-json", { status: 200 })])), (e: { message: string }) => { assert.match(e.message, /测试引擎 API returned invalid JSON/); });
+        await rejectsErr(TemplateEngine.run({ template: tpl, resolved: resolved("searxng"), query: "q", options: {}, params: {}, fetch: makeFetch([new Response("not-json", { status: 200 })]) }), (e: { message: string }) => { assert.match(e.message, /测试引擎 API returned invalid JSON/); });
 
         // V8 的 JSON.parse 错误只回显 body 前 ~10 字符：用短 key 才能完整落入片段，
         // 验证 e.message 确实过了 redactSecret（长 key 只会泄漏前缀片段，无法整串命中）。
         const shortKey = "k3y123";
         const bochaTpl = template({ name: "博查搜索", url: "https://api.example.com/search" });
-        await rejectsErr(TemplateEngine.run(bochaTpl, resolved("bocha", { apiKey: shortKey }), "q", {}, {}, makeFetch([new Response(`${shortKey} not-json`, { status: 200 })])), (error: unknown) => {
+        await rejectsErr(TemplateEngine.run({ template: bochaTpl, resolved: resolved("bocha", { apiKey: shortKey }), query: "q", options: {}, params: {}, fetch: makeFetch([new Response(`${shortKey} not-json`, { status: 200 })]) }), (error: unknown) => {
             const message = error instanceof Error ? error.message : String(error);
             assert.match(message, /博查搜索 API returned invalid JSON/);
             assert.ok(message.includes("***"), "JSON.parse 错误内嵌的 body 片段已脱敏");
@@ -274,7 +274,7 @@ describe("模板执行器：错误通道与脱敏（T-E5）", () => {
         const fullText = JSON.stringify(bigItems);
         assert.ok(Encoding.utf8ByteLength(fullText) > TOOL_OUTPUT_MAX_BYTES, "测试数据本身应超预算");
 
-        const truncated = unwrap(await TemplateEngine.run(template({ url: "https://api.example.com/search" }), resolved("test"), "q", {}, {}, makeFetch([jsonOk(bigItems)])));
+        const truncated = unwrap(await TemplateEngine.run({ template: template({ url: "https://api.example.com/search" }), resolved: resolved("test"), query: "q", options: {}, params: {}, fetch: makeFetch([jsonOk(bigItems)]) }));
         assert.equal(typeof truncated.results, "string");
         assert.ok(Encoding.utf8ByteLength(fullText) > (truncated.results as string).length, "回流文本应短于全文");
         assert.ok((truncated.results as string).endsWith("已截断]"), `截断标注：${(truncated.results as string).slice(-50)}`);
@@ -282,7 +282,7 @@ describe("模板执行器：错误通道与脱敏（T-E5）", () => {
 
         // 预算内：小响应原样透传（无标注）。
         const smallItems = [{ id: 1 }, { id: 2 }];
-        const intact = unwrap(await TemplateEngine.run(template({ url: "https://api.example.com/search" }), resolved("test"), "q", {}, {}, makeFetch([jsonOk(smallItems)])));
+        const intact = unwrap(await TemplateEngine.run({ template: template({ url: "https://api.example.com/search" }), resolved: resolved("test"), query: "q", options: {}, params: {}, fetch: makeFetch([jsonOk(smallItems)]) }));
         assert.equal(intact.results, JSON.stringify(smallItems));
     });
 
@@ -295,7 +295,7 @@ describe("模板执行器：错误通道与脱敏（T-E5）", () => {
                 init?.signal?.addEventListener("abort", () => reject(new DOMException("This operation was aborted", "AbortError")));
             })) as unknown as typeof globalThis.fetch;
         // 超时路径实现保留 throw（SearchEngine.timeoutError 未知异常通道），仍然 reject。
-        const pending = TemplateEngine.run(tpl, resolved("bocha"), "q", {}, {}, hangingFetch).then(
+        const pending = TemplateEngine.run({ template: tpl, resolved: resolved("bocha"), query: "q", options: {}, params: {}, fetch: hangingFetch }).then(
             () => assert.fail("超时应抛错"),
             (error: unknown) => error
         );
@@ -314,10 +314,10 @@ describe("模板执行器：{{count}} 归一（T-E6，客户端截断已随透�
         const tpl = template({ method: "POST", url: "https://api.example.com/search", defaultBody: '{"count":"{{count}}"}' });
         const fetchFn = makeFetch([jsonOk({ results: [] }), jsonOk({ results: [] })]);
 
-        await TemplateEngine.run(tpl, resolved("custom:clamp"), "q", { maxResults: 0 }, {}, fetchFn);
+        await TemplateEngine.run({ template: tpl, resolved: resolved("custom:clamp"), query: "q", options: { maxResults: 0 }, params: {}, fetch: fetchFn });
         assert.equal(JSON.parse(fetchFn.calls[0]!.init.body as string).count, 5);
 
-        await TemplateEngine.run(tpl, resolved("custom:clamp"), "q", { maxResults: 99 }, {}, fetchFn);
+        await TemplateEngine.run({ template: tpl, resolved: resolved("custom:clamp"), query: "q", options: { maxResults: 99 }, params: {}, fetch: fetchFn });
         assert.equal(JSON.parse(fetchFn.calls[1]!.init.body as string).count, 20);
     });
 });
@@ -374,7 +374,7 @@ describe("模板执行器：父级取消透传（G-1）", () => {
             return jsonOk([]);
         }) as typeof globalThis.fetch;
 
-        await rejectsErr(TemplateEngine.run(template({ url: "https://api.example.com/search" }), resolved("bocha"), "q", {}, {}, fetchFn, signal), (error: unknown) => {
+        await rejectsErr(TemplateEngine.run({ template: template({ url: "https://api.example.com/search" }), resolved: resolved("bocha"), query: "q", options: {}, params: {}, fetch: fetchFn, signal }), (error: unknown) => {
             // 取消统一 TOOL_CANCELLED 控制流码（不再走引擎失败文案）；message 走
             // desc 中性文案（三期撤 detail 的既成设计，tool-runner / 各引擎构造一致），
             // 引擎名信息改从 details.toolName 断言（不再锁定已退役的 detail 文案）。
@@ -393,7 +393,7 @@ describe("模板执行器：父级取消透传（G-1）", () => {
         const fetchFn = hangingFetch();
 
         // 四期门⑦：父级取消沿返回值通道到达（Err），不再 reject。
-        const pending = TemplateEngine.run(template({ url: "https://api.example.com/search" }), resolved("bocha"), "q", {}, {}, fetchFn, signal).then(
+        const pending = TemplateEngine.run({ template: template({ url: "https://api.example.com/search" }), resolved: resolved("bocha"), query: "q", options: {}, params: {}, fetch: fetchFn, signal }).then(
             (r) => (r.ok ? assert.fail("取消应失败") : r.error)
         );
         // 等链内 fetch 真正挂起后再取消（中途时序）。

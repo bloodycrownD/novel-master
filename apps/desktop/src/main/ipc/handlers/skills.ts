@@ -106,7 +106,7 @@ export namespace Skills {
             // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
             if (!built.ok) return Result.err(built.error);
             const rt = built.value;
-            return rt.skills().writeSkillFile(req.domain, req.name, req.path, req.content, req.projectId);
+            return rt.skills().writeSkillFile({ domain: req.domain, name: req.name, path: req.path, content: req.content, projectId: req.projectId });
         });
     }
 

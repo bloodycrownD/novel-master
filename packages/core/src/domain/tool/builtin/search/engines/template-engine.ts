@@ -54,6 +54,24 @@ const bodyValue = (value: string, numResults: number, values: TemplatePlaceholde
     return TemplateEngine.substitutePlaceholders(value, values, displayName, false);
 };
 
+/** {@link TemplateEngine.run} 入参：模板与链解析配置成对（template 恒等 resolved.template），query/options/params 为工具层求值输入。 */
+type TemplateEngineRunParams = {
+    /** 模板（由 resolveEngineChain 携带，链解析是全仓唯一查模板点）。 */
+    readonly template: SearchEngineTemplate;
+    /** 链解析结果：引擎 id、凭据（apiKey / baseUrl）与模板成对注入。 */
+    readonly resolved: ResolvedEngineConfig;
+    /** 搜索词：`{{query}}` 占位符取值，URL 透传时百分号编码。 */
+    readonly query: string;
+    /** 工具层选项（maxResults → 结果条数 clamp）。 */
+    readonly options: SearchToolOptions;
+    /** 工具层自由 JSON，原样透传引擎方言字段（GET 并入 query string、POST 浅合并覆盖 defaultBody）。 */
+    readonly params: ToolParams;
+    /** fetch 注入：生产经 ctx.fetchFn，测试注入假 fetch。 */
+    readonly fetch: FetchFn;
+    /** 回合取消信号：已 abort 不发起请求，在途请求同步 abort。 */
+    readonly signal?: AbortSignal;
+};
+
 export const TemplateEngine = {
     /**
    * 占位符内插：URL 传 encodeQuery（仅 `{{query}}` 百分号编码），headers/defaultBody 原样；
@@ -89,15 +107,16 @@ export const TemplateEngine = {
    * （非 abort 的 fetch 错误经 timeoutError 透传）仍抛，search-tool 的
    * 降级 catch 收口。
    */
-    async run(template: SearchEngineTemplate, resolved: ResolvedEngineConfig, q: string, opts: SearchToolOptions, params: ToolParams, fetch: FetchFn, signal?: AbortSignal): Promise<Result<SearchResponse, AppError>> {
+    async run(p: TemplateEngineRunParams): Promise<Result<SearchResponse, AppError>> {
+        const { template, resolved, query, options, params, fetch, signal } = p;
         // 父 signal 已 abort（取消先于请求）：直接取消、不发起请求——已 aborted 的
         // signal 再注册监听器不会补发回调（WHATWG 语义），不早退会空挂满 30s 超时
         //（照 curl-tool / tool-runner 的取消早退先例）。
         if (signal?.aborted === true) return Result.err(new AppError("TOOL_CANCELLED", {toolName: template.name}));
         const engine = resolved.engine;
-        const numResults = SearchEngine.normalizeMaxResults(opts.maxResults);
+        const numResults = SearchEngine.normalizeMaxResults(options.maxResults);
         const values: TemplatePlaceholderValues = {
-            query: q,
+            query,
             count: numResults,
             apiKey: resolved.apiKey,
             baseUrl: resolved.baseUrl,

@@ -9,10 +9,16 @@ import { Text } from "@/common/text.js";
 import { UserVfsActionXml } from "./user-vfs-action-xml.js";
 import type { ToolUseBlock } from "@/domain/chat/model/content-block.js";
 
-/** 保存映射可选参数。 */
-export interface UserVfsSaveMappingOptions {
+/** 保存映射参数对象（>4 参收口）：`replaceAll` 由原 options 展平；原 `saved` 入参（与 `fileContentAtSave` 恒等的死参）已沿调用链删除。 */
+export type UserVfsSaveMappingParams = {
+    /** 保存前磁盘内容；`null` 表示新文件。 */
+    readonly baseline: string | null;
+    readonly path: string;
+    /** 用户保存后的全文。 */
+    readonly fileContentAtSave: string;
+    /** edit 工具 input 透传 `options.replaceAll`。 */
     readonly replaceAll?: boolean;
-}
+};
 
 /** edit hunk 描述（与 tool_use.input 及 action XML 同源）。 */
 interface UserVfsEditHunk {
@@ -92,11 +98,9 @@ function collectChangeRegions(parts: ReadonlyArray<ArrayChange<unknown>>): LineC
 export const UserVfsSaveMapping = {
     /**
    * 将用户保存映射为 `edit` 多 hunk 或 `write` fallback / no-op。
-   *
-   * @param baseline - 保存前磁盘内容；`null` 表示新文件。
-   * @param saved - 用户保存后的全文（与 `fileContentAtSave` 一致）。
    */
-    mapToToolUses(baseline: string | null, _saved: string, path: string, fileContentAtSave: string, options?: UserVfsSaveMappingOptions): UserVfsSaveMappingResult {
+    mapToToolUses(p: UserVfsSaveMappingParams): UserVfsSaveMappingResult {
+        const { baseline, path, fileContentAtSave } = p;
         const content = fileContentAtSave;
         if (baseline != null && baseline === content) {
             return { kind: "noop" };
@@ -160,7 +164,7 @@ export const UserVfsSaveMapping = {
                     path,
                     oldString: anchor.oldString,
                     newString: anchor.newString,
-                    ...(options?.replaceAll === true ? { options: { replaceAll: true } } : {}),
+                    ...(p.replaceAll === true ? { options: { replaceAll: true } } : {}),
                 },
             });
         }

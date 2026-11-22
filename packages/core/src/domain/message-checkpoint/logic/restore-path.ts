@@ -186,7 +186,7 @@ export const RestorePath = {
         // restore 走复活降级，不给 live 新 entry 伪造占位行。
         const diverged = cpEntryId != null && entryId != null && cpEntryId !== entryId;
         const backfillEntryId = diverged ? cpEntryId : entryId ?? cpEntryId;
-        const backfilled = await BackfillMissingRevision.backfillIfNeeded({ revisionRepo, entryRepo, contentStore }, scopeKeyStr, logicalPath, backfillEntryId, version);
+        const backfilled = await BackfillMissingRevision.backfillIfNeeded({ revisionRepo, entryRepo, contentStore, scopeKey: scopeKeyStr, logicalPath, entryId: backfillEntryId, targetVersion: version });
         if (!backfilled.ok) return Result.err(backfilled.error);
         const outcome = await RestorePath.restoreToRevision({ vfs, revisionRepo, entryRepo, contentStore }, { scope, logicalPath, version, liveHeadByPath, prefetch, checkpointEntryId });
         if (!outcome.ok) {

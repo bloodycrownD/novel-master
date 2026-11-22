@@ -168,7 +168,7 @@ export namespace Vfs {
                 ) {
                     log.info("user-vfs-turn external_drift_detected", { path: req.path });
                 }
-                const op = UserVfsTurnOps.buildSave(baseline, req.content, req.path, req.content);
+                const op = UserVfsTurnOps.buildSave({ baseline, path: req.path, fileContentAtSave: req.content });
                 if (op != null) {
                     const exec = await UserVfsTurnExecuteService.executeSessionOp(rt, scope.sessionId, op);
                     if (!exec.ok) return IpcResults.err(FormatIpcError.format(exec.error));
@@ -582,12 +582,12 @@ export namespace Vfs {
                     const baseline = baselineResult.value;
                     if (baseline == null)
                         return toWriterResult(await UserVfsTurnExecuteService.executeSessionOp(rt, scope.sessionId, UserVfsTurnOps.buildCreateFile(logicalPath, content)));
-                    const op = UserVfsTurnOps.buildSave(baseline, content, logicalPath, content);
+                    const op = UserVfsTurnOps.buildSave({ baseline, path: logicalPath, fileContentAtSave: content });
                     if (op == null) return Result.ok(undefined);
                     return toWriterResult(await UserVfsTurnExecuteService.executeSessionOp(rt, scope.sessionId, op));
                 },
             };
-            const appliedWithWriter = await batch.applyBatchIngestWithWriter(scope, targetDir, plan, applyOptions, writer);
+            const appliedWithWriter = await batch.applyBatchIngestWithWriter({ scope, targetDir, plan, options: applyOptions, writer });
             if (!appliedWithWriter.ok) return Result.err(appliedWithWriter.error);
             report = appliedWithWriter.value;
         } else {

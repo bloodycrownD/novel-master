@@ -117,7 +117,22 @@ export namespace LlmNativeFetchShim {
    *
    * nm-style: keep-local — 取消赛跑协议：`settled` 双分支状态机 + once listener 摘除是独立不变量，内联会把竞态收口塞进 fetch 主体。
    */
-    function raceWithAbort<T>(call: Promise<T>, signal: AbortSignal, requestId: string, requestAbort: LlmNativeRequestAbortFn | undefined, cancelState: {userAborted: boolean}): Promise<T> {
+    /** raceWithAbort 的参数对象（>4 参签名收口）：取消赛跑的材料同对象，字段名即文档。 */
+    type RaceWithAbortParams<T> = {
+        /** native 请求 Promise（竞跑的一侧）。 */
+        readonly call: Promise<T>;
+        /** 取消信号源（竞跑的另一侧）。 */
+        readonly signal: AbortSignal;
+        /** native 取消路由键（abort 时传给 requestAbort）。 */
+        readonly requestId: string;
+        /** 真断连入口，旧 native 构建缺该方法时退化为仅本地取消。 */
+        readonly requestAbort: LlmNativeRequestAbortFn | undefined;
+        /** 本端取消标记：abort 分支置位，供调用方把 native "abort" reject 同归 AbortError。 */
+        readonly cancelState: {userAborted: boolean};
+    };
+
+    function raceWithAbort<T>(p: RaceWithAbortParams<T>): Promise<T> {
+        const {call, signal, requestId, requestAbort, cancelState} = p;
         return new Promise<T>((resolve, reject) => {
             let settled = false;
             // nm-style: keep-closure — settled 竞态互斥 + reject 仅存于 Promise executor 作用域，拆出需槽+透传、破坏取消赛跑内聚
@@ -216,7 +231,7 @@ export namespace LlmNativeFetchShim {
             try {
                 const headers = NativeSseTransport.flattenRequestHeaders(init?.headers as Parameters<typeof NativeSseTransport.flattenRequestHeaders>[0]);
                 const nativeCall = request(requestId, method, url, headers, body, LLM_NATIVE_FETCH_CALL_TIMEOUT_MS) as Promise<NativeRequestResult>;
-                result = signal == null ? await nativeCall : await raceWithAbort(nativeCall, signal, requestId, requestAbort, cancelState);
+                result = signal == null ? await nativeCall : await raceWithAbort({call: nativeCall, signal, requestId, requestAbort, cancelState});
             } catch (err) {
                 if (err instanceof NativeSseAbortError) {
                     // 用户取消是终态：AbortError 形态原样上抛，不套传输错误映射——core 的

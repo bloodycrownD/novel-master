@@ -192,12 +192,22 @@ export namespace ChatPromptTokensService {
         };
     }
 
+    /** buildTokenStats 的参数对象（>4 参签名收口）：计数字段同对象，字段名即文档。 */
+    type BuildTokenStatsParams = {
+        readonly tokenCount: number;
+        readonly estimated: boolean;
+        readonly counterKind: string;
+        readonly contextWindow: number | undefined;
+        readonly source: "api" | "local";
+    };
+
     /**
    * 统计响应装配：main 在产出时把完整 label 拼好（core 的
    * {@link TokenFormat.sourceBadge} + {@link TokenFormat.contextUsageLabel} 单源），
    * renderer 纯渲染 `stats.label`，不再本地拼装（X1：renderer 不能 import core）。
    */
-    function buildTokenStats(tokenCount: number, estimated: boolean, counterKind: string, contextWindow: number | undefined, source: "api" | "local"): PromptChatTokenStatsResponse {
+    function buildTokenStats(p: BuildTokenStatsParams): PromptChatTokenStatsResponse {
+        const { tokenCount, estimated, counterKind, contextWindow, source } = p;
         const pct = contextWindow != null && contextWindow > 0 ? Math.min(999, Math.round((tokenCount / contextWindow) * 100)) : undefined;
         const badge = TokenFormat.sourceBadge(source, counterKind, estimated);
         const label = TokenFormat.contextUsageLabel(tokenCount, contextWindow, badge);
@@ -254,14 +264,14 @@ export namespace ChatPromptTokensService {
             // 「预估」标签与 counterKind 语义不变，变的是读数——折算对中文低估八成，而这
             // 正是最需要保守估计的一条路径。
             const count = countFallbackTokens(runtime, serialized.value);
-            return Result.ok(buildTokenStats(count, true, "heuristic", undefined, "local"));
+            return Result.ok(buildTokenStats({ tokenCount: count, estimated: true, counterKind: "heuristic", contextWindow: undefined, source: "local" }));
         }
 
         const counted = await countFn({ layout, ctx, savedModelId, rawMessages });
         if (!counted.ok) return Result.err(counted.error);
         if (counted.value == null) return Result.ok(null);
         const { tokenCount, estimated, counterKind, contextWindow, source } = counted.value;
-        return Result.ok(buildTokenStats(tokenCount, estimated, counterKind, contextWindow, source));
+        return Result.ok(buildTokenStats({ tokenCount, estimated, counterKind, contextWindow, source }));
     }
 
     /**
@@ -346,7 +356,7 @@ export namespace ChatPromptTokensService {
         const contextWindow = cw.value;
         PromptChatTokenUpdatedForwarder.notify({
             sessionId: scope.sessionId,
-            stats: buildTokenStats(warm.tokenCount, warm.estimated, warm.counterKind, contextWindow ?? undefined, warm.source),
+            stats: buildTokenStats({ tokenCount: warm.tokenCount, estimated: warm.estimated, counterKind: warm.counterKind, contextWindow: contextWindow ?? undefined, source: warm.source }),
         });
     }
 

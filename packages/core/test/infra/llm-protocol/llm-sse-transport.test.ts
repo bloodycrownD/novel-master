@@ -32,17 +32,7 @@ describe("llm-sse-transport", () => {
         });
 
         const chunks: string[] = [];
-        const result = await LlmSseTransport.post(
-            "https://api.example.com/v1/chat/completions",
-            {
-                method: "POST",
-                headers: { Authorization: "Bearer sk-test" },
-                body: "{}",
-            },
-            (chunk) => chunks.push(chunk),
-            undefined,
-            { fetchFn: fetchFn as typeof fetch },
-        );
+        const result = await LlmSseTransport.post({ url: "https://api.example.com/v1/chat/completions", init: { method: "POST", headers: { Authorization: "Bearer sk-test" }, body: "{}" }, onChunk: (chunk) => chunks.push(chunk), fetchFn: fetchFn as typeof fetch });
 
         assert.equal(result.status, 200);
         assert.equal(chunks.length, 2);
@@ -99,15 +89,7 @@ describe("llm-sse-transport", () => {
 
         try {
             const chunks: string[] = [];
-            const promise = LlmSseTransport.post(
-                "https://api.example.com/v1/chat/completions",
-                {
-                    method: "POST",
-                    headers: { Authorization: "Bearer sk-test" },
-                    body: "{}",
-                },
-                (chunk) => chunks.push(chunk),
-            );
+            const promise = LlmSseTransport.post({ url: "https://api.example.com/v1/chat/completions", init: { method: "POST", headers: { Authorization: "Bearer sk-test" }, body: "{}" }, onChunk: (chunk) => chunks.push(chunk) });
             await promise;
 
             assert.equal(chunks.length, 2);
@@ -152,11 +134,7 @@ describe("llm-sse-transport", () => {
 
         try {
             const chunks: string[] = [];
-            await LlmSseTransport.post(
-                "https://api.example.com/v1/chat/completions",
-                { method: "POST", body: "{}" },
-                (chunk) => chunks.push(chunk),
-            );
+            await LlmSseTransport.post({ url: "https://api.example.com/v1/chat/completions", init: { method: "POST", body: "{}" }, onChunk: (chunk) => chunks.push(chunk) });
 
             assert.ok(chunks.length < burst.length);
             assert.equal(chunks.join(""), burst);
@@ -193,11 +171,7 @@ describe("llm-sse-transport", () => {
 
         try {
             const chunks: string[] = [];
-            await LlmSseTransport.post(
-                "https://api.example.com/v1/chat/completions",
-                { method: "POST", body: "{}" },
-                (chunk) => chunks.push(chunk),
-            );
+            await LlmSseTransport.post({ url: "https://api.example.com/v1/chat/completions", init: { method: "POST", body: "{}" }, onChunk: (chunk) => chunks.push(chunk) });
 
             assert.equal(chunks.join(""), fullText);
         } finally {
@@ -249,13 +223,7 @@ describe("llm-sse-transport", () => {
             preAborted.abort();
             await assert.rejects(
                 () =>
-                    LlmSseTransport.post(
-                        "https://api.example.com/v1/chat/completions",
-                        { method: "POST", body: "{}" },
-                        () => {},
-                        "test-provider",
-                        { signal: preAborted.signal },
-                    ),
+                    LlmSseTransport.post({ url: "https://api.example.com/v1/chat/completions", init: { method: "POST", body: "{}" }, onChunk: () => {}, providerId: "test-provider", signal: preAborted.signal }),
                 (err: unknown) => {
                     assert.ok(AppErrorOps.is(err, "PROVIDER_HTTP_ERROR"));
                     assert.match(String(err.message), /Request aborted/);
@@ -264,13 +232,7 @@ describe("llm-sse-transport", () => {
             );
 
             const controller = new AbortController();
-            const promise = LlmSseTransport.post(
-                "https://api.example.com/v1/chat/completions",
-                { method: "POST", body: "{}" },
-                () => {},
-                "test-provider",
-                { signal: controller.signal },
-            );
+            const promise = LlmSseTransport.post({ url: "https://api.example.com/v1/chat/completions", init: { method: "POST", body: "{}" }, onChunk: () => {}, providerId: "test-provider", signal: controller.signal });
 
             controller.abort();
 
@@ -331,11 +293,7 @@ describe("llm-sse-transport", () => {
 
         try {
             const chunks: string[] = [];
-            const promise = LlmSseTransport.post(
-                "https://api.example.com/v1/chat/completions",
-                { method: "POST", body: "{}" },
-                (chunk) => chunks.push(chunk),
-            );
+            const promise = LlmSseTransport.post({ url: "https://api.example.com/v1/chat/completions", init: { method: "POST", body: "{}" }, onChunk: (chunk) => chunks.push(chunk) });
 
             // Advance past the old v1.0.2 90s stall window; transport must not auto-abort.
             mock.timers.tick(120_000);
@@ -380,12 +338,7 @@ describe("llm-sse-transport", () => {
         try {
             await assert.rejects(
                 () =>
-                    LlmSseTransport.post(
-                        "https://api.example.com/v1/chat/completions",
-                        { method: "POST", body: "{}" },
-                        () => {},
-                        "openai-test",
-                    ),
+                    LlmSseTransport.post({ url: "https://api.example.com/v1/chat/completions", init: { method: "POST", body: "{}" }, onChunk: () => {}, providerId: "openai-test" }),
                 (err: unknown) => {
                     assert.ok(AppErrorOps.is(err, "PROVIDER_HTTP_ERROR"));
                     assert.match(String(err.message), /401/);
@@ -407,13 +360,7 @@ describe("llm-sse-transport", () => {
 
         await assert.rejects(
             () =>
-                LlmSseTransport.post(
-                    "https://api.example.com/v1/chat/completions",
-                    { method: "POST", body: "{}" },
-                    () => {},
-                    "openai-test",
-                    { fetchFn: fetchFn as typeof fetch },
-                ),
+                LlmSseTransport.post({ url: "https://api.example.com/v1/chat/completions", init: { method: "POST", body: "{}" }, onChunk: () => {}, providerId: "openai-test", fetchFn: fetchFn as typeof fetch }),
             (err: unknown) => {
                 assert.ok(AppErrorOps.is(err, "PROVIDER_HTTP_ERROR"));
                 assert.match(String(err.message), /401/);
@@ -459,13 +406,7 @@ describe("llm-sse-transport", () => {
 
         try {
             const chunks: string[] = [];
-            await LlmSseTransport.post(
-                "https://api.example.com/v1/chat/completions",
-                { method: "POST", body: "{}" },
-                (chunk) => chunks.push(chunk),
-                undefined,
-                { fetchFn: fetchFn as typeof fetch },
-            );
+            await LlmSseTransport.post({ url: "https://api.example.com/v1/chat/completions", init: { method: "POST", body: "{}" }, onChunk: (chunk) => chunks.push(chunk), fetchFn: fetchFn as typeof fetch });
 
             assert.equal(fetchFn.mock.calls.length, 0);
             assert.equal(chunks.length, 1);
@@ -498,13 +439,7 @@ describe("llm-sse-transport", () => {
 
         await assert.rejects(
             () =>
-                LlmSseTransport.post(
-                    "https://api.example.com/v1/chat/completions",
-                    { method: "POST", body: "{}" },
-                    () => {},
-                    undefined,
-                    { fetchFn: fetchFn as typeof fetch },
-                ),
+                LlmSseTransport.post({ url: "https://api.example.com/v1/chat/completions", init: { method: "POST", body: "{}" }, onChunk: () => {}, fetchFn: fetchFn as typeof fetch }),
             (err: unknown) => {
                 assert.ok(AppErrorOps.is(err, "PROVIDER_HTTP_ERROR"));
                 assert.match(String(err.message), /does not support fetch stream bodies/);

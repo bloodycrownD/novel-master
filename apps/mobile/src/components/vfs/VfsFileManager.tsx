@@ -438,7 +438,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
                         try {
                             for (const path of paths) {
                                 const deleteOptions = {recursive: true, useUserVfsTurn, sessionId};
-                                const deleted = await VfsOperationsService.deleteScopedEntry(runtime, scope, writableVfs, path, deleteOptions);
+                                const deleted = await VfsOperationsService.deleteScopedEntry({runtime, scope, vfs: writableVfs, path, ...deleteOptions});
                                 if (!deleted.ok) {
                                     showToast(ToastMessage.toast(coreT({key: "ui.common.delete_failed"}), deleted.error));
                                     return;
@@ -496,7 +496,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
                     };
                     if (isDir) {
                         if (useUserVfsTurn) {
-                            const renamed = await VfsOperationsService.sessionRenameFile(runtime, sessionId!, sourcePath, newPath, renameOpts);
+                            const renamed = await VfsOperationsService.sessionRenameFile({runtime, sessionId: sessionId!, oldPath: sourcePath, newPath, options: renameOpts});
                             if (!renamed.ok) {
                                 moveFailed(renamed.error);
                                 continue;
@@ -516,7 +516,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
                         }
                     } else {
                         if (useUserVfsTurn) {
-                            const renamed = await VfsOperationsService.sessionRenameFile(runtime, sessionId!, sourcePath, newPath, renameOpts);
+                            const renamed = await VfsOperationsService.sessionRenameFile({runtime, sessionId: sessionId!, oldPath: sourcePath, newPath, options: renameOpts});
                             if (!renamed.ok) {
                                 moveFailed(renamed.error);
                                 continue;
@@ -685,7 +685,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
                         try {
                             if (menuRow.kind === 'file') {
                                 if (useUserVfsTurn) {
-                                    const renamed = await VfsOperationsService.sessionRenameFile(runtime, sessionId!, menuPath, newPath);
+                                    const renamed = await VfsOperationsService.sessionRenameFile({runtime, sessionId: sessionId!, oldPath: menuPath, newPath});
                                     if (!renamed.ok) {
                                         renameFailed(renamed.error);
                                         return;
@@ -699,7 +699,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
                                 }
                             } else {
                                 if (useUserVfsTurn) {
-                                    const renamed = await VfsOperationsService.sessionRenameFile(runtime, sessionId!, menuPath, newPath);
+                                    const renamed = await VfsOperationsService.sessionRenameFile({runtime, sessionId: sessionId!, oldPath: menuPath, newPath});
                                     if (!renamed.ok) {
                                         renameFailed(renamed.error);
                                         return;
@@ -739,7 +739,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
                         onPress: () => {
                             const runDelete = async () => {
                                 const deleteOptions = {recursive: true, useUserVfsTurn, sessionId};
-                                const deleted = await VfsOperationsService.deleteScopedEntry(runtime, scope, writableVfs, menuPath, deleteOptions);
+                                const deleted = await VfsOperationsService.deleteScopedEntry({runtime, scope, vfs: writableVfs, path: menuPath, ...deleteOptions});
                                 if (!deleted.ok) {
                                     showToast(ToastMessage.toast(coreT({key: "ui.common.delete_failed"}), deleted.error));
                                     return;

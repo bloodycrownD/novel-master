@@ -369,7 +369,7 @@ action 说明：
                 // （不像 edit 那样有「打哪一份」的歧义），不必强求模型每次显式声明。
                 const domain = input.domain ?? "project";
                 const path = input.path ?? SKILL_DEFAULT_ENTRY;
-                const written = await service.writeSkillFile(domain, name, input.path, content, skills.projectId);
+                const written = await service.writeSkillFile({ domain, name, path: input.path, content, projectId: skills.projectId });
                 if (!written.ok) return Result.err(written.error);
                 const { version } = written.value;
                 return Result.ok({ action: "write", domain, name, path, version });
@@ -386,7 +386,7 @@ action 说明：
                 const domain = input.domain;
                 if (domain === undefined) return missingField("domain");
                 const path = input.path ?? SKILL_DEFAULT_ENTRY;
-                const result = await service.editSkillFile(domain, name, input.path, { oldString, newString, replaceAll: input.replaceAll }, skills.projectId);
+                const result = await service.editSkillFile({ domain, name, path: input.path, match: { oldString, newString, replaceAll: input.replaceAll }, projectId: skills.projectId });
                 if (!result.ok) return Result.err(result.error);
                 return Result.ok({
                     action: "edit",

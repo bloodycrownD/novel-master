@@ -53,15 +53,22 @@ const log = LogFactory.create("llm.sse-transport");
 
 export type SseByteHandler = (chunk: string) => void;
 
-interface PostSseOptions {
+/** {@link LlmSseTransport.post} 的参数对象（>4 参收口）：原 PostSseOptions 字段展平，providerId 同对象并列。 */
+export type SsePostParams = {
+    readonly url: string;
+    readonly init: RequestInit;
+    /** UTF-8 解码后的文本增量回调（只搬字节不认协议）。 */
+    readonly onChunk: SseByteHandler;
+    /** 服务商 id（错误构造与日志归因用）。 */
+    readonly providerId?: string;
     readonly fetchFn?: FetchFn;
     readonly signal?: AbortSignal;
     readonly logTag?: string;
-}
+};
 
 /**
  * SSE 传输 port（spec llm-stream-native §3）：把「发起请求 + 增量投递解码后
- * 文本 chunk」抽象为可注册实现，形状与 `post` 现签名逐参对齐。
+ * 文本 chunk」抽象为可注册实现，opts 字段与 {@link SsePostParams} 逐字段对应。
  *
  * - `post` 语义与 LlmSseTransport.post 一致：HTTP 2xx 流结束 resolve `{status, contentType}`；
  *   非 2xx / 网络失败 reject（ProviderError 形态或 transport 自有错误）；
@@ -178,6 +185,12 @@ type SsePostSettleCtx = {
     logTag: string;
 };
 
+/** native 分支单次 chunk 投递参数（>4 参收口，{@link SsePostSettle.deliverNativeChunk}）。 */
+type SseNativeChunkParams = { readonly ctx: SsePostSettleCtx; readonly state: SseDispatchState; readonly onChunk: SseByteHandler; readonly logTag: string; readonly chunk: string };
+
+/** XHR 分支新文本投递参数（>4 参收口，{@link SsePostSettle.deliverNewText}）。 */
+type SseNewTextParams = { readonly ctx: SsePostSettleCtx; readonly xhr: SseXmlHttpRequest; readonly state: SseDispatchState; readonly emitter: SseEmitterHandle; readonly logTag: string };
+
 /**
  * settle / 投递族（同主体：SsePostSettleCtx 生命周期）——7 个操作收同一 namespace，
  * ctx 显式传参形态不变（纯机械重组，体与顺序逐字保持）。
@@ -249,22 +262,22 @@ const SsePostSettle = {
     },
 
     /** native 分支 chunk 投递（wrapper 多次异步调用）：观测计数与首包台账经 ctx/state 共享，裸参数化会拆散台账。 */
-    deliverNativeChunk(ctx: SsePostSettleCtx, state: SseDispatchState, onChunk: SseByteHandler, logTag: string, chunk: string): void {
-        SsePostSettle.noteActivity(ctx, chunk.length);
-        SseDispatch.dispatchChunk(chunk, state, onChunk, (bytes) => LlmSseTransport.logSse(logTag, "native first chunk", { bytes }));
+    deliverNativeChunk(p: SseNativeChunkParams): void {
+        SsePostSettle.noteActivity(p.ctx, p.chunk.length);
+        SseDispatch.dispatchChunk(p.chunk, p.state, p.onChunk, (bytes) => LlmSseTransport.logSse(p.logTag, "native first chunk", { bytes }));
     },
 
     /** XHR 分支新文本投递：按 ctx.xhrCursor 切增量，游标与观测计数经 ctx 原子推进（settled 守卫由调用侧直读）。 */
-    deliverNewText(ctx: SsePostSettleCtx, xhr: SseXmlHttpRequest, state: SseDispatchState, emitter: SseEmitterHandle, logTag: string): void {
-        const text = xhr.responseText;
-        if (text.length <= ctx.xhrCursor) {
+    deliverNewText(p: SseNewTextParams): void {
+        const text = p.xhr.responseText;
+        if (text.length <= p.ctx.xhrCursor) {
             return;
         }
-        const chunk = text.slice(ctx.xhrCursor);
-        ctx.xhrCursor = text.length;
-        SsePostSettle.noteActivity(ctx, chunk.length);
+        const chunk = text.slice(p.ctx.xhrCursor);
+        p.ctx.xhrCursor = text.length;
+        SsePostSettle.noteActivity(p.ctx, chunk.length);
         // 经公共 dispatchChunk 转发到 emitter（节流由 emitter 负责），首包日志统一在此。
-        SseDispatch.dispatchChunk(chunk, state, emitter.append, (bytes) => LlmSseTransport.logSse(logTag, "xhr first chunk", { bytes }));
+        SseDispatch.dispatchChunk(chunk, p.state, p.emitter.append, (bytes) => LlmSseTransport.logSse(p.logTag, "xhr first chunk", { bytes }));
     },
 } as const;
 
@@ -330,9 +343,10 @@ export const LlmSseTransport = {
    * 传输三分支逐请求择优（registered native → XHR → fetch）；whole-call
    * 语义与 settle 守卫在公共层装配（见模块文档）。
    */
-    post(url: string, init: RequestInit, onChunk: SseByteHandler, providerId?: string, options?: PostSseOptions): Promise<{ status: number; contentType: string | null }> {
-        const logTag = options?.logTag ?? DEFAULT_LOG_TAG;
-        const signal = options?.signal ?? init.signal ?? undefined;
+    post(p: SsePostParams): Promise<{ status: number; contentType: string | null }> {
+        const { url, init, onChunk, providerId } = p;
+        const logTag = p.logTag ?? DEFAULT_LOG_TAG;
+        const signal = p.signal ?? init.signal ?? undefined;
         const method = init.method ?? "POST";
 
         // 三分支逐请求运行时判定（spec §3）：registered native → XHR → fetch。
@@ -397,7 +411,7 @@ export const LlmSseTransport = {
                 const postOptions = { providerId, signal: controller.signal, logTag, wholeCallTimeoutMs: SSE_WHOLE_CALL_TIMEOUT_MS };
 
                 // native 侧已合批（~10 事件/s），JS 侧直投（与 fetch 同款即时转发）。
-                void transport.post(url, init, (chunk) => SsePostSettle.deliverNativeChunk(ctx, dispatchState, onChunk, logTag, chunk), postOptions).then(
+                void transport.post(url, init, (chunk) => SsePostSettle.deliverNativeChunk({ ctx, state: dispatchState, onChunk, logTag, chunk }), postOptions).then(
                     (result) => {
                         SsePostSettle.resolveOnce(ctx, resolve, result);
                     },
@@ -456,7 +470,7 @@ export const LlmSseTransport = {
                     // 任何响应数据到达（含 UTF-8 解码滞后的空增量）：更新观测打点
                     //（lastActivityAt / processedLength），不参与任何超时判定。
                     SsePostSettle.noteActivity(ctx, 0);
-                    SsePostSettle.deliverNewText(ctx, xhr, dispatchState, emitter, logTag);
+                    SsePostSettle.deliverNewText({ ctx, xhr, state: dispatchState, emitter, logTag });
                 };
 
                 // 整调用预算耗尽（callTimeout 到点，RN dispatch 'timeout' 事件）：
@@ -470,7 +484,7 @@ export const LlmSseTransport = {
                     // settle 即终态：超时/中止 settle 后迟到的完成回调不得补投 tail、
                     // 也不得用 resolve/reject 顶替既有终态。
                     if (ctx.settled) return;
-                    SsePostSettle.deliverNewText(ctx, xhr, dispatchState, emitter, logTag);
+                    SsePostSettle.deliverNewText({ ctx, xhr, state: dispatchState, emitter, logTag });
                     // Synchronous flush on complete: no async drain chain; guarantees tail delivery.
                     const tail = emitter.flush();
                     if (tail.length > 0) {
@@ -531,7 +545,7 @@ export const LlmSseTransport = {
                 xhr.send(init.body ?? null);
             } else {
                 /** fetch 分支：Desktop/CLI（流式 body 可用）与未注册 native 的非 RN 环境。 */
-                const fetchFn = options?.fetchFn ?? globalThis.fetch;
+                const fetchFn = p.fetchFn ?? globalThis.fetch;
 
                 // 组合自有 controller：用户 AbortSignal（停止生成）转发进来；公共层
                 // 超时也经它主动断流。用户取消语义不变——signal abort →

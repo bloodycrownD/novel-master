@@ -142,13 +142,13 @@ test("createWorkspaceEntry（新建文件夹）NOT_FOUND 失败 → 中文文案
         };
     });
     try {
-        const outcome = await createWorkspaceEntry(
-            { kind: "blank", panelScope: "chat", x: 0, y: 0 },
-            "folder",
-            "新文件夹",
-            "p1",
-            "s1",
-        );
+        const outcome = await createWorkspaceEntry({
+            target: { kind: "blank", panelScope: "chat", x: 0, y: 0 },
+            kind: "folder",
+            name: "新文件夹",
+            projectId: "p1",
+            sessionId: "s1",
+        });
         assert.equal(outcome.ok, false);
         if (!outcome.ok) {
             assert.equal(outcome.message, "文件不存在或已被删除。");

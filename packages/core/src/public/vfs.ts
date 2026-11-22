@@ -57,6 +57,5 @@ export { UserVfsActionXml } from "../domain/vfs/logic/user-vfs-action-xml.js";
 export { UserVfsSaveBaseline } from "../domain/vfs/logic/read-user-vfs-save-baseline.js";
 export { VfsErrorForUser } from "../domain/vfs/logic/format-vfs-error-for-user.js";
 export { EntryNameValidator } from "../domain/vfs/logic/validate-entry-name.js";
-export type { UserVfsSaveMappingOptions } from "../domain/vfs/logic/user-vfs-save-mapping.js";
 export { ActionXmlToolUses } from "../domain/vfs/logic/action-xml-to-tool-uses.js";
 export type { DerivedToolUseInput } from "../domain/vfs/logic/action-xml-to-tool-uses.js";

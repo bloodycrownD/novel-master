@@ -303,7 +303,7 @@ export const NativeChatComposer = forwardRef<NativeChatComposerInstance, NativeC
                 // 纯插入的光标锚（见 remapTokenRanges）：只信调用方显式给的
                 // 光标（引用落文恒有）；兜底路径的 plain.length 不代表真实插入
                 // 点，不传——对齐点兜底已是保守正确。
-                confirmedRangesRef.current = TokenRanges.remapTokenRanges(baselineRef.current, plain, confirmedRangesRef.current, cursor);
+                confirmedRangesRef.current = TokenRanges.remapTokenRanges({prev: baselineRef.current, next: plain, ranges: confirmedRangesRef.current, nextCursor: cursor});
             }
             baselineRef.current = plain;
             instance.setValue(confirmedRangesRef.current != null ? TokenRanges.synthesizeTokenMarkdownFromRanges(plain, confirmedRangesRef.current) : TokenRanges.synthesizeTokenMarkdown(plain));
@@ -328,7 +328,7 @@ export const NativeChatComposer = forwardRef<NativeChatComposerInstance, NativeC
                 // 删除段 `[光标 + delta, 光标)` 正好覆盖被删胶囊；选区整体删除时
                 // 右缘同样贴着删除段（原生把光标落到选区起点）。打字路径没有
                 // 「编辑后光标」的独立来源，nextCursor 留给派生的光标差。
-                confirmedRangesRef.current = TokenRanges.remapTokenRanges(baselineRef.current, plain, confirmedRangesRef.current, undefined, selectionRef.current?.end);
+                confirmedRangesRef.current = TokenRanges.remapTokenRanges({prev: baselineRef.current, next: plain, ranges: confirmedRangesRef.current, prevCursor: selectionRef.current?.end});
             }
             baselineRef.current = plain;
             changeTextRef.current(plain);

@@ -80,7 +80,7 @@ describe("VFS directory nodes", () => {
         for (const fn of [
             () => vfs.read(GLOBAL_SCOPE, drafts),
             () => vfs.write(GLOBAL_SCOPE, drafts, "x", { versionCheck: false }),
-            () => vfs.replace(GLOBAL_SCOPE, drafts, "a", "b"),
+            () => vfs.replace({ scopeKey: GLOBAL_SCOPE, path: drafts, oldString: "a", newString: "b" }),
         ]) {
             await rejectsErr(fn, (e: unknown) => {
                 assert.ok(AppErrorOps.is(e, "VFS_IS_DIRECTORY"));

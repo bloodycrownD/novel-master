@@ -28,6 +28,16 @@ interface DirSortPlan {
     readonly sortedFiles: readonly string[];
 }
 
+/** walkDir 的评估参数：scope/ctx 为评估常量，dirPath 为当前目录游标，rows/displayByPath/planByDir 为共享游标。 */
+type WalkDirParams = {
+    readonly scope: WorkplaceScopeType;
+    readonly ctx: WorkplaceRuleContext;
+    readonly dirPath: string;
+    readonly rows: WorkplaceRuleRow[];
+    readonly displayByPath: ReadonlyMap<string, DisplayState>;
+    readonly planByDir: ReadonlyMap<string, DirSortPlan>;
+};
+
 /** 单文件排序元组（auto 名单与全量名单两处排序共用；mtime 缺省 0）。 */
 const fileSortMeta = (ctx: WorkplaceRuleContext, p: string): WorkplaceFileSortMeta => ({
     logicalPath: p,
@@ -101,7 +111,7 @@ export const WorkplaceRuleEngine = {
         }
 
         const rows: WorkplaceRuleRow[] = [];
-        const walked = WorkplaceRuleEngine.walkDir(scope, ctx, WorkplaceScope.rootLogicalPath(scope), rows, displayByPath, planByDir);
+        const walked = WorkplaceRuleEngine.walkDir({ scope, ctx, dirPath: WorkplaceScope.rootLogicalPath(scope), rows, displayByPath, planByDir });
         if (!walked.ok) return Result.err(walked.error);
         return Result.ok({ rows, displayByPath });
     },
@@ -125,7 +135,8 @@ export const WorkplaceRuleEngine = {
    * nm-style: keep-local — 递归 DFS 遍历：自身递归调用 + 顶层单点调用，内联需再造
    * 一个具名递归函数；rows / displayByPath / planByDir 三个游标在此阶段内共享。
    */
-    walkDir(scope: WorkplaceScopeType, ctx: WorkplaceRuleContext, dirPath: string, rows: WorkplaceRuleRow[], displayByPath: ReadonlyMap<string, DisplayState>, planByDir: ReadonlyMap<string, DirSortPlan>): Result<void, AppError> {
+    walkDir(p: WalkDirParams): Result<void, AppError> {
+        const { scope, ctx, dirPath, rows, displayByPath, planByDir } = p;
         rows.push({
             kind: "dir",
             path: dirPath,
@@ -138,7 +149,7 @@ export const WorkplaceRuleEngine = {
         if (!children.ok) return Result.err(children.error);
         const subdirs = WorkplaceEval.sortDirPaths(children.value, dirRule, { smartRules: ctx.smartRules, dirMtimeByPath: ctx.dirMtimeByPath });
         for (const sub of subdirs) {
-            const walked = WorkplaceRuleEngine.walkDir(scope, ctx, sub, rows, displayByPath, planByDir);
+            const walked = WorkplaceRuleEngine.walkDir({ ...p, dirPath: sub });
             if (!walked.ok) return Result.err(walked.error);
         }
 

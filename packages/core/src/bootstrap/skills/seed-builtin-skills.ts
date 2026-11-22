@@ -184,7 +184,7 @@ export const BuiltinSkills = {
         }
         // 版本落后：无条件重种当前文案（存在性只决定是否需要 seed 特权豁免
         // D2② 的新建拦截——首种时目录必不存在；重种走整文件覆盖）。
-        const written = await service.writeSkillFile("global", "agent-config", undefined, AGENT_CONFIG_SKILL_MD, undefined, exists ? undefined : { builtinSeed: true });
+        const written = await service.writeSkillFile({ domain: "global", name: "agent-config", content: AGENT_CONFIG_SKILL_MD, builtinSeed: !exists });
         if (!written.ok) {
             return Result.err(written.error);
         }

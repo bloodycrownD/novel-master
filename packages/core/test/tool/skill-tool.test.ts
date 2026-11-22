@@ -14,8 +14,10 @@ import type {
     EffectiveSkill,
 } from "../../src/domain/skills/logic/effective-skills.js";
 import type {
+    SkillEditParams,
     SkillFileContent,
     SkillService,
+    SkillWriteParams,
 } from "../../src/service/skills/skills.port.js";
 import {  AgentTurnRunner  } from "../../src/service/agent/logic/run-agent-turn.js";
 import {  AgentTools  } from "../../src/domain/agent/logic/resolve-agent-tools.js";
@@ -24,8 +26,8 @@ import type { AgentDefinition } from "../../src/domain/agent/model/agent-definit
 /** 构造 fake SkillService：实现 skill 工具用到的服务方法，按调用记录断言。 */
 function fakeSkillService(overrides?: {
     readonly read?: (domain: unknown, name: string, path?: string, projectId?: string) => Promise<SkillFileContent>;
-    readonly write?: (domain: unknown, name: string, path: string | undefined, content: string, projectId?: string) => Promise<{ version: number }>;
-    readonly edit?: (domain: unknown, name: string, path: string | undefined, match: unknown, projectId?: string) => Promise<{ version: number; replacements: number }>;
+    readonly write?: (p: SkillWriteParams) => Promise<{ version: number }>;
+    readonly edit?: (p: SkillEditParams) => Promise<{ version: number; replacements: number }>;
     readonly effective?: (projectId: string) => Promise<EffectiveSkill[]>;
     readonly list?: (scope: unknown) => Promise<unknown[]>;
 }): SkillService & {
@@ -294,11 +296,12 @@ describe("skill 工具", () => {
         ));
         const writeCall = svc.calls.find((c) => c.method === "writeSkillFile");
         assert.ok(writeCall != null);
-        assert.equal(writeCall.args[0], "project", "write 缺省域应为 project");
-        assert.equal(writeCall.args[1], "demo");
-        assert.equal(writeCall.args[2], undefined, "path 缺省透传 undefined");
-        assert.equal(writeCall.args[3], "新内容");
-        assert.equal(writeCall.args[4], "proj-1");
+        const writeParams = writeCall.args[0];
+        assert.equal(writeParams.domain, "project", "write 缺省域应为 project");
+        assert.equal(writeParams.name, "demo");
+        assert.equal(writeParams.path, undefined, "path 缺省透传 undefined");
+        assert.equal(writeParams.content, "新内容");
+        assert.equal(writeParams.projectId, "proj-1");
         assert.equal((out as { path: string }).path, "SKILL.md");
 
         await rejectsErr(
@@ -332,8 +335,9 @@ describe("skill 工具", () => {
         ));
         const editCall = svc.calls.find((c) => c.method === "editSkillFile");
         assert.ok(editCall != null);
-        assert.equal(editCall.args[0], "global");
-        assert.deepEqual(editCall.args[3], {
+        const editParams = editCall.args[0];
+        assert.equal(editParams.domain, "global");
+        assert.deepEqual(editParams.match, {
             oldString: "旧文本",
             newString: "新文本",
             replaceAll: true,
@@ -566,7 +570,7 @@ describe("skill 工具同路径串行化（runParallel）", () => {
             // 首笔延迟制造竞态——若 runner 不排队，第二笔会基于旧快照整份
             // 覆盖第一笔的改动（真实事故：同 step 多笔 skill edit 只有最后
             // 一条生效）。
-            edit: async (_domain, _name, _path, match) => {
+            edit: async ({ match }) => {
                 editCalls += 1;
                 const callNo = editCalls;
                 if (callNo === 1) {
@@ -615,7 +619,7 @@ describe("skill 工具同路径串行化（runParallel）", () => {
         const events: string[] = [];
         let calls = 0;
         const service = fakeSkillService({
-            edit: async (domain) => {
+            edit: async ({ domain }) => {
                 calls += 1;
                 const callNo = calls;
                 events.push(`start:${domain}${callNo}`);

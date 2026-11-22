@@ -1074,18 +1074,18 @@ describe("dispatch：引擎分发与链空文案", () => {
             apiKey: "k",
             template: PRESET_ENGINE_TEMPLATES.bocha,
         };
-        const out = unwrap(await SearchDispatch.dispatch(resolved, "q", {}, {}, fetchFn));
+        const out = unwrap(await SearchDispatch.dispatch({ resolved, query: "q", options: {}, params: {}, fetch: fetchFn }));
         assert.equal(out.engine, "bocha");
         assert.equal(urls[0], "https://api.bochaai.com/v1/web-search");
 
-        const ddg = unwrap(await SearchDispatch.dispatch({ engine: "duckduckgo" }, "q", {}, { ignored: true }, fetchFn));
+        const ddg = unwrap(await SearchDispatch.dispatch({ resolved: { engine: "duckduckgo" }, query: "q", options: {}, params: { ignored: true }, fetch: fetchFn }));
         assert.equal(ddg.engine, "duckduckgo");
         assert.ok(urls[1]!.startsWith("https://html.duckduckgo.com/html/"));
     });
 
     it("SearchDispatch.dispatch 未知 id / 无模板：Result.err 携带 SearchEngine.failed 可读错误（含引擎 id，模板缺失不再走异常通道）", async () => {
         const fetchFn = (async () => bochaResponse()) as typeof globalThis.fetch;
-        const r = await SearchDispatch.dispatch({ engine: "custom:missing" }, "q", {}, {}, fetchFn);
+        const r = await SearchDispatch.dispatch({ resolved: { engine: "custom:missing" }, query: "q", options: {}, params: {}, fetch: fetchFn });
         assert.ok(!r.ok);
         assert.match(r.error.message, /unknown search engine: custom:missing/);
     });

@@ -5,11 +5,22 @@
  */
 
 import { attachmentPath } from "@/domain/chat/logic/message/attachment-path.js";
-import { UserVfsSaveMapping, type UserVfsSaveMappingOptions } from "@/domain/vfs/logic/user-vfs-save-mapping.js";
+import { UserVfsSaveMapping } from "@/domain/vfs/logic/user-vfs-save-mapping.js";
 import type { UserVfsTurnOp, UserVfsTurnToolSpec } from "@/service/chat/user-vfs-turn.port.js";
 
 /** 工具 ID 自增序号（模块内 holder，对象管理）。 */
 const toolIdCounter = { seq: 0 };
+
+/** 保存编辑 op 参数（>4 参收口）：`replaceAll` 展平（原 mappingOptions 字段）。 */
+export type UserVfsSaveOpParams = {
+    /** 保存前磁盘内容；`null` 表示新文件。 */
+    readonly baseline: string | null;
+    readonly path: string;
+    /** 用户保存后的全文。 */
+    readonly fileContentAtSave: string;
+    /** edit 工具 input 透传 `options.replaceAll`。 */
+    readonly replaceAll?: boolean;
+};
 
 /** UI VFS turn op 构建器集合（delete / mkdir / rename / create / save）。 */
 export const UserVfsTurnOps = {
@@ -60,8 +71,8 @@ export const UserVfsTurnOps = {
     /**
    * 构建保存编辑操作 op；内容无变化时返回 `null`（no-op）。
    */
-    buildSave(baseline: string | null, saved: string, path: string, fileContentAtSave: string, mappingOptions?: UserVfsSaveMappingOptions): UserVfsTurnOp | null {
-        const mapped = UserVfsSaveMapping.mapToToolUses(baseline, saved, path, fileContentAtSave, mappingOptions);
+    buildSave(p: UserVfsSaveOpParams): UserVfsTurnOp | null {
+        const mapped = UserVfsSaveMapping.mapToToolUses(p);
 
         if (mapped.kind === "noop") {
             return null;

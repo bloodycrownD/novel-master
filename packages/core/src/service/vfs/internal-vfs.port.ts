@@ -26,6 +26,15 @@ import type { Result } from "@/errors/either.js";
  * 错误通道迁移四期：读取 / 路径校验 / 写入 / 删除 / rename 走返回值通道（`Result<T, AppError>`）；
  * `glob` 链上无解包点，暂维持原形态。
  */
+/** 单文件替换参数对象（>4 参收口，{@link InternalVfsService.replace} 各实现共用）。 */
+export type VfsReplaceParams = {
+    readonly scopeKey: string;
+    readonly path: string;
+    readonly oldString: string;
+    readonly newString: string;
+    readonly replaceAll?: boolean;
+};
+
 export interface InternalVfsService {
     list(scopeKey: string, dir: string, options?: { recursive?: boolean; maxDepth?: number }): Promise<Result<VfsListEntry[], AppError>>;
 
@@ -38,7 +47,7 @@ export interface InternalVfsService {
 
     write(scopeKey: string, path: string, content: string): Promise<Result<{ version: number }, AppError>>;
 
-    replace(scopeKey: string, path: string, oldString: string, newString: string, options?: { replaceAll?: boolean }): Promise<Result<{ version: number; replacements: number }, AppError>>;
+    replace(p: VfsReplaceParams): Promise<Result<{ version: number; replacements: number }, AppError>>;
 
     glob(scopeKey: string, pattern: string, options?: { cwd?: string }): Promise<string[]>;
 

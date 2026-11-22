@@ -250,7 +250,7 @@ export function useChatComposerController({
     const advanceTokenRanges = useCallback((prev: string, next: string, inserted?: readonly TokenRange[], nextCursor?: number, prevCursor?: number) => {
         // D11 删除锚：编辑前光标（打字路径由选区镜像带入；Picker 落文不带，
         // 走既有纯插入/差分口径）。
-        const remapped = TokenRanges.remapTokenRanges(prev, next, tokenRangesRef.current, nextCursor, prevCursor);
+        const remapped = TokenRanges.remapTokenRanges({prev, next, ranges: tokenRangesRef.current, nextCursor, prevCursor});
         const merged = inserted != null && inserted.length > 0 ? [...remapped, ...inserted].sort((a, b) => a.start - b.start) : remapped;
         tokenRangesRef.current = merged;
         setTokenRanges(merged);

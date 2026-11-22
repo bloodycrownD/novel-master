@@ -8,12 +8,12 @@ import {  UserVfsSaveMapping  } from "../../src/domain/vfs/logic/user-vfs-save-m
 
 describe("UserVfsSaveMapping.mapToToolUses", () => {
     it("内容相等时返回 noop", () => {
-        const result = UserVfsSaveMapping.mapToToolUses("hello", "hello", "a.md", "hello");
+        const result = UserVfsSaveMapping.mapToToolUses({ baseline: "hello", path: "a.md", fileContentAtSave: "hello" });
         assert.equal(result.kind, "noop");
     });
 
     it("新文件返回 write", () => {
-        const result = UserVfsSaveMapping.mapToToolUses(null, "new", "new.md", "new");
+        const result = UserVfsSaveMapping.mapToToolUses({ baseline: null, path: "new.md", fileContentAtSave: "new" });
         assert.equal(result.kind, "write");
         if (result.kind === "write") {
             assert.equal(result.path, "new.md");
@@ -25,7 +25,7 @@ describe("UserVfsSaveMapping.mapToToolUses", () => {
     it("小改锚点 edit", () => {
         const baseline = "line1\nline2\nline3";
         const saved = "line1\nLINE2\nline3";
-        const result = UserVfsSaveMapping.mapToToolUses(baseline, saved, "ch.md", saved);
+        const result = UserVfsSaveMapping.mapToToolUses({ baseline, path: "ch.md", fileContentAtSave: saved });
         assert.equal(result.kind, "edit");
         if (result.kind === "edit") {
             assert.equal(result.toolUses.length, 1);
@@ -38,7 +38,7 @@ describe("UserVfsSaveMapping.mapToToolUses", () => {
     it("锚点不唯一时 fallback write", () => {
         const baseline = "aa\naa";
         const saved = "AA\naa";
-        const result = UserVfsSaveMapping.mapToToolUses(baseline, saved, "x.md", saved);
+        const result = UserVfsSaveMapping.mapToToolUses({ baseline, path: "x.md", fileContentAtSave: saved });
         assert.equal(result.kind, "write");
         if (result.kind === "write") {
             assert.equal(result.reason, "anchor-not-unique");
@@ -48,7 +48,7 @@ describe("UserVfsSaveMapping.mapToToolUses", () => {
     it("多 hunk 生成多个 edit tool_use", () => {
         const baseline = "aaa\nsep\nbbb\nsep\nccc";
         const saved = "AAA\nsep\nbbb\nsep\nCCC";
-        const result = UserVfsSaveMapping.mapToToolUses(baseline, saved, "multi.md", saved);
+        const result = UserVfsSaveMapping.mapToToolUses({ baseline, path: "multi.md", fileContentAtSave: saved });
         assert.equal(result.kind, "edit");
         if (result.kind === "edit") {
             assert.equal(result.toolUses.length, 2);

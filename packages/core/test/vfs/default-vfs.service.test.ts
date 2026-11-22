@@ -51,12 +51,12 @@ describe("DefaultVfsService (integration)", () => {
         const conn = ctx.conn;
         const vfs = VfsServiceFactory.create(conn);
         unwrap(await vfs.write(GLOBAL, "/r.txt", "hello world"));
-        const once = unwrap(await vfs.replace(GLOBAL, "/r.txt", "world", "there"));
+        const once = unwrap(await vfs.replace({ scopeKey: GLOBAL, path: "/r.txt", oldString: "world", newString: "there" }));
         assert.equal(once.replacements, 1);
         assert.equal(unwrap(await vfs.read(GLOBAL, "/r.txt")).content, "hello there");
 
         unwrap(await vfs.write(GLOBAL, "/all.txt", "a X b X"));
-        const all = unwrap(await vfs.replace(GLOBAL, "/all.txt", "X", "Y", { replaceAll: true }));
+        const all = unwrap(await vfs.replace({ scopeKey: GLOBAL, path: "/all.txt", oldString: "X", newString: "Y", replaceAll: true }));
         assert.equal(all.replacements, 2);
         assert.equal(unwrap(await vfs.read(GLOBAL, "/all.txt")).content, "a Y b Y");
     });
@@ -66,7 +66,7 @@ describe("DefaultVfsService (integration)", () => {
         const conn = ctx.conn;
         const vfs = VfsServiceFactory.create(conn);
         unwrap(await vfs.write(GLOBAL, "/missing.txt", "hello"));
-        await rejectsErr(() => vfs.replace(GLOBAL, "/missing.txt", "nope", "x"), (e: unknown) => {
+        await rejectsErr(() => vfs.replace({ scopeKey: GLOBAL, path: "/missing.txt", oldString: "nope", newString: "x" }), (e: unknown) => {
             assert.ok(AppErrorOps.is(e, "VFS_REPLACE_NOT_FOUND"));
         });
     });

@@ -36,6 +36,18 @@ export interface RenderWorkplaceFileTreeForMacroParams extends RenderWorkplaceFi
     readonly displayByPath: ReadonlyMap<string, DisplayState>;
 }
 
+/**
+ * appendDirLines 递归渲染参数：基础树参数展开 + 行缓冲/目录/前缀游标 + 可选 display 后缀。
+ *
+ * nm-style: keep-public — 导出函数签名类型；declaration 构建要求导出，脚本不统计签名内类型引用。
+ */
+export interface AppendDirLinesParams extends RenderWorkplaceFileTreeParams {
+    readonly lines: string[];
+    readonly dirPath: string;
+    readonly prefix: string;
+    readonly displayByPath?: ReadonlyMap<string, DisplayState>;
+}
+
 type TreeEntry = { readonly kind: "dir" | "file"; readonly path: string };
 
 export const WorkplaceFileTree = {
@@ -50,24 +62,24 @@ export const WorkplaceFileTree = {
         return base.length > 0 ? base : "/";
     },
 
-    appendDirLines(lines: string[], dirPath: string, prefix: string, params: RenderWorkplaceFileTreeParams, displayByPath?: ReadonlyMap<string, DisplayState>): Result<void, AppError> {
-        const dirRule = params.dirRuleMap.get(dirPath) ?? null;
-        const childDirs = WorkplaceTree.directChildDirs(dirPath, params.allDirs);
+    appendDirLines(p: AppendDirLinesParams): Result<void, AppError> {
+        const dirRule = p.dirRuleMap.get(p.dirPath) ?? null;
+        const childDirs = WorkplaceTree.directChildDirs(p.dirPath, p.allDirs);
         if (!childDirs.ok) return Result.err(childDirs.error);
-        const subdirs = WorkplaceEval.sortDirPaths(childDirs.value, dirRule, { smartRules: params.smartRules, dirMtimeByPath: params.dirMtimeByPath }).map((path) => ({ kind: "dir" as const, path }));
+        const subdirs = WorkplaceEval.sortDirPaths(childDirs.value, dirRule, { smartRules: p.smartRules, dirMtimeByPath: p.dirMtimeByPath }).map((path) => ({ kind: "dir" as const, path }));
 
-        const resolvedDir = PathNormalizer.normalize(dirPath);
+        const resolvedDir = PathNormalizer.normalize(p.dirPath);
         if (!resolvedDir.ok) return Result.err(resolvedDir.error);
         const dirPrefix = resolvedDir.value === "/" ? "/" : `${resolvedDir.value}/`;
         const childFiles: string[] = [];
-        for (const logicalPath of params.fileSet) {
+        for (const logicalPath of p.fileSet) {
             if (!logicalPath.startsWith(dirPrefix)) continue;
             const rel = resolvedDir.value === "/" ? logicalPath.slice(1) : logicalPath.slice(dirPrefix.length);
             if (rel.length === 0 || rel.includes("/")) continue;
             childFiles.push(logicalPath);
         }
-        const fileMetas = childFiles.map((logicalPath): WorkplaceFileSortMeta => ({ logicalPath, mtimeMs: params.mtimeByPath.get(logicalPath) ?? 0 }));
-        const files = WorkplaceEval.sortFilesForDir(fileMetas, dirRule, { smartRules: params.smartRules }).map((file) => ({ kind: "file" as const, path: file.logicalPath }));
+        const fileMetas = childFiles.map((logicalPath): WorkplaceFileSortMeta => ({ logicalPath, mtimeMs: p.mtimeByPath.get(logicalPath) ?? 0 }));
+        const files = WorkplaceEval.sortFilesForDir(fileMetas, dirRule, { smartRules: p.smartRules }).map((file) => ({ kind: "file" as const, path: file.logicalPath }));
 
         const children: TreeEntry[] = [...subdirs, ...files];
         for (let i = 0; i < children.length; i++) {
@@ -89,13 +101,13 @@ export const WorkplaceFileTree = {
                 const idx = normalized.lastIndexOf("/");
                 lineName = idx >= 0 ? normalized.slice(idx + 1) : normalized;
             }
-            if (child.kind === "file" && displayByPath != null) {
-                const state = displayByPath.get(child.path) ?? "filename";
+            if (child.kind === "file" && p.displayByPath != null) {
+                const state = p.displayByPath.get(child.path) ?? "filename";
                 lineName += ` ${WorkplaceLabels.filetreeMacroLoadStateLabel(state)}`;
             }
-            lines.push(`${prefix}${branch}${lineName}`);
+            p.lines.push(`${p.prefix}${branch}${lineName}`);
             if (child.kind === "dir") {
-                const nested = WorkplaceFileTree.appendDirLines(lines, child.path, prefix + (isLast ? "    " : "│   "), params, displayByPath);
+                const nested = WorkplaceFileTree.appendDirLines({ ...p, dirPath: child.path, prefix: p.prefix + (isLast ? "    " : "│   ") });
                 if (!nested.ok) return Result.err(nested.error);
             }
         }
@@ -113,7 +125,7 @@ export const WorkplaceFileTree = {
         const rootLabel = WorkplaceFileTree.rootLabel(params.scope);
         const headerLine = rootLabel === "/" ? "/" : `${rootLabel}/`;
         const lines: string[] = [headerLine];
-        const rendered = WorkplaceFileTree.appendDirLines(lines, rootPath, "", params);
+        const rendered = WorkplaceFileTree.appendDirLines({ ...params, lines, dirPath: rootPath, prefix: "" });
         if (!rendered.ok) return Result.err(rendered.error);
         return Result.ok(lines.join("\n"));
     },
@@ -129,7 +141,7 @@ export const WorkplaceFileTree = {
         const rootLabel = WorkplaceFileTree.rootLabel(params.scope);
         const headerLine = rootLabel === "/" ? "/" : `${rootLabel}/`;
         const lines: string[] = [headerLine];
-        const rendered = WorkplaceFileTree.appendDirLines(lines, rootPath, "", params, params.displayByPath);
+        const rendered = WorkplaceFileTree.appendDirLines({ ...params, lines, dirPath: rootPath, prefix: "" });
         if (!rendered.ok) return Result.err(rendered.error);
         return Result.ok(lines.join("\n"));
     },

@@ -59,7 +59,26 @@ export namespace StreamApplyBuffer {
         }
     }
 
-    function push(slot: StreamApplyBufferSlot, onFlush: StreamApplyFlushFn, flushIntervalMs: number, maxCharsPerBuffer: number, chunk: StreamWireChunk): void {
+    /** push 的参数对象（>4 参签名收口）：缓冲环境与入参同对象，字段名即文档。 */
+    type StreamApplyBufferPushParams = {
+        readonly slot: StreamApplyBufferSlot;
+        readonly onFlush: StreamApplyFlushFn;
+        readonly flushIntervalMs: number;
+        readonly maxCharsPerBuffer: number;
+        readonly chunk: StreamWireChunk;
+    };
+
+    /** pushAll 的参数对象：缓冲环境同 push，入参换成批量 chunks。 */
+    type StreamApplyBufferPushAllParams = {
+        readonly slot: StreamApplyBufferSlot;
+        readonly onFlush: StreamApplyFlushFn;
+        readonly flushIntervalMs: number;
+        readonly maxCharsPerBuffer: number;
+        readonly chunks: readonly StreamWireChunk[];
+    };
+
+    function push(p: StreamApplyBufferPushParams): void {
+        const {slot, onFlush, flushIntervalMs, maxCharsPerBuffer, chunk} = p;
         if (chunk.delta.length === 0) {
             return;
         }
@@ -70,7 +89,8 @@ export namespace StreamApplyBuffer {
         }
     }
 
-    function pushAll(slot: StreamApplyBufferSlot, onFlush: StreamApplyFlushFn, flushIntervalMs: number, maxCharsPerBuffer: number, chunks: readonly StreamWireChunk[]): void {
+    function pushAll(p: StreamApplyBufferPushAllParams): void {
+        const {slot, onFlush, flushIntervalMs, maxCharsPerBuffer, chunks} = p;
         for (const chunk of chunks) {
             if (chunk.delta.length === 0) {
                 continue;
@@ -90,8 +110,8 @@ export namespace StreamApplyBuffer {
         const slot: StreamApplyBufferSlot = {queue: [], timer: null};
 
         return {
-            push: chunk => push(slot, onFlush, flushIntervalMs, maxCharsPerBuffer, chunk),
-            pushAll: chunks => pushAll(slot, onFlush, flushIntervalMs, maxCharsPerBuffer, chunks),
+            push: chunk => push({slot, onFlush, flushIntervalMs, maxCharsPerBuffer, chunk}),
+            pushAll: chunks => pushAll({slot, onFlush, flushIntervalMs, maxCharsPerBuffer, chunks}),
             flush: () => flush(slot, onFlush),
             reset() {
                 clearTimer(slot);

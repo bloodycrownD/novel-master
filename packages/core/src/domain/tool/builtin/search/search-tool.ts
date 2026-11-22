@@ -212,7 +212,7 @@ ${engineSection}
             //（首引擎前 elapsed 为 0，不会误拦）。
             if (Date.now() - startedAt >= SEARCH_CHAIN_BUDGET_MS) return Result.err(new AppError("TOOL_FAILED", {toolName: SEARCH_TOOL_NAME, cause: new Error(buildChainErrorMessage(failureLines, candidates.length - i)), detail: `Tool failed: ${SEARCH_TOOL_NAME}`}));
             try {
-                const response = await SearchDispatch.dispatch(entry, query, { maxResults }, params, fetchFn, signal);
+                const response = await SearchDispatch.dispatch({ resolved: entry, query, options: { maxResults }, params, fetch: fetchFn, signal });
                 if (!response.ok) {
                     // 引擎已知失败（四期门⑦沿 Result 回来）：取消重判后记降级行，
                     // 尝试链中下一个引擎（钉死时仅一员，自然止）；取消沿 Result.err 返回。

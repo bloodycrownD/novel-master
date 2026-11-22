@@ -32,7 +32,7 @@ import { TdbcTransaction } from "@/infra/tdbc/logic/transaction-helper.js";
 
 
 import type { VfsGrepMatch, VfsGrepOptions, VfsListEntry, VfsReadResult, VfsContentSize } from "../internal-vfs.port.js";
-import type { InternalVfsService } from "../internal-vfs.port.js";
+import type { InternalVfsService, VfsReplaceParams } from "../internal-vfs.port.js";
 
 /**
  * Decorates an inner {@link InternalVfsService} so file mutations append revision history.
@@ -66,10 +66,11 @@ export class RevisionAwareVfsService implements InternalVfsService {
         });
     }
 
-    async replace(scopeKey: string, path: string, oldString: string, newString: string, options?: { replaceAll?: boolean }): Promise<Result<{ version: number; replacements: number }, AppError>> {
+    async replace(p: VfsReplaceParams): Promise<Result<{ version: number; replacements: number }, AppError>> {
+        const { scopeKey, path, oldString, newString } = p;
         const current = await this.read(scopeKey, path);
         if (!current.ok) return Result.err(current.error);
-        const computed = ReplaceResult.compute(path, current.value.content, oldString, newString, options);
+        const computed = ReplaceResult.compute(path, current.value.content, oldString, newString, { replaceAll: p.replaceAll });
         if (!computed.ok) return Result.err(computed.error);
         const { nextContent, replacements } = computed.value;
 

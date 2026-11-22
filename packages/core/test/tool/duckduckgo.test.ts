@@ -77,7 +77,7 @@ function ddgResolved(): ResolvedEngineConfig {
 describe("search 引擎适配器：duckduckgo（T-A6，内置免费兜底）", () => {
     it("请求形状：GET html 端点 + q 参数 + Accept: text/html + 自报轻客户端 UA，无任何鉴权头", async () => {
         const fetchFn = makeFetch(() => htmlOk(ddgResultsHtml()));
-        await Duckduckgo.search(ddgResolved(), "唐代科举", {}, fetchFn);
+        await Duckduckgo.search({ resolved: ddgResolved(), query: "唐代科举", options: {}, fetch: fetchFn });
 
         assert.equal(fetchFn.calls.length, 1);
         const call = fetchFn.calls[0]!;
@@ -95,7 +95,7 @@ describe("search 引擎适配器：duckduckgo（T-A6，内置免费兜底）", (
 
     it("解析：标题/直链 href 实体解码/uddg 重定向解码（嵌套 %26）/snippet 实体解码/广告块跳过/近形类名不误伤", async () => {
         const fetchFn = makeFetch(() => htmlOk(ddgResultsHtml()));
-        const out = await Duckduckgo.search(ddgResolved(), "q", {}, fetchFn);
+        const out = await Duckduckgo.search({ resolved: ddgResolved(), query: "q", options: {}, fetch: fetchFn });
         assert.ok(out.ok, "expected Result.ok");
         const res = out.value;
 
@@ -136,12 +136,7 @@ describe("search 引擎适配器：duckduckgo（T-A6，内置免费兜底）", (
         ).join("");
         const fetchFn = makeFetch(() => htmlOk(`<body>${blocks}</body>`));
 
-        const out2 = await Duckduckgo.search(
-            ddgResolved(),
-            "q",
-            { maxResults: 2 },
-            fetchFn
-        );
+        const out2 = await Duckduckgo.search({ resolved: ddgResolved(), query: "q", options: { maxResults: 2 }, fetch: fetchFn });
         assert.ok(out2.ok, "expected Result.ok");
         assert.equal(out2.value.results.length, 2);
         assert.deepEqual(
@@ -150,12 +145,7 @@ describe("search 引擎适配器：duckduckgo（T-A6，内置免费兜底）", (
         );
 
         // 0 → 默认 5（normalizeMaxResults 共用 clamp）；6 块全量可解析。
-        const out5 = await Duckduckgo.search(
-            ddgResolved(),
-            "q",
-            { maxResults: 0 },
-            fetchFn
-        );
+        const out5 = await Duckduckgo.search({ resolved: ddgResolved(), query: "q", options: { maxResults: 0 }, fetch: fetchFn });
         assert.ok(out5.ok, "expected Result.ok");
         assert.equal(out5.value.results.length, 5);
     });
@@ -164,7 +154,7 @@ describe("search 引擎适配器：duckduckgo（T-A6，内置免费兜底）", (
         const fetchFn = makeFetch(
             () => htmlOk("<html><body>no results here</body></html>")
         );
-        const r = await Duckduckgo.search(ddgResolved(), "q", {}, fetchFn);
+        const r = await Duckduckgo.search({ resolved: ddgResolved(), query: "q", options: {}, fetch: fetchFn });
         assert.ok(!r.ok, "expected Result.err");
         assert.match(r.error.message, /DuckDuckGo returned no parseable results \(invalid response\)/);
     });
@@ -176,7 +166,7 @@ describe("search 引擎适配器：duckduckgo（T-A6，内置免费兜底）", (
   <a class="result__snippet">摘要</a>
 </div>`;
         const fetchFn = makeFetch(() => htmlOk(html));
-        const r = await Duckduckgo.search(ddgResolved(), "q", {}, fetchFn);
+        const r = await Duckduckgo.search({ resolved: ddgResolved(), query: "q", options: {}, fetch: fetchFn });
         assert.ok(!r.ok, "expected Result.err");
         assert.match(r.error.message, /no parseable results/);
     });
@@ -185,7 +175,7 @@ describe("search 引擎适配器：duckduckgo（T-A6，内置免费兜底）", (
         const fetchFn = makeFetch(
             () => new Response("anomaly detected", { status: 403 })
         );
-        const r = await Duckduckgo.search(ddgResolved(), "q", {}, fetchFn);
+        const r = await Duckduckgo.search({ resolved: ddgResolved(), query: "q", options: {}, fetch: fetchFn });
         assert.ok(!r.ok, "expected Result.err");
         assert.match(r.error.message, /DuckDuckGo API error 403: anomaly detected/);
     });

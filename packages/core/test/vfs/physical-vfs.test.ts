@@ -48,12 +48,7 @@ describe("T-PB1: 物理树列目录（合成目录 + 各域拼接）", () => {
         // 技能造数必须经 SkillsService（写 /meta/skills/... 约定），
         // 禁止 meta 域 vfs 直写（旧 /skills/... 直写是错误约定，会掩盖双前缀冲突）
         const skills = SkillsServiceFactory.create(ctx.conn);
-        unwrap(await skills.writeSkillFile(
-            "global",
-            `global-skill-${suffix}`,
-            undefined,
-            "S",
-        ));
+        unwrap(await skills.writeSkillFile({ domain: "global", name: `global-skill-${suffix}`, content: "S" }));
 
         const svc = VfsServiceFactory.createPhysical(ctx.conn);
         const templateRows = unwrap(await svc.list("/template"));
@@ -83,13 +78,7 @@ describe("T-PB1: 物理树列目录（合成目录 + 各域拼接）", () => {
         const p1 = unwrap(await ctx.projects.create(`P1-${suffix}`));
         await ctx.projectVfs(p1.id).write(`/p1-${suffix}.md`, "P1");
         // 项目技能同样经 SkillsService 造数（meta 域约定）
-        await SkillsServiceFactory.create(ctx.conn).writeSkillFile(
-            "project",
-            `proj-skill-${suffix}`,
-            undefined,
-            "PS",
-            p1.id,
-        );
+        await SkillsServiceFactory.create(ctx.conn).writeSkillFile({ domain: "project", name: `proj-skill-${suffix}`, content: "PS", projectId: p1.id });
         const s1 = unwrap(await ctx.sessions.create(p1.id, `首个会话-${suffix}`));
         const s1vfs = ctx.sessionVfs(p1.id, s1.id);
         await s1vfs.write(`/s-only-${suffix}.md`, "SESSION");
@@ -192,21 +181,10 @@ describe("T-PB2: read 五前缀解析 + 无写方法", () => {
         const suffix = testIsolationSuffix();
 
         await ctx.globalVfs().write(`/g-${suffix}.md`, "GLOBAL");
-        await SkillsServiceFactory.create(ctx.conn).writeSkillFile(
-            "global",
-            `gm-${suffix}`,
-            undefined,
-            "GLOBAL-META",
-        );
+        await SkillsServiceFactory.create(ctx.conn).writeSkillFile({ domain: "global", name: `gm-${suffix}`, content: "GLOBAL-META" });
         const project = unwrap(await ctx.projects.create(`P-${suffix}`));
         await ctx.projectVfs(project.id).write(`/pt-${suffix}.md`, "PROJECT");
-        await SkillsServiceFactory.create(ctx.conn).writeSkillFile(
-            "project",
-            `pm-${suffix}`,
-            undefined,
-            "PROJECT-META",
-            project.id,
-        );
+        await SkillsServiceFactory.create(ctx.conn).writeSkillFile({ domain: "project", name: `pm-${suffix}`, content: "PROJECT-META", projectId: project.id });
         const session = unwrap(await ctx.sessions.create(project.id));
         await ctx
             .sessionVfs(project.id, session.id)
@@ -324,13 +302,8 @@ describe("listTree: 批量全树拉取（desktop/B-2 core 半边）", () => {
         // 经 SkillsService 造数（/meta/skills/... 约定），含辅助文件形成多层
         const skills = SkillsServiceFactory.create(ctx.conn);
         const name = `tree-skill-${suffix}`;
-        unwrap(await skills.writeSkillFile("global", name, undefined, "入口"));
-        unwrap(await skills.writeSkillFile(
-            "global",
-            name,
-            "notes/deep/ref.md",
-            "深层辅助文件",
-        ));
+        unwrap(await skills.writeSkillFile({ domain: "global", name, content: "入口" }));
+        unwrap(await skills.writeSkillFile({ domain: "global", name, path: "notes/deep/ref.md", content: "深层辅助文件" }));
 
         const svc = VfsServiceFactory.createPhysical(ctx.conn);
         const rows = unwrap(await svc.listTree("/meta"));
@@ -355,13 +328,7 @@ describe("listTree: 批量全树拉取（desktop/B-2 core 半边）", () => {
         const suffix = testIsolationSuffix();
         const project = unwrap(await ctx.projects.create(`P-tree-${suffix}`));
         await ctx.projectVfs(project.id).write(`/pt-${suffix}.md`, "P");
-        await SkillsServiceFactory.create(ctx.conn).writeSkillFile(
-            "project",
-            `pt-skill-${suffix}`,
-            undefined,
-            "PS",
-            project.id,
-        );
+        await SkillsServiceFactory.create(ctx.conn).writeSkillFile({ domain: "project", name: `pt-skill-${suffix}`, content: "PS", projectId: project.id });
         const main = unwrap(await ctx.sessions.create(project.id, `主会话-${suffix}`));
         await ctx.sessionVfs(project.id, main.id).write(`/s-${suffix}.md`, "S");
         const child = unwrap(await ctx.sessions.createSubSession(
@@ -511,19 +478,8 @@ describe("core/G-2: read 挂载点根一律 NOT_FOUND", () => {
         // 种上技能，让 /meta 与 /projects/{pid}/meta 落在显式目录行上
         //（否则查无 entry，测不到 IS_DIRECTORY → NOT_FOUND 归一分支）
         const skills = SkillsServiceFactory.create(ctx.conn);
-        unwrap(await skills.writeSkillFile(
-            "global",
-            `g2-global-${suffix}`,
-            undefined,
-            "全局",
-        ));
-        unwrap(await skills.writeSkillFile(
-            "project",
-            `g2-project-${suffix}`,
-            undefined,
-            "项目",
-            project.id,
-        ));
+        unwrap(await skills.writeSkillFile({ domain: "global", name: `g2-global-${suffix}`, content: "全局" }));
+        unwrap(await skills.writeSkillFile({ domain: "project", name: `g2-project-${suffix}`, content: "项目", projectId: project.id }));
         const session = unwrap(await ctx.sessions.create(project.id));
 
         const svc = VfsServiceFactory.createPhysical(ctx.conn);
