@@ -42,9 +42,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     }
 
     async findMaxVersionForEntry(entryId: number): Promise<number | null> {
-        const rows = await TdbcTemplate.query<{
-            max_version: number | null
-        }>(this.conn, this.parser, VfsRevisionSql.findMaxVersionForEntry, {entryId});
+        const rows = await TdbcTemplate.query<{ max_version: number | null }>(this.conn, this.parser, VfsRevisionSql.findMaxVersionForEntry, {entryId});
         const max = rows[0]?.max_version;
         return max == null ? null : Number(max);
     }
@@ -80,9 +78,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
 
     /** nm-style: keep-public — 实现 VfsRevisionRepository.existsByEntryAndVersion 端口方法；内联会把查询 SQL 搬进调用层。 */
     async existsByEntryAndVersion(entryId: number, version: number): Promise<boolean> {
-        const rows = await TdbcTemplate.query<{
-            one: number
-        }>(this.conn, this.parser, VfsRevisionSql.existsByEntryAndVersion, {entryId, version});
+        const rows = await TdbcTemplate.query<{ one: number }>(this.conn, this.parser, VfsRevisionSql.existsByEntryAndVersion, {entryId, version});
         return rows.length > 0;
     }
 
@@ -252,9 +248,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
 
     /** nm-style: keep-public — 实现 VfsRevisionRepository.repairRefCountFloor 端口方法；integrity-repair 注明保留逐条版，生产对账走 batchRepairRefCountFloor，端口契约仍在且端口文件不在本轮范围。 */
     async repairRefCountFloor(entryId: number, version: number, expected: number): Promise<boolean> {
-        const rows = await TdbcTemplate.query<{
-            ref_count: number
-        }>(this.conn, this.parser, VfsRevisionSql.repairRefCountFloorSelect, {entryId, version});
+        const rows = await TdbcTemplate.query<{ ref_count: number }>(this.conn, this.parser, VfsRevisionSql.repairRefCountFloorSelect, {entryId, version});
         const row = rows[0];
         if (row == null) {
             return false;
