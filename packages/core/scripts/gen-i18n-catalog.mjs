@@ -1,5 +1,5 @@
 /**
- * 从 src/i18n/catalog/*.yaml 生成 src/i18n/generated-catalog.ts（内嵌对象）。
+ * 从 resources/i18n/*.yaml 生成 src/i18n/generated-catalog.ts（内嵌对象）。
  *
  * 各宿主（desktop main/renderer、mobile、cli）无法在渲染进程/同步路径读盘，
  * 也没有 yaml loader：catalog 以构建期内嵌的 TS 模块进 bundle（spec §2.4 的
@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const catalogDir = join(here, "../src/i18n/catalog");
+const catalogDir = join(here, "../resources/i18n");
 const outFile = join(here, "../src/i18n/generated-catalog.ts");
 
 /** 与 parseCoreCatalog 同构的展平：中间节点必须 mapping、叶子必须 string。 */
@@ -34,7 +34,7 @@ function flatten(node, prefix, out) {
 }
 
 /**
- * i18n 按域拆分：catalog/{error,label,ui,chat,settings}.yaml，文件名 = 顶层段，
+ * i18n 按域拆分：resources/i18n/{error,label,ui,chat,settings}.yaml，文件名 = 顶层段，
  * 每文件顶层 zh-CN: / en-US: locale 段、段下保留完整段子树（与旧单文件同构，纯物理拆分）。
  */
 const DOMAIN_FILES = ["error", "label", "ui", "chat", "settings"];
@@ -89,7 +89,7 @@ function literal(obj, indent) {
 
 function domainBody(keyType, keyImport, zh, en, exportName, moduleId) {
   return `/**
- * 自动生成：scripts/gen-i18n-catalog.mjs 从 src/i18n/catalog/*.yaml 生成，勿手改。
+ * 自动生成：scripts/gen-i18n-catalog.mjs 从 resources/i18n/*.yaml 生成，勿手改。
  * 键序固定 zh-CN 在前（localeRule 的对象键序约束：同语言前缀回退依赖键序）。
  * zh-CN 全量（satisfies 即全集断言）；en-US 为部分骨架（缺 key 由回退链落 zh-CN）。
  *

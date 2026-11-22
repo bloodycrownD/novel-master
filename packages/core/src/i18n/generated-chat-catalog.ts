@@ -1,5 +1,5 @@
 /**
- * 自动生成：scripts/gen-i18n-catalog.mjs 从 src/i18n/catalog/*.yaml 生成，勿手改。
+ * 自动生成：scripts/gen-i18n-catalog.mjs 从 resources/i18n/*.yaml 生成，勿手改。
  * 键序固定 zh-CN 在前（localeRule 的对象键序约束：同语言前缀回退依赖键序）。
  * zh-CN 全量（satisfies 即全集断言）；en-US 为部分骨架（缺 key 由回退链落 zh-CN）。
  *

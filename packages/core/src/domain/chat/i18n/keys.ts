@@ -1,7 +1,7 @@
 /**
  * Chat 域消息 key 契约。
  *
- * 文案本体在 `src/i18n/catalog/*.yaml 的 chat 段（gen-i18n-catalog.mjs 生成 generated-chat-catalog.ts）`；本文件只定义 key 与
+ * 文案本体在 `resources/i18n/chat.yaml 的 chat 段（gen-i18n-catalog.mjs 生成 generated-chat-catalog.ts）`；本文件只定义 key 与
  * descriptor 类型，不包含任何用户可见文本。
  *
  * @module domain/chat/i18n/keys

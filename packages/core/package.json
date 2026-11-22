@@ -138,7 +138,6 @@
       "types": "./dist/i18n/generated-settings-catalog.d.ts",
       "import": "./dist/i18n/generated-settings-catalog.js"
     },
-    "./i18n/catalog/*": "./src/i18n/catalog/*",
     "./domain/chat/presentation/*": {
       "types": "./dist/domain/chat/presentation/*",
       "import": "./dist/domain/chat/presentation/*"

@@ -10,7 +10,7 @@ import {  CORE_MESSAGE_KEYS, CORE_MESSAGE_KEY_PATTERN, ERROR_KEY_DOMAINS, LABEL_
 import {  tCore  } from "../helpers/core-i18n.js";
 import {  CORE_CATALOGS  } from "../../src/i18n/generated-catalog.js";
 
-const CATALOG_DIR = new URL("../../src/i18n/catalog/", import.meta.url);
+const CATALOG_DIR = new URL("../../resources/i18n/", import.meta.url);
 // i18n 按域拆分：catalog/{error,label,ui,chat,settings}.yaml，文件名 = 组；每文件顶层 locale 段。
 import { parse } from "yaml";
 const CORE_FILES = ["error", "label", "ui"] as const;

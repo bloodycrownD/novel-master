@@ -12,7 +12,7 @@ import {  createTranslator  } from "../../src/common/i18n.js";
 import {  Catalog  } from "../../src/i18n/catalog.js";
 import type { CoreMessageKey } from "../../src/i18n/keys.js";
 
-const CATALOG_DIR = new URL("../../src/i18n/catalog/", import.meta.url);
+const CATALOG_DIR = new URL("../../resources/i18n/", import.meta.url);
 
 /** i18n 按域拆分后 core 组 = error/label/ui 三文件；取 locale 段合并回单棵 mapping 喂 parseCore。 */
 function loadCatalog(locale: string) {

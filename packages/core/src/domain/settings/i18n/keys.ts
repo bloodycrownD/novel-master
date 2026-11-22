@@ -1,7 +1,7 @@
 /**
  * 搜索配置（settings.search.*）消息 key 契约。
  *
- * 文案本体在 `src/i18n/catalog/*.yaml 的 settings 段（gen-i18n-catalog.mjs 生成 generated-settings-catalog.ts）`；本文件只定义 key 与
+ * 文案本体在 `resources/i18n/settings.yaml 的 settings 段（gen-i18n-catalog.mjs 生成 generated-settings-catalog.ts）`；本文件只定义 key 与
  * descriptor 类型，不包含任何用户可见文本。
  *
  * key 形态：`settings.search.<area>.<name>`（area ∈ list / detail / auth / params /
