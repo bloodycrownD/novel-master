@@ -16,9 +16,11 @@
  * @module bootstrap/smart-sort-rule/builtin-smart-sort-rules
  */
 
+import { TdbcTemplate } from "@/infra/tdbc/logic/template-helper.js";
+import { SqlTemplateParser } from "@/infra/sql-template/index.js";
+import { SmartSortRuleSql } from "@/infra/sql-template/generated/smart_sort_rule.mapper.generated.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { SmartSortCaptureKind } from "@/domain/smart-sort-rule/model/smart-sort-rule.js";
-import { SMART_SORT_RULE_TABLE } from "./smart-sort-rule-schema.js";
 
 /**
  * 内置规则 seed 行（pattern 按 spec 附录 A 定案；description 为描述文字）.
@@ -111,11 +113,6 @@ export const BUILTIN_SMART_SORT_RULE_ROWS: readonly BuiltinSmartSortRuleSeedRow[
     },
 ];
 
-/** 内置规则幂等插入 SQL（模板内缩进是语句正文，勿改）。 */
-const INSERT_OR_IGNORE_SMART_SORT_RULE_SQL = `INSERT OR IGNORE INTO ${SMART_SORT_RULE_TABLE} ( rule_id, name, pattern, flags, capture_kind, description, enabled, sort_order,
-    created_at_ms, updated_at_ms )
-    VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`.trim();
-
 /**
  * 内置智能排序规则 seed 操作族。
  */
@@ -127,9 +124,10 @@ export const BuiltinSmartSortRules = {
    * 域内没有可判失败，故不套 `Result`。
    */
     async seed(conn: TdbcConnection): Promise<void> {
+        const parser = new SqlTemplateParser();
         const now = Date.now();
         for (const row of BUILTIN_SMART_SORT_RULE_ROWS) {
-            await conn.execute(INSERT_OR_IGNORE_SMART_SORT_RULE_SQL, [row.ruleId, row.name, row.pattern, row.flags, row.captureKind, row.description, row.sortOrder, now, now]);
+            await TdbcTemplate.execute(conn, parser, SmartSortRuleSql.insertBuiltinRule, { ruleId: row.ruleId, name: row.name, pattern: row.pattern, flags: row.flags, captureKind: row.captureKind, description: row.description, sortOrder: row.sortOrder, createdAtMs: now, updatedAtMs: now });
         }
     },
 } as const;

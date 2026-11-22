@@ -31,6 +31,14 @@
     #{createdAtMs}, #{updatedAtMs})
   </insert>
 
+  <!-- builtin seed 专用：enabled 字面 1（内置规则默认启用），主键冲突整行忽略（幂等重灌） -->
+  <insert id="insertBuiltinRule">
+    INSERT OR IGNORE INTO smart_sort_rule (rule_id, name, pattern, flags, capture_kind, description, enabled, sort_order,
+    created_at_ms, updated_at_ms)
+    VALUES (#{ruleId}, #{name}, #{pattern}, #{flags}, #{captureKind}, #{description}, 1, #{sortOrder},
+    #{createdAtMs}, #{updatedAtMs})
+  </insert>
+
   <update id="update">
     UPDATE smart_sort_rule
     SET name = #{name}, pattern = #{pattern}, flags = #{flags}, capture_kind = #{captureKind},

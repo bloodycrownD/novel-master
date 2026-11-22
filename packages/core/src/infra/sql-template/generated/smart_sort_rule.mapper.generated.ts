@@ -19,6 +19,11 @@ export const SmartSortRuleSql = {
     VALUES (#{ruleId}, #{name}, #{pattern}, #{flags}, #{captureKind}, #{description}, #{enabled}, #{sortOrder},
     #{createdAtMs}, #{updatedAtMs})
 `,
+    insertBuiltinRule: `INSERT OR IGNORE INTO smart_sort_rule (rule_id, name, pattern, flags, capture_kind, description, enabled, sort_order,
+    created_at_ms, updated_at_ms)
+    VALUES (#{ruleId}, #{name}, #{pattern}, #{flags}, #{captureKind}, #{description}, 1, #{sortOrder},
+    #{createdAtMs}, #{updatedAtMs})
+`,
     update: `UPDATE smart_sort_rule
     SET name = #{name}, pattern = #{pattern}, flags = #{flags}, capture_kind = #{captureKind},
     description = #{description}, enabled = #{enabled}, sort_order = #{sortOrder}, updated_at_ms = #{updatedAtMs}
@@ -50,6 +55,7 @@ export const SmartSortRuleSqlParams = {
     listOrdered: [],
     find: ["ruleId"],
     insert: ["ruleId", "name", "pattern", "flags", "captureKind", "description", "enabled", "sortOrder", "createdAtMs", "updatedAtMs"],
+    insertBuiltinRule: ["ruleId", "name", "pattern", "flags", "captureKind", "description", "sortOrder", "createdAtMs", "updatedAtMs"],
     update: ["name", "pattern", "flags", "captureKind", "description", "enabled", "sortOrder", "updatedAtMs", "ruleId"],
     updateSortOrders: [],
     delete: ["ruleId"],
