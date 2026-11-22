@@ -46,12 +46,7 @@ export const MacroScan = {
                     return Result.err(new AppError("PROMPT_INVALID_YAML", { detail: "unclosed macro comment", offset: open }));
                 }
                 const end = close + 4;
-                actions.push({
-                    kind: "comment",
-                    start: open,
-                    end,
-                    path: [],
-                });
+                actions.push({kind: "comment", start: open, end, path: [],});
                 i = end;
                 continue;
             }
