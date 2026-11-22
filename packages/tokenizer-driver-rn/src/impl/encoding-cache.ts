@@ -37,7 +37,7 @@ export type RnEncodingName = "cl100k_base" | "o200k_base";
  * 编码器窄口：只要「文本 → token 数」，不暴露具体实现（便于换表 / 换实现）。
  */
 export interface RnTokenEncoding {
-  encode(text: string): ArrayLike<unknown>;
+    encode(text: string): ArrayLike<unknown>;
 }
 
 /**
@@ -50,31 +50,31 @@ export interface RnTokenEncoding {
 const DEFAULT_RN_ENCODING_NAME: RnEncodingName = "cl100k_base";
 
 export namespace EncodingCache {
-  /**
+    /**
    * ranks 命名空间取默认导出兼容形态。
    *
    * ranks 模块 ESM 侧是 default 导出、CJS 侧是命名导出；Metro / jest(ESM) /
    * jest(CJS) / Vite 四种环境下形态不同，统一经 `(mod.default ?? mod)` 取值。
    */
-  function unwrapRanksModule(mod: unknown): unknown {
-    const candidate = mod as { default?: unknown } | null | undefined;
-    return candidate?.default ?? mod;
-  }
+    function unwrapRanksModule(mod: unknown): unknown {
+        const candidate = mod as { default?: unknown } | null | undefined;
+        return candidate?.default ?? mod;
+    }
 
-  /** 取（或惰性构造）指定编码的编码表；构造失败返回 null（TTL 内不重试）。 */
-  export function get(name: RnEncodingName): RnTokenEncoding | null {
-    return EncodingRegistry.get(name, () => {
-      const ranks = name === "o200k_base" ? unwrapRanksModule(o200kRanksModule) : unwrapRanksModule(cl100kRanksModule);
-      return new Tiktoken(ranks as never) as unknown as RnTokenEncoding;
-    });
-  }
+    /** 取（或惰性构造）指定编码的编码表；构造失败返回 null（TTL 内不重试）。 */
+    export function get(name: RnEncodingName): RnTokenEncoding | null {
+        return EncodingRegistry.get(name, () => {
+            const ranks = name === "o200k_base" ? unwrapRanksModule(o200kRanksModule) : unwrapRanksModule(cl100kRanksModule);
+            return new Tiktoken(ranks as never) as unknown as RnTokenEncoding;
+        });
+    }
 
-  /** 默认（cl100k）编码表取用口。 */
-  export function getDefault(): RnTokenEncoding | null {
-    return get(DEFAULT_RN_ENCODING_NAME);
-  }
+    /** 默认（cl100k）编码表取用口。 */
+    export function getDefault(): RnTokenEncoding | null {
+        return get(DEFAULT_RN_ENCODING_NAME);
+    }
 
-  /**
+    /**
    * 用默认编码表（cl100k）计一段文本的 token 数。
    *
    * 走 core 的 `countTextWithIncrementalTokenizer` 而不是直接 `encode`：后者对
@@ -86,30 +86,30 @@ export namespace EncodingCache {
    * @returns token 数；**编码表不可用时返回 null**，调用方须自行决定降级口径
    *   （不要把 null 当 0）。
    */
-  export function countText(text: string): number | null {
-    const encoding = getDefault();
-    if (encoding == null) {
-      return null;
+    export function countText(text: string): number | null {
+        const encoding = getDefault();
+        if (encoding == null) {
+            return null;
+        }
+        return TokenizerTextCount.count((chunk) => encoding.encode(chunk).length, text);
     }
-    return TokenizerTextCount.count((chunk) => encoding.encode(chunk).length, text);
-  }
 
-  /**
+    /**
    * 测试钩子：只清空编码表缓存（不动构造器）。转发 registry 的同名钩子。
    *
    * 注意这里**不 `free()`**（js-tiktoken 实例本就没有该方法，句柄由 registry 持有）。
    */
-  export function __resetForTests(): void {
-    EncodingRegistry.clearForTests();
-  }
+    export function __resetForTests(): void {
+        EncodingRegistry.clearForTests();
+    }
 
-  /**
+    /**
    * 测试钩子：覆盖编码表构造器（传 `null` 还原默认实现）。
    * 构造器换了，已缓存的表不再由它产出，registry 会一并作废缓存。
    */
-  export function __setFactoryForTests(factory: ((name: RnEncodingName) => RnTokenEncoding) | null): void {
-    // 适配一层：registry 的工厂槽以「任意编码名字符串」调用，本驱动的注入形态
-    // 收窄为 RnEncodingName（实际传入值只会是两表之一）。
-    EncodingRegistry.setFactoryForTests(factory == null ? null : (encodingName: string) => factory(encodingName as RnEncodingName));
-  }
+    export function __setFactoryForTests(factory: ((name: RnEncodingName) => RnTokenEncoding) | null): void {
+        // 适配一层：registry 的工厂槽以「任意编码名字符串」调用，本驱动的注入形态
+        // 收窄为 RnEncodingName（实际传入值只会是两表之一）。
+        EncodingRegistry.setFactoryForTests(factory == null ? null : (encodingName: string) => factory(encodingName as RnEncodingName));
+    }
 }

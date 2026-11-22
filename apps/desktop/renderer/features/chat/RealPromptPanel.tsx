@@ -21,29 +21,29 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { coreT } from "@shared/logic/core-i18n";
 import type {
-  PromptPreviewTurnDto,
-  PromptTextCardDto,
+    PromptPreviewTurnDto,
+    PromptTextCardDto,
 } from "@shared/ipc-types";
 import { ipcPromptRealPreview } from "@/ipc/client";
 import { Button } from "@/components/ui/Button";
 import { PromptLeafCard, promptLeafKindLabel } from "./PromptLeafCard";
 import {
-  PromptToolGroupCard,
-  type ToolGroupLeaf,
+    PromptToolGroupCard,
+    type ToolGroupLeaf,
 } from "./PromptToolGroupCard";
 import { PromptWorkplaceCard } from "./PromptWorkplaceCard";
 
 interface RealPromptPanelProps {
-  projectId: string;
-  sessionId: string;
-  visible: boolean;
+    projectId: string;
+    sessionId: string;
+    visible: boolean;
 }
 
 /** 轮层 role 徽标文案（轮的消息 role；合成段按真实 role 归轮，无 template 分类）。 */
 const TURN_ROLE_LABELS: Record<PromptPreviewTurnDto["kind"], string> = {
-  user: "user",
-  assistant: "assistant",
-  system: "system",
+    user: "user",
+    assistant: "assistant",
+    system: "system",
 };
 
 /** 空正文在全屏里的占位文案。 */
@@ -51,241 +51,241 @@ const EMPTY_TEXT_PLACEHOLDER = coreT({key: "ui.prompt.empty_value"});
 
 /** 全屏 Modal 的内容来源：某个叶子（单份正文）。 */
 interface FullscreenTarget {
-  /** Modal 标题（叶子标签）。 */
-  title: string;
-  /** 正文块（叶子恒为单块，保留数组形态与渲染循环对齐）。 */
-  blocks: readonly string[];
+    /** Modal 标题（叶子标签）。 */
+    title: string;
+    /** 正文块（叶子恒为单块，保留数组形态与渲染循环对齐）。 */
+    blocks: readonly string[];
 }
 
 export function RealPromptPanel({
-  projectId,
-  sessionId,
-  visible,
+    projectId,
+    sessionId,
+    visible,
 }: RealPromptPanelProps) {
-  const [turns, setTurns] = useState<PromptPreviewTurnDto[]>([]);
-  // 展开态 map：轮卡 key = turn.id，组卡 key = `${turn.id}::${card.id}`。
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  // 全屏 Modal 打开中的内容（null = 未打开）。
-  const [fullscreen, setFullscreen] = useState<FullscreenTarget | null>(null);
-  // load 的请求序号（竞态守卫）：只认最后一次发起的请求，旧响应后到直接丢弃。
-  const requestIdRef = useRef(0);
+    const [turns, setTurns] = useState<PromptPreviewTurnDto[]>([]);
+    // 展开态 map：轮卡 key = turn.id，组卡 key = `${turn.id}::${card.id}`。
+    const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+    // 全屏 Modal 打开中的内容（null = 未打开）。
+    const [fullscreen, setFullscreen] = useState<FullscreenTarget | null>(null);
+    // load 的请求序号（竞态守卫）：只认最后一次发起的请求，旧响应后到直接丢弃。
+    const requestIdRef = useRef(0);
 
-  const load = useCallback(async () => {
-    // 竞态守卫（对齐 mobile 侧 requestIdRef）：`load` 的旧 promise 闭包带着旧的
-    // projectId/sessionId，在途期间切了会话照样会回来无条件 setTurns，把别的会话的
-    // 轮卡写进面板（且会一直留到下一次重取）。本迭代新增的 `session-compacted`
-    // 订阅又多了一条触发源，这条路径从「偶发」变成「可达」，故补序号守卫。
-    const requestId = ++requestIdRef.current;
-    const result = await ipcPromptRealPreview({ projectId, sessionId });
-    if (requestId !== requestIdRef.current) {
-      return;
-    }
-    if (result.ok) {
-      // 归一化 `cards` 兜底：Electron dev 下 renderer 会 HMR 而 main 进程不重启，
-      // 旧 main 下发的 payload 没有 `cards` 字段，裸读会在展开轮卡时抛
-      // undefined（renderer 全仓无 ErrorBoundary，整页会卸载）。这里单点兜空数组。
-      setTurns(result.data.map((turn) => ({ ...turn, cards: turn.cards ?? [] })));
-    }
-  }, [projectId, sessionId]);
+    const load = useCallback(async () => {
+        // 竞态守卫（对齐 mobile 侧 requestIdRef）：`load` 的旧 promise 闭包带着旧的
+        // projectId/sessionId，在途期间切了会话照样会回来无条件 setTurns，把别的会话的
+        // 轮卡写进面板（且会一直留到下一次重取）。本迭代新增的 `session-compacted`
+        // 订阅又多了一条触发源，这条路径从「偶发」变成「可达」，故补序号守卫。
+        const requestId = ++requestIdRef.current;
+        const result = await ipcPromptRealPreview({ projectId, sessionId });
+        if (requestId !== requestIdRef.current) {
+            return;
+        }
+        if (result.ok) {
+            // 归一化 `cards` 兜底：Electron dev 下 renderer 会 HMR 而 main 进程不重启，
+            // 旧 main 下发的 payload 没有 `cards` 字段，裸读会在展开轮卡时抛
+            // undefined（renderer 全仓无 ErrorBoundary，整页会卸载）。这里单点兜空数组。
+            setTurns(result.data.map((turn) => ({ ...turn, cards: turn.cards ?? [] })));
+        }
+    }, [projectId, sessionId]);
 
-  useEffect(() => {
-    if (visible) {
-      void load();
-    }
-  }, [visible, load]);
+    useEffect(() => {
+        if (visible) {
+            void load();
+        }
+    }, [visible, load]);
 
-  // 手动压缩成功后，`ConversationPanel.runCompaction` 会在 renderer 进程内 dispatch
-  // `session-compacted`（detail 带 sessionId）。本面板是**常驻挂载**的（visible 只是
-  // prop），压缩前后 visible 不翻转，仅靠上面那个 effect 不会重取——而手动压缩刚清了
-  // `rule_snapshot` + `file_cache` 两域，下一次拼提示词的 workplace 块是按当前工作区
-  // 重评估的结果，面板里这份旧快照必须跟着刷新。这里订阅该事件：按 sessionId 过滤
-  // 且仅在 visible 时重取（不可见时省掉一次无用 IPC）。
-  // 同范式先例：`SessionDetailDrawer` 订阅 `context-changed`。不复用
-  // `onComposerAttachmentsSuggest`（载荷语义是 composer 附件条，不符）。
-  // 依赖数组带 `load`：它随 projectId/sessionId 变化，监听器闭包里的 sessionId 不会
-  // 停在旧会话上（stale closure 会让旧 sessionId 的事件误触发重取）。
-  useEffect(() => {
-    if (!visible) {
-      return;
-    }
-    const handleCompacted = (e: Event) => {
-      const detail = (e as CustomEvent<{ sessionId?: string }>).detail;
-      if (detail?.sessionId === sessionId) {
-        void load();
-      }
-    };
-    window.addEventListener("session-compacted", handleCompacted);
-    return () => window.removeEventListener("session-compacted", handleCompacted);
-  }, [visible, sessionId, load]);
+    // 手动压缩成功后，`ConversationPanel.runCompaction` 会在 renderer 进程内 dispatch
+    // `session-compacted`（detail 带 sessionId）。本面板是**常驻挂载**的（visible 只是
+    // prop），压缩前后 visible 不翻转，仅靠上面那个 effect 不会重取——而手动压缩刚清了
+    // `rule_snapshot` + `file_cache` 两域，下一次拼提示词的 workplace 块是按当前工作区
+    // 重评估的结果，面板里这份旧快照必须跟着刷新。这里订阅该事件：按 sessionId 过滤
+    // 且仅在 visible 时重取（不可见时省掉一次无用 IPC）。
+    // 同范式先例：`SessionDetailDrawer` 订阅 `context-changed`。不复用
+    // `onComposerAttachmentsSuggest`（载荷语义是 composer 附件条，不符）。
+    // 依赖数组带 `load`：它随 projectId/sessionId 变化，监听器闭包里的 sessionId 不会
+    // 停在旧会话上（stale closure 会让旧 sessionId 的事件误触发重取）。
+    useEffect(() => {
+        if (!visible) {
+            return;
+        }
+        const handleCompacted = (e: Event) => {
+            const detail = (e as CustomEvent<{ sessionId?: string }>).detail;
+            if (detail?.sessionId === sessionId) {
+                void load();
+            }
+        };
+        window.addEventListener("session-compacted", handleCompacted);
+        return () => window.removeEventListener("session-compacted", handleCompacted);
+    }, [visible, sessionId, load]);
 
-  // 换会话清展开态与全屏：core 的轮 id 是会话内相对的 `turn-${seq}`，切会话后
-  // 上一会话的展开态会被新会话同 id 的轮「继承」（口径对齐 mobile 的 load 清空）。
-  useEffect(() => {
-    setExpanded({});
-    setFullscreen(null);
-  }, [projectId, sessionId]);
-
-  const closeFullscreen = useCallback(() => setFullscreen(null), []);
-
-  const toggleExpanded = useCallback((key: string) => {
-    setExpanded((prev) => ({ ...prev, [key]: !(prev[key] ?? false) }));
-  }, []);
-
-  /** 叶子卡全屏：该卡正文单份。 */
-  const openLeafFullscreen = useCallback((card: PromptTextCardDto) => {
-    setFullscreen({ title: promptLeafKindLabel(card), blocks: [card.body] });
-  }, []);
-
-  /** 组卡某一格全屏：该格正文单份。 */
-  const openGroupLeafFullscreen = useCallback(
-    (_cardId: string, leaf: ToolGroupLeaf) => {
-      setFullscreen({ title: leaf.label, blocks: [leaf.body] });
-    },
-    [],
-  );
-
-  /** workplace 某文件全屏：该文件块内正文单份（标题 = 路径）。 */
-  const openWorkplaceFileFullscreen = useCallback(
-    (_cardId: string, path: string, body: string) => {
-      setFullscreen({ title: path, blocks: [body] });
-    },
-    [],
-  );
-
-  // Esc 关闭全屏 Modal。已被下游消费掉的 Esc（defaultPrevented）不拦截。
-  useEffect(() => {
-    if (fullscreen == null) {
-      return;
-    }
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !e.defaultPrevented) {
+    // 换会话清展开态与全屏：core 的轮 id 是会话内相对的 `turn-${seq}`，切会话后
+    // 上一会话的展开态会被新会话同 id 的轮「继承」（口径对齐 mobile 的 load 清空）。
+    useEffect(() => {
+        setExpanded({});
         setFullscreen(null);
-      }
+    }, [projectId, sessionId]);
+
+    const closeFullscreen = useCallback(() => setFullscreen(null), []);
+
+    const toggleExpanded = useCallback((key: string) => {
+        setExpanded((prev) => ({ ...prev, [key]: !(prev[key] ?? false) }));
+    }, []);
+
+    /** 叶子卡全屏：该卡正文单份。 */
+    const openLeafFullscreen = useCallback((card: PromptTextCardDto) => {
+        setFullscreen({ title: promptLeafKindLabel(card), blocks: [card.body] });
+    }, []);
+
+    /** 组卡某一格全屏：该格正文单份。 */
+    const openGroupLeafFullscreen = useCallback(
+        (_cardId: string, leaf: ToolGroupLeaf) => {
+            setFullscreen({ title: leaf.label, blocks: [leaf.body] });
+        },
+        [],
+    );
+
+    /** workplace 某文件全屏：该文件块内正文单份（标题 = 路径）。 */
+    const openWorkplaceFileFullscreen = useCallback(
+        (_cardId: string, path: string, body: string) => {
+            setFullscreen({ title: path, blocks: [body] });
+        },
+        [],
+    );
+
+    // Esc 关闭全屏 Modal。已被下游消费掉的 Esc（defaultPrevented）不拦截。
+    useEffect(() => {
+        if (fullscreen == null) {
+            return;
+        }
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "Escape" && !e.defaultPrevented) {
+                setFullscreen(null);
+            }
+        };
+        document.addEventListener("keydown", handleKeyDown);
+        return () => document.removeEventListener("keydown", handleKeyDown);
+    }, [fullscreen]);
+
+    if (!visible) {
+        return null;
+    }
+
+    const renderCard = (card: PromptPreviewTurnDto["cards"][number], turnId: string) => {
+        if (card.type === "toolGroup") {
+            return (
+                <PromptToolGroupCard
+                    key={card.id}
+                    card={card}
+                    expanded={expanded[`${turnId}::${card.id}`] ?? false}
+                    // 组卡 key 与读取侧同口径拼 `${turnId}::${cardId}`，否则展开态写进去读不出来。
+                    onToggle={(cardId) => toggleExpanded(`${turnId}::${cardId}`)}
+                    onOpenLeaf={openGroupLeafFullscreen}
+                />
+            );
+        }
+        if (card.type === "workplace") {
+            // 无组头：轮展开即见文件列表（用户拍板，不再嵌 workplace 组）。
+            // 文件级展开态落在同一 expanded map：key 前缀 `${turnId}::${cardId}:`。
+            const filePrefix = `${turnId}::${card.id}:`;
+            const openFilePaths = new Set( Object.keys(expanded) .filter((key) => key.startsWith(filePrefix)) .map((key) => key.slice(filePrefix.length)) );
+            return (
+                <PromptWorkplaceCard
+                    key={card.id}
+                    card={card}
+                    onToggleFile={(cardId, path) => toggleExpanded(`${turnId}::${cardId}:${path}`)}
+                    openFilePaths={openFilePaths}
+                    onOpenFile={openWorkplaceFileFullscreen}
+                />
+            );
+        }
+        return <PromptLeafCard key={card.id} card={card} onOpen={openLeafFullscreen} />;
     };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [fullscreen]);
 
-  if (!visible) {
-    return null;
-  }
-
-  const renderCard = (card: PromptPreviewTurnDto["cards"][number], turnId: string) => {
-    if (card.type === "toolGroup") {
-      return (
-        <PromptToolGroupCard
-          key={card.id}
-          card={card}
-          expanded={expanded[`${turnId}::${card.id}`] ?? false}
-          // 组卡 key 与读取侧同口径拼 `${turnId}::${cardId}`，否则展开态写进去读不出来。
-          onToggle={(cardId) => toggleExpanded(`${turnId}::${cardId}`)}
-          onOpenLeaf={openGroupLeafFullscreen}
-        />
-      );
-    }
-    if (card.type === "workplace") {
-      // 无组头：轮展开即见文件列表（用户拍板，不再嵌 workplace 组）。
-      // 文件级展开态落在同一 expanded map：key 前缀 `${turnId}::${cardId}:`。
-      const filePrefix = `${turnId}::${card.id}:`;
-      const openFilePaths = new Set( Object.keys(expanded) .filter((key) => key.startsWith(filePrefix)) .map((key) => key.slice(filePrefix.length)) );
-      return (
-        <PromptWorkplaceCard
-          key={card.id}
-          card={card}
-          onToggleFile={(cardId, path) => toggleExpanded(`${turnId}::${cardId}:${path}`)}
-          openFilePaths={openFilePaths}
-          onOpenFile={openWorkplaceFileFullscreen}
-        />
-      );
-    }
-    return <PromptLeafCard key={card.id} card={card} onOpen={openLeafFullscreen} />;
-  };
-
-  return (
-    <div className="real-prompt-list" id="real-prompt-list">
-      {turns.map((turn) => {
-        const open = expanded[turn.id] ?? false;
-        const roleLabel = TURN_ROLE_LABELS[turn.kind] ?? turn.kind;
-        return (
-          <div
-            key={turn.id}
-            className={`prompt-turn prompt-turn--${turn.kind} prompt-turn-card${open ? " is-expanded" : ""}`}
-            data-turn-id={turn.id}
-            data-turn-kind={turn.kind}
-          >
-            <div className="prompt-turn-card__head">
-              <button
-                type="button"
-                className="prompt-turn-card__toggle"
-                aria-expanded={open}
-                aria-label={coreT({key: "ui.prompt.turn_aria", params: {action: open ? coreT({key: "ui.common.collapse"}) : coreT({key: "ui.common.expand"}), role: roleLabel, summary: turn.summaryText.slice(0, 20)}})}
-                onClick={() => toggleExpanded(turn.id)}
-              >
-                <span
-                  className="prompt-turn-card__role"
-                  data-turn-kind={turn.kind}
-                >
-                  {roleLabel}
-                </span>
-                <span className="prompt-turn-card__summary">
-                  {turn.summaryText}
-                </span>
-                <span className="prompt-segment__preview prompt-turn-card__meta">
-                  {turn.metaText}
-                </span>
-              </button>
-              <span
-                className="prompt-segment__chevron"
-                aria-hidden="true"
-                data-state={open ? "open" : "closed"}
-              >
-                {open ? "▼" : "▶"}
-              </span>
-            </div>
-            {open ? (
-              <div className="prompt-turn-card__body">
-                {turn.cards.map((card) => renderCard(card, turn.id))}
-              </div>
+    return (
+        <div className="real-prompt-list" id="real-prompt-list">
+            {turns.map((turn) => {
+                const open = expanded[turn.id] ?? false;
+                const roleLabel = TURN_ROLE_LABELS[turn.kind] ?? turn.kind;
+                return (
+                    <div
+                        key={turn.id}
+                        className={`prompt-turn prompt-turn--${turn.kind} prompt-turn-card${open ? " is-expanded" : ""}`}
+                        data-turn-id={turn.id}
+                        data-turn-kind={turn.kind}
+                    >
+                        <div className="prompt-turn-card__head">
+                            <button
+                                type="button"
+                                className="prompt-turn-card__toggle"
+                                aria-expanded={open}
+                                aria-label={coreT({key: "ui.prompt.turn_aria", params: {action: open ? coreT({key: "ui.common.collapse"}) : coreT({key: "ui.common.expand"}), role: roleLabel, summary: turn.summaryText.slice(0, 20)}})}
+                                onClick={() => toggleExpanded(turn.id)}
+                            >
+                                <span
+                                    className="prompt-turn-card__role"
+                                    data-turn-kind={turn.kind}
+                                >
+                                    {roleLabel}
+                                </span>
+                                <span className="prompt-turn-card__summary">
+                                    {turn.summaryText}
+                                </span>
+                                <span className="prompt-segment__preview prompt-turn-card__meta">
+                                    {turn.metaText}
+                                </span>
+                            </button>
+                            <span
+                                className="prompt-segment__chevron"
+                                aria-hidden="true"
+                                data-state={open ? "open" : "closed"}
+                            >
+                                {open ? "▼" : "▶"}
+                            </span>
+                        </div>
+                        {open ? (
+                            <div className="prompt-turn-card__body">
+                                {turn.cards.map((card) => renderCard(card, turn.id))}
+                            </div>
+                        ) : null}
+                    </div>
+                );
+            })}
+            <p className="real-prompt-hint">
+                {coreT({key: "ui.prompt.viewer_hint_desktop"})}
+            </p>
+            {fullscreen != null ? (
+                <div className="text-prompt-overlay" onClick={closeFullscreen}>
+                    <div
+                        className="prompt-editor-modal"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label={coreT({key: "ui.prompt.fullscreen_aria", params: {title: fullscreen.title}})}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="prompt-fullscreen__title">{fullscreen.title}</div>
+                        <div className="prompt-fullscreen__body">
+                            {fullscreen.blocks.length === 0 ? (
+                                <p className="prompt-fullscreen__empty">{EMPTY_TEXT_PLACEHOLDER}</p>
+                            ) : (
+                                fullscreen.blocks.map((content, index) => (
+                                    // 叶子恒单块；索引参与 key 保证重复正文时也稳定。
+                                    <div
+                                        key={`raw-${index}-${content.slice(0, 8)}`}
+                                        className="prompt-fullscreen__block"
+                                    >
+                                        <pre className="prompt-fullscreen__raw">{content}</pre>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                        <div className="prompt-editor-modal__footer">
+                            <Button variant="secondary" onClick={closeFullscreen}>
+                                {coreT({key: "ui.common.close"})}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
             ) : null}
-          </div>
-        );
-      })}
-      <p className="real-prompt-hint">
-        {coreT({key: "ui.prompt.viewer_hint_desktop"})}
-      </p>
-      {fullscreen != null ? (
-        <div className="text-prompt-overlay" onClick={closeFullscreen}>
-          <div
-            className="prompt-editor-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label={coreT({key: "ui.prompt.fullscreen_aria", params: {title: fullscreen.title}})}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="prompt-fullscreen__title">{fullscreen.title}</div>
-            <div className="prompt-fullscreen__body">
-              {fullscreen.blocks.length === 0 ? (
-                <p className="prompt-fullscreen__empty">{EMPTY_TEXT_PLACEHOLDER}</p>
-              ) : (
-                fullscreen.blocks.map((content, index) => (
-                  // 叶子恒单块；索引参与 key 保证重复正文时也稳定。
-                  <div
-                    key={`raw-${index}-${content.slice(0, 8)}`}
-                    className="prompt-fullscreen__block"
-                  >
-                    <pre className="prompt-fullscreen__raw">{content}</pre>
-                  </div>
-                ))
-              )}
-            </div>
-            <div className="prompt-editor-modal__footer">
-              <Button variant="secondary" onClick={closeFullscreen}>
-                {coreT({key: "ui.common.close"})}
-              </Button>
-            </div>
-          </div>
         </div>
-      ) : null}
-    </div>
-  );
+    );
 }

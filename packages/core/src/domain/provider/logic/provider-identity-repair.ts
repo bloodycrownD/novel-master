@@ -41,7 +41,7 @@ import { ProviderModel } from "../model/provider.js";
  *   应当 fail-fast 让上层感知，而不是悄悄打补丁掩盖根因。
  */
 export const ProviderIdentityRepair = {
-  /**
+    /**
    * 校验 provider 双身份键形态：内置行必须有非空 builtin_key、所有行必须有非空 display_name。
    *
    * 这是 provider-identity-v1 migration `assertMigratedShape` 的运行时镜像。display_name
@@ -54,44 +54,44 @@ export const ProviderIdentityRepair = {
    * - repair 不会静默补值——migration 不变量一旦在运行时被破坏，说明数据层出了严重问题，
    *   应当 fail-fast 让上层感知，而不是悄悄打补丁掩盖根因。
    */
-  createIdentityRepairOperation(args: { readonly providerRepo: ProviderRepository }): IntegrityRepairOperation {
-    const { providerRepo } = args;
-    return {
-      name: "provider-identity-shape",
-      kind: "repair",
-      async detect() {
-        // 已知失败沿 Result.err 上行（p26 R4：接口已 Result 化，repo 失败不再解包转 throw）。
-        const listed = await providerRepo.list();
-        if (!listed.ok) return Result.err(listed.error);
-        const providers = listed.value;
-        const offenders: string[] = [];
-        for (const p of providers) {
-          if (p.displayName.trim() === "") {
-            offenders.push(`${p.id}: 空 display_name`);
-          }
-          if (p.isBuiltin && (p.builtinKey == null || p.builtinKey.trim() === "")) {
-            offenders.push(`${p.id}: 内置行缺 builtin_key`);
-          }
-        }
-        if (offenders.length === 0) {
-          return Result.ok({ needsRepair: false });
-        }
-        return Result.ok({ needsRepair: true, details: `${offenders.length} 条 provider 违反双身份键不变量：${offenders.join("; ")}` });
-      },
-      async repair() {
-        // migration 不变量不能在运行时静默修复——重新 detect 一遍，违反则 fail-fast（assert 异常由 runAll 兜网收进报告）。
-        const listed = await providerRepo.list();
-        if (!listed.ok) return Result.err(listed.error);
-        const providers = listed.value;
-        const emptyNames = providers.filter((p) => p.displayName.trim() === "");
-        const builtinMissingKey = providers.filter((p) => p.isBuiltin && (p.builtinKey == null || p.builtinKey.trim() === ""));
-        assert(emptyNames.length === 0 && builtinMissingKey.length === 0, `[invariant] provider 双身份键不变量被破坏，无法自动修复：空 display_name=[${emptyNames.map((p) => p.id).join(", ")}]，内置行缺 builtin_key=[${builtinMissingKey.map((p) => p.id).join(", ")}]`);
-        return Result.ok(undefined);
-      },
-    };
-  },
+    createIdentityRepairOperation(args: { readonly providerRepo: ProviderRepository }): IntegrityRepairOperation {
+        const { providerRepo } = args;
+        return {
+            name: "provider-identity-shape",
+            kind: "repair",
+            async detect() {
+                // 已知失败沿 Result.err 上行（p26 R4：接口已 Result 化，repo 失败不再解包转 throw）。
+                const listed = await providerRepo.list();
+                if (!listed.ok) return Result.err(listed.error);
+                const providers = listed.value;
+                const offenders: string[] = [];
+                for (const p of providers) {
+                    if (p.displayName.trim() === "") {
+                        offenders.push(`${p.id}: 空 display_name`);
+                    }
+                    if (p.isBuiltin && (p.builtinKey == null || p.builtinKey.trim() === "")) {
+                        offenders.push(`${p.id}: 内置行缺 builtin_key`);
+                    }
+                }
+                if (offenders.length === 0) {
+                    return Result.ok({ needsRepair: false });
+                }
+                return Result.ok({ needsRepair: true, details: `${offenders.length} 条 provider 违反双身份键不变量：${offenders.join("; ")}` });
+            },
+            async repair() {
+                // migration 不变量不能在运行时静默修复——重新 detect 一遍，违反则 fail-fast（assert 异常由 runAll 兜网收进报告）。
+                const listed = await providerRepo.list();
+                if (!listed.ok) return Result.err(listed.error);
+                const providers = listed.value;
+                const emptyNames = providers.filter((p) => p.displayName.trim() === "");
+                const builtinMissingKey = providers.filter((p) => p.isBuiltin && (p.builtinKey == null || p.builtinKey.trim() === ""));
+                assert(emptyNames.length === 0 && builtinMissingKey.length === 0, `[invariant] provider 双身份键不变量被破坏，无法自动修复：空 display_name=[${emptyNames.map((p) => p.id).join(", ")}]，内置行缺 builtin_key=[${builtinMissingKey.map((p) => p.id).join(", ")}]`);
+                return Result.ok(undefined);
+            },
+        };
+    },
 
-  /**
+    /**
    * provider id 重命名时把对应的 sksp 密钥 ref 从旧 id 搬到新 id。
    *
    * 来源是 provider-identity-v1 migration 的 renameSkspSecrets。抽出成独立操作后，
@@ -100,43 +100,43 @@ export const ProviderIdentityRepair = {
    * - detect：旧 ref 存在且新 ref 不存在时才标记 needsRepair=true；
    * - repair：读旧值 → 写新 ref → 删旧 ref（标准 rename 三步），幂等。
    */
-  createSecretRenameOperation(args: { readonly secretStore: SecretStore; readonly oldId: string; readonly newId: string }): IntegrityRepairOperation {
-    const { secretStore, oldId, newId } = args;
-    const oldRef = ProviderModel.apiKeyRef(oldId);
-    const newRef = ProviderModel.apiKeyRef(newId);
-    return {
-      name: `provider-secret-rename:${oldId}->${newId}`,
-      kind: "rename",
-      async detect() {
-        if (oldId === newId) {
-          return Result.ok({ needsRepair: false });
-        }
-        const hasOld = await secretStore.has(oldRef);
-        if (!hasOld) {
-          return Result.ok({ needsRepair: false });
-        }
-        const hasNew = await secretStore.has(newRef);
-        if (hasNew) {
-          return Result.ok({ needsRepair: false, details: `新 ref ${newRef} 已存在，跳过 rename（避免覆盖）` });
-        }
-        return Result.ok({ needsRepair: true, details: `旧 ref ${oldRef} 存在、新 ref ${newRef} 不存在，需搬运` });
-      },
-      async repair() {
-        if (oldId === newId) {
-          return Result.ok(undefined);
-        }
-        const value = await secretStore.get(oldRef);
-        if (value == null) {
-          return Result.ok(undefined);
-        }
-        if (await secretStore.has(newRef)) {
-          // detect 已拦，但 repair 要求幂等，这里再核一次避免覆盖。
-          return Result.ok(undefined);
-        }
-        await secretStore.set(newRef, value);
-        await secretStore.delete(oldRef);
-        return Result.ok(undefined);
-      },
-    };
-  },
+    createSecretRenameOperation(args: { readonly secretStore: SecretStore; readonly oldId: string; readonly newId: string }): IntegrityRepairOperation {
+        const { secretStore, oldId, newId } = args;
+        const oldRef = ProviderModel.apiKeyRef(oldId);
+        const newRef = ProviderModel.apiKeyRef(newId);
+        return {
+            name: `provider-secret-rename:${oldId}->${newId}`,
+            kind: "rename",
+            async detect() {
+                if (oldId === newId) {
+                    return Result.ok({ needsRepair: false });
+                }
+                const hasOld = await secretStore.has(oldRef);
+                if (!hasOld) {
+                    return Result.ok({ needsRepair: false });
+                }
+                const hasNew = await secretStore.has(newRef);
+                if (hasNew) {
+                    return Result.ok({ needsRepair: false, details: `新 ref ${newRef} 已存在，跳过 rename（避免覆盖）` });
+                }
+                return Result.ok({ needsRepair: true, details: `旧 ref ${oldRef} 存在、新 ref ${newRef} 不存在，需搬运` });
+            },
+            async repair() {
+                if (oldId === newId) {
+                    return Result.ok(undefined);
+                }
+                const value = await secretStore.get(oldRef);
+                if (value == null) {
+                    return Result.ok(undefined);
+                }
+                if (await secretStore.has(newRef)) {
+                    // detect 已拦，但 repair 要求幂等，这里再核一次避免覆盖。
+                    return Result.ok(undefined);
+                }
+                await secretStore.set(newRef, value);
+                await secretStore.delete(oldRef);
+                return Result.ok(undefined);
+            },
+        };
+    },
 } as const;

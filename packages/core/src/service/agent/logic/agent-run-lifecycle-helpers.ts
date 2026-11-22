@@ -21,45 +21,45 @@
 export const PENDING_RUN_ID = "__pending__" as const;
 
 export type ShouldApplyTranscriptReloadOptions = {
-  readonly abortRetainPending?: boolean;
-  readonly phase?: "assistant" | "tool_results";
+    readonly abortRetainPending?: boolean;
+    readonly phase?: "assistant" | "tool_results";
 };
 
 /** Agent run 生命周期谓词族（desktop useAgentRunLifecycle 消费）。 */
 export const RunLifecycle = {
-  /** 是否接受带 runId 的 stream/bus 事件。 */
-  shouldAccept: (activeRunId: string | null, runId: string | undefined): boolean => {
-    // 前奏终态（runId === ''）：只在受理哨兵态下放行（见 PENDING_RUN_ID 注释）。
-    // 这里的顺序不能调换——空串终态必须先于「空串一律拒绝」判据被接住。
-    if (runId === "") {
-      return activeRunId === PENDING_RUN_ID;
-    }
-    if (runId == null) {
-      return false;
-    }
-    if (activeRunId == null) {
-      return false;
-    }
-    return activeRunId === runId;
-  },
+    /** 是否接受带 runId 的 stream/bus 事件。 */
+    shouldAccept: (activeRunId: string | null, runId: string | undefined): boolean => {
+        // 前奏终态（runId === ''）：只在受理哨兵态下放行（见 PENDING_RUN_ID 注释）。
+        // 这里的顺序不能调换——空串终态必须先于「空串一律拒绝」判据被接住。
+        if (runId === "") {
+            return activeRunId === PENDING_RUN_ID;
+        }
+        if (runId == null) {
+            return false;
+        }
+        if (activeRunId == null) {
+            return false;
+        }
+        return activeRunId === runId;
+    },
 
-  /** abort 后迟到 RUN_STARTED 是否应被忽略。 */
-  shouldIgnoreStale: (uiRunning: boolean, _activeRunId: string | null): boolean => !uiRunning,
+    /** abort 后迟到 RUN_STARTED 是否应被忽略。 */
+    shouldIgnoreStale: (uiRunning: boolean, _activeRunId: string | null): boolean => !uiRunning,
 
-  /** STEP/FINISHED 是否允许触发增列表的 transcript reload。 */
-  shouldReload: (uiRunning: boolean): boolean => uiRunning,
+    /** STEP/FINISHED 是否允许触发增列表的 transcript reload。 */
+    shouldReload: (uiRunning: boolean): boolean => uiRunning,
 
-  /** STEP/FINISHED/FAILED 是否允许增列表 reload（uiRunning + freeze 双保险；abort retain 一次例外）。 */
-  shouldApply: (uiRunning: boolean, freezeCount: number | null, opts?: ShouldApplyTranscriptReloadOptions): boolean => {
-    if (opts?.abortRetainPending === true && opts.phase === "assistant") {
-      return true;
-    }
-    if (!RunLifecycle.shouldReload(uiRunning)) {
-      return false;
-    }
-    if (freezeCount != null) {
-      return false;
-    }
-    return true;
-  },
+    /** STEP/FINISHED/FAILED 是否允许增列表 reload（uiRunning + freeze 双保险；abort retain 一次例外）。 */
+    shouldApply: (uiRunning: boolean, freezeCount: number | null, opts?: ShouldApplyTranscriptReloadOptions): boolean => {
+        if (opts?.abortRetainPending === true && opts.phase === "assistant") {
+            return true;
+        }
+        if (!RunLifecycle.shouldReload(uiRunning)) {
+            return false;
+        }
+        if (freezeCount != null) {
+            return false;
+        }
+        return true;
+    },
 } as const;

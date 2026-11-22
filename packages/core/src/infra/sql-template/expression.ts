@@ -26,103 +26,103 @@ const compiledTestFunctionCache = new Map<string, (ctx: unknown) => unknown>();
  * `test` 表达式的规范化、上下文绑定与求值门面。
  */
 export const SqlTemplateExpression = {
-  /**
+    /**
    * Applies `transform` only to segments outside single- and double-quoted literals.
    */
-  mapOutsideStringLiterals(expr: string, transform: (segment: string) => string): string {
-    let result = "";
-    let i = 0;
-    while (i < expr.length) {
-      const ch = expr[i];
-      if (ch === "'" || ch === '"') {
-        const quote = ch;
-        const start = i;
-        i++;
+    mapOutsideStringLiterals(expr: string, transform: (segment: string) => string): string {
+        let result = "";
+        let i = 0;
         while (i < expr.length) {
-          if (expr[i] === "\\") {
-            i += 2;
-            continue;
-          }
-          if (expr[i] === quote) {
-            i++;
-            break;
-          }
-          i++;
+            const ch = expr[i];
+            if (ch === "'" || ch === '"') {
+                const quote = ch;
+                const start = i;
+                i++;
+                while (i < expr.length) {
+                    if (expr[i] === "\\") {
+                        i += 2;
+                        continue;
+                    }
+                    if (expr[i] === quote) {
+                        i++;
+                        break;
+                    }
+                    i++;
+                }
+                result += expr.slice(start, i);
+                continue;
+            }
+            let end = i;
+            while (end < expr.length && expr[end] !== "'" && expr[end] !== '"') {
+                end++;
+            }
+            result += transform(expr.slice(i, end));
+            i = end;
         }
-        result += expr.slice(start, i);
-        continue;
-      }
-      let end = i;
-      while (end < expr.length && expr[end] !== "'" && expr[end] !== '"') {
-        end++;
-      }
-      result += transform(expr.slice(i, end));
-      i = end;
-    }
-    return result;
-  },
+        return result;
+    },
 
-  /**
+    /**
    * Converts MyBatis logical keywords to JavaScript operators (whole-word only).
    * Keywords inside string literals are left unchanged.
    */
-  normalize(expr: string): string {
-    return SqlTemplateExpression.mapOutsideStringLiterals(expr.trim(), (segment) => {
-      const anded = segment.replace(/\band\b/gi, "&&");
-      const ored = anded.replace(/\bor\b/gi, "||");
-      return ored.replace(/\bnot\b/gi, "!");
-    });
-  },
+    normalize(expr: string): string {
+        return SqlTemplateExpression.mapOutsideStringLiterals(expr.trim(), (segment) => {
+            const anded = segment.replace(/\band\b/gi, "&&");
+            const ored = anded.replace(/\bor\b/gi, "||");
+            return ored.replace(/\bnot\b/gi, "!");
+        });
+    },
 
-  /**
+    /**
    * Rewrites bare identifiers to `__ctx__.path` for evaluation in a single scope.
    * Identifiers inside string literals are left unchanged.
    */
-  bindToContext(expr: string): string {
-    return SqlTemplateExpression.mapOutsideStringLiterals(expr, (segment) =>
-      segment.replace(IDENTIFIER_RE, (match) => {
-        const lower = match.toLowerCase();
-        if (RESERVED_WORDS.has(lower)) return match;
-        const parts = match.split(".");
-        let bound = `__ctx__.${parts[0]}`;
-        for (let i = 1; i < parts.length; i++) {
-          bound += `?.${parts[i]}`;
-        }
-        return bound;
-      })
-    );
-  },
+    bindToContext(expr: string): string {
+        return SqlTemplateExpression.mapOutsideStringLiterals(expr, (segment) =>
+            segment.replace(IDENTIFIER_RE, (match) => {
+                const lower = match.toLowerCase();
+                if (RESERVED_WORDS.has(lower)) return match;
+                const parts = match.split(".");
+                let bound = `__ctx__.${parts[0]}`;
+                for (let i = 1; i < parts.length; i++) {
+                    bound += `?.${parts[i]}`;
+                }
+                return bound;
+            })
+        );
+    },
 
-  /**
+    /**
    * Evaluates a `test` expression against the current context stack.
    * Missing properties read as `undefined` via a chained Proxy.
    */
-  evaluateTest(expr: string, stack: ContextStack, options?: EvaluateTestOptions): boolean {
-    const normalized = SqlTemplateExpression.bindToContext(SqlTemplateExpression.normalize(expr));
-    const errorOptions = options?.offset !== undefined ? { offset: options.offset } : undefined;
-    if (!normalized) {
-      throw new SqlTemplateError("EXPRESSION_ERROR", "Empty test expression", errorOptions);
-    }
-    if (FORBIDDEN_PATTERN.test(normalized)) {
-      throw new SqlTemplateError("EXPRESSION_ERROR", `Disallowed syntax in test expression: ${expr}`, errorOptions);
-    }
+    evaluateTest(expr: string, stack: ContextStack, options?: EvaluateTestOptions): boolean {
+        const normalized = SqlTemplateExpression.bindToContext(SqlTemplateExpression.normalize(expr));
+        const errorOptions = options?.offset !== undefined ? { offset: options.offset } : undefined;
+        if (!normalized) {
+            throw new SqlTemplateError("EXPRESSION_ERROR", "Empty test expression", errorOptions);
+        }
+        if (FORBIDDEN_PATTERN.test(normalized)) {
+            throw new SqlTemplateError("EXPRESSION_ERROR", `Disallowed syntax in test expression: ${expr}`, errorOptions);
+        }
 
-    const ctx = SqlTemplateContextProxy.mergedForExpression(stack);
-    try {
-      let fn = compiledTestFunctionCache.get(normalized);
-      if (fn === undefined) {
-        fn = new Function("__ctx__", `return (${normalized});`) as (ctx: unknown) => unknown;
-        compiledTestFunctionCache.set(normalized, fn);
-      }
-      return Boolean(fn(ctx));
-    } catch (err) {
-      throw new SqlTemplateError("EXPRESSION_ERROR", `Failed to evaluate test expression: ${expr}`, { ...errorOptions, cause: err });
-    }
-  },
+        const ctx = SqlTemplateContextProxy.mergedForExpression(stack);
+        try {
+            let fn = compiledTestFunctionCache.get(normalized);
+            if (fn === undefined) {
+                fn = new Function("__ctx__", `return (${normalized});`) as (ctx: unknown) => unknown;
+                compiledTestFunctionCache.set(normalized, fn);
+            }
+            return Boolean(fn(ctx));
+        } catch (err) {
+            throw new SqlTemplateError("EXPRESSION_ERROR", `Failed to evaluate test expression: ${expr}`, { ...errorOptions, cause: err });
+        }
+    },
 } as const;
 
 // nm-style: keep-public — packages/core/src/index.ts 主入口再导出的公共类型契约（无生产直引）
 export interface EvaluateTestOptions {
-  /** Template offset of the `test` attribute value, when known. */
-  offset?: number;
+    /** Template offset of the `test` attribute value, when known. */
+    offset?: number;
 }

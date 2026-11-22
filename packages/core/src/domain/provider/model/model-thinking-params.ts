@@ -6,31 +6,31 @@
 
 /** Anthropic Messages API thinking 字段。 */
 export interface AnthropicThinkingParams {
-  readonly type: "enabled";
-  readonly budget_tokens: number;
+    readonly type: "enabled";
+    readonly budget_tokens: number;
 }
 
 /** OpenAI Chat Completions reasoning_effort。 */
 export interface OpenAiThinkingParams {
-  readonly reasoning_effort: "low" | "medium" | "high";
+    readonly reasoning_effort: "low" | "medium" | "high";
 }
 
 /** Gemini thinkingConfig 片段。 */
 export interface GeminiThinkingConfig {
-  readonly thinkingBudget?: number;
-  readonly thinkingLevel?: string;
+    readonly thinkingBudget?: number;
+    readonly thinkingLevel?: string;
 }
 
 /** Gemini generateContent thinking 配置。 */
 export interface GeminiThinkingParams {
-  readonly thinkingConfig: GeminiThinkingConfig;
+    readonly thinkingConfig: GeminiThinkingConfig;
 }
 
 /** 按 provider protocol 区分的思考参数联合类型。 */
 export type ModelThinkingParams =
-  | {
-      readonly protocol: "anthropic";
-      readonly anthropic: AnthropicThinkingParams;
-    }
-  | { readonly protocol: "openai"; readonly openai: OpenAiThinkingParams }
-  | { readonly protocol: "gemini"; readonly gemini: GeminiThinkingParams };
+    | {
+            readonly protocol: "anthropic";
+            readonly anthropic: AnthropicThinkingParams;
+        }
+    | { readonly protocol: "openai"; readonly openai: OpenAiThinkingParams }
+    | { readonly protocol: "gemini"; readonly gemini: GeminiThinkingParams };

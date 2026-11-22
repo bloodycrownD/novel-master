@@ -14,533 +14,533 @@ import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix
 novelMasterTestFixture();
 
 describe("MessageRollbackService (revision model)", () => {
-  it("R1: rollback to assistant anchor restores earlier file content", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
+    it("R1: rollback to assistant anchor restores earlier file content", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
 
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("poem")));
-    const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "here" }],
-    }));
-    await svfs.write("/poem.md", "roses", { versionCheck: false });
-    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
+        const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("poem")));
+        const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "here" }],
+        }));
+        await svfs.write("/poem.md", "roses", { versionCheck: false });
+        unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
-    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("more")));
-    const assistant2 = unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "later" }],
-    }));
-    await svfs.write("/poem.md", "violets", { versionCheck: false });
-    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id));
+        unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("more")));
+        const assistant2 = unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "later" }],
+        }));
+        await svfs.write("/poem.md", "violets", { versionCheck: false });
+        unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id));
 
-    await ctx.sessionFs.rollbackFilesToMessage(
-      session.id,
-      project.id,
-      assistant1.id,
-    );
-
-    assert.equal(unwrap(await svfs.read("/poem.md")).content, "roses");
-    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
-    assert.equal(messages.length, 2);
-    assert.equal(messages[0]!.id, user1.id);
-    assert.equal(messages[1]!.id, assistant1.id);
-  });
-
-  it("R2: plain user undo_send 无 prior 时回退到 anchor checkpoint", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
-
-    await svfs.write("/anchor.md", "at-send", { versionCheck: false });
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("anchor")));
-    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, user1.id));
-
-    await svfs.write("/anchor.md", "after-send", { versionCheck: false });
-    await svfs.write("/later.md", "new file", { versionCheck: false });
-    unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "later" }],
-    }));
-
-    await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, user1.id);
-
-    // 无 prior 时回退到 anchor 自身 checkpoint：/anchor.md 恢复到 capture 版本，
-    // /later.md 不在 checkpoint 里 → 删除。
-    assert.equal(unwrap(await svfs.read("/anchor.md")).content, "at-send");
-    assert.ok(!(await svfs.read("/later.md")).ok, "later.md 应已被回滚删除");
-    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
-    assert.equal(messages.length, 0);
-  });
-
-  it("R2b: plain user undo_send 无 prior 时护栏拒绝删光工作区", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
-
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("write poem")));
-    const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "ok" }],
-    }));
-    await svfs.write("/poem.md", "draft", { versionCheck: false });
-    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
-    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("nice")));
-    unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "thanks" }],
-    }));
-
-    // S-13 护栏：user1 是首条 plain user，prior 与 anchor 都没有 baseline 快照，
-    // targetTree 为空——直接 reconcile 会把 /poem.md 当「需删除」清掉。这里应抛
-    // ROLLBACK_UNDO_SEND_EMPTY_TARGET，且不截断消息、不动文件。
-    await rejectsErr(
-      () => ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, user1.id),
-      (error: unknown) => {
-        assert.equal(
-          isSessionFsError(error, "ROLLBACK_UNDO_SEND_EMPTY_TARGET"),
-          true,
+        await ctx.sessionFs.rollbackFilesToMessage(
+            session.id,
+            project.id,
+            assistant1.id,
         );
-        return true;
-      },
-    );
-    assert.equal(unwrap(await svfs.read("/poem.md")).content, "draft");
-    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
-    assert.equal(messages.length, 4);
-  });
-
-  it("R3: plain user undo_send 无 prior 时护栏拒绝清空工作区", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
-    await svfs.write("/keep.md", "stable", { versionCheck: false });
-
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("hi")));
-    unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "hello" }],
-    }));
-    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("bye")));
-
-    // S-13 护栏：没有任何 baseline checkpoint，targetTree 为空，拒绝 reconcile。
-    await rejectsErr(
-      () => ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, user1.id),
-      (error: unknown) =>
-        isSessionFsError(error, "ROLLBACK_UNDO_SEND_EMPTY_TARGET"),
-    );
-    assert.equal(unwrap(await svfs.read("/keep.md")).content, "stable");
-    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
-    assert.equal(messages.length, 3);
-  });
-
-  it("U1: undo_send 回滚 user₁ 保留 prior 消息并对齐发送前 checkpoint", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
-
-    await svfs.write("/state.md", "baseline", { versionCheck: false });
-    const priorAsst = unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "setup" }],
-    }));
-    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, priorAsst.id));
-
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("prompt")));
-    const asst1 = unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "reply" }],
-    }));
-    await svfs.write("/state.md", "after-user1", { versionCheck: false });
-    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, asst1.id));
-    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("follow-up")));
-
-    await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, user1.id);
-
-    assert.equal(unwrap(await svfs.read("/state.md")).content, "baseline");
-    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
-    assert.equal(messages.length, 1);
-    assert.equal(messages[0]!.id, priorAsst.id);
-  });
-
-  it("U2: plain user undo_send 首条无 baseline 时护栏拒删", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
-
-    await svfs.write("/solo.md", "only", { versionCheck: false });
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("first")));
-    unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "hi" }],
-    }));
-
-    // S-13 护栏：首条 plain user、无 baseline，targetTree 为空 → 拒绝删除。
-    await rejectsErr(
-      () => ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, user1.id),
-      (error: unknown) =>
-        isSessionFsError(error, "ROLLBACK_UNDO_SEND_EMPTY_TARGET"),
-    );
-    assert.equal(unwrap(await svfs.read("/solo.md")).content, "only");
-    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
-    assert.equal(messages.length, 2);
-  });
-
-  it("R-BC1: 角色卡导入 backfill baseline 后 undo_send 回首条 user 保留文件", async () => {
-    // 导入角色卡会 backfill baseline checkpoint，让回滚有正确基线。
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-rbc1-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
-    const scope = {
-      kind: "session" as const,
-      projectId: project.id,
-      sessionId: session.id,
-    };
-
-    // 先发一条消息（纯文本，无 capture），再导入角色卡——导入 backfill
-    // 会给这条消息补 baseline checkpoint。
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("你好")));
-
-    const cardSvc = VfsServiceFactory.createCharacterCardImport(ctx.conn);
-    const tree = new Map<string, string>([
-      ["角色描述.md", "card-desc"],
-      ["世界书/设定.md", "world"],
-    ]);
-    await cardSvc.import(scope, tree, { confirmed: true, directoryPath: "/" });
-
-    // 聊一轮：assistant 文本（不触发 capture，因为没改文件）。
-    unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "你好呀" }],
-    }));
-
-    // 回滚到首条 user（undo_send）。
-    await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, user1.id);
-
-    // 导入的文件应保留（baseline checkpoint 保护了它们）。
-    assert.equal(unwrap(await svfs.read("/角色描述.md")).content, "card-desc");
-    assert.equal(unwrap(await svfs.read("/世界书/设定.md")).content, "world");
-    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
-    assert.equal(messages.length, 0);
-  });
-
-  it("R-BC2: 消息 3 有 checkpoint，消息 6 导入时只补 4-6 不碰 1-2", async () => {
-    // backfill 只应补「最后一个有 checkpoint 的消息之后」的空窗，
-    // 不能给已有 checkpoint 之前的消息补（那会破坏它们原有的回滚语义）。
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-rbc2-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
-    const scope = {
-      kind: "session" as const,
-      projectId: project.id,
-      sessionId: session.id,
-    };
-
-    // 消息 1-2：纯文本，无 checkpoint。
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("first")));
-    unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "hi" }],
-    }));
-
-    // 消息 3：assistant 写文件 + capture（成为最后一个有 checkpoint 的）。
-    await svfs.write("/old.md", "v1", { versionCheck: false });
-    const assistant3 = unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "wrote" }],
-    }));
-    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant3.id));
-
-    // 消息 4-5：纯文本，无 checkpoint（空窗开始）。
-    const user4 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("chat")));
-    unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "reply" }],
-    }));
-
-    // 消息 6 时导入角色卡——backfill 应只补 4、5、6，不碰 1、2。
-    const cardSvc = VfsServiceFactory.createCharacterCardImport(ctx.conn);
-    const tree = new Map<string, string>([
-      ["新文件.md", "imported"],
-    ]);
-    await cardSvc.import(scope, tree, { confirmed: true, directoryPath: "/" });
-
-    // 验证：消息 1 没有 baseline checkpoint（backfill 没碰它），
-    // 所以回滚到消息 1 时仍然走空基线（无 prior、无 anchor checkpoint）。
-    // backfill 边界的直接断言：消息 1、2 不因导入被补 baseline。
-    const checkpointRepo = new SqliteMessageCheckpointRepository(ctx.conn);
-    assert.equal(
-      await checkpointRepo.hasCheckpoint(session.id, user1.id),
-      false,
-      "backfill 不得给最后一个有 checkpoint 的消息之前的消息补 baseline",
-    );
-
-    // 回滚到消息 4（plain user → undo_send，prior = 消息 3 的 capture checkpoint）。
-    // path 快照修复后 prior tree 完整含 /old.md（导入删除其 entry 也不丢），
-    // 回滚按「目标检查点完成态」执行：/old.md 复活复现、tail 期导入的
-    // /新文件.md（不在 prior tree）被删除。
-    await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, user4.id);
-    assert.equal(unwrap(await svfs.read("/old.md")).content, "v1");
-    {
-      const r = await svfs.read("/新文件.md");
-      assert.ok(!r.ok && AppErrorOps.is(r.error, "VFS_NOT_FOUND"), "导入的新文件应走 Err 且为 VFS_NOT_FOUND");
-    }
-    const msgsAfter4 = outcomeValue(await ctx.messages.listBySession(session.id));
-    assert.equal(msgsAfter4.length, 3); // user1, asst2, asst3
-  });
-
-  it("U3: undo_send 含锚点 checkpoint 时仍仅用 prior tree", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
-
-    const priorAsst = unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "prior" }],
-    }));
-    await svfs.write("/file.md", "prior-content", { versionCheck: false });
-    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, priorAsst.id));
-
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("send")));
-    await svfs.write("/file.md", "at-user-checkpoint", { versionCheck: false });
-    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, user1.id));
-    unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "later" }],
-    }));
-    await svfs.write("/file.md", "after", { versionCheck: false });
-
-    await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, user1.id);
-
-    assert.equal(unwrap(await svfs.read("/file.md")).content, "prior-content");
-    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
-    assert.equal(messages.length, 1);
-    assert.equal(messages[0]!.id, priorAsst.id);
-  });
-
-  it("N1: rewind user_vfs_action 锚点保留", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
-
-    const vfsUser = unwrap(await ctx.messages.append(
-      session.id,
-      "user",
-      TextBlocks.of("<user_vfs_action>write /a.md</user_vfs_action>"),
-      {
-        raw: {
-          metadata: { kind: "user_vfs_action", source: "user", synthetic: true },
-        },
-      },
-    ));
-    await svfs.write("/a.md", "v1", { versionCheck: false });
-    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, vfsUser.id));
-    unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "done" }],
-    }));
-    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("tail")));
-
-    await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, vfsUser.id);
-
-    assert.equal(unwrap(await svfs.read("/a.md")).content, "v1");
-    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
-    assert.equal(messages.length, 1);
-    assert.equal(messages[0]!.id, vfsUser.id);
-  });
-
-  it("N2: rewind 纯 tool_result user 锚点保留", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-
-    const toolUser = unwrap(await ctx.messages.append(session.id, "user", {
-      blocks: [{ type: "tool_result", toolUseId: "tu1", content: "ok" }],
-    }));
-    unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "later" }],
-    }));
-
-    await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, toolUser.id);
-
-    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
-    assert.equal(messages.length, 1);
-    assert.equal(messages[0]!.id, toolUser.id);
-  });
-
-  it("R4: restore creates parent directories for nested paths", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
-
-    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("go")));
-    const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "nested" }],
-    }));
-    await svfs.write("/deep/nested/file.md", "content", { versionCheck: false });
-    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
-
-    // entry_id 化后 hardDelete 会删除 vfs_entry 行，revision 仍保留但无 entry 可挂载。
-    // 如果 entry 被彻底删除，rollback 无法重建。测试改为只删除内容不删 entry。
-    await svfs.write("/deep/nested/file.md", "overwrite", { versionCheck: false });
-
-    await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant1.id);
-
-    assert.equal(unwrap(await svfs.read("/deep/nested/file.md")).content, "content");
-  });
-
-  it("R10: rollback nested file when parent directory still exists", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
-
-    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("go")));
-    const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "nested" }],
-    }));
-    await svfs.write("/dir/file.md", "v1", { versionCheck: false });
-    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
-
-    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("more")));
-    const assistant2 = unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "update" }],
-    }));
-    await svfs.write("/dir/file.md", "v2", { versionCheck: false });
-    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id));
-
-    await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant1.id);
-
-    assert.equal(unwrap(await svfs.read("/dir/file.md")).content, "v1");
-    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
-    assert.equal(messages.length, 2);
-    assert.equal(messages[1]!.id, assistant1.id);
-  });
-
-  it("R9: anchor without checkpoint uses prior checkpoint tree", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
-
-    const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "mutate" }],
-    }));
-    await svfs.write("/state.md", "v1", { versionCheck: false });
-    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
-
-    const textOnly = unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "no tools" }],
-    }));
-    await svfs.write("/state.md", "v2", { versionCheck: false });
-
-    await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, textOnly.id);
-
-    assert.equal(unwrap(await svfs.read("/state.md")).content, "v1");
-    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
-    assert.equal(messages.length, 2);
-    assert.equal(messages[1]!.id, textOnly.id);
-  });
-
-  it("truncates tail on assistant anchor when session has no checkpoints", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-
-    const assistant = unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "legacy" }],
-    }));
-    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("tail")));
-
-    await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant.id);
-
-    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
-    assert.equal(messages.length, 1);
-    assert.equal(messages[0]!.id, assistant.id);
-  });
-
-  // CD-01 第 1 步：rewind 分支同样受「空 targetTree 护栏」保护。
-  // 旧语义（护栏条件写死 mode === "undo_send"）下这条会**删光**会话工作区
-  // 并静默截断消息——用户从没要求删 /created.md。
-  it("rewind anchor before first checkpoint: empty target is blocked instead of wiping the workspace", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
-
-    const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "hello" }],
-    }));
-    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("more")));
-
-    const assistant2 = unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "write" }],
-    }));
-    await svfs.write("/created.md", "new file", { versionCheck: false });
-    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id));
-
-    const filesBefore = unwrap(await svfs.list("/", { recursive: true })).length;
-    const messageCountBefore = (
-      outcomeValue(await ctx.messages.listBySession(session.id))
-    ).length;
-
-    // 空 targetTree + live 树非空必须被拦下（rewind 同样适用）。
-    await rejectsErr(
-      () =>
-        ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant1.id),
-      (error: unknown) =>
-        isSessionFsError(error, "ROLLBACK_UNDO_SEND_EMPTY_TARGET"),
-    );
-
-    assert.equal(
-      unwrap(await svfs.list("/", { recursive: true })).length,
-      filesBefore,
-      "被拦下的回滚不得删掉任何文件"
-    );
-    assert.equal(
-      unwrap(await svfs.read("/created.md")).content,
-      "new file",
-      "被拦下的回滚不得动 live 树"
-    );
-    assert.equal(
-      (outcomeValue(await ctx.messages.listBySession(session.id))).length,
-      messageCountBefore,
-      "被拦下的回滚不得截断消息"
-    );
-  });
-
-  it("tool turn: rollback on assistant anchor keeps assistant and tool_result", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
-
-    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("read file")));
-    const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [
-        { type: "text", text: "reading" },
-        { type: "tool_use", id: "tu1", name: "read", input: { path: "/a.md" } },
-      ],
-    }));
-    await svfs.write("/a.md", "v1", { versionCheck: false });
-    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
-    unwrap(await ctx.messages.append(session.id, "user", {
-      blocks: [{ type: "tool_result", toolUseId: "tu1", content: "ok" }],
-    }));
-
-    unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("more")));
-    const assistant2 = unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "later" }],
-    }));
-    await svfs.write("/a.md", "v2", { versionCheck: false });
-    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id));
-
-    await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant1.id);
-
-    assert.equal(unwrap(await svfs.read("/a.md")).content, "v1");
-    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
-    assert.equal(messages.length, 3);
-    assert.equal(messages[0]!.role, "user");
-    assert.equal(messages[1]!.id, assistant1.id);
-    assert.equal(messages[2]!.role, "user");
-    assert.equal(
-      messages[2]!.content.blocks?.some((b) => b.type === "tool_result"),
-      true,
-    );
-  });
+
+        assert.equal(unwrap(await svfs.read("/poem.md")).content, "roses");
+        const messages = outcomeValue(await ctx.messages.listBySession(session.id));
+        assert.equal(messages.length, 2);
+        assert.equal(messages[0]!.id, user1.id);
+        assert.equal(messages[1]!.id, assistant1.id);
+    });
+
+    it("R2: plain user undo_send 无 prior 时回退到 anchor checkpoint", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
+
+        await svfs.write("/anchor.md", "at-send", { versionCheck: false });
+        const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("anchor")));
+        unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, user1.id));
+
+        await svfs.write("/anchor.md", "after-send", { versionCheck: false });
+        await svfs.write("/later.md", "new file", { versionCheck: false });
+        unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "later" }],
+        }));
+
+        await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, user1.id);
+
+        // 无 prior 时回退到 anchor 自身 checkpoint：/anchor.md 恢复到 capture 版本，
+        // /later.md 不在 checkpoint 里 → 删除。
+        assert.equal(unwrap(await svfs.read("/anchor.md")).content, "at-send");
+        assert.ok(!(await svfs.read("/later.md")).ok, "later.md 应已被回滚删除");
+        const messages = outcomeValue(await ctx.messages.listBySession(session.id));
+        assert.equal(messages.length, 0);
+    });
+
+    it("R2b: plain user undo_send 无 prior 时护栏拒绝删光工作区", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
+
+        const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("write poem")));
+        const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "ok" }],
+        }));
+        await svfs.write("/poem.md", "draft", { versionCheck: false });
+        unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
+        unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("nice")));
+        unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "thanks" }],
+        }));
+
+        // S-13 护栏：user1 是首条 plain user，prior 与 anchor 都没有 baseline 快照，
+        // targetTree 为空——直接 reconcile 会把 /poem.md 当「需删除」清掉。这里应抛
+        // ROLLBACK_UNDO_SEND_EMPTY_TARGET，且不截断消息、不动文件。
+        await rejectsErr(
+            () => ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, user1.id),
+            (error: unknown) => {
+                assert.equal(
+                    isSessionFsError(error, "ROLLBACK_UNDO_SEND_EMPTY_TARGET"),
+                    true,
+                );
+                return true;
+            },
+        );
+        assert.equal(unwrap(await svfs.read("/poem.md")).content, "draft");
+        const messages = outcomeValue(await ctx.messages.listBySession(session.id));
+        assert.equal(messages.length, 4);
+    });
+
+    it("R3: plain user undo_send 无 prior 时护栏拒绝清空工作区", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
+        await svfs.write("/keep.md", "stable", { versionCheck: false });
+
+        const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("hi")));
+        unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "hello" }],
+        }));
+        unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("bye")));
+
+        // S-13 护栏：没有任何 baseline checkpoint，targetTree 为空，拒绝 reconcile。
+        await rejectsErr(
+            () => ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, user1.id),
+            (error: unknown) =>
+                isSessionFsError(error, "ROLLBACK_UNDO_SEND_EMPTY_TARGET"),
+        );
+        assert.equal(unwrap(await svfs.read("/keep.md")).content, "stable");
+        const messages = outcomeValue(await ctx.messages.listBySession(session.id));
+        assert.equal(messages.length, 3);
+    });
+
+    it("U1: undo_send 回滚 user₁ 保留 prior 消息并对齐发送前 checkpoint", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
+
+        await svfs.write("/state.md", "baseline", { versionCheck: false });
+        const priorAsst = unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "setup" }],
+        }));
+        unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, priorAsst.id));
+
+        const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("prompt")));
+        const asst1 = unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "reply" }],
+        }));
+        await svfs.write("/state.md", "after-user1", { versionCheck: false });
+        unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, asst1.id));
+        unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("follow-up")));
+
+        await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, user1.id);
+
+        assert.equal(unwrap(await svfs.read("/state.md")).content, "baseline");
+        const messages = outcomeValue(await ctx.messages.listBySession(session.id));
+        assert.equal(messages.length, 1);
+        assert.equal(messages[0]!.id, priorAsst.id);
+    });
+
+    it("U2: plain user undo_send 首条无 baseline 时护栏拒删", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
+
+        await svfs.write("/solo.md", "only", { versionCheck: false });
+        const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("first")));
+        unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "hi" }],
+        }));
+
+        // S-13 护栏：首条 plain user、无 baseline，targetTree 为空 → 拒绝删除。
+        await rejectsErr(
+            () => ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, user1.id),
+            (error: unknown) =>
+                isSessionFsError(error, "ROLLBACK_UNDO_SEND_EMPTY_TARGET"),
+        );
+        assert.equal(unwrap(await svfs.read("/solo.md")).content, "only");
+        const messages = outcomeValue(await ctx.messages.listBySession(session.id));
+        assert.equal(messages.length, 2);
+    });
+
+    it("R-BC1: 角色卡导入 backfill baseline 后 undo_send 回首条 user 保留文件", async () => {
+        // 导入角色卡会 backfill baseline checkpoint，让回滚有正确基线。
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-rbc1-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
+        const scope = {
+            kind: "session" as const,
+            projectId: project.id,
+            sessionId: session.id,
+        };
+
+        // 先发一条消息（纯文本，无 capture），再导入角色卡——导入 backfill
+        // 会给这条消息补 baseline checkpoint。
+        const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("你好")));
+
+        const cardSvc = VfsServiceFactory.createCharacterCardImport(ctx.conn);
+        const tree = new Map<string, string>([
+            ["角色描述.md", "card-desc"],
+            ["世界书/设定.md", "world"],
+        ]);
+        await cardSvc.import(scope, tree, { confirmed: true, directoryPath: "/" });
+
+        // 聊一轮：assistant 文本（不触发 capture，因为没改文件）。
+        unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "你好呀" }],
+        }));
+
+        // 回滚到首条 user（undo_send）。
+        await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, user1.id);
+
+        // 导入的文件应保留（baseline checkpoint 保护了它们）。
+        assert.equal(unwrap(await svfs.read("/角色描述.md")).content, "card-desc");
+        assert.equal(unwrap(await svfs.read("/世界书/设定.md")).content, "world");
+        const messages = outcomeValue(await ctx.messages.listBySession(session.id));
+        assert.equal(messages.length, 0);
+    });
+
+    it("R-BC2: 消息 3 有 checkpoint，消息 6 导入时只补 4-6 不碰 1-2", async () => {
+        // backfill 只应补「最后一个有 checkpoint 的消息之后」的空窗，
+        // 不能给已有 checkpoint 之前的消息补（那会破坏它们原有的回滚语义）。
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-rbc2-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
+        const scope = {
+            kind: "session" as const,
+            projectId: project.id,
+            sessionId: session.id,
+        };
+
+        // 消息 1-2：纯文本，无 checkpoint。
+        const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("first")));
+        unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "hi" }],
+        }));
+
+        // 消息 3：assistant 写文件 + capture（成为最后一个有 checkpoint 的）。
+        await svfs.write("/old.md", "v1", { versionCheck: false });
+        const assistant3 = unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "wrote" }],
+        }));
+        unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant3.id));
+
+        // 消息 4-5：纯文本，无 checkpoint（空窗开始）。
+        const user4 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("chat")));
+        unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "reply" }],
+        }));
+
+        // 消息 6 时导入角色卡——backfill 应只补 4、5、6，不碰 1、2。
+        const cardSvc = VfsServiceFactory.createCharacterCardImport(ctx.conn);
+        const tree = new Map<string, string>([
+            ["新文件.md", "imported"],
+        ]);
+        await cardSvc.import(scope, tree, { confirmed: true, directoryPath: "/" });
+
+        // 验证：消息 1 没有 baseline checkpoint（backfill 没碰它），
+        // 所以回滚到消息 1 时仍然走空基线（无 prior、无 anchor checkpoint）。
+        // backfill 边界的直接断言：消息 1、2 不因导入被补 baseline。
+        const checkpointRepo = new SqliteMessageCheckpointRepository(ctx.conn);
+        assert.equal(
+            await checkpointRepo.hasCheckpoint(session.id, user1.id),
+            false,
+            "backfill 不得给最后一个有 checkpoint 的消息之前的消息补 baseline",
+        );
+
+        // 回滚到消息 4（plain user → undo_send，prior = 消息 3 的 capture checkpoint）。
+        // path 快照修复后 prior tree 完整含 /old.md（导入删除其 entry 也不丢），
+        // 回滚按「目标检查点完成态」执行：/old.md 复活复现、tail 期导入的
+        // /新文件.md（不在 prior tree）被删除。
+        await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, user4.id);
+        assert.equal(unwrap(await svfs.read("/old.md")).content, "v1");
+        {
+            const r = await svfs.read("/新文件.md");
+            assert.ok(!r.ok && AppErrorOps.is(r.error, "VFS_NOT_FOUND"), "导入的新文件应走 Err 且为 VFS_NOT_FOUND");
+        }
+        const msgsAfter4 = outcomeValue(await ctx.messages.listBySession(session.id));
+        assert.equal(msgsAfter4.length, 3); // user1, asst2, asst3
+    });
+
+    it("U3: undo_send 含锚点 checkpoint 时仍仅用 prior tree", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
+
+        const priorAsst = unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "prior" }],
+        }));
+        await svfs.write("/file.md", "prior-content", { versionCheck: false });
+        unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, priorAsst.id));
+
+        const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("send")));
+        await svfs.write("/file.md", "at-user-checkpoint", { versionCheck: false });
+        unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, user1.id));
+        unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "later" }],
+        }));
+        await svfs.write("/file.md", "after", { versionCheck: false });
+
+        await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, user1.id);
+
+        assert.equal(unwrap(await svfs.read("/file.md")).content, "prior-content");
+        const messages = outcomeValue(await ctx.messages.listBySession(session.id));
+        assert.equal(messages.length, 1);
+        assert.equal(messages[0]!.id, priorAsst.id);
+    });
+
+    it("N1: rewind user_vfs_action 锚点保留", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
+
+        const vfsUser = unwrap(await ctx.messages.append(
+            session.id,
+            "user",
+            TextBlocks.of("<user_vfs_action>write /a.md</user_vfs_action>"),
+            {
+                raw: {
+                    metadata: { kind: "user_vfs_action", source: "user", synthetic: true },
+                },
+            },
+        ));
+        await svfs.write("/a.md", "v1", { versionCheck: false });
+        unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, vfsUser.id));
+        unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "done" }],
+        }));
+        unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("tail")));
+
+        await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, vfsUser.id);
+
+        assert.equal(unwrap(await svfs.read("/a.md")).content, "v1");
+        const messages = outcomeValue(await ctx.messages.listBySession(session.id));
+        assert.equal(messages.length, 1);
+        assert.equal(messages[0]!.id, vfsUser.id);
+    });
+
+    it("N2: rewind 纯 tool_result user 锚点保留", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+
+        const toolUser = unwrap(await ctx.messages.append(session.id, "user", {
+            blocks: [{ type: "tool_result", toolUseId: "tu1", content: "ok" }],
+        }));
+        unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "later" }],
+        }));
+
+        await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, toolUser.id);
+
+        const messages = outcomeValue(await ctx.messages.listBySession(session.id));
+        assert.equal(messages.length, 1);
+        assert.equal(messages[0]!.id, toolUser.id);
+    });
+
+    it("R4: restore creates parent directories for nested paths", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
+
+        unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("go")));
+        const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "nested" }],
+        }));
+        await svfs.write("/deep/nested/file.md", "content", { versionCheck: false });
+        unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
+
+        // entry_id 化后 hardDelete 会删除 vfs_entry 行，revision 仍保留但无 entry 可挂载。
+        // 如果 entry 被彻底删除，rollback 无法重建。测试改为只删除内容不删 entry。
+        await svfs.write("/deep/nested/file.md", "overwrite", { versionCheck: false });
+
+        await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant1.id);
+
+        assert.equal(unwrap(await svfs.read("/deep/nested/file.md")).content, "content");
+    });
+
+    it("R10: rollback nested file when parent directory still exists", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
+
+        unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("go")));
+        const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "nested" }],
+        }));
+        await svfs.write("/dir/file.md", "v1", { versionCheck: false });
+        unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
+
+        unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("more")));
+        const assistant2 = unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "update" }],
+        }));
+        await svfs.write("/dir/file.md", "v2", { versionCheck: false });
+        unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id));
+
+        await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant1.id);
+
+        assert.equal(unwrap(await svfs.read("/dir/file.md")).content, "v1");
+        const messages = outcomeValue(await ctx.messages.listBySession(session.id));
+        assert.equal(messages.length, 2);
+        assert.equal(messages[1]!.id, assistant1.id);
+    });
+
+    it("R9: anchor without checkpoint uses prior checkpoint tree", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
+
+        const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "mutate" }],
+        }));
+        await svfs.write("/state.md", "v1", { versionCheck: false });
+        unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
+
+        const textOnly = unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "no tools" }],
+        }));
+        await svfs.write("/state.md", "v2", { versionCheck: false });
+
+        await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, textOnly.id);
+
+        assert.equal(unwrap(await svfs.read("/state.md")).content, "v1");
+        const messages = outcomeValue(await ctx.messages.listBySession(session.id));
+        assert.equal(messages.length, 2);
+        assert.equal(messages[1]!.id, textOnly.id);
+    });
+
+    it("truncates tail on assistant anchor when session has no checkpoints", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+
+        const assistant = unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "legacy" }],
+        }));
+        unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("tail")));
+
+        await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant.id);
+
+        const messages = outcomeValue(await ctx.messages.listBySession(session.id));
+        assert.equal(messages.length, 1);
+        assert.equal(messages[0]!.id, assistant.id);
+    });
+
+    // CD-01 第 1 步：rewind 分支同样受「空 targetTree 护栏」保护。
+    // 旧语义（护栏条件写死 mode === "undo_send"）下这条会**删光**会话工作区
+    // 并静默截断消息——用户从没要求删 /created.md。
+    it("rewind anchor before first checkpoint: empty target is blocked instead of wiping the workspace", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
+
+        const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "hello" }],
+        }));
+        unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("more")));
+
+        const assistant2 = unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "write" }],
+        }));
+        await svfs.write("/created.md", "new file", { versionCheck: false });
+        unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id));
+
+        const filesBefore = unwrap(await svfs.list("/", { recursive: true })).length;
+        const messageCountBefore = (
+            outcomeValue(await ctx.messages.listBySession(session.id))
+        ).length;
+
+        // 空 targetTree + live 树非空必须被拦下（rewind 同样适用）。
+        await rejectsErr(
+            () =>
+                ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant1.id),
+            (error: unknown) =>
+                isSessionFsError(error, "ROLLBACK_UNDO_SEND_EMPTY_TARGET"),
+        );
+
+        assert.equal(
+            unwrap(await svfs.list("/", { recursive: true })).length,
+            filesBefore,
+            "被拦下的回滚不得删掉任何文件"
+        );
+        assert.equal(
+            unwrap(await svfs.read("/created.md")).content,
+            "new file",
+            "被拦下的回滚不得动 live 树"
+        );
+        assert.equal(
+            (outcomeValue(await ctx.messages.listBySession(session.id))).length,
+            messageCountBefore,
+            "被拦下的回滚不得截断消息"
+        );
+    });
+
+    it("tool turn: rollback on assistant anchor keeps assistant and tool_result", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
+
+        unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("read file")));
+        const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [
+                { type: "text", text: "reading" },
+                { type: "tool_use", id: "tu1", name: "read", input: { path: "/a.md" } },
+            ],
+        }));
+        await svfs.write("/a.md", "v1", { versionCheck: false });
+        unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
+        unwrap(await ctx.messages.append(session.id, "user", {
+            blocks: [{ type: "tool_result", toolUseId: "tu1", content: "ok" }],
+        }));
+
+        unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("more")));
+        const assistant2 = unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "later" }],
+        }));
+        await svfs.write("/a.md", "v2", { versionCheck: false });
+        unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id));
+
+        await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant1.id);
+
+        assert.equal(unwrap(await svfs.read("/a.md")).content, "v1");
+        const messages = outcomeValue(await ctx.messages.listBySession(session.id));
+        assert.equal(messages.length, 3);
+        assert.equal(messages[0]!.role, "user");
+        assert.equal(messages[1]!.id, assistant1.id);
+        assert.equal(messages[2]!.role, "user");
+        assert.equal(
+            messages[2]!.content.blocks?.some((b) => b.type === "tool_result"),
+            true,
+        );
+    });
 });

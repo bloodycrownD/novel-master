@@ -11,34 +11,34 @@ import type { Result } from "@/errors/either.js";
  * 明文经 ContentStore 落库；多 revision / live entry 可共享同一 blob。
  */
 export interface VfsContentStore {
-  /**
+    /**
    * 将明文 put 入 blob 表；同 hash 已存在则复用行。
    *
    * @returns content_hash（UTF-8 明文 SHA-256 小写 hex）
    */
-  put(plain: string): Promise<string>;
+    put(plain: string): Promise<string>;
 
-  /**
+    /**
    * 按 hash 解出 UTF-8 明文；blob 缺失 / encoding 无法解码走 `Result.err`。
    */
-  get(contentHash: string): Promise<Result<string, AppError>>;
+    get(contentHash: string): Promise<Result<string, AppError>>;
 
-  /**
+    /**
    * 批量按 hash 解出 UTF-8 明文（分块下发 `IN (...)` 查询，避免逐条 get 的 N+1）。
    *
    * @returns 键为命中的 content_hash，值为对应明文；未命中的 hash 不出现在结果中。
    */
-  getMany(hashes: readonly string[]): Promise<Result<Map<string, string>, AppError>>;
+    getMany(hashes: readonly string[]): Promise<Result<Map<string, string>, AppError>>;
 
-  /**
+    /**
    * 清扫未被 `vfs_entry` ∪ `vfs_revision` 引用的孤立 blob 行（一条 NOT IN 子查询完成）。
    *
    * @remarks 全库引用集由 SQL 子查询当场计算，调用方无需再传 referencedHashes。
    * @returns 删除的行数
    */
-  gc(): Promise<number>;
+    gc(): Promise<number>;
 
-  /**
+    /**
    * 承诺式 ensure：若指定 content_hash 的 blob 行不存在，则 put 一份明文；
    * 已存在则直接返回 content_hash。
    *
@@ -51,15 +51,15 @@ export interface VfsContentStore {
    * @param fallbackPlain 不存在时用于 put 的明文；为 null 时仅探测不写入
    * @throws 当 blob 不存在且 fallbackPlain 为 null 时抛 `NOT_FOUND`
    */
-  ensureBlob(
-    contentHash: string,
-    fallbackPlain: string | null
-  ): Promise<string>;
+    ensureBlob(
+        contentHash: string,
+        fallbackPlain: string | null
+    ): Promise<string>;
 
-  /**
+    /**
    * 批量检查哪些 content_hash 的 blob 行已存在。
    *
    * @returns 已存在的 hash 集合
    */
-  findExistingBlobHashes(hashes: ReadonlyArray<string>): Promise<Set<string>>;
+    findExistingBlobHashes(hashes: ReadonlyArray<string>): Promise<Set<string>>;
 }

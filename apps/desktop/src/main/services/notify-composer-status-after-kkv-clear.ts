@@ -24,27 +24,27 @@ import { ProjectComposerStatusService } from "./project-composer-status.service.
 // nm-style 注记：文件名 notify-…-after-kkv-clear 动词/事件前缀，按内容主体起名（ComposerStatusRefresh，
 // 语义族对齐 mobile refreshComposerStatusAfter*）；成员保留事件修饰（After*）作区分。
 export namespace ComposerStatusRefresh {
-  /**
+    /**
    * Undo rewind / 手动重置 / undo_send：直接空状态条。
    * Renderer 侧仍会 ∪ annotate store（若有）。
    */
-  export async function afterSessionKkvCleared(scope: {readonly projectId: string; readonly sessionId: string}): Promise<void> {
-    ComposerAttachmentsSuggestForwarder.notify({
-      sessionId: scope.sessionId,
-      attachments: [],
-    });
-  }
+    export async function afterSessionKkvCleared(scope: {readonly projectId: string; readonly sessionId: string}): Promise<void> {
+        ComposerAttachmentsSuggestForwarder.notify({
+            sessionId: scope.sessionId,
+            attachments: [],
+        });
+    }
 
-  /**
+    /**
    * 置位 / 压缩成功：project(仅 annotate) 推送；终态非强制 `[]`。
    * Annotate chip 由 renderer `unionComposerStatusWithAnnotate` 合并。
    * （Undo undo_send / rewind 走 {@link afterSessionKkvCleared} 推空。）
    */
-  export async function afterFloorOrCompaction(scope: {readonly projectId: string; readonly sessionId: string}): Promise<void> {
-    const attachments = await ProjectComposerStatusService.forSession(scope.sessionId);
-    ComposerAttachmentsSuggestForwarder.notify({
-      sessionId: scope.sessionId,
-      attachments,
-    });
-  }
+    export async function afterFloorOrCompaction(scope: {readonly projectId: string; readonly sessionId: string}): Promise<void> {
+        const attachments = await ProjectComposerStatusService.forSession(scope.sessionId);
+        ComposerAttachmentsSuggestForwarder.notify({
+            sessionId: scope.sessionId,
+            attachments,
+        });
+    }
 }

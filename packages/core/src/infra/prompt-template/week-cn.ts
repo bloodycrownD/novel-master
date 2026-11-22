@@ -8,8 +8,8 @@
  * 中文星期标签。
  */
 export const WeekCn = {
-  /** Local Chinese weekday (e.g. 「星期一」). */
-  format(date: Date): string {
-    return date.toLocaleDateString("zh-CN", { weekday: "long" });
-  },
+    /** Local Chinese weekday (e.g. 「星期一」). */
+    format(date: Date): string {
+        return date.toLocaleDateString("zh-CN", { weekday: "long" });
+    },
 } as const;

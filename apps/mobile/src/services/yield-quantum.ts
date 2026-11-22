@@ -18,14 +18,14 @@
  * 的 yield mock，调用方零参、测试面收窄到构造处）。默认 16ms 即生产取值。
  */
 export namespace YieldQuantum {
-  export function create(intervalMs = 16): () => Promise<void> {
-    let lastYieldAt = Date.now();
-    return async () => {
-      const now = Date.now();
-      if (now - lastYieldAt >= intervalMs) {
-        await new Promise<void>(resolve => setTimeout(resolve, 0));
-        lastYieldAt = Date.now();
-      }
-    };
-  }
+    export function create(intervalMs = 16): () => Promise<void> {
+        let lastYieldAt = Date.now();
+        return async () => {
+            const now = Date.now();
+            if (now - lastYieldAt >= intervalMs) {
+                await new Promise<void>(resolve => setTimeout(resolve, 0));
+                lastYieldAt = Date.now();
+            }
+        };
+    }
 }

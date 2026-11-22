@@ -24,7 +24,7 @@ import { TemplateEngine } from "./template-engine.js";
 export const SEARCH_NOT_CONFIGURED_MESSAGE = "当前没有可用的已启用搜索引擎，请在 设置 → 搜索配置 开启或配置引擎";
 
 export const SearchDispatch = {
-  /**
+    /**
    * 按解析结果分发到代码适配器 / 模板执行器（单引擎请求，串行降级循环在
    * search 工具 run 内）。已知引擎失败与未知引擎（模板缺失）均收 `Result.err`
    * 由调用方逐引擎收集（该引擎计一次失败、降级到链中下一员）；全链失败 /
@@ -36,10 +36,10 @@ export const SearchDispatch = {
    *
    * nm-style: keep-public — spec §4 引擎分发唯一入口（search 工具 run 消费）。
    */
-  async dispatch(resolved: ResolvedEngineConfig, query: string, options: SearchToolOptions, params: ToolParams, fetch: FetchFn, signal?: AbortSignal): Promise<Result<SearchResponse, AppError>> {
-    if (resolved.engine === "duckduckgo") return Duckduckgo.search(resolved, query, options, fetch, signal);
-    const template = resolved.template;
-    if (template == null) return Result.err(SearchEngine.failed(`unknown search engine: ${resolved.engine} (no template resolved)`));
-    return TemplateEngine.run(template, resolved, query, options, params, fetch, signal);
-  },
+    async dispatch(resolved: ResolvedEngineConfig, query: string, options: SearchToolOptions, params: ToolParams, fetch: FetchFn, signal?: AbortSignal): Promise<Result<SearchResponse, AppError>> {
+        if (resolved.engine === "duckduckgo") return Duckduckgo.search(resolved, query, options, fetch, signal);
+        const template = resolved.template;
+        if (template == null) return Result.err(SearchEngine.failed(`unknown search engine: ${resolved.engine} (no template resolved)`));
+        return TemplateEngine.run(template, resolved, query, options, params, fetch, signal);
+    },
 } as const;

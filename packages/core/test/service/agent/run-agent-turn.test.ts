@@ -15,767 +15,767 @@ import {  tCore  } from "../../helpers/core-i18n.js";
 
 /** 发送侧（mobile）区间扫描口径：逐区间 slice 单独扫（D9）。 */
 function scanComposerRanges(
-  text: string,
-  ranges: readonly ComposerDraftTokenRange[]
+    text: string,
+    ranges: readonly ComposerDraftTokenRange[]
 ): MessageAttachment[] {
-  const out: MessageAttachment[] = [];
-  for (const range of ranges) {
-    const slice = text.slice(range.start, range.end);
-    out.push(...AttachmentScanner.scanAtPaths(slice), ...AttachmentScanner.scanSkills(slice));
-  }
-  return out;
+    const out: MessageAttachment[] = [];
+    for (const range of ranges) {
+        const slice = text.slice(range.start, range.end);
+        out.push(...AttachmentScanner.scanAtPaths(slice), ...AttachmentScanner.scanSkills(slice));
+    }
+    return out;
 }
 
 function mockUserVfsTurn(): UserVfsTurnService {
-  return {
-    executeOp: async () => ({ ok: true }),
-  };
+    return {
+        executeOp: async () => ({ ok: true }),
+    };
 }
 
 const sampleDefinition: AgentDefinition = {
-  name: "Test",
-  prompts: { persist: [], dynamic: [] },
-  model: "provider:model",
+    name: "Test",
+    prompts: { persist: [], dynamic: [] },
+    model: "provider:model",
 };
 
 /** 开启常驻工作区：materialize / 差集用例用。 */
 const workplaceOnDefinition: AgentDefinition = {
-  ...sampleDefinition,
-  prompts: { persist: [], dynamic: [], workplace: "【done】" },
+    ...sampleDefinition,
+    prompts: { persist: [], dynamic: [], workplace: "【done】" },
 };
 
 /** 空规则视图：materialize 无差集。 */
 function emptyRuleView() {
-  return { rows: [] as const, displayByPath: new Map() };
+    return { rows: [] as const, displayByPath: new Map() };
 }
 
 /** 含单一可见文件的规则视图：materialize 可产出 workplace。 */
 function ruleViewWithFile(path: string) {
-  return {
-    rows: [
-      {
-        kind: "file" as const,
-        path,
-        inclusionMode: "include" as const,
-        displayState: "full" as const,
-      },
-    ],
-    displayByPath: new Map([[path, "full" as const]]),
-  };
+    return {
+        rows: [
+            {
+                kind: "file" as const,
+                path,
+                inclusionMode: "include" as const,
+                displayState: "full" as const,
+            },
+        ],
+        displayByPath: new Map([[path, "full" as const]]),
+    };
 }
 
 function makeRuntime(overrides: {
-  readonly listBySession?: () => Promise<
-    ReadonlyArray<{ id?: string; role: string; content: unknown; raw?: unknown }>
-  >;
-  readonly listBySessionTail?: (
-    sessionId: string,
-    options: { limit: number },
-  ) => Promise<
-    ReadonlyArray<{ id?: string; role: string; content: unknown; raw?: unknown }>
-  >;
-  readonly append?: (
-    sessionId: string,
-    role: string,
-    content: unknown,
-    opts?: { attachments?: readonly unknown[] },
-  ) => Promise<{ id: string }>;
-  readonly delete?: (id: string) => Promise<void>;
-  readonly userVfsTurn?: UserVfsTurnService;
-  readonly evaluateRuleView?: () => Promise<ReturnType<typeof emptyRuleView>>;
-  readonly listKeys?: (sessionId: string, domain: string) => Promise<string[]>;
-  /** 覆盖 messageCheckpoint.capture（默认 no-op）。 */
-  readonly capture?: (
-    sessionId: string,
-    projectId: string,
-    messageId: string,
-  ) => Promise<void>;
-  /** 覆盖 messageCheckpoint.release（默认 no-op；S-1 回滚路径用）。 */
-  readonly release?: (
-    sessionId: string,
-    messageId: string,
-  ) => Promise<void>;
-  /** 覆盖 messageCheckpoint.backfillMissingBaselines（默认 no-op）。 */
-  readonly backfillMissingBaselines?: (
-    sessionId: string,
-    projectId: string,
-  ) => Promise<void>;
-  /** 覆盖 agentRegistry.get 返回的 definition（默认 sampleDefinition）。 */
-  readonly definition?: AgentDefinition;
+    readonly listBySession?: () => Promise<
+        ReadonlyArray<{ id?: string; role: string; content: unknown; raw?: unknown }>
+    >;
+    readonly listBySessionTail?: (
+        sessionId: string,
+        options: { limit: number },
+    ) => Promise<
+        ReadonlyArray<{ id?: string; role: string; content: unknown; raw?: unknown }>
+    >;
+    readonly append?: (
+        sessionId: string,
+        role: string,
+        content: unknown,
+        opts?: { attachments?: readonly unknown[] },
+    ) => Promise<{ id: string }>;
+    readonly delete?: (id: string) => Promise<void>;
+    readonly userVfsTurn?: UserVfsTurnService;
+    readonly evaluateRuleView?: () => Promise<ReturnType<typeof emptyRuleView>>;
+    readonly listKeys?: (sessionId: string, domain: string) => Promise<string[]>;
+    /** 覆盖 messageCheckpoint.capture（默认 no-op）。 */
+    readonly capture?: (
+        sessionId: string,
+        projectId: string,
+        messageId: string,
+    ) => Promise<void>;
+    /** 覆盖 messageCheckpoint.release（默认 no-op；S-1 回滚路径用）。 */
+    readonly release?: (
+        sessionId: string,
+        messageId: string,
+    ) => Promise<void>;
+    /** 覆盖 messageCheckpoint.backfillMissingBaselines（默认 no-op）。 */
+    readonly backfillMissingBaselines?: (
+        sessionId: string,
+        projectId: string,
+    ) => Promise<void>;
+    /** 覆盖 agentRegistry.get 返回的 definition（默认 sampleDefinition）。 */
+    readonly definition?: AgentDefinition;
 }): AgentTurnRuntimePort {
-  const definition = overrides.definition ?? sampleDefinition;
-  return {
-    state: {
-      getCurrentAgentId: async () => Result.ok("a1"),
-      getCurrentModelId: async () => Result.ok("openai/gpt"),
-    },
-    agentRegistry: {
-      listAgentIds: async () => ["a1"],
-      list: async () => [definition],
-      // 错误通道迁移四期：agentRegistry.get 走 Result 通道。
-      get: async () => Result.ok(definition) as never,
-    },
-    projects: {
-      getAgentConfig: async () => Result.ok({ mode: "follow" }),
-    } as AgentTurnRuntimePort["projects"],
-    messages: {
-      // 错误通道迁移八期：读口走 Outcome——override 仍写裸数组，这里统一包 completed。
-      listBySession: async () => ({ kind: "completed" as const, value: await (overrides.listBySession ?? (async () => []))() }),
-      listBySessionTail: async (sessionId: string, options: { limit: number }) => ({
-        kind: "completed" as const,
-        value: await (overrides.listBySessionTail ?? (async () => []))(sessionId, options),
-      }),
-      // 错误通道迁移二期：append/delete 走 Result 通道——override 仍写裸值，这里统一包 Ok。
-      append:
-        overrides.append != null
-          ? (async (...args: Parameters<NonNullable<typeof overrides.append>>) => Result.ok(await overrides.append!(...args))) as AgentTurnRuntimePort["messages"]["append"]
-          : (async () => Result.ok({ id: "m1", role: "user", content: { blocks: [] } })) as AgentTurnRuntimePort["messages"]["append"],
-      delete: (async (...args: Parameters<NonNullable<typeof overrides.delete>>) => {
-        await overrides.delete!(...args);
-        return Result.ok(undefined);
-      }) as AgentTurnRuntimePort["messages"]["delete"],
-    } as AgentTurnRuntimePort["messages"],
-    messageCheckpoint: {
-      capture:
-        overrides.capture ?? (async () => undefined),
-      release: overrides.release ?? (async () => undefined),
-      backfillMissingBaselines:
-        overrides.backfillMissingBaselines ?? (async () => undefined),
-    } as AgentTurnRuntimePort["messageCheckpoint"],
-    modelRequests: {} as AgentTurnRuntimePort["modelRequests"],
-    eventBus: {} as AgentTurnRuntimePort["eventBus"],
-    compactionConditionEvaluator:
-      undefined as unknown as AgentTurnRuntimePort["compactionConditionEvaluator"],
-    eventOrchestrator:
-      {} as AgentTurnRuntimePort["eventOrchestrator"],
-    sessionVfs: () => ({} as AgentTurnRuntimePort["sessionVfs"] extends (
-      ...args: never[]
-    ) => infer R
-      ? R
-      : never),
-    workplace: () =>
-      ({
-        renderDisplay: async () => Result.ok(""),
-        buildListRows: async () => Result.ok([]),
-        materializePersistBlock: async () => Result.ok({ workplaceDisplay: "" }),
-        evaluateRuleView:
-          overrides.evaluateRuleView ?? (async () => Result.ok(emptyRuleView())),
-      }) as ReturnType<AgentTurnRuntimePort["workplace"]>,
-    sessionKkv: {
-      get: async () => null,
-      set: async () => undefined,
-      delete: async () => undefined,
-      clearDomain: async () => undefined,
-      clearSession: async () => undefined,
-      listKeys: overrides.listKeys ?? (async () => []),
-    },
-    ...(overrides.userVfsTurn != null
-      ? { userVfsTurn: overrides.userVfsTurn }
-      : {}),
-    sessions: {
-      getSessionAgentConfig: async () => Result.ok({ mode: "follow" }),
-    },
-  };
+    const definition = overrides.definition ?? sampleDefinition;
+    return {
+        state: {
+            getCurrentAgentId: async () => Result.ok("a1"),
+            getCurrentModelId: async () => Result.ok("openai/gpt"),
+        },
+        agentRegistry: {
+            listAgentIds: async () => ["a1"],
+            list: async () => [definition],
+            // 错误通道迁移四期：agentRegistry.get 走 Result 通道。
+            get: async () => Result.ok(definition) as never,
+        },
+        projects: {
+            getAgentConfig: async () => Result.ok({ mode: "follow" }),
+        } as AgentTurnRuntimePort["projects"],
+        messages: {
+            // 错误通道迁移八期：读口走 Outcome——override 仍写裸数组，这里统一包 completed。
+            listBySession: async () => ({ kind: "completed" as const, value: await (overrides.listBySession ?? (async () => []))() }),
+            listBySessionTail: async (sessionId: string, options: { limit: number }) => ({
+                kind: "completed" as const,
+                value: await (overrides.listBySessionTail ?? (async () => []))(sessionId, options),
+            }),
+            // 错误通道迁移二期：append/delete 走 Result 通道——override 仍写裸值，这里统一包 Ok。
+            append:
+                overrides.append != null
+                    ? (async (...args: Parameters<NonNullable<typeof overrides.append>>) => Result.ok(await overrides.append!(...args))) as AgentTurnRuntimePort["messages"]["append"]
+                    : (async () => Result.ok({ id: "m1", role: "user", content: { blocks: [] } })) as AgentTurnRuntimePort["messages"]["append"],
+            delete: (async (...args: Parameters<NonNullable<typeof overrides.delete>>) => {
+                await overrides.delete!(...args);
+                return Result.ok(undefined);
+            }) as AgentTurnRuntimePort["messages"]["delete"],
+        } as AgentTurnRuntimePort["messages"],
+        messageCheckpoint: {
+            capture:
+                overrides.capture ?? (async () => undefined),
+            release: overrides.release ?? (async () => undefined),
+            backfillMissingBaselines:
+                overrides.backfillMissingBaselines ?? (async () => undefined),
+        } as AgentTurnRuntimePort["messageCheckpoint"],
+        modelRequests: {} as AgentTurnRuntimePort["modelRequests"],
+        eventBus: {} as AgentTurnRuntimePort["eventBus"],
+        compactionConditionEvaluator:
+            undefined as unknown as AgentTurnRuntimePort["compactionConditionEvaluator"],
+        eventOrchestrator:
+            {} as AgentTurnRuntimePort["eventOrchestrator"],
+        sessionVfs: () => ({} as AgentTurnRuntimePort["sessionVfs"] extends (
+            ...args: never[]
+        ) => infer R
+            ? R
+            : never),
+        workplace: () =>
+            ({
+                renderDisplay: async () => Result.ok(""),
+                buildListRows: async () => Result.ok([]),
+                materializePersistBlock: async () => Result.ok({ workplaceDisplay: "" }),
+                evaluateRuleView:
+                    overrides.evaluateRuleView ?? (async () => Result.ok(emptyRuleView())),
+            }) as ReturnType<AgentTurnRuntimePort["workplace"]>,
+        sessionKkv: {
+            get: async () => null,
+            set: async () => undefined,
+            delete: async () => undefined,
+            clearDomain: async () => undefined,
+            clearSession: async () => undefined,
+            listKeys: overrides.listKeys ?? (async () => []),
+        },
+        ...(overrides.userVfsTurn != null
+            ? { userVfsTurn: overrides.userVfsTurn }
+            : {}),
+        sessions: {
+            getSessionAgentConfig: async () => Result.ok({ mode: "follow" }),
+        },
+    };
 }
 
 describe("runAgentTurn", () => {
-  it("returns AGENT_MESSAGE_EMPTY when input is empty and resume is not allowed", async () => {
-    await rejectsErr(
-      () =>
-        AgentTurnRunner.run(
-          makeRuntime({}),
-          { projectId: "p", sessionId: "s" },
-          "",
-        ),
-      (err: unknown) => {
-        assert.ok(AppErrorOps.is(err, "AGENT_MESSAGE_EMPTY"));
-        assert.equal(renderError(err), "消息不能为空");
-      },
-    );
-  });
-
-  it("does not append user message on empty resume when last is user", async () => {
-    let appended = false;
-    let fullListCalls = 0;
-    const runtime = makeRuntime({
-      listBySession: async () => {
-        fullListCalls += 1;
-        return [{ role: "user", content: { blocks: [] } }];
-      },
-      listBySessionTail: async () => [{ role: "user", content: { blocks: [] } }],
-      append: async () => {
-        appended = true;
-        return { id: "m-new" };
-      },
-    });
-    try {
-      unwrap(await AgentTurnRunner.run(
-        runtime,
-        { projectId: "p", sessionId: "s" },
-        "",
-        { allowResumeWithoutInput: true },
-      ));
-    } catch {
-      // Runner deps are stubbed; reaching runner means resume gate passed.
-    }
-    assert.equal(appended, false);
-    // 回归锁（2026-09-30 真机实锤）：续跑判定只许 tail(1) 单行读。全量
-    // listBySession 含 hidden 整表解压，压缩会话上是秒级前奏（实测 ~4s），
-    // 且落在停止观察点之前——用户连点停止无响应。
-    assert.equal(
-      fullListCalls,
-      0,
-      "续跑判定不得走全量 listBySession（含 hidden 整表解压）",
-    );
-  });
-
-  it("returns AGENT_MESSAGE_EMPTY on empty resume when last message is not user", async () => {
-    await rejectsErr(
-      () =>
-        AgentTurnRunner.run(
-          makeRuntime({
-            listBySessionTail: async () => [
-              { role: "assistant", content: { blocks: [] } },
-            ],
-          }),
-          { projectId: "p", sessionId: "s" },
-          "",
-          { allowResumeWithoutInput: true },
-        ),
-      (err: unknown) => {
-        assert.ok(AppErrorOps.is(err, "AGENT_MESSAGE_EMPTY"));
-      },
-    );
-  });
-
-  // T-AT5（落库 path 一律带前导 `/`；composer-at-token-prompt-dedup SPEC / scanAtPathAttachments）
-  it("T-AT5: 手输 @path 入库 attachments 且 content 保留 token", async () => {
-    userVfsUnifiedToolTurnFlag.resetForTests();
-    userVfsUnifiedToolTurnFlag.refresh(false);
-    let appendedContent: unknown;
-    let appendedOptions: { attachments?: readonly { path?: string; source?: string }[] } | undefined;
-    const runtime = makeRuntime({
-      append: async (_sid, _role, content, opts) => {
-        appendedContent = content;
-        appendedOptions = opts;
-        return { id: "m-at5" };
-      },
-    });
-    try {
-      unwrap(await AgentTurnRunner.run(
-        runtime,
-        { projectId: "p", sessionId: "s" },
-        "请看 @notes/a.md",
-      ));
-    } catch {
-      // runner deps stubbed
-    }
-    assert.deepEqual(appendedContent, {
-      blocks: [{ type: "text", text: "请看 @notes/a.md" }],
-    });
-    assert.equal(appendedOptions?.attachments?.length, 1);
-    assert.equal(appendedOptions?.attachments?.[0]?.source, "attach");
-    assert.equal(appendedOptions?.attachments?.[0]?.path, "/notes/a.md");
-    userVfsUnifiedToolTurnFlag.resetForTests();
-  });
-
-  it("T-AT6: chips 与手输同一 @path 发送时按 path 去重", async () => {
-    userVfsUnifiedToolTurnFlag.resetForTests();
-    userVfsUnifiedToolTurnFlag.refresh(false);
-    let appendedOptions: { attachments?: readonly { path?: string }[] } | undefined;
-    const runtime = makeRuntime({
-      append: async (_sid, _role, _content, opts) => {
-        appendedOptions = opts;
-        return { id: "m-at6" };
-      },
-    });
-    try {
-      unwrap(await AgentTurnRunner.run(
-        runtime,
-        { projectId: "p", sessionId: "s" },
-        "再提 @notes/a.md",
-        {
-          attachments: [
-            {
-              name: "a.md",
-              source: "attach",
-              type: "text",
-              content: null,
-              path: "/notes/a.md",
+    it("returns AGENT_MESSAGE_EMPTY when input is empty and resume is not allowed", async () => {
+        await rejectsErr(
+            () =>
+                AgentTurnRunner.run(
+                    makeRuntime({}),
+                    { projectId: "p", sessionId: "s" },
+                    "",
+                ),
+            (err: unknown) => {
+                assert.ok(AppErrorOps.is(err, "AGENT_MESSAGE_EMPTY"));
+                assert.equal(renderError(err), "消息不能为空");
             },
-          ],
-        },
-      ));
-    } catch {
-      // runner deps stubbed
-    }
-    assert.equal(appendedOptions?.attachments?.length, 1);
-    assert.equal(appendedOptions?.attachments?.[0]?.path, "/notes/a.md");
-    userVfsUnifiedToolTurnFlag.resetForTests();
-  });
+        );
+    });
 
-  it("T-CA9: attachments 区间结果 + excludedScanRanges 掩码驱动发送挂点补挂（贴邻 chip）", async () => {
-    userVfsUnifiedToolTurnFlag.resetForTests();
-    userVfsUnifiedToolTurnFlag.refresh(false);
-    let appendedOptions:
-      | {
-          attachments?: readonly {
-            path?: string;
-            action?: string;
-            skillName?: string;
-            source?: string;
-          }[];
+    it("does not append user message on empty resume when last is user", async () => {
+        let appended = false;
+        let fullListCalls = 0;
+        const runtime = makeRuntime({
+            listBySession: async () => {
+                fullListCalls += 1;
+                return [{ role: "user", content: { blocks: [] } }];
+            },
+            listBySessionTail: async () => [{ role: "user", content: { blocks: [] } }],
+            append: async () => {
+                appended = true;
+                return { id: "m-new" };
+            },
+        });
+        try {
+            unwrap(await AgentTurnRunner.run(
+                runtime,
+                { projectId: "p", sessionId: "s" },
+                "",
+                { allowResumeWithoutInput: true },
+            ));
+        } catch {
+            // Runner deps are stubbed; reaching runner means resume gate passed.
         }
-      | undefined;
-    const runtime = makeRuntime({
-      append: async (_sid, _role, _content, opts) => {
-        appendedOptions = opts;
-        return { id: "m-ca9" };
-      },
+        assert.equal(appended, false);
+        // 回归锁（2026-09-30 真机实锤）：续跑判定只许 tail(1) 单行读。全量
+        // listBySession 含 hidden 整表解压，压缩会话上是秒级前奏（实测 ~4s），
+        // 且落在停止观察点之前——用户连点停止无响应。
+        assert.equal(
+            fullListCalls,
+            0,
+            "续跑判定不得走全量 listBySession（含 hidden 整表解压）",
+        );
     });
-    const text = "$agent-config$节拍成章";
-    const ranges: ComposerDraftTokenRange[] = [
-      { start: 0, end: 13 },
-      { start: 13, end: 18 },
-    ];
-    try {
-      unwrap(await AgentTurnRunner.run(runtime, { projectId: "p", sessionId: "s" }, text, {
-        attachments: scanComposerRanges(text, ranges),
-        excludedScanRanges: ranges,
-      }));
-    } catch {
-      // runner deps stubbed
-    }
-    const attachments = appendedOptions?.attachments ?? [];
-    assert.deepEqual(
-      attachments
-        .filter((a) => a.action === "skillAttach")
-        .map((a) => a.skillName)
-        .sort(),
-      ["agent-config", "节拍成章"],
-      "贴邻两颗技能都应挂载（全量扫描只认第一颗）",
-    );
-    userVfsUnifiedToolTurnFlag.resetForTests();
-  });
 
-  it("T-CA9: excludedScanRanges 掩码后 @path 不被贴邻 $技能 污染", async () => {
-    userVfsUnifiedToolTurnFlag.resetForTests();
-    userVfsUnifiedToolTurnFlag.refresh(false);
-    let appendedOptions:
-      | {
-          attachments?: readonly {
-            path?: string;
-            action?: string;
-            skillName?: string;
-            source?: string;
-          }[];
+    it("returns AGENT_MESSAGE_EMPTY on empty resume when last message is not user", async () => {
+        await rejectsErr(
+            () =>
+                AgentTurnRunner.run(
+                    makeRuntime({
+                        listBySessionTail: async () => [
+                            { role: "assistant", content: { blocks: [] } },
+                        ],
+                    }),
+                    { projectId: "p", sessionId: "s" },
+                    "",
+                    { allowResumeWithoutInput: true },
+                ),
+            (err: unknown) => {
+                assert.ok(AppErrorOps.is(err, "AGENT_MESSAGE_EMPTY"));
+            },
+        );
+    });
+
+    // T-AT5（落库 path 一律带前导 `/`；composer-at-token-prompt-dedup SPEC / scanAtPathAttachments）
+    it("T-AT5: 手输 @path 入库 attachments 且 content 保留 token", async () => {
+        userVfsUnifiedToolTurnFlag.resetForTests();
+        userVfsUnifiedToolTurnFlag.refresh(false);
+        let appendedContent: unknown;
+        let appendedOptions: { attachments?: readonly { path?: string; source?: string }[] } | undefined;
+        const runtime = makeRuntime({
+            append: async (_sid, _role, content, opts) => {
+                appendedContent = content;
+                appendedOptions = opts;
+                return { id: "m-at5" };
+            },
+        });
+        try {
+            unwrap(await AgentTurnRunner.run(
+                runtime,
+                { projectId: "p", sessionId: "s" },
+                "请看 @notes/a.md",
+            ));
+        } catch {
+            // runner deps stubbed
         }
-      | undefined;
-    const runtime = makeRuntime({
-      append: async (_sid, _role, _content, opts) => {
-        appendedOptions = opts;
-        return { id: "m-ca9-path" };
-      },
+        assert.deepEqual(appendedContent, {
+            blocks: [{ type: "text", text: "请看 @notes/a.md" }],
+        });
+        assert.equal(appendedOptions?.attachments?.length, 1);
+        assert.equal(appendedOptions?.attachments?.[0]?.source, "attach");
+        assert.equal(appendedOptions?.attachments?.[0]?.path, "/notes/a.md");
+        userVfsUnifiedToolTurnFlag.resetForTests();
     });
-    const text = "@docs/a.md$写作";
-    const ranges: ComposerDraftTokenRange[] = [
-      { start: 0, end: 10 },
-      { start: 10, end: 13 },
-    ];
-    try {
-      unwrap(await AgentTurnRunner.run(runtime, { projectId: "p", sessionId: "s" }, text, {
-        attachments: scanComposerRanges(text, ranges),
-        excludedScanRanges: ranges,
-      }));
-    } catch {
-      // runner deps stubbed
-    }
-    const attachments = appendedOptions?.attachments ?? [];
-    assert.deepEqual(
-      attachments.filter((a) => a.path != null).map((a) => a.path),
-      ["/docs/a.md"],
-      "路径附件不得被 $技能 粘成 /docs/a.md$写作",
-    );
-    assert.deepEqual(
-      attachments
-        .filter((a) => a.action === "skillAttach")
-        .map((a) => a.skillName),
-      ["写作"],
-    );
-    userVfsUnifiedToolTurnFlag.resetForTests();
-  });
 
-  it("仅 attach attachments 非空允许发送并 append", async () => {
-    userVfsUnifiedToolTurnFlag.resetForTests();
-    userVfsUnifiedToolTurnFlag.refresh(false);
-    let appended = false;
-    const runtime = makeRuntime({
-      append: async () => {
-        appended = true;
-        return { id: "m-attach-only" };
-      },
-    });
-    try {
-      unwrap(await AgentTurnRunner.run(runtime, { projectId: "p", sessionId: "s" }, "", {
-        attachments: [
-          {
-            name: "a.md",
-            source: "attach",
-            type: "text",
-            content: null,
-            path: "/a.md",
-          },
-        ],
-      }));
-    } catch {
-      // runner deps stubbed
-    }
-    assert.equal(appended, true);
-    userVfsUnifiedToolTurnFlag.resetForTests();
-  });
-
-  it("T-SR1：丢弃预览 workplace/user_ops；不 materialize workplace（user ops 拆除后无 flush 注入）", async () => {
-    userVfsUnifiedToolTurnFlag.resetForTests();
-    let appendedOpts:
-      | {
-          attachments?: readonly {
-            source?: string;
-            path?: string;
-            content?: string | null;
-            action?: string;
-            name?: string;
-          }[];
+    it("T-AT6: chips 与手输同一 @path 发送时按 path 去重", async () => {
+        userVfsUnifiedToolTurnFlag.resetForTests();
+        userVfsUnifiedToolTurnFlag.refresh(false);
+        let appendedOptions: { attachments?: readonly { path?: string }[] } | undefined;
+        const runtime = makeRuntime({
+            append: async (_sid, _role, _content, opts) => {
+                appendedOptions = opts;
+                return { id: "m-at6" };
+            },
+        });
+        try {
+            unwrap(await AgentTurnRunner.run(
+                runtime,
+                { projectId: "p", sessionId: "s" },
+                "再提 @notes/a.md",
+                {
+                    attachments: [
+                        {
+                            name: "a.md",
+                            source: "attach",
+                            type: "text",
+                            content: null,
+                            path: "/notes/a.md",
+                        },
+                    ],
+                },
+            ));
+        } catch {
+            // runner deps stubbed
         }
-      | undefined;
-    const runtime = makeRuntime({
-      definition: workplaceOnDefinition,
-      evaluateRuleView: async () => ruleViewWithFile("/delta.md"),
-      listKeys: async () => [],
-      userVfsTurn: mockUserVfsTurn(),
-      append: async (_sid, _role, _content, opts) => {
-        appendedOpts = opts;
-        return { id: "m-sr1" };
-      },
+        assert.equal(appendedOptions?.attachments?.length, 1);
+        assert.equal(appendedOptions?.attachments?.[0]?.path, "/notes/a.md");
+        userVfsUnifiedToolTurnFlag.resetForTests();
     });
-    try {
-      unwrap(await AgentTurnRunner.run(runtime, { projectId: "p", sessionId: "s" }, "", {
-        attachments: [
-          {
-            name: "preview-wp",
-            source: "workplace",
-            type: "text",
-            content: null,
-            path: "/stale-preview.md",
-          },
-          {
-            name: "preview-ops",
-            source: "user_ops",
-            type: "text",
-            content: null,
-          },
-          {
-            name: "chip.md",
-            source: "attach",
-            type: "text",
-            content: null,
-            path: "/chip.md",
-          },
-        ],
-      }));
-    } catch {
-      // runner deps stubbed
-    }
-    const atts = appendedOpts?.attachments ?? [];
-    assert.equal(
-      atts.some((a) => a.source === "workplace"),
-      false,
-      "新路径不得 materialize / 保留预览 workplace",
-    );
-    assert.equal(
-      atts.some((a) => a.path === "/stale-preview.md"),
-      false,
-      "不得原样保留预览 workplace",
-    );
-    assert.equal(
-      atts.some((a) => a.source === "user_ops"),
-      false,
-      "误传的 user_ops 预览一律丢弃（flush 已拆除）",
-    );
-    assert.ok(atts.some((a) => a.source === "attach" && a.path === "/chip.md"));
-    userVfsUnifiedToolTurnFlag.resetForTests();
-  });
 
-  it("T-CR3：空正文+仅规则可见文件（无 pending/批注）→ 返回「消息不能为空」且不 append", async () => {
-    userVfsUnifiedToolTurnFlag.resetForTests();
-    userVfsUnifiedToolTurnFlag.refresh(false);
-    let appendCount = 0;
-    let evaluateCalled = false;
-    const runtime = makeRuntime({
-      definition: workplaceOnDefinition,
-      evaluateRuleView: async () => {
-        evaluateCalled = true;
-        return ruleViewWithFile("/only-wp.md");
-      },
-      listKeys: async () => [],
-      append: async () => {
-        appendCount += 1;
-        return { id: "m-cr3" };
-      },
+    it("T-CA9: attachments 区间结果 + excludedScanRanges 掩码驱动发送挂点补挂（贴邻 chip）", async () => {
+        userVfsUnifiedToolTurnFlag.resetForTests();
+        userVfsUnifiedToolTurnFlag.refresh(false);
+        let appendedOptions:
+            | {
+                    attachments?: readonly {
+                        path?: string;
+                        action?: string;
+                        skillName?: string;
+                        source?: string;
+                    }[];
+                }
+            | undefined;
+        const runtime = makeRuntime({
+            append: async (_sid, _role, _content, opts) => {
+                appendedOptions = opts;
+                return { id: "m-ca9" };
+            },
+        });
+        const text = "$agent-config$节拍成章";
+        const ranges: ComposerDraftTokenRange[] = [
+            { start: 0, end: 13 },
+            { start: 13, end: 18 },
+        ];
+        try {
+            unwrap(await AgentTurnRunner.run(runtime, { projectId: "p", sessionId: "s" }, text, {
+                attachments: scanComposerRanges(text, ranges),
+                excludedScanRanges: ranges,
+            }));
+        } catch {
+            // runner deps stubbed
+        }
+        const attachments = appendedOptions?.attachments ?? [];
+        assert.deepEqual(
+            attachments
+                .filter((a) => a.action === "skillAttach")
+                .map((a) => a.skillName)
+                .sort(),
+            ["agent-config", "节拍成章"],
+            "贴邻两颗技能都应挂载（全量扫描只认第一颗）",
+        );
+        userVfsUnifiedToolTurnFlag.resetForTests();
     });
-    await rejectsErr(
-      () =>
-        AgentTurnRunner.run(runtime, { projectId: "p", sessionId: "s" }, ""),
-      (err: unknown) => {
-        assert.ok(AppErrorOps.is(err, "AGENT_MESSAGE_EMPTY"));
-        assert.equal(renderError(err), "消息不能为空");
-      },
-    );
-    assert.equal(appendCount, 0, "仅规则变更不得 append user");
-    assert.equal(
-      evaluateCalled,
-      false,
-      "发送路径不得再 evaluateRuleView materialize",
-    );
-    userVfsUnifiedToolTurnFlag.resetForTests();
-  });
 
-  it("B-01：空输入且末条 assistant → 返回「消息不能为空」、不 append 空 user", async () => {
-    userVfsUnifiedToolTurnFlag.resetForTests();
-    userVfsUnifiedToolTurnFlag.refresh(false);
-    const existing = [
-      {
-        id: "a1",
-        role: "assistant" as const,
-        content: { blocks: [{ type: "text" as const, text: "模型回复" }] },
-      },
-    ];
-    let appendCount = 0;
-    const runtime = makeRuntime({
-      definition: workplaceOnDefinition,
-      evaluateRuleView: async () => ruleViewWithFile("/visible.md"),
-      listKeys: async () => [],
-      listBySession: async () => existing,
-      append: async () => {
-        appendCount += 1;
-        return { id: "m-b01-bad" };
-      },
+    it("T-CA9: excludedScanRanges 掩码后 @path 不被贴邻 $技能 污染", async () => {
+        userVfsUnifiedToolTurnFlag.resetForTests();
+        userVfsUnifiedToolTurnFlag.refresh(false);
+        let appendedOptions:
+            | {
+                    attachments?: readonly {
+                        path?: string;
+                        action?: string;
+                        skillName?: string;
+                        source?: string;
+                    }[];
+                }
+            | undefined;
+        const runtime = makeRuntime({
+            append: async (_sid, _role, _content, opts) => {
+                appendedOptions = opts;
+                return { id: "m-ca9-path" };
+            },
+        });
+        const text = "@docs/a.md$写作";
+        const ranges: ComposerDraftTokenRange[] = [
+            { start: 0, end: 10 },
+            { start: 10, end: 13 },
+        ];
+        try {
+            unwrap(await AgentTurnRunner.run(runtime, { projectId: "p", sessionId: "s" }, text, {
+                attachments: scanComposerRanges(text, ranges),
+                excludedScanRanges: ranges,
+            }));
+        } catch {
+            // runner deps stubbed
+        }
+        const attachments = appendedOptions?.attachments ?? [];
+        assert.deepEqual(
+            attachments.filter((a) => a.path != null).map((a) => a.path),
+            ["/docs/a.md"],
+            "路径附件不得被 $技能 粘成 /docs/a.md$写作",
+        );
+        assert.deepEqual(
+            attachments
+                .filter((a) => a.action === "skillAttach")
+                .map((a) => a.skillName),
+            ["写作"],
+        );
+        userVfsUnifiedToolTurnFlag.resetForTests();
     });
-    await rejectsErr(
-      () => AgentTurnRunner.run(runtime, { projectId: "p", sessionId: "s" }, ""),
-      (err: unknown) => {
-        assert.ok(AppErrorOps.is(err, "AGENT_MESSAGE_EMPTY"));
-        assert.equal(renderError(err), "消息不能为空");
-      },
-    );
-    assert.equal(appendCount, 0, "末条 assistant 不得误 append");
-    const after = outcomeValue(await runtime.messages.listBySession("s"));
-    assert.equal(after.length, existing.length, "listBySession 长度不变");
-    assert.equal(
-      after.some((m) => m.role === "user"),
-      false,
-      "不得新增空 user",
-    );
-    userVfsUnifiedToolTurnFlag.resetForTests();
-  });
 
-  it("A7: workplace=false → 空输入仍返回「消息不能为空」", async () => {
-    userVfsUnifiedToolTurnFlag.resetForTests();
-    userVfsUnifiedToolTurnFlag.refresh(false);
-    let appendCount = 0;
-    const runtime = makeRuntime({
-      // sampleDefinition：workplace 缺省 false
-      definition: sampleDefinition,
-      evaluateRuleView: async () => ruleViewWithFile("/should-not-send.md"),
-      listKeys: async () => [],
-      append: async () => {
-        appendCount += 1;
-        return { id: "m-a7" };
-      },
+    it("仅 attach attachments 非空允许发送并 append", async () => {
+        userVfsUnifiedToolTurnFlag.resetForTests();
+        userVfsUnifiedToolTurnFlag.refresh(false);
+        let appended = false;
+        const runtime = makeRuntime({
+            append: async () => {
+                appended = true;
+                return { id: "m-attach-only" };
+            },
+        });
+        try {
+            unwrap(await AgentTurnRunner.run(runtime, { projectId: "p", sessionId: "s" }, "", {
+                attachments: [
+                    {
+                        name: "a.md",
+                        source: "attach",
+                        type: "text",
+                        content: null,
+                        path: "/a.md",
+                    },
+                ],
+            }));
+        } catch {
+            // runner deps stubbed
+        }
+        assert.equal(appended, true);
+        userVfsUnifiedToolTurnFlag.resetForTests();
     });
-    await rejectsErr(
-      () =>
-        AgentTurnRunner.run(runtime, { projectId: "p", sessionId: "s" }, ""),
-      (err: unknown) => {
-        assert.ok(AppErrorOps.is(err, "AGENT_MESSAGE_EMPTY"));
-        assert.equal(renderError(err), "消息不能为空");
-      },
-    );
-    assert.equal(appendCount, 0);
-    userVfsUnifiedToolTurnFlag.resetForTests();
-  });
 
-  // T-DS3（S-13 治本）：普通纯文本 chat 路径下，runAgentTurn 必须为新 append
-  // 的 user 消息写 baseline checkpoint。原先仅 userOpsAttachments 非空时才写，
-  // 导致 plain chat 无 baseline → undo_send 时 targetTree 空 → 删光工作区。
-  it("T-DS3a：普通纯文本 chat 路径为新 user 消息写 baseline checkpoint", async () => {
-    userVfsUnifiedToolTurnFlag.resetForTests();
-    userVfsUnifiedToolTurnFlag.refresh(false);
-    const captured: Array<{
-      sessionId: string;
-      projectId: string;
-      messageId: string;
-    }> = [];
-    const runtime = makeRuntime({
-      append: async () => ({ id: "u-plain-1" }),
-      capture: async (sessionId, projectId, messageId) => {
-        captured.push({ sessionId, projectId, messageId });
-      },
+    it("T-SR1：丢弃预览 workplace/user_ops；不 materialize workplace（user ops 拆除后无 flush 注入）", async () => {
+        userVfsUnifiedToolTurnFlag.resetForTests();
+        let appendedOpts:
+            | {
+                    attachments?: readonly {
+                        source?: string;
+                        path?: string;
+                        content?: string | null;
+                        action?: string;
+                        name?: string;
+                    }[];
+                }
+            | undefined;
+        const runtime = makeRuntime({
+            definition: workplaceOnDefinition,
+            evaluateRuleView: async () => ruleViewWithFile("/delta.md"),
+            listKeys: async () => [],
+            userVfsTurn: mockUserVfsTurn(),
+            append: async (_sid, _role, _content, opts) => {
+                appendedOpts = opts;
+                return { id: "m-sr1" };
+            },
+        });
+        try {
+            unwrap(await AgentTurnRunner.run(runtime, { projectId: "p", sessionId: "s" }, "", {
+                attachments: [
+                    {
+                        name: "preview-wp",
+                        source: "workplace",
+                        type: "text",
+                        content: null,
+                        path: "/stale-preview.md",
+                    },
+                    {
+                        name: "preview-ops",
+                        source: "user_ops",
+                        type: "text",
+                        content: null,
+                    },
+                    {
+                        name: "chip.md",
+                        source: "attach",
+                        type: "text",
+                        content: null,
+                        path: "/chip.md",
+                    },
+                ],
+            }));
+        } catch {
+            // runner deps stubbed
+        }
+        const atts = appendedOpts?.attachments ?? [];
+        assert.equal(
+            atts.some((a) => a.source === "workplace"),
+            false,
+            "新路径不得 materialize / 保留预览 workplace",
+        );
+        assert.equal(
+            atts.some((a) => a.path === "/stale-preview.md"),
+            false,
+            "不得原样保留预览 workplace",
+        );
+        assert.equal(
+            atts.some((a) => a.source === "user_ops"),
+            false,
+            "误传的 user_ops 预览一律丢弃（flush 已拆除）",
+        );
+        assert.ok(atts.some((a) => a.source === "attach" && a.path === "/chip.md"));
+        userVfsUnifiedToolTurnFlag.resetForTests();
     });
-    try {
-      unwrap(await AgentTurnRunner.run(
-        runtime,
-        { projectId: "p", sessionId: "s" },
-        "只是一条纯文本消息",
-      ));
-    } catch {
-      // runner deps stubbed；走到 capture 即说明 baseline 已写
-    }
-    assert.equal(captured.length, 1, "plain chat 必须为新 user 消息写一次 baseline");
-    assert.deepEqual(captured[0], {
-      sessionId: "s",
-      projectId: "p",
-      messageId: "u-plain-1",
-    });
-    userVfsUnifiedToolTurnFlag.resetForTests();
-  });
 
-  // T-DS3b：baseline checkpoint 写入失败必须向上抛出，不能静默吞掉，否则
-  // 调用方无法感知 baseline 缺失，后续 undo_send 仍会撞护栏。
-  it("T-DS3b：baseline capture 抛错时 runAgentTurn 向上抛出", async () => {
-    userVfsUnifiedToolTurnFlag.resetForTests();
-    userVfsUnifiedToolTurnFlag.refresh(false);
-    const runtime = makeRuntime({
-      append: async () => ({ id: "u-plain-2" }),
-      capture: async () => {
-        throw new Error("baseline capture failed");
-      },
+    it("T-CR3：空正文+仅规则可见文件（无 pending/批注）→ 返回「消息不能为空」且不 append", async () => {
+        userVfsUnifiedToolTurnFlag.resetForTests();
+        userVfsUnifiedToolTurnFlag.refresh(false);
+        let appendCount = 0;
+        let evaluateCalled = false;
+        const runtime = makeRuntime({
+            definition: workplaceOnDefinition,
+            evaluateRuleView: async () => {
+                evaluateCalled = true;
+                return ruleViewWithFile("/only-wp.md");
+            },
+            listKeys: async () => [],
+            append: async () => {
+                appendCount += 1;
+                return { id: "m-cr3" };
+            },
+        });
+        await rejectsErr(
+            () =>
+                AgentTurnRunner.run(runtime, { projectId: "p", sessionId: "s" }, ""),
+            (err: unknown) => {
+                assert.ok(AppErrorOps.is(err, "AGENT_MESSAGE_EMPTY"));
+                assert.equal(renderError(err), "消息不能为空");
+            },
+        );
+        assert.equal(appendCount, 0, "仅规则变更不得 append user");
+        assert.equal(
+            evaluateCalled,
+            false,
+            "发送路径不得再 evaluateRuleView materialize",
+        );
+        userVfsUnifiedToolTurnFlag.resetForTests();
     });
-    // error-matrix-final R1：未知异常转 Result（cause 透传），不再 reject。
-    // 本用例的 runtime stub 未注入 delete ⇒ append 的回滚补偿也失败 ⇒
-    // 落 INFRA_ROLLBACK_DEGRADED（rootCause 挂 cause、回滚清单进 details）——
-    // 恰好顺带钉住「回滚损坏优先上报」的分级语义。
-    const rD = unwrapErr(
-      await AgentTurnRunner.run(
-        runtime,
-        { projectId: "p", sessionId: "s" },
-        "纯文本消息",
-      ),
-    );
-    assert.equal(rD.key, "INFRA_ROLLBACK_DEGRADED");
-    assert.match((rD.cause as Error).message, /baseline capture failed/);
-    userVfsUnifiedToolTurnFlag.resetForTests();
-  });
 
-  // T-SC1（S-1 迁移）：runAgentTurn 的 append+capture 链走 CoordinatedWrite 后，
-  // capture 步骤抛错时必须逆序回滚——删掉刚 append 的 user 消息，同时入口的
-  // backfillMissingBaselines 已为历史消息写了 baseline，会话仍可回滚。
-  it("T-SC1：capture 抛错时 append 被逆序回滚、baseline checkpoint 仍存在", async () => {
-    userVfsUnifiedToolTurnFlag.resetForTests();
-    userVfsUnifiedToolTurnFlag.refresh(false);
-    const deletedIds: string[] = [];
-    const released: Array<{ sessionId: string; messageId: string }> = [];
-    const backfilled: Array<{ sessionId: string; projectId: string }> = [];
-    const runtime = makeRuntime({
-      append: async () => ({ id: "u-sc1" }),
-      delete: async (id: string) => {
-        deletedIds.push(id);
-      },
-      capture: async () => {
-        throw new Error("capture boom");
-      },
-      release: async (sessionId, messageId) => {
-        released.push({ sessionId, messageId });
-      },
-      backfillMissingBaselines: async (sessionId, projectId) => {
-        backfilled.push({ sessionId, projectId });
-      },
+    it("B-01：空输入且末条 assistant → 返回「消息不能为空」、不 append 空 user", async () => {
+        userVfsUnifiedToolTurnFlag.resetForTests();
+        userVfsUnifiedToolTurnFlag.refresh(false);
+        const existing = [
+            {
+                id: "a1",
+                role: "assistant" as const,
+                content: { blocks: [{ type: "text" as const, text: "模型回复" }] },
+            },
+        ];
+        let appendCount = 0;
+        const runtime = makeRuntime({
+            definition: workplaceOnDefinition,
+            evaluateRuleView: async () => ruleViewWithFile("/visible.md"),
+            listKeys: async () => [],
+            listBySession: async () => existing,
+            append: async () => {
+                appendCount += 1;
+                return { id: "m-b01-bad" };
+            },
+        });
+        await rejectsErr(
+            () => AgentTurnRunner.run(runtime, { projectId: "p", sessionId: "s" }, ""),
+            (err: unknown) => {
+                assert.ok(AppErrorOps.is(err, "AGENT_MESSAGE_EMPTY"));
+                assert.equal(renderError(err), "消息不能为空");
+            },
+        );
+        assert.equal(appendCount, 0, "末条 assistant 不得误 append");
+        const after = outcomeValue(await runtime.messages.listBySession("s"));
+        assert.equal(after.length, existing.length, "listBySession 长度不变");
+        assert.equal(
+            after.some((m) => m.role === "user"),
+            false,
+            "不得新增空 user",
+        );
+        userVfsUnifiedToolTurnFlag.resetForTests();
     });
-    // error-matrix-final R1：未知异常转 INFRA_UNEXPECTED_ERROR（cause 透传），不再 reject。
-    const rC = unwrapErr(
-      await AgentTurnRunner.run(
-        runtime,
-        { projectId: "p", sessionId: "s" },
-        "会触发 capture 失败的消息",
-      ),
-    );
-    assert.equal(rC.key, "INFRA_UNEXPECTED_ERROR");
-    assert.match((rC.cause as Error).message, /capture boom/);
-    // 入口 baseline 回填仍执行 → 历史消息的 baseline checkpoint 存在、会话可回滚
-    assert.equal(backfilled.length, 1, "入口必须调一次 backfillMissingBaselines");
-    // append 的补偿动作：刚写入的 user 消息被删
-    assert.deepEqual(deletedIds, ["u-sc1"], "capture 失败后 append 必须被逆序回滚");
-    // capture 的补偿动作（release）在 execute 抛错前未实际写入，这里仅验证调度路径
-    assert.equal(released.length, 0, "capture execute 抛错，其自身回滚不触发");
-    userVfsUnifiedToolTurnFlag.resetForTests();
-  });
 
-  // T-DS5（S-13 扩展）：runAgentTurn 入口必须调一次 backfillMissingBaselines，
-  // 给历史空窗消息补 baseline。Step 9 已保证新消息源头有 baseline，但旧会话里
-  // 可能还留着 Step 9 之前的消息——这里在 turn 开始时幂等补齐。
-  it("T-DS5：runAgentTurn 开始时调一次 backfillMissingBaselines", async () => {
-    userVfsUnifiedToolTurnFlag.resetForTests();
-    userVfsUnifiedToolTurnFlag.refresh(false);
-    const backfilled: Array<{ sessionId: string; projectId: string }> = [];
-    const runtime = makeRuntime({
-      append: async () => ({ id: "u-backfill-1" }),
-      backfillMissingBaselines: async (sessionId, projectId) => {
-        backfilled.push({ sessionId, projectId });
-      },
+    it("A7: workplace=false → 空输入仍返回「消息不能为空」", async () => {
+        userVfsUnifiedToolTurnFlag.resetForTests();
+        userVfsUnifiedToolTurnFlag.refresh(false);
+        let appendCount = 0;
+        const runtime = makeRuntime({
+            // sampleDefinition：workplace 缺省 false
+            definition: sampleDefinition,
+            evaluateRuleView: async () => ruleViewWithFile("/should-not-send.md"),
+            listKeys: async () => [],
+            append: async () => {
+                appendCount += 1;
+                return { id: "m-a7" };
+            },
+        });
+        await rejectsErr(
+            () =>
+                AgentTurnRunner.run(runtime, { projectId: "p", sessionId: "s" }, ""),
+            (err: unknown) => {
+                assert.ok(AppErrorOps.is(err, "AGENT_MESSAGE_EMPTY"));
+                assert.equal(renderError(err), "消息不能为空");
+            },
+        );
+        assert.equal(appendCount, 0);
+        userVfsUnifiedToolTurnFlag.resetForTests();
     });
-    try {
-      unwrap(await AgentTurnRunner.run(
-        runtime,
-        { projectId: "p", sessionId: "s" },
-        "继续聊天",
-      ));
-    } catch {
-      // runner deps stubbed；走到断言即说明 backfill 已调
-    }
-    assert.equal(backfilled.length, 1, "每轮发送只能调一次 backfill");
-    assert.deepEqual(backfilled[0], { sessionId: "s", projectId: "p" });
-    userVfsUnifiedToolTurnFlag.resetForTests();
-  });
 
-  // T-B4（init-busy-yield Step 4）：连续多轮 run 时每轮仍恰好调用一次
-  // backfillMissingBaselines——判定加游标短路后调用契约不变（T-DS5 的多轮形态）。
-  it("T-B4：连续两轮 run 每轮恰调用一次 backfillMissingBaselines", async () => {
-    userVfsUnifiedToolTurnFlag.resetForTests();
-    userVfsUnifiedToolTurnFlag.refresh(false);
-    const backfilled: Array<{ sessionId: string; projectId: string }> = [];
-    const runtime = makeRuntime({
-      append: async () => ({ id: `u-b4-${backfilled.length}` }),
-      backfillMissingBaselines: async (sessionId, projectId) => {
-        backfilled.push({ sessionId, projectId });
-      },
+    // T-DS3（S-13 治本）：普通纯文本 chat 路径下，runAgentTurn 必须为新 append
+    // 的 user 消息写 baseline checkpoint。原先仅 userOpsAttachments 非空时才写，
+    // 导致 plain chat 无 baseline → undo_send 时 targetTree 空 → 删光工作区。
+    it("T-DS3a：普通纯文本 chat 路径为新 user 消息写 baseline checkpoint", async () => {
+        userVfsUnifiedToolTurnFlag.resetForTests();
+        userVfsUnifiedToolTurnFlag.refresh(false);
+        const captured: Array<{
+            sessionId: string;
+            projectId: string;
+            messageId: string;
+        }> = [];
+        const runtime = makeRuntime({
+            append: async () => ({ id: "u-plain-1" }),
+            capture: async (sessionId, projectId, messageId) => {
+                captured.push({ sessionId, projectId, messageId });
+            },
+        });
+        try {
+            unwrap(await AgentTurnRunner.run(
+                runtime,
+                { projectId: "p", sessionId: "s" },
+                "只是一条纯文本消息",
+            ));
+        } catch {
+            // runner deps stubbed；走到 capture 即说明 baseline 已写
+        }
+        assert.equal(captured.length, 1, "plain chat 必须为新 user 消息写一次 baseline");
+        assert.deepEqual(captured[0], {
+            sessionId: "s",
+            projectId: "p",
+            messageId: "u-plain-1",
+        });
+        userVfsUnifiedToolTurnFlag.resetForTests();
     });
-    for (let round = 0; round < 2; round++) {
-      try {
-        unwrap(await AgentTurnRunner.run(
-          runtime,
-          { projectId: "p", sessionId: "s" },
-          `第 ${round + 1} 轮消息`,
-        ));
-      } catch {
-        // runner deps stubbed；走到调用记录即说明 backfill 已调
-      }
-    }
-    assert.equal(backfilled.length, 2, "两轮 run 每轮恰调用一次 backfill");
-    assert.deepEqual(backfilled[0], { sessionId: "s", projectId: "p" });
-    assert.deepEqual(backfilled[1], { sessionId: "s", projectId: "p" });
-    userVfsUnifiedToolTurnFlag.resetForTests();
-  });
+
+    // T-DS3b：baseline checkpoint 写入失败必须向上抛出，不能静默吞掉，否则
+    // 调用方无法感知 baseline 缺失，后续 undo_send 仍会撞护栏。
+    it("T-DS3b：baseline capture 抛错时 runAgentTurn 向上抛出", async () => {
+        userVfsUnifiedToolTurnFlag.resetForTests();
+        userVfsUnifiedToolTurnFlag.refresh(false);
+        const runtime = makeRuntime({
+            append: async () => ({ id: "u-plain-2" }),
+            capture: async () => {
+                throw new Error("baseline capture failed");
+            },
+        });
+        // error-matrix-final R1：未知异常转 Result（cause 透传），不再 reject。
+        // 本用例的 runtime stub 未注入 delete ⇒ append 的回滚补偿也失败 ⇒
+        // 落 INFRA_ROLLBACK_DEGRADED（rootCause 挂 cause、回滚清单进 details）——
+        // 恰好顺带钉住「回滚损坏优先上报」的分级语义。
+        const rD = unwrapErr(
+            await AgentTurnRunner.run(
+                runtime,
+                { projectId: "p", sessionId: "s" },
+                "纯文本消息",
+            ),
+        );
+        assert.equal(rD.key, "INFRA_ROLLBACK_DEGRADED");
+        assert.match((rD.cause as Error).message, /baseline capture failed/);
+        userVfsUnifiedToolTurnFlag.resetForTests();
+    });
+
+    // T-SC1（S-1 迁移）：runAgentTurn 的 append+capture 链走 CoordinatedWrite 后，
+    // capture 步骤抛错时必须逆序回滚——删掉刚 append 的 user 消息，同时入口的
+    // backfillMissingBaselines 已为历史消息写了 baseline，会话仍可回滚。
+    it("T-SC1：capture 抛错时 append 被逆序回滚、baseline checkpoint 仍存在", async () => {
+        userVfsUnifiedToolTurnFlag.resetForTests();
+        userVfsUnifiedToolTurnFlag.refresh(false);
+        const deletedIds: string[] = [];
+        const released: Array<{ sessionId: string; messageId: string }> = [];
+        const backfilled: Array<{ sessionId: string; projectId: string }> = [];
+        const runtime = makeRuntime({
+            append: async () => ({ id: "u-sc1" }),
+            delete: async (id: string) => {
+                deletedIds.push(id);
+            },
+            capture: async () => {
+                throw new Error("capture boom");
+            },
+            release: async (sessionId, messageId) => {
+                released.push({ sessionId, messageId });
+            },
+            backfillMissingBaselines: async (sessionId, projectId) => {
+                backfilled.push({ sessionId, projectId });
+            },
+        });
+        // error-matrix-final R1：未知异常转 INFRA_UNEXPECTED_ERROR（cause 透传），不再 reject。
+        const rC = unwrapErr(
+            await AgentTurnRunner.run(
+                runtime,
+                { projectId: "p", sessionId: "s" },
+                "会触发 capture 失败的消息",
+            ),
+        );
+        assert.equal(rC.key, "INFRA_UNEXPECTED_ERROR");
+        assert.match((rC.cause as Error).message, /capture boom/);
+        // 入口 baseline 回填仍执行 → 历史消息的 baseline checkpoint 存在、会话可回滚
+        assert.equal(backfilled.length, 1, "入口必须调一次 backfillMissingBaselines");
+        // append 的补偿动作：刚写入的 user 消息被删
+        assert.deepEqual(deletedIds, ["u-sc1"], "capture 失败后 append 必须被逆序回滚");
+        // capture 的补偿动作（release）在 execute 抛错前未实际写入，这里仅验证调度路径
+        assert.equal(released.length, 0, "capture execute 抛错，其自身回滚不触发");
+        userVfsUnifiedToolTurnFlag.resetForTests();
+    });
+
+    // T-DS5（S-13 扩展）：runAgentTurn 入口必须调一次 backfillMissingBaselines，
+    // 给历史空窗消息补 baseline。Step 9 已保证新消息源头有 baseline，但旧会话里
+    // 可能还留着 Step 9 之前的消息——这里在 turn 开始时幂等补齐。
+    it("T-DS5：runAgentTurn 开始时调一次 backfillMissingBaselines", async () => {
+        userVfsUnifiedToolTurnFlag.resetForTests();
+        userVfsUnifiedToolTurnFlag.refresh(false);
+        const backfilled: Array<{ sessionId: string; projectId: string }> = [];
+        const runtime = makeRuntime({
+            append: async () => ({ id: "u-backfill-1" }),
+            backfillMissingBaselines: async (sessionId, projectId) => {
+                backfilled.push({ sessionId, projectId });
+            },
+        });
+        try {
+            unwrap(await AgentTurnRunner.run(
+                runtime,
+                { projectId: "p", sessionId: "s" },
+                "继续聊天",
+            ));
+        } catch {
+            // runner deps stubbed；走到断言即说明 backfill 已调
+        }
+        assert.equal(backfilled.length, 1, "每轮发送只能调一次 backfill");
+        assert.deepEqual(backfilled[0], { sessionId: "s", projectId: "p" });
+        userVfsUnifiedToolTurnFlag.resetForTests();
+    });
+
+    // T-B4（init-busy-yield Step 4）：连续多轮 run 时每轮仍恰好调用一次
+    // backfillMissingBaselines——判定加游标短路后调用契约不变（T-DS5 的多轮形态）。
+    it("T-B4：连续两轮 run 每轮恰调用一次 backfillMissingBaselines", async () => {
+        userVfsUnifiedToolTurnFlag.resetForTests();
+        userVfsUnifiedToolTurnFlag.refresh(false);
+        const backfilled: Array<{ sessionId: string; projectId: string }> = [];
+        const runtime = makeRuntime({
+            append: async () => ({ id: `u-b4-${backfilled.length}` }),
+            backfillMissingBaselines: async (sessionId, projectId) => {
+                backfilled.push({ sessionId, projectId });
+            },
+        });
+        for (let round = 0; round < 2; round++) {
+            try {
+                unwrap(await AgentTurnRunner.run(
+                    runtime,
+                    { projectId: "p", sessionId: "s" },
+                    `第 ${round + 1} 轮消息`,
+                ));
+            } catch {
+                // runner deps stubbed；走到调用记录即说明 backfill 已调
+            }
+        }
+        assert.equal(backfilled.length, 2, "两轮 run 每轮恰调用一次 backfill");
+        assert.deepEqual(backfilled[0], { sessionId: "s", projectId: "p" });
+        assert.deepEqual(backfilled[1], { sessionId: "s", projectId: "p" });
+        userVfsUnifiedToolTurnFlag.resetForTests();
+    });
 });
 
 /** 错误用户可见文案：带 messageKey 时经 tCore 渲染（G1-G3 descriptor 契约），否则回退 message。 */
 function renderError(error: unknown): string {
-  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
-  return textOf(error);
+    const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
+    return textOf(error);
 }
 
 /** 含 cause 链（ToolError 包装 AppError 时 messageKey 在 cause 上）。 */
 function textOf(error: unknown): string {
-  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
-  if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
-  if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
-  return e.message;
+    const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
+    if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
+    if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
+    return e.message;
 }

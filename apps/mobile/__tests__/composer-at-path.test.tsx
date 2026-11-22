@@ -25,47 +25,47 @@ import { composerChips, AttachmentScanner } from '@novel-master/core/chat';
 import { composerAtPath } from '@/components/chat/composer-at-path';
 
 describe('composer-at-path 纯函数域 (T-ATD* / T-AT*)', () => {
-  it('T-ATD2: Picker token 为 @path；目录尾 /；扫描落库带前导 /', () => {
-    const tokensResult = composerAtPath.tokensFromPickerSelection(['/notes'], ['/a.md']);
-    if (!tokensResult.ok) throw tokensResult.error;
-    const tokens = tokensResult.value;
-    expect(tokens).toEqual(['@/notes/', '@/a.md']);
-    const scanned = AttachmentScanner.scanAtPaths(tokens.join(' '));
-    expect(scanned).toHaveLength(2);
-    expect(scanned[0]!.path).toBe('/notes/');
-    expect(scanned[0]!.type).toBe('dir');
-    expect(scanned[1]!.path).toBe('/a.md');
-    expect(scanned.every(a => a.path!.startsWith('/'))).toBe(true);
-  });
+    it('T-ATD2: Picker token 为 @path；目录尾 /；扫描落库带前导 /', () => {
+        const tokensResult = composerAtPath.tokensFromPickerSelection(['/notes'], ['/a.md']);
+        if (!tokensResult.ok) throw tokensResult.error;
+        const tokens = tokensResult.value;
+        expect(tokens).toEqual(['@/notes/', '@/a.md']);
+        const scanned = AttachmentScanner.scanAtPaths(tokens.join(' '));
+        expect(scanned).toHaveLength(2);
+        expect(scanned[0]!.path).toBe('/notes/');
+        expect(scanned[0]!.type).toBe('dir');
+        expect(scanned[1]!.path).toBe('/a.md');
+        expect(scanned.every(a => a.path!.startsWith('/'))).toBe(true);
+    });
 
-  it('T-ATD3: 点选插入完整 @path', () => {
-    const active = composerAtPath.detectQuery('见 @ab', 5);
-    expect(active).not.toBeNull();
-    expect(active!.query).toBe('ab');
-    const tokenResult = composerAtPath.formatToken('/ab.md', false);
-    if (!tokenResult.ok) throw tokenResult.error;
-    const next = composerAtPath.replaceToken('见 @ab', 5, active!.start, tokenResult.value);
-    expect(next.text).toBe('见 @/ab.md ');
-  });
+    it('T-ATD3: 点选插入完整 @path', () => {
+        const active = composerAtPath.detectQuery('见 @ab', 5);
+        expect(active).not.toBeNull();
+        expect(active!.query).toBe('ab');
+        const tokenResult = composerAtPath.formatToken('/ab.md', false);
+        if (!tokenResult.ok) throw tokenResult.error;
+        const next = composerAtPath.replaceToken('见 @ab', 5, active!.start, tokenResult.value);
+        expect(next.text).toBe('见 @/ab.md ');
+    });
 
-  it('findActiveAtQuery: @/a.md 无尾空格为活跃；带尾空格则关闭', () => {
-    const bare = '@/a.md';
-    expect(composerAtPath.detectQuery(bare, bare.length)).not.toBeNull();
-    expect(composerAtPath.detectQuery(bare, bare.length)!.query).toBe('/a.md');
-    expect(composerAtPath.detectQuery(`${bare} `, `${bare} `.length)).toBeNull();
-  });
+    it('findActiveAtQuery: @/a.md 无尾空格为活跃；带尾空格则关闭', () => {
+        const bare = '@/a.md';
+        expect(composerAtPath.detectQuery(bare, bare.length)).not.toBeNull();
+        expect(composerAtPath.detectQuery(bare, bare.length)!.query).toBe('/a.md');
+        expect(composerAtPath.detectQuery(`${bare} `, `${bare} `.length)).toBeNull();
+    });
 
-  it('T-ATD4: 删除正文 @path 后扫描为空', () => {
-    expect(AttachmentScanner.scanAtPaths('看 @/a.md')).toHaveLength(1);
-    expect(AttachmentScanner.scanAtPaths('看')).toHaveLength(0);
-  });
+    it('T-ATD4: 删除正文 @path 后扫描为空', () => {
+        expect(AttachmentScanner.scanAtPaths('看 @/a.md')).toHaveLength(1);
+        expect(AttachmentScanner.scanAtPaths('看')).toHaveLength(0);
+    });
 
-  it('T-AT3: 仅 @path 扫描为 source:attach，不进状态 chip', () => {
-    const scanned = AttachmentScanner.scanAtPaths('请看 @/a.md');
-    expect(scanned.length).toBeGreaterThan(0);
-    expect(scanned.every(a => a.source === 'attach')).toBe(true);
-    const {status, attach} = composerChips.partition(scanned);
-    expect(status).toHaveLength(0);
-    expect(attach).toHaveLength(scanned.length);
-  });
+    it('T-AT3: 仅 @path 扫描为 source:attach，不进状态 chip', () => {
+        const scanned = AttachmentScanner.scanAtPaths('请看 @/a.md');
+        expect(scanned.length).toBeGreaterThan(0);
+        expect(scanned.every(a => a.source === 'attach')).toBe(true);
+        const {status, attach} = composerChips.partition(scanned);
+        expect(status).toHaveLength(0);
+        expect(attach).toHaveLength(scanned.length);
+    });
 });

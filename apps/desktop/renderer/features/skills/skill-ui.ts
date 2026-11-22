@@ -8,10 +8,10 @@ import { coreT } from "@shared/logic/core-i18n";
 
 /** 域徽标文案：项目副本覆盖同名全局技能时标「项目 · 覆盖全局」。 */
 export function skillDomainLabel( domain: SkillDomainDto, overridden: boolean ): string {
-  if (domain === "project") {
-    return overridden ? coreT({key: "ui.skills.domain_tag_overridden"}) : coreT({key: "ui.skills.domain_project"});
-  }
-  return coreT({key: "ui.skills.domain_tag_global"});
+    if (domain === "project") {
+        return overridden ? coreT({key: "ui.skills.domain_tag_overridden"}) : coreT({key: "ui.skills.domain_project"});
+    }
+    return coreT({key: "ui.skills.domain_tag_global"});
 }
 
 /** 新建技能的 SKILL.md 模板：front matter（name/description）+ 辅助文件引导。 */
@@ -24,11 +24,11 @@ export { NewSkillDoc } from "@shared/logic/skills";
 
 /** 技能定位（跳详情用）：project 域带 projectId，global 域缺省。 */
 export function toSkillRef( domain: SkillDomainDto, name: string, projectId?: string ): SkillRefDto {
-  return {
-    domain,
-    ...(domain === "project" && projectId != null ? { projectId } : {}),
-    name,
-  };
+    return {
+        domain,
+        ...(domain === "project" && projectId != null ? { projectId } : {}),
+        name,
+    };
 }
 
 /**
@@ -39,9 +39,9 @@ export function toSkillRef( domain: SkillDomainDto, name: string, projectId?: st
 export const OPEN_SETTINGS_VIEW_EVENT = "open-settings-view";
 
 export type OpenSettingsViewDetail =
-  | { readonly view: "skillsManage" }
-  | { readonly view: "skillDetail"; readonly skillRef: SkillRefDto };
+    | { readonly view: "skillsManage" }
+    | { readonly view: "skillDetail"; readonly skillRef: SkillRefDto };
 
 export function dispatchOpenSettingsView(detail: OpenSettingsViewDetail): void {
-  window.dispatchEvent( new CustomEvent<OpenSettingsViewDetail>(OPEN_SETTINGS_VIEW_EVENT, { detail }) );
+    window.dispatchEvent( new CustomEvent<OpenSettingsViewDetail>(OPEN_SETTINGS_VIEW_EVENT, { detail }) );
 }

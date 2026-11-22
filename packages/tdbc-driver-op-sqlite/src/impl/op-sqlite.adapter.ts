@@ -10,54 +10,54 @@ import type { OpSqliteResult, OpSqliteAdapter } from "../adapter.js";
 
 /** op-sqlite 原生 execute 结果（metadata 为 {name, type, index} 形态）。 */
 type OpSqliteRawResult = {
-  rows?: (Record<string, unknown> | unknown[])[];
-  rowsAffected?: number;
-  insertId?: number;
-  columnNames?: string[];
-  metadata?: { name: string; type?: string; index?: number }[];
+    rows?: (Record<string, unknown> | unknown[])[];
+    rowsAffected?: number;
+    insertId?: number;
+    columnNames?: string[];
+    metadata?: { name: string; type?: string; index?: number }[];
 };
 
 /** op-sqlite 连接对象（DB）的最小调用面（实例方法模型）。 */
 type OpSqliteDb = {
-  execute: (sql: string, params?: unknown[]) => Promise<OpSqliteRawResult>;
-  executeSync: (sql: string, params?: unknown[]) => OpSqliteRawResult;
-  close: () => void;
-  getDbPath: (location?: string) => string;
+    execute: (sql: string, params?: unknown[]) => Promise<OpSqliteRawResult>;
+    executeSync: (sql: string, params?: unknown[]) => OpSqliteRawResult;
+    close: () => void;
+    getDbPath: (location?: string) => string;
 };
 
 /** 构造注入的 op-sqlite 模块表面（非 port，便于测试 fake）。 */
 export type OpSqliteBindings = {
-  open: (options: {
-    name: string;
-    location?: string;
-    failOnCreate?: boolean;
-  }) => OpSqliteDb;
-  /**
+    open: (options: {
+        name: string;
+        location?: string;
+        failOnCreate?: boolean;
+    }) => OpSqliteDb;
+    /**
    * 平台路径常量（Android 上 IOS_* 为 null，iOS 上 ANDROID_* 为 null；
    * Node / web 环境可能均不可用）。
    */
-  ANDROID_FILES_PATH?: string | null;
-  IOS_DOCUMENT_PATH?: string | null;
+    ANDROID_FILES_PATH?: string | null;
+    IOS_DOCUMENT_PATH?: string | null;
 };
 
 /** 把 op-sqlite 的 metadata 字段 `{name, type, index}` 转换为契约的 `{columnName}`。 */
 function convertMetadata(metadata: OpSqliteRawResult["metadata"],): { columnName: string }[] | undefined {
-  if (!metadata || metadata.length === 0) {
-    return undefined;
-  }
-  return metadata.map((m) => ({ columnName: m.name }));
+    if (!metadata || metadata.length === 0) {
+        return undefined;
+    }
+    return metadata.map((m) => ({ columnName: m.name }));
 }
 
 function convertResult(raw: OpSqliteRawResult): OpSqliteResult {
-  // 集中在此处做字段名转换：rows 纯数组直接透传（row-mapper 已兼容），
-  // columnNames 真实存在（quick-sqlite 8.2.7 运行时没有）也直接透传。
-  return {
-    rows: raw.rows,
-    rowsAffected: raw.rowsAffected,
-    insertId: raw.insertId,
-    columnNames: raw.columnNames,
-    metadata: convertMetadata(raw.metadata),
-  };
+    // 集中在此处做字段名转换：rows 纯数组直接透传（row-mapper 已兼容），
+    // columnNames 真实存在（quick-sqlite 8.2.7 运行时没有）也直接透传。
+    return {
+        rows: raw.rows,
+        rowsAffected: raw.rowsAffected,
+        insertId: raw.insertId,
+        columnNames: raw.columnNames,
+        metadata: convertMetadata(raw.metadata),
+    };
 }
 
 /**
@@ -68,71 +68,71 @@ function convertResult(raw: OpSqliteRawResult): OpSqliteResult {
  * 反转：`execute` 是异步（Promise），`executeSync` 才是同步。
  */
 export class BaseOpSqliteAdapter implements OpSqliteAdapter {
-  private readonly bindings: OpSqliteBindings;
-  private db?: OpSqliteDb;
+    private readonly bindings: OpSqliteBindings;
+    private db?: OpSqliteDb;
 
-  constructor(bindings: OpSqliteBindings) {
-    this.bindings = bindings;
-  }
-
-  async open(options: {
-    name: string;
-    location?: string;
-    failOnCreate?: boolean;
-  }): Promise<void> {
-    // 持住 DB 连接对象：execute/executeSync/close/getDbPath 都走实例方法。
-    // 注意：undefined 值的键不能传给原生层——op-sqlite C++ 侧用
-    // hasProperty 探测后直接 asString/asBool，键存在但值为 undefined
-    // 会抛 JSI 错误（真机事故：fallback open 传 location: undefined 直接炸）。
-    const nativeOptions: {name: string; location?: string; failOnCreate?: boolean} = {
-      name: options.name,
-    };
-    if (options.location !== undefined) {
-      nativeOptions.location = options.location;
+    constructor(bindings: OpSqliteBindings) {
+        this.bindings = bindings;
     }
-    if (options.failOnCreate !== undefined) {
-      nativeOptions.failOnCreate = options.failOnCreate;
+
+    async open(options: {
+        name: string;
+        location?: string;
+        failOnCreate?: boolean;
+    }): Promise<void> {
+        // 持住 DB 连接对象：execute/executeSync/close/getDbPath 都走实例方法。
+        // 注意：undefined 值的键不能传给原生层——op-sqlite C++ 侧用
+        // hasProperty 探测后直接 asString/asBool，键存在但值为 undefined
+        // 会抛 JSI 错误（真机事故：fallback open 传 location: undefined 直接炸）。
+        const nativeOptions: {name: string; location?: string; failOnCreate?: boolean} = {
+            name: options.name,
+        };
+        if (options.location !== undefined) {
+            nativeOptions.location = options.location;
+        }
+        if (options.failOnCreate !== undefined) {
+            nativeOptions.failOnCreate = options.failOnCreate;
+        }
+        this.db = this.bindings.open(nativeOptions);
     }
-    this.db = this.bindings.open(nativeOptions);
-  }
 
-  async close(): Promise<void> {
-    this.db?.close();
-    this.db = undefined;
-  }
-
-  async execute(sql: string, params?: unknown[]): Promise<OpSqliteResult> {
-    const db = this.requireDb();
-    // op-sqlite 命名反转：execute 是异步版本（Promise）。
-    return convertResult(await db.execute(sql, params ?? []));
-  }
-
-  executeSync(sql: string, params?: unknown[]): OpSqliteResult {
-    const db = this.requireDb();
-    // executeSync 才是同步版本：JSI 直调、阻塞 JS 线程，供事务内切换使用。
-    return convertResult(db.executeSync(sql, params ?? []));
-  }
-
-  getLegacyDefaultDir(): string | undefined {
-    // quick-sqlite 的 location: 'default' 布局：Android 落在
-    // <files>/default/<name>，iOS 落在 <DocumentDir>/default/<name>。
-    // 平台常量一边为 null（另一平台），均不可用时返回 undefined。
-    const base = this.bindings.ANDROID_FILES_PATH ?? this.bindings.IOS_DOCUMENT_PATH;
-    if (typeof base !== "string" || base.length === 0) {
-      return undefined;
+    async close(): Promise<void> {
+        this.db?.close();
+        this.db = undefined;
     }
-    return `${base}/default`;
-  }
 
-  getDbPath(): string | undefined {
-    return this.db?.getDbPath();
-  }
+    async execute(sql: string, params?: unknown[]): Promise<OpSqliteResult> {
+        const db = this.requireDb();
+        // op-sqlite 命名反转：execute 是异步版本（Promise）。
+        return convertResult(await db.execute(sql, params ?? []));
+    }
 
-  private requireDb(): OpSqliteDb {
-    // 编程护栏（assert 通道）：未 open 即调用属 API 误用；tdbc 协议面的 close-后-调用
-    // 由 connection.ts 的 assertOpen 抛 TdbcError CONNECTION_CLOSED（conformance C1 锁定），
-    // 不经此处。
-    assert(this.db != null, "op-sqlite adapter is not open");
-    return this.db;
-  }
+    executeSync(sql: string, params?: unknown[]): OpSqliteResult {
+        const db = this.requireDb();
+        // executeSync 才是同步版本：JSI 直调、阻塞 JS 线程，供事务内切换使用。
+        return convertResult(db.executeSync(sql, params ?? []));
+    }
+
+    getLegacyDefaultDir(): string | undefined {
+        // quick-sqlite 的 location: 'default' 布局：Android 落在
+        // <files>/default/<name>，iOS 落在 <DocumentDir>/default/<name>。
+        // 平台常量一边为 null（另一平台），均不可用时返回 undefined。
+        const base = this.bindings.ANDROID_FILES_PATH ?? this.bindings.IOS_DOCUMENT_PATH;
+        if (typeof base !== "string" || base.length === 0) {
+            return undefined;
+        }
+        return `${base}/default`;
+    }
+
+    getDbPath(): string | undefined {
+        return this.db?.getDbPath();
+    }
+
+    private requireDb(): OpSqliteDb {
+        // 编程护栏（assert 通道）：未 open 即调用属 API 误用；tdbc 协议面的 close-后-调用
+        // 由 connection.ts 的 assertOpen 抛 TdbcError CONNECTION_CLOSED（conformance C1 锁定），
+        // 不经此处。
+        assert(this.db != null, "op-sqlite adapter is not open");
+        return this.db;
+    }
 }

@@ -12,6 +12,6 @@ import type { UsageRecordInsert } from "../model/usage-record.js";
  * usage-record-schema 的模块注释）。
  */
 export interface UsageRecordRepository {
-  /** 追加一行账本记录（单语句 INSERT，天然原子）。 */
-  insert(record: UsageRecordInsert): Promise<void>;
+    /** 追加一行账本记录（单语句 INSERT，天然原子）。 */
+    insert(record: UsageRecordInsert): Promise<void>;
 }

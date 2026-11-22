@@ -8,227 +8,227 @@ import {  DefaultWorkplaceService  } from "@/service/workplace/impl/workplace.se
 import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
 
 function createSpyingWorkplaceService(
-  conn: import("@novel-master/core").TdbcConnection,
-  projectId: string,
+    conn: import("@novel-master/core").TdbcConnection,
+    projectId: string,
 ) {
-  const baseRepo = new SqliteVfsEntryRepository(conn);
-  const calls = {
-    scanContents: 0,
-    findByPath: 0,
-    listFileMetaUnderPrefix: 0,
-  };
+    const baseRepo = new SqliteVfsEntryRepository(conn);
+    const calls = {
+        scanContents: 0,
+        findByPath: 0,
+        listFileMetaUnderPrefix: 0,
+    };
 
-  const vfs: VfsEntryRepository = {
-    list: (...args) => baseRepo.list(...args),
-    findByPath: async (...args) => {
-      calls.findByPath += 1;
-      return baseRepo.findByPath(...args);
-    },
-    findContentHash: (...args) => baseRepo.findContentHash(...args),
-    insert: (...args) => baseRepo.insert(...args),
-    insertWithContentHash: (...args) => baseRepo.insertWithContentHash(...args),
-    insertAtVersion: (...args) => baseRepo.insertAtVersion(...args),
-    insertDirectory: (...args) => baseRepo.insertDirectory(...args),
-    update: (...args) => baseRepo.update(...args),
-    updateWithContentHash: (...args) => baseRepo.updateWithContentHash(...args),
-    setHeadContentHash: (...args) => baseRepo.setHeadContentHash(...args),
-    delete: (...args) => baseRepo.delete(...args),
-    listAllPaths: (...args) => baseRepo.listAllPaths(...args),
-    listDirectoryPathsUnderPrefix: (...args) =>
-      baseRepo.listDirectoryPathsUnderPrefix(...args),
-    listDirectoryMetaUnderPrefix: (...args) =>
-      baseRepo.listDirectoryMetaUnderPrefix(...args),
-    listEntriesUnderPrefix: (...args) =>
-      baseRepo.listEntriesUnderPrefix(...args),
-    listFileMetaUnderPrefix: async (...args) => {
-      calls.listFileMetaUnderPrefix += 1;
-      return baseRepo.listFileMetaUnderPrefix(...args);
-    },
-    listFileHeadsUnderPrefix: (...args) =>
-      baseRepo.listFileHeadsUnderPrefix(...args),
-    scanContents: async (...args) => {
-      calls.scanContents += 1;
-      return baseRepo.scanContents(...args);
-    },
-    computeEntrySignature: (...args) => baseRepo.computeEntrySignature(...args),
-  };
+    const vfs: VfsEntryRepository = {
+        list: (...args) => baseRepo.list(...args),
+        findByPath: async (...args) => {
+            calls.findByPath += 1;
+            return baseRepo.findByPath(...args);
+        },
+        findContentHash: (...args) => baseRepo.findContentHash(...args),
+        insert: (...args) => baseRepo.insert(...args),
+        insertWithContentHash: (...args) => baseRepo.insertWithContentHash(...args),
+        insertAtVersion: (...args) => baseRepo.insertAtVersion(...args),
+        insertDirectory: (...args) => baseRepo.insertDirectory(...args),
+        update: (...args) => baseRepo.update(...args),
+        updateWithContentHash: (...args) => baseRepo.updateWithContentHash(...args),
+        setHeadContentHash: (...args) => baseRepo.setHeadContentHash(...args),
+        delete: (...args) => baseRepo.delete(...args),
+        listAllPaths: (...args) => baseRepo.listAllPaths(...args),
+        listDirectoryPathsUnderPrefix: (...args) =>
+            baseRepo.listDirectoryPathsUnderPrefix(...args),
+        listDirectoryMetaUnderPrefix: (...args) =>
+            baseRepo.listDirectoryMetaUnderPrefix(...args),
+        listEntriesUnderPrefix: (...args) =>
+            baseRepo.listEntriesUnderPrefix(...args),
+        listFileMetaUnderPrefix: async (...args) => {
+            calls.listFileMetaUnderPrefix += 1;
+            return baseRepo.listFileMetaUnderPrefix(...args);
+        },
+        listFileHeadsUnderPrefix: (...args) =>
+            baseRepo.listFileHeadsUnderPrefix(...args),
+        scanContents: async (...args) => {
+            calls.scanContents += 1;
+            return baseRepo.scanContents(...args);
+        },
+        computeEntrySignature: (...args) => baseRepo.computeEntrySignature(...args),
+    };
 
-  const wt = new DefaultWorkplaceService({
-    conn,
-    scope: { kind: "project", projectId },
-    vfs,
-    workplace: new SqliteWorkplaceRepository(conn),
-  });
+    const wt = new DefaultWorkplaceService({
+        conn,
+        scope: { kind: "project", projectId },
+        vfs,
+        workplace: new SqliteWorkplaceRepository(conn),
+    });
 
-  return { wt, calls, vfs: baseRepo };
+    return { wt, calls, vfs: baseRepo };
 }
 
 
 novelMasterTestFixture();
 
 describe("worktree materialize", () => {
-  it("buildListRows and materialize list path never call scanContents", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const pvfs = ctx.projectVfs(project.id);
-    await pvfs.write("/hidden/a.md", "A");
-    await pvfs.write("/hidden/b.md", "B");
-    await pvfs.write("/visible/c.md", "C");
+    it("buildListRows and materialize list path never call scanContents", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const pvfs = ctx.projectVfs(project.id);
+        await pvfs.write("/hidden/a.md", "A");
+        await pvfs.write("/hidden/b.md", "B");
+        await pvfs.write("/visible/c.md", "C");
 
-    const { wt, calls } = createSpyingWorkplaceService(ctx.conn, project.id);
-    await wt.setFileRule({
-      logicalPath: "/visible/c.md",
-      inclusionMode: "show",
+        const { wt, calls } = createSpyingWorkplaceService(ctx.conn, project.id);
+        await wt.setFileRule({
+            logicalPath: "/visible/c.md",
+            inclusionMode: "show",
+        });
+
+        calls.scanContents = 0;
+        calls.findByPath = 0;
+        const rows = unwrap(await wt.buildListRows());
+        assert.ok(rows.length >= 4);
+        assert.equal(calls.scanContents, 0);
+        assert.equal(calls.findByPath, 0);
+
+        calls.scanContents = 0;
+        calls.findByPath = 0;
+        calls.listFileMetaUnderPrefix = 0;
+        // L1 memo（读时校验缓存）：写一个新文件强制签名失效，deprecated
+        // materialize 组合的 live + persist 并发评估经 conn 级 inFlight 去重，
+        // 合并为单次 metadata 加载（旧断言的“各一次”是实例级无共享时的行为）
+        await pvfs.write("/visible/d.md", "D");
+        const materialized = unwrap(await wt.materialize());
+        assert.equal(calls.scanContents, 0);
+        assert.ok(materialized.listRows.length >= 4);
+        assert.equal(
+            calls.listFileMetaUnderPrefix,
+            1,
+            "deprecated materialize 组合 live + persist 经缓存 inFlight 去重合并为单次 metadata",
+        );
     });
 
-    calls.scanContents = 0;
-    calls.findByPath = 0;
-    const rows = unwrap(await wt.buildListRows());
-    assert.ok(rows.length >= 4);
-    assert.equal(calls.scanContents, 0);
-    assert.equal(calls.findByPath, 0);
+    it("filename fill display never calls findByPath", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const pvfs = ctx.projectVfs(project.id);
+        await pvfs.write("/fn/a.md", "BODY-A");
+        await pvfs.write("/fn/b.md", "BODY-B");
 
-    calls.scanContents = 0;
-    calls.findByPath = 0;
-    calls.listFileMetaUnderPrefix = 0;
-    // L1 memo（读时校验缓存）：写一个新文件强制签名失效，deprecated
-    // materialize 组合的 live + persist 并发评估经 conn 级 inFlight 去重，
-    // 合并为单次 metadata 加载（旧断言的“各一次”是实例级无共享时的行为）
-    await pvfs.write("/visible/d.md", "D");
-    const materialized = unwrap(await wt.materialize());
-    assert.equal(calls.scanContents, 0);
-    assert.ok(materialized.listRows.length >= 4);
-    assert.equal(
-      calls.listFileMetaUnderPrefix,
-      1,
-      "deprecated materialize 组合 live + persist 经缓存 inFlight 去重合并为单次 metadata",
-    );
-  });
+        const { wt, calls } = createSpyingWorkplaceService(ctx.conn, project.id);
+        await wt.setDirRule({
+            logicalPath: "/fn",
+            ruleEnabled: true,
+            headCount: 0,
+            tailCount: 0,
+            fillPolicy: "filename",
+        });
 
-  it("filename fill display never calls findByPath", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const pvfs = ctx.projectVfs(project.id);
-    await pvfs.write("/fn/a.md", "BODY-A");
-    await pvfs.write("/fn/b.md", "BODY-B");
-
-    const { wt, calls } = createSpyingWorkplaceService(ctx.conn, project.id);
-    await wt.setDirRule({
-      logicalPath: "/fn",
-      ruleEnabled: true,
-      headCount: 0,
-      tailCount: 0,
-      fillPolicy: "filename",
+        calls.findByPath = 0;
+        const materialized = unwrap(await wt.materialize());
+        assert.equal(calls.findByPath, 0);
+        assert.match(materialized.workplaceDisplay, /a\.md/);
+        assert.match(materialized.workplaceDisplay, /b\.md/);
+        assert.doesNotMatch(materialized.workplaceDisplay, /BODY-A/);
     });
 
-    calls.findByPath = 0;
-    const materialized = unwrap(await wt.materialize());
-    assert.equal(calls.findByPath, 0);
-    assert.match(materialized.workplaceDisplay, /a\.md/);
-    assert.match(materialized.workplaceDisplay, /b\.md/);
-    assert.doesNotMatch(materialized.workplaceDisplay, /BODY-A/);
-  });
+    it("lazy findByPath only for visible full/header files", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const pvfs = ctx.projectVfs(project.id);
+        for (let i = 0; i < 10; i += 1) {
+            await pvfs.write(`/batch/f${i}.md`, `body-${i}`);
+        }
+        await pvfs.write("/batch/show-a.md", "FULL-A");
+        await pvfs.write("/batch/show-b.md", "FULL-B");
 
-  it("lazy findByPath only for visible full/header files", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const pvfs = ctx.projectVfs(project.id);
-    for (let i = 0; i < 10; i += 1) {
-      await pvfs.write(`/batch/f${i}.md`, `body-${i}`);
-    }
-    await pvfs.write("/batch/show-a.md", "FULL-A");
-    await pvfs.write("/batch/show-b.md", "FULL-B");
+        const { wt, calls } = createSpyingWorkplaceService(ctx.conn, project.id);
+        await wt.setFileRule({
+            logicalPath: "/batch/show-a.md",
+            inclusionMode: "show",
+        });
+        await wt.setFileRule({
+            logicalPath: "/batch/show-b.md",
+            inclusionMode: "show",
+        });
+        await wt.setDirRule({
+            logicalPath: "/batch",
+            headCount: 0,
+            tailCount: 0,
+            fillPolicy: "hidden",
+        });
 
-    const { wt, calls } = createSpyingWorkplaceService(ctx.conn, project.id);
-    await wt.setFileRule({
-      logicalPath: "/batch/show-a.md",
-      inclusionMode: "show",
-    });
-    await wt.setFileRule({
-      logicalPath: "/batch/show-b.md",
-      inclusionMode: "show",
-    });
-    await wt.setDirRule({
-      logicalPath: "/batch",
-      headCount: 0,
-      tailCount: 0,
-      fillPolicy: "hidden",
-    });
-
-    calls.findByPath = 0;
-    const materialized = unwrap(await wt.materialize());
-    assert.equal(
-      calls.findByPath,
-      2,
-      "only show (full) files read content; auto files hidden",
-    );
-    assert.match(materialized.workplaceDisplay, /show-a\.md/);
-    assert.match(materialized.workplaceDisplay, /show-b\.md/);
-  });
-
-  it("materialize listRows match buildListRows order", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const pvfs = ctx.projectVfs(project.id);
-    await pvfs.write("/parent/a.md", "A");
-    await pvfs.write("/parent/sub/b.md", "B");
-
-    const wt = createSpyingWorkplaceService(ctx.conn, project.id).wt;
-    await wt.setFileRule({
-      logicalPath: "/parent/a.md",
-      inclusionMode: "show",
-    });
-    await wt.setFileRule({
-      logicalPath: "/parent/sub/b.md",
-      inclusionMode: "show",
+        calls.findByPath = 0;
+        const materialized = unwrap(await wt.materialize());
+        assert.equal(
+            calls.findByPath,
+            2,
+            "only show (full) files read content; auto files hidden",
+        );
+        assert.match(materialized.workplaceDisplay, /show-a\.md/);
+        assert.match(materialized.workplaceDisplay, /show-b\.md/);
     });
 
-    const [rows, materialized] = await Promise.all([
-      wt.buildListRows().then(unwrap),
-      wt.materialize().then(unwrap),
-    ]);
-    assert.deepEqual(
-      rows.map((r) => r.path),
-      materialized.listRows.map((r) => r.path),
-    );
-  });
+    it("materialize listRows match buildListRows order", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const pvfs = ctx.projectVfs(project.id);
+        await pvfs.write("/parent/a.md", "A");
+        await pvfs.write("/parent/sub/b.md", "B");
 
-  it("materialize filetreeDisplay 与 renderFileTree 一致且含加载后缀", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const pvfs = ctx.projectVfs(project.id);
-    await pvfs.write("/a.md", "A");
-    await pvfs.write("/b.md", "B");
+        const wt = createSpyingWorkplaceService(ctx.conn, project.id).wt;
+        await wt.setFileRule({
+            logicalPath: "/parent/a.md",
+            inclusionMode: "show",
+        });
+        await wt.setFileRule({
+            logicalPath: "/parent/sub/b.md",
+            inclusionMode: "show",
+        });
 
-    const { wt } = createSpyingWorkplaceService(ctx.conn, project.id);
-    await wt.setFileRule({
-      logicalPath: "/a.md",
-      inclusionMode: "show",
+        const [rows, materialized] = await Promise.all([
+            wt.buildListRows().then(unwrap),
+            wt.materialize().then(unwrap),
+        ]);
+        assert.deepEqual(
+            rows.map((r) => r.path),
+            materialized.listRows.map((r) => r.path),
+        );
     });
 
-    const materialized = unwrap(await wt.materialize());
-    const fileTree = unwrap(await wt.renderFileTree());
-    assert.equal(materialized.filetreeDisplay, fileTree);
-    assert.match(materialized.filetreeDisplay, /a\.md 全部加载/);
-  });
+    it("materialize filetreeDisplay 与 renderFileTree 一致且含加载后缀", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const pvfs = ctx.projectVfs(project.id);
+        await pvfs.write("/a.md", "A");
+        await pvfs.write("/b.md", "B");
 
-  it("T-WEC11: materializePersistBlock 与 renderDisplay 一致", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
-    await svfs.write("/note.md", "hello");
+        const { wt } = createSpyingWorkplaceService(ctx.conn, project.id);
+        await wt.setFileRule({
+            logicalPath: "/a.md",
+            inclusionMode: "show",
+        });
 
-    const { WorkplaceServiceFactory } = await import("@novel-master/core/workplace");
-    const wt = WorkplaceServiceFactory.create(ctx.conn, {
-      kind: "session",
-      projectId: project.id,
-      sessionId: session.id,
+        const materialized = unwrap(await wt.materialize());
+        const fileTree = unwrap(await wt.renderFileTree());
+        assert.equal(materialized.filetreeDisplay, fileTree);
+        assert.match(materialized.filetreeDisplay, /a\.md 全部加载/);
     });
 
-    const { workplaceDisplay } = unwrap(await wt.materializePersistBlock());
-    assert.ok(workplaceDisplay.length > 0);
-    const display = unwrap(await wt.renderDisplay());
-    assert.equal(workplaceDisplay, display);
-  });
+    it("T-WEC11: materializePersistBlock 与 renderDisplay 一致", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
+        await svfs.write("/note.md", "hello");
+
+        const { WorkplaceServiceFactory } = await import("@novel-master/core/workplace");
+        const wt = WorkplaceServiceFactory.create(ctx.conn, {
+            kind: "session",
+            projectId: project.id,
+            sessionId: session.id,
+        });
+
+        const { workplaceDisplay } = unwrap(await wt.materializePersistBlock());
+        assert.ok(workplaceDisplay.length > 0);
+        const display = unwrap(await wt.renderDisplay());
+        assert.equal(workplaceDisplay, display);
+    });
 });

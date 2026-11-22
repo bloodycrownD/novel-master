@@ -24,17 +24,17 @@ import type { RestorePathDeps, RestorePathError, RestorePathOutcome, RestorePath
 
 /** `DeletedEntry.revive` 依赖：restore 底座里 revive 必需的三项 + 必填 entryRepo。 */
 export type ReviveDeletedEntryDeps = Pick<RestorePathDeps, "vfs" | "revisionRepo" | "contentStore"> & {
-  readonly entryRepo: VfsEntryRepository;
+    readonly entryRepo: VfsEntryRepository;
 };
 
 /** `DeletedEntry.revive` 定位参数：checkpoint 旧 entryId 必填。 */
 export type ReviveDeletedEntryParams = Pick<RestorePathParams, "scope" | "logicalPath" | "version"> & {
-  /** checkpoint 记录的旧 entryId（复活分支的寻址依据）。 */
-  readonly checkpointEntryId: number;
+    /** checkpoint 记录的旧 entryId（复活分支的寻址依据）。 */
+    readonly checkpointEntryId: number;
 };
 
 export const DeletedEntry = {
-  /**
+    /**
    * 按 checkpoint 旧 entryId 复活已删 entry 并把 live head 拨回目标 version。
    *
    * 步骤：
@@ -49,66 +49,66 @@ export const DeletedEntry = {
    * @remarks 占用探测直查 DB（不信 prefetch）：prefetch 的 entryIdByPath 来自
    *          live heads 快照，复活场景本就不在快照内；直查还能兜住快照过时的边界。
    */
-  async revive(deps: ReviveDeletedEntryDeps, params: ReviveDeletedEntryParams): Promise<Result<RestorePathOutcome, RestorePathError>> {
-    const { vfs, entryRepo, revisionRepo, contentStore } = deps;
-    const { scope, logicalPath, checkpointEntryId, version } = params;
-    const scopeKeyStr = LogicalPath.scopeKey(scope);
+    async revive(deps: ReviveDeletedEntryDeps, params: ReviveDeletedEntryParams): Promise<Result<RestorePathOutcome, RestorePathError>> {
+        const { vfs, entryRepo, revisionRepo, contentStore } = deps;
+        const { scope, logicalPath, checkpointEntryId, version } = params;
+        const scopeKeyStr = LogicalPath.scopeKey(scope);
 
-    const meta = await revisionRepo.findMetaByEntryAndVersion(checkpointEntryId, version);
-    if (meta == null) {
-      // revision 真缺（非 entry 缺）：维持降级语义。
-      return Result.err(new AppError("SESSION_FS_RESTORE_REVISION_MISSING", { descriptor: { key: "error.session_fs.restore_revision_missing", params: { logical_path: logicalPath, revision_version: version } }, logicalPath, revisionVersion: version }));
-    }
-    if (meta.status === "deleted") {
-      // 防御：checkpoint 只 capture live head，正常不指向 deleted 态；
-      // revisionHeadBackfill 对 entry 已删场景回补的 deleted 墓碑会落到这里——
-      // 目标即删除态，路径上不留文件。
-      const removed = await vfs.delete(logicalPath);
-      if (!removed.ok && !AppErrorOps.is(removed.error, "VFS_NOT_FOUND")) {
-        return Result.err(removed.error);
-      }
-      return Result.ok("deleted");
-    }
+        const meta = await revisionRepo.findMetaByEntryAndVersion(checkpointEntryId, version);
+        if (meta == null) {
+            // revision 真缺（非 entry 缺）：维持降级语义。
+            return Result.err(new AppError("SESSION_FS_RESTORE_REVISION_MISSING", { descriptor: { key: "error.session_fs.restore_revision_missing", params: { logical_path: logicalPath, revision_version: version } }, logicalPath, revisionVersion: version }));
+        }
+        if (meta.status === "deleted") {
+            // 防御：checkpoint 只 capture live head，正常不指向 deleted 态；
+            // revisionHeadBackfill 对 entry 已删场景回补的 deleted 墓碑会落到这里——
+            // 目标即删除态，路径上不留文件。
+            const removed = await vfs.delete(logicalPath);
+            if (!removed.ok && !AppErrorOps.is(removed.error, "VFS_NOT_FOUND")) {
+                return Result.err(removed.error);
+            }
+            return Result.ok("deleted");
+        }
 
-    const rev = await revisionRepo.findByEntryAndVersion(checkpointEntryId, version);
-    if (!rev.ok) return Result.err(rev.error);
-    if (rev.value == null || rev.value.content == null) {
-      // 与 RestorePath.restoreToRevision 正常分支同口径：active 行无正文无法恢复。
-      return Result.err(new AppError("SESSION_FS_RESTORE_REVISION_MISSING", { descriptor: { key: "error.session_fs.restore_revision_missing", params: { logical_path: logicalPath, revision_version: version } }, logicalPath, revisionVersion: version }));
-    }
+        const rev = await revisionRepo.findByEntryAndVersion(checkpointEntryId, version);
+        if (!rev.ok) return Result.err(rev.error);
+        if (rev.value == null || rev.value.content == null) {
+            // 与 RestorePath.restoreToRevision 正常分支同口径：active 行无正文无法恢复。
+            return Result.err(new AppError("SESSION_FS_RESTORE_REVISION_MISSING", { descriptor: { key: "error.session_fs.restore_revision_missing", params: { logical_path: logicalPath, revision_version: version } }, logicalPath, revisionVersion: version }));
+        }
 
-    // 路径被新 entry 占用（删除后同路径重建）：先墓碑删掉新 entry。
-    // 按「回滚后工作区正文 = 目标检查点完成态」拍板——旧内容回来、tail 期
-    // 新建的同路径文件被回退；新 entry 的 revision 历史保留在其 entryId 下。
-    const occupied = await entryRepo.findByPath(scopeKeyStr, logicalPath);
-    if (!occupied.ok) return Result.err(occupied.error);
-    if (occupied.value != null) {
-      const removed = await vfs.delete(logicalPath);
-      if (!removed.ok && !AppErrorOps.is(removed.error, "VFS_NOT_FOUND")) {
-        return Result.err(removed.error);
-      }
-    }
+        // 路径被新 entry 占用（删除后同路径重建）：先墓碑删掉新 entry。
+        // 按「回滚后工作区正文 = 目标检查点完成态」拍板——旧内容回来、tail 期
+        // 新建的同路径文件被回退；新 entry 的 revision 历史保留在其 entryId 下。
+        const occupied = await entryRepo.findByPath(scopeKeyStr, logicalPath);
+        if (!occupied.ok) return Result.err(occupied.error);
+        if (occupied.value != null) {
+            const removed = await vfs.delete(logicalPath);
+            if (!removed.ok && !AppErrorOps.is(removed.error, "VFS_NOT_FOUND")) {
+                return Result.err(removed.error);
+            }
+        }
 
-    // put 幂等：blob 正常由 revision 触发器维护在位，这里确保复活 entry 的
-    // content_hash 有 blob 可解，并回取权威 hash（对齐 resetHeadToVersion）。
-    const contentHash = contentStore ? await contentStore.put(rev.value.content) : meta.contentHash;
-    if (contentHash == null || contentHash.length === 0) {
-      return Result.err(new AppError("SESSION_FS_RESTORE_REVISION_MISSING", { descriptor: { key: "error.session_fs.restore_revision_missing", params: { logical_path: logicalPath, revision_version: version } }, logicalPath, revisionVersion: version }));
-    }
+        // put 幂等：blob 正常由 revision 触发器维护在位，这里确保复活 entry 的
+        // content_hash 有 blob 可解，并回取权威 hash（对齐 resetHeadToVersion）。
+        const contentHash = contentStore ? await contentStore.put(rev.value.content) : meta.contentHash;
+        if (contentHash == null || contentHash.length === 0) {
+            return Result.err(new AppError("SESSION_FS_RESTORE_REVISION_MISSING", { descriptor: { key: "error.session_fs.restore_revision_missing", params: { logical_path: logicalPath, revision_version: version } }, logicalPath, revisionVersion: version }));
+        }
 
-    const ensured = await DirectoryChain.ensure(vfs, logicalPath);
-    if (!ensured.ok) {
-      return Result.err(ensured.error);
-    }
-    await entryRepo.reviveEntryAtVersion({
-      entryId: checkpointEntryId,
-      scopeKey: scopeKeyStr,
-      path: logicalPath,
-      contentHash,
-      headVersion: version,
-      mtimeMs: rev.value.mtimeMs,
-    });
-    await RevisionRefCount.adjust(revisionRepo, checkpointEntryId, version, +1);
-    return Result.ok("restored");
-  },
+        const ensured = await DirectoryChain.ensure(vfs, logicalPath);
+        if (!ensured.ok) {
+            return Result.err(ensured.error);
+        }
+        await entryRepo.reviveEntryAtVersion({
+            entryId: checkpointEntryId,
+            scopeKey: scopeKeyStr,
+            path: logicalPath,
+            contentHash,
+            headVersion: version,
+            mtimeMs: rev.value.mtimeMs,
+        });
+        await RevisionRefCount.adjust(revisionRepo, checkpointEntryId, version, +1);
+        return Result.ok("restored");
+    },
 } as const;

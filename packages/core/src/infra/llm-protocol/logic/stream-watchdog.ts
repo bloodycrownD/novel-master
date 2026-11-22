@@ -22,63 +22,63 @@
 export const STREAM_IDLE_TIMEOUT_MS = 30_000;
 
 interface StreamWatchdogHandle {
-  /**
+    /**
    * 收到任何响应数据时调用（含空 chunk）：重置空闲定时器。
    * onTimeout 触发或 dispose 后调用为空操作（看门狗已进入终态）。
    */
-  noteActivity(): void;
-  /** 清空全部定时器并进入终态（请求正常收尾 / 错误清理路径调用，幂等）。 */
-  dispose(): void;
+    noteActivity(): void;
+    /** 清空全部定时器并进入终态（请求正常收尾 / 错误清理路径调用，幂等）。 */
+    dispose(): void;
 }
 
 interface StreamWatchdogOptions {
-  /** 流空闲超时阈值，默认 {@link STREAM_IDLE_TIMEOUT_MS}。 */
-  readonly idleTimeoutMs?: number;
-  /** 空闲 deadline 到点时回调一次；此后看门狗进入终态，不再触发。 */
-  readonly onTimeout: () => void;
+    /** 流空闲超时阈值，默认 {@link STREAM_IDLE_TIMEOUT_MS}。 */
+    readonly idleTimeoutMs?: number;
+    /** 空闲 deadline 到点时回调一次；此后看门狗进入终态，不再触发。 */
+    readonly onTimeout: () => void;
 }
 
 export const StreamWatchdog = {
-  /**
+    /**
    * 创建空闲看门狗。构造时不启动定时器——首个 {@link StreamWatchdogHandle.noteActivity}
    * 才武装空闲 deadline。纯 `setTimeout` 实现，fake timers 可直测。
    */
-  create(options: StreamWatchdogOptions): StreamWatchdogHandle {
-    const idleTimeoutMs = options.idleTimeoutMs ?? STREAM_IDLE_TIMEOUT_MS;
+    create(options: StreamWatchdogOptions): StreamWatchdogHandle {
+        const idleTimeoutMs = options.idleTimeoutMs ?? STREAM_IDLE_TIMEOUT_MS;
 
-    let idleTimer: ReturnType<typeof setTimeout> | null = null;
-    let fired = false;
+        let idleTimer: ReturnType<typeof setTimeout> | null = null;
+        let fired = false;
 
-    // nm-style: keep-closure — idleTimer 是 handle 私有定时器槽（闭包生命周期=watchdog 生命周期）；本文件已退役零生产接入方且 STREAM_IDLE_TIMEOUT_MS 在 allowlist 冻结面，抽取零收益。
-    const clearIdleTimer = (): void => {
-      if (idleTimer != null) {
-        clearTimeout(idleTimer);
-        idleTimer = null;
-      }
-    };
+        // nm-style: keep-closure — idleTimer 是 handle 私有定时器槽（闭包生命周期=watchdog 生命周期）；本文件已退役零生产接入方且 STREAM_IDLE_TIMEOUT_MS 在 allowlist 冻结面，抽取零收益。
+        const clearIdleTimer = (): void => {
+            if (idleTimer != null) {
+                clearTimeout(idleTimer);
+                idleTimer = null;
+            }
+        };
 
-    return {
-      noteActivity(): void {
-        if (fired) {
-          return;
-        }
-        clearIdleTimer();
-        idleTimer = setTimeout(() => {
-          idleTimer = null;
-          if (fired) {
-            return;
-          }
-          fired = true;
-          options.onTimeout();
-        }, idleTimeoutMs);
-      },
+        return {
+            noteActivity(): void {
+                if (fired) {
+                    return;
+                }
+                clearIdleTimer();
+                idleTimer = setTimeout(() => {
+                    idleTimer = null;
+                    if (fired) {
+                        return;
+                    }
+                    fired = true;
+                    options.onTimeout();
+                }, idleTimeoutMs);
+            },
 
-      dispose(): void {
-        // dispose 即终态：与 onTimeout 触发同级——此后迟到的 noteActivity
-        // （正常收尾后偶发的活动回调）不得重启空闲定时器造成泄漏。
-        fired = true;
-        clearIdleTimer();
-      },
-    };
-  },
+            dispose(): void {
+                // dispose 即终态：与 onTimeout 触发同级——此后迟到的 noteActivity
+                // （正常收尾后偶发的活动回调）不得重启空闲定时器造成泄漏。
+                fired = true;
+                clearIdleTimer();
+            },
+        };
+    },
 } as const;

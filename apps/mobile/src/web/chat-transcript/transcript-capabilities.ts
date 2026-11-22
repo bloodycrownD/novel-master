@@ -37,25 +37,25 @@ export const TRANSCRIPT_READY_VERSION = 't2';
 
 /** 当前 webview 实现声明的能力清单（ready 上报的真实来源）。 */
 export const TRANSCRIPT_CAPABILITIES: readonly string[] = [
-  TRANSCRIPT_CAPABILITY_STREAM_BLOCK_COMMIT,
-  TRANSCRIPT_CAPABILITY_STREAM_PROJECTION,
+    TRANSCRIPT_CAPABILITY_STREAM_BLOCK_COMMIT,
+    TRANSCRIPT_CAPABILITY_STREAM_PROJECTION,
 ];
 
 export namespace TranscriptCapabilities {
-  /**
+    /**
    * 能力清单判定：缺省 / 非数组 / 未命中一律视为未声明。
    * 用显式循环而非 Array.prototype.includes，避免老 WebView 内核差异。
    */
-  // prettier-ignore
-  export function include(caps: readonly string[] | undefined | null, target: string): boolean {
-    if (!caps) {
-      return false;
+    // prettier-ignore
+    export function include(caps: readonly string[] | undefined | null, target: string): boolean {
+        if (!caps) {
+            return false;
+        }
+        for (let i = 0; i < caps.length; i++) {
+            if (caps[i] === target) {
+                return true;
+            }
+        }
+        return false;
     }
-    for (let i = 0; i < caps.length; i++) {
-      if (caps[i] === target) {
-        return true;
-      }
-    }
-    return false;
-  }
 }

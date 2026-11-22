@@ -11,89 +11,89 @@ import assert from "node:assert/strict";
 import { before, describe, it } from "node:test";
 
 import {
-  CHARACTERS_PER_TOKEN_RATIO,
-  DefaultTokenCounterRegistry,
-  PromptLlmInputCount,
-  serializePromptLlmInput,
-  TokenCountTools,
-  type TokenizerFamily,
+    CHARACTERS_PER_TOKEN_RATIO,
+    DefaultTokenCounterRegistry,
+    PromptLlmInputCount,
+    serializePromptLlmInput,
+    TokenCountTools,
+    type TokenizerFamily,
 } from "@novel-master/core/tokenizer";
 import { EncodingCache } from "../src/impl/encoding-cache.js";
 import { SentencePieceFamilyCount } from "../src/impl/sentencepiece-token-counter.js";
 import {
-  WebFamilyCount,
-  WebTokenizerCounter,
+    WebFamilyCount,
+    WebTokenizerCounter,
 } from "../src/impl/web-tokenizer-counter.js";
 import { TokenizerNodeRegisterForTests } from "../src/register-for-tests.js";
 
 /** 一段中文正文：字符折算在它上面低估得最明显。 */
 const CHINESE =
-  "他把伞收了，窗外的雨顺着玻璃往下淌，街灯在水洼里碎成一片橙。".repeat(20);
+    "他把伞收了，窗外的雨顺着玻璃往下淌，街灯在水洼里碎成一片橙。".repeat(20);
 
 /** node 驱动的 `tokenizerAssetPaths` 对这个家族返回 null ⇒ 加载必然失败 ⇒ 必走兜底。 */
 const UNKNOWN_FAMILY = "no-such-family" as unknown as TokenizerFamily;
 
 describe("兜底计数口径", () => {
-  before(() => {
-    TokenizerNodeRegisterForTests.registerForTests();
-  });
-
-  it("F1: web 家族加载失败 → 默认 cl100k 真计数（非字符折算）", async () => {
-    const result = await WebFamilyCount.countPrompt(UNKNOWN_FAMILY, CHINESE);
-    assert.equal(result.estimated, true);
-    assert.equal(result.count, EncodingCache.countText(CHINESE));
-    assert.ok(
-      result.count > Math.ceil(CHINESE.length / CHARACTERS_PER_TOKEN_RATIO) * 3,
-      `web 兜底 ${result.count} 应远大于字符折算`,
-    );
-  });
-
-  it("F2: sentencepiece 家族加载失败 → 默认 cl100k 真计数（非字符折算）", async () => {
-    const result = await SentencePieceFamilyCount.countPrompt(UNKNOWN_FAMILY, CHINESE);
-    assert.equal(result.estimated, true);
-    assert.equal(result.count, EncodingCache.countText(CHINESE));
-    assert.ok(
-      result.count > Math.ceil(CHINESE.length / CHARACTERS_PER_TOKEN_RATIO) * 3,
-      `sentencepiece 兜底 ${result.count} 应远大于字符折算`,
-    );
-  });
-
-  it("F3: 同步 countText / countMessages 仍是字符折算（同步 port 不改）", () => {
-    const counter = new WebTokenizerCounter(UNKNOWN_FAMILY as never);
-    const charRatio = Math.ceil(CHINESE.length / CHARACTERS_PER_TOKEN_RATIO);
-    assert.equal(counter.countText(CHINESE), charRatio);
-    assert.equal(counter.countMessages([]), 0);
-  });
-
-  it("F4: 连 cl100k 表都建不起来 → 才退到最后一级的字符折算", async () => {
-    // 注入「构造必失败」的编码表工厂，复现 ranks 资源缺失这类环境级故障。
-    EncodingCache.__setFactoryForTests(() => {
-      throw new Error("boom: encoding table unavailable");
+    before(() => {
+        TokenizerNodeRegisterForTests.registerForTests();
     });
-    try {
-      assert.equal(EncodingCache.countText(CHINESE), null);
 
-      const layout = { system: CHINESE, persist: [], dynamic: [] };
-      const ctx = { workplaceDisplay: "", messages: [] };
-      const result = (await PromptLlmInputCount.count({
-        layout,
-        ctx,
-        savedModelId: "openai/my-custom/foo",
-        registry: DefaultTokenCounterRegistry.create({} as Record<string, never>),
-      })).value;
-      const serialized =
-        (await serializePromptLlmInput(layout, ctx)).value +
-        TokenCountTools.serialize(undefined);
+    it("F1: web 家族加载失败 → 默认 cl100k 真计数（非字符折算）", async () => {
+        const result = await WebFamilyCount.countPrompt(UNKNOWN_FAMILY, CHINESE);
+        assert.equal(result.estimated, true);
+        assert.equal(result.count, EncodingCache.countText(CHINESE));
+        assert.ok(
+            result.count > Math.ceil(CHINESE.length / CHARACTERS_PER_TOKEN_RATIO) * 3,
+            `web 兜底 ${result.count} 应远大于字符折算`,
+        );
+    });
 
-      assert.equal(result.counterKind, "heuristic");
-      assert.equal(result.estimated, true);
-      assert.equal(
-        result.tokenCount,
-        Math.ceil(serialized.length / CHARACTERS_PER_TOKEN_RATIO),
-      );
-    } finally {
-      // 还原真实构造器（会顺带作废缓存），别把故障留给后续用例。
-      EncodingCache.__setFactoryForTests(null);
-    }
-  });
+    it("F2: sentencepiece 家族加载失败 → 默认 cl100k 真计数（非字符折算）", async () => {
+        const result = await SentencePieceFamilyCount.countPrompt(UNKNOWN_FAMILY, CHINESE);
+        assert.equal(result.estimated, true);
+        assert.equal(result.count, EncodingCache.countText(CHINESE));
+        assert.ok(
+            result.count > Math.ceil(CHINESE.length / CHARACTERS_PER_TOKEN_RATIO) * 3,
+            `sentencepiece 兜底 ${result.count} 应远大于字符折算`,
+        );
+    });
+
+    it("F3: 同步 countText / countMessages 仍是字符折算（同步 port 不改）", () => {
+        const counter = new WebTokenizerCounter(UNKNOWN_FAMILY as never);
+        const charRatio = Math.ceil(CHINESE.length / CHARACTERS_PER_TOKEN_RATIO);
+        assert.equal(counter.countText(CHINESE), charRatio);
+        assert.equal(counter.countMessages([]), 0);
+    });
+
+    it("F4: 连 cl100k 表都建不起来 → 才退到最后一级的字符折算", async () => {
+        // 注入「构造必失败」的编码表工厂，复现 ranks 资源缺失这类环境级故障。
+        EncodingCache.__setFactoryForTests(() => {
+            throw new Error("boom: encoding table unavailable");
+        });
+        try {
+            assert.equal(EncodingCache.countText(CHINESE), null);
+
+            const layout = { system: CHINESE, persist: [], dynamic: [] };
+            const ctx = { workplaceDisplay: "", messages: [] };
+            const result = (await PromptLlmInputCount.count({
+                layout,
+                ctx,
+                savedModelId: "openai/my-custom/foo",
+                registry: DefaultTokenCounterRegistry.create({} as Record<string, never>),
+            })).value;
+            const serialized =
+                (await serializePromptLlmInput(layout, ctx)).value +
+                TokenCountTools.serialize(undefined);
+
+            assert.equal(result.counterKind, "heuristic");
+            assert.equal(result.estimated, true);
+            assert.equal(
+                result.tokenCount,
+                Math.ceil(serialized.length / CHARACTERS_PER_TOKEN_RATIO),
+            );
+        } finally {
+            // 还原真实构造器（会顺带作废缓存），别把故障留给后续用例。
+            EncodingCache.__setFactoryForTests(null);
+        }
+    });
 });

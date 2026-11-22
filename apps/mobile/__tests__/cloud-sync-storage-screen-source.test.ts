@@ -15,50 +15,50 @@ import {readFileSync} from 'fs';
 import {join} from 'path';
 
 const source = readFileSync(
-  join(__dirname, '../src/screens/stack/CloudSyncStorageScreen.tsx'),
-  'utf8',
+    join(__dirname, '../src/screens/stack/CloudSyncStorageScreen.tsx'),
+    'utf8',
 );
 
 describe('CloudSyncStorageScreen 云端存储设置页', () => {
-  it('同步状态卡存在：展示云端/本机 rev 与对齐提示', () => {
-    expect(source).toMatch(/title=\{coreT\(\{key: "ui\.cloud_sync\.sync_status"\}\)\}/);
-    expect(source).toMatch(/label: coreT\(\{key: "ui\.cloud_sync\.rev_cloud"\}\)/);
-    expect(source).toMatch(/label: coreT\(\{key: "ui\.cloud_sync\.rev_local"\}\)/);
-    expect(source).toMatch(/ui\.cloud_sync\.cloud_newer_hint/);
-  });
+    it('同步状态卡存在：展示云端/本机 rev 与对齐提示', () => {
+        expect(source).toMatch(/title=\{coreT\(\{key: "ui\.cloud_sync\.sync_status"\}\)\}/);
+        expect(source).toMatch(/label: coreT\(\{key: "ui\.cloud_sync\.rev_cloud"\}\)/);
+        expect(source).toMatch(/label: coreT\(\{key: "ui\.cloud_sync\.rev_local"\}\)/);
+        expect(source).toMatch(/ui\.cloud_sync\.cloud_newer_hint/);
+    });
 
-  it('进入页面经 refreshCloudSyncStatus 拉取同步状态（getCloudSyncStatusView）', () => {
-    expect(source).toMatch(/CloudSyncService\.getStatusView/);
-    expect(source).toMatch(/refreshCloudSyncStatus/);
-    expect(source).toMatch(/useFocusEffect/);
-  });
+    it('进入页面经 refreshCloudSyncStatus 拉取同步状态（getCloudSyncStatusView）', () => {
+        expect(source).toMatch(/CloudSyncService\.getStatusView/);
+        expect(source).toMatch(/refreshCloudSyncStatus/);
+        expect(source).toMatch(/useFocusEffect/);
+    });
 
-  it('云存储配置入口存在：value 显示配置状态，点击进入 CloudSyncConfig', () => {
-    expect(source).toMatch(/coreT\(\{key: "ui\.nav\.cloud_storage"\}\)/);
-    expect(source).toMatch(/cloudConfigured \? coreT\(\{key: "ui\.cloud_sync\.configured"\}\) : coreT\(\{key: "ui\.cloud_sync\.not_configured"\}\)/);
-    expect(source).toMatch(/navigation\.navigate\('CloudSyncConfig'\)/);
-  });
+    it('云存储配置入口存在：value 显示配置状态，点击进入 CloudSyncConfig', () => {
+        expect(source).toMatch(/coreT\(\{key: "ui\.nav\.cloud_storage"\}\)/);
+        expect(source).toMatch(/cloudConfigured \? coreT\(\{key: "ui\.cloud_sync\.configured"\}\) : coreT\(\{key: "ui\.cloud_sync\.not_configured"\}\)/);
+        expect(source).toMatch(/navigation\.navigate\('CloudSyncConfig'\)/);
+    });
 
-  it('拉取/推送菜单项存在，均跳转 CloudSyncProgress（op 区分）', () => {
-    expect(source).toMatch(/coreT\(\{key: "ui\.cloud_sync\.pull_title"\}\)/);
-    expect(source).toMatch(/coreT\(\{key: "ui\.cloud_sync\.push_title"\}\)/);
-    expect(source).toMatch(
-      /navigation\.navigate\('CloudSyncProgress', \{op: 'pull'\}\)/,
-    );
-    expect(source).toMatch(
-      /navigation\.navigate\('CloudSyncProgress', \{op: 'push'\}\)/,
-    );
-  });
+    it('拉取/推送菜单项存在，均跳转 CloudSyncProgress（op 区分）', () => {
+        expect(source).toMatch(/coreT\(\{key: "ui\.cloud_sync\.pull_title"\}\)/);
+        expect(source).toMatch(/coreT\(\{key: "ui\.cloud_sync\.push_title"\}\)/);
+        expect(source).toMatch(
+            /navigation\.navigate\('CloudSyncProgress', \{op: 'pull'\}\)/,
+        );
+        expect(source).toMatch(
+            /navigation\.navigate\('CloudSyncProgress', \{op: 'push'\}\)/,
+        );
+    });
 
-  it('从云端拉取有 Alert 二次确认，取消/拉取两个动作', () => {
-    expect(source).toMatch(/Alert\.alert\(coreT\(\{key: "ui\.cloud_sync\.pull_title"\}\), coreT\(\{key: "ui\.cloud_sync\.pull_confirm_msg"\}\)/);
-    expect(source).toMatch(/text: coreT\(\{key: "ui\.common\.cancel"\}\), style: 'cancel'/);
-    expect(source).toMatch(/text: coreT\(\{key: "ui\.cloud_sync\.pull_action"\}\)/);
-  });
+    it('从云端拉取有 Alert 二次确认，取消/拉取两个动作', () => {
+        expect(source).toMatch(/Alert\.alert\(coreT\(\{key: "ui\.cloud_sync\.pull_title"\}\), coreT\(\{key: "ui\.cloud_sync\.pull_confirm_msg"\}\)/);
+        expect(source).toMatch(/text: coreT\(\{key: "ui\.common\.cancel"\}\), style: 'cancel'/);
+        expect(source).toMatch(/text: coreT\(\{key: "ui\.cloud_sync\.pull_action"\}\)/);
+    });
 
-  it('Agent 运行中守卫：同步操作在 agentActive 时禁用', () => {
-    expect(source).toMatch(/agentActivity\.isActive/);
-    expect(source).toMatch(/syncControlsDisabled = agentActive/);
-    expect(source).toMatch(/ui\.cloud_sync\.agent_active_note/);
-  });
+    it('Agent 运行中守卫：同步操作在 agentActive 时禁用', () => {
+        expect(source).toMatch(/agentActivity\.isActive/);
+        expect(source).toMatch(/syncControlsDisabled = agentActive/);
+        expect(source).toMatch(/ui\.cloud_sync\.agent_active_note/);
+    });
 });

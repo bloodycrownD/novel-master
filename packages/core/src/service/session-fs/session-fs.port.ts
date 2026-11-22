@@ -12,7 +12,7 @@ import type { RollbackOptions } from "@/service/message-checkpoint/message-rollb
  * Session-scoped rollback entry point (delegates to message checkpoint restore).
  */
 export interface SessionFsService {
-  /**
+    /**
    * Restores the session workspace to the anchor message checkpoint tree (v2 forward-restore),
    * then deletes messages with `seq > anchor.seq` and tail checkpoints.
    *
@@ -23,5 +23,5 @@ export interface SessionFsService {
    * 名字点明「files」：本门面只负责工作区/VFS 面（分层的稳定 API），消息截断与
    * 回滚计划装配的唯一实现在 `MessageRollbackService.rollbackToMessage`。
    */
-  rollbackFilesToMessage(sessionId: string, projectId: string, messageId: string, options?: RollbackOptions): Promise<Result<void, AppError>>;
+    rollbackFilesToMessage(sessionId: string, projectId: string, messageId: string, options?: RollbackOptions): Promise<Result<void, AppError>>;
 }

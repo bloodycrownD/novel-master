@@ -10,35 +10,35 @@ import type { WorkplaceScope as WorkplaceScopeType } from "../model/workplace-ty
 export type WorkplaceScope = WorkplaceScopeType;
 
 export const WorkplaceScope = {
-  /**
+    /**
    * Stable storage key for a workplace scope.
    */
-  key(scope: WorkplaceScopeType): string {
-    switch (scope.kind) {
-      case "global":
-        return "global";
-      case "project":
-        return `project:${scope.projectId}`;
-      case "session":
-        return `session:${scope.sessionId}`;
-      case "global-meta":
-        return "global:meta";
-      case "project-meta":
-        return `project:${scope.projectId}:meta`;
-    }
-  },
+    key(scope: WorkplaceScopeType): string {
+        switch (scope.kind) {
+            case "global":
+                return "global";
+            case "project":
+                return `project:${scope.projectId}`;
+            case "session":
+                return `session:${scope.sessionId}`;
+            case "global-meta":
+                return "global:meta";
+            case "project-meta":
+                return `project:${scope.projectId}:meta`;
+        }
+    },
 
-  /**
+    /**
    * Root logical path for workplace rules in this scope (unified `/` for all domains).
    */
-  rootLogicalPath(_scope: WorkplaceScopeType): string {
-    return "/";
-  },
+    rootLogicalPath(_scope: WorkplaceScopeType): string {
+        return "/";
+    },
 
-  /**
+    /**
    * Whether `logicalPath` is the scope root (rule cannot be turned off).
    */
-  isRootPath(scope: WorkplaceScopeType, logicalPath: string): boolean {
-    return logicalPath === WorkplaceScope.rootLogicalPath(scope);
-  },
+    isRootPath(scope: WorkplaceScopeType, logicalPath: string): boolean {
+        return logicalPath === WorkplaceScope.rootLogicalPath(scope);
+    },
 } as const;

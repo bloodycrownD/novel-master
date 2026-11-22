@@ -6,110 +6,110 @@ import {Pressable, StyleSheet, Text} from 'react-native';
 import type {ThemeTokens} from '@/theme/tokens';
 
 type BtnProps = {
-  label: string;
-  onPress: () => void;
-  tokens: ThemeTokens;
-  disabled?: boolean;
-  fullWidth?: boolean;
+    label: string;
+    onPress: () => void;
+    tokens: ThemeTokens;
+    disabled?: boolean;
+    fullWidth?: boolean;
 };
 
 export function PrimaryButton({
-  label,
-  onPress,
-  tokens,
-  disabled,
-  fullWidth,
+    label,
+    onPress,
+    tokens,
+    disabled,
+    fullWidth,
 }: BtnProps) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      disabled={disabled}
-      style={({pressed}) => [
-        styles.primary,
-        fullWidth ? styles.fullWidth : null,
-        {
-          backgroundColor: tokens.primary,
-          opacity: disabled ? 0.45 : pressed ? 0.85 : 1,
-        },
-      ]}
-    >
-      <Text
-        pointerEvents="none"
-        style={[styles.primaryText, fullWidth ? styles.fullWidthLabel : null]}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
+    return (
+        <Pressable
+            accessibilityRole="button"
+            onPress={onPress}
+            disabled={disabled}
+            style={({pressed}) => [
+                styles.primary,
+                fullWidth ? styles.fullWidth : null,
+                {
+                    backgroundColor: tokens.primary,
+                    opacity: disabled ? 0.45 : pressed ? 0.85 : 1,
+                },
+            ]}
+        >
+            <Text
+                pointerEvents="none"
+                style={[styles.primaryText, fullWidth ? styles.fullWidthLabel : null]}
+            >
+                {label}
+            </Text>
+        </Pressable>
+    );
 }
 
 export function SecondaryButton({
-  label,
-  onPress,
-  tokens,
-  disabled,
-  fullWidth,
+    label,
+    onPress,
+    tokens,
+    disabled,
+    fullWidth,
 }: BtnProps) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      disabled={disabled}
-      style={({pressed}) => [
-        styles.secondary,
-        fullWidth ? styles.fullWidth : null,
-        {
-          backgroundColor: tokens.bgSecondary,
-          opacity: disabled ? 0.45 : pressed ? 0.85 : 1,
-        },
-      ]}
-    >
-      <Text
-        pointerEvents="none"
-        style={[
-          styles.secondaryText,
-          {color: tokens.text},
-          fullWidth ? styles.fullWidthLabel : null,
-        ]}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
+    return (
+        <Pressable
+            accessibilityRole="button"
+            onPress={onPress}
+            disabled={disabled}
+            style={({pressed}) => [
+                styles.secondary,
+                fullWidth ? styles.fullWidth : null,
+                {
+                    backgroundColor: tokens.bgSecondary,
+                    opacity: disabled ? 0.45 : pressed ? 0.85 : 1,
+                },
+            ]}
+        >
+            <Text
+                pointerEvents="none"
+                style={[
+                    styles.secondaryText,
+                    {color: tokens.text},
+                    fullWidth ? styles.fullWidthLabel : null,
+                ]}
+            >
+                {label}
+            </Text>
+        </Pressable>
+    );
 }
 
 const styles = StyleSheet.create({
-  primary: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
-    // 注意：不要在可拉伸按钮上用 alignItems:'center'——Android 上会把
-    // Pressable 命中区收成文字大小，出现「只有点文字才响应」。
-    justifyContent: 'center',
-  },
-  primaryText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  secondary: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
-    justifyContent: 'center',
-  },
-  secondaryText: {
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  fullWidth: {
-    alignSelf: 'stretch',
-    width: '100%',
-  },
-  fullWidthLabel: {
-    width: '100%',
-  },
+    primary: {
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+        borderRadius: 8,
+        // 注意：不要在可拉伸按钮上用 alignItems:'center'——Android 上会把
+        // Pressable 命中区收成文字大小，出现「只有点文字才响应」。
+        justifyContent: 'center',
+    },
+    primaryText: {
+        color: '#FFFFFF',
+        fontSize: 14,
+        fontWeight: '600',
+        textAlign: 'center',
+    },
+    secondary: {
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+        borderRadius: 8,
+        justifyContent: 'center',
+    },
+    secondaryText: {
+        fontSize: 14,
+        fontWeight: '600',
+        textAlign: 'center',
+    },
+    fullWidth: {
+        alignSelf: 'stretch',
+        width: '100%',
+    },
+    fullWidthLabel: {
+        width: '100%',
+    },
 });

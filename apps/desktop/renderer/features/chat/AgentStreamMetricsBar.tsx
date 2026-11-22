@@ -13,26 +13,26 @@ import { coreT } from "@shared/logic/core-i18n";
 import { buildAgentStreamMetricsLabel, type AgentStreamMetricsView } from "@/hooks/useAgentStreamMetrics";
 
 type Props = {
-  metrics: AgentStreamMetricsView;
-  /** 点击指标条打开用量详情弹窗（metric-detail-sheet）；不传仍可聚焦播报。 */
-  onClick?: () => void;
-  /** 锚定弹窗用：按钮 DOM 引用透传给父层（MetricsDetailPopover 定位锚点）。 */
-  buttonRef?: React.RefObject<HTMLButtonElement | null>;
+    metrics: AgentStreamMetricsView;
+    /** 点击指标条打开用量详情弹窗（metric-detail-sheet）；不传仍可聚焦播报。 */
+    onClick?: () => void;
+    /** 锚定弹窗用：按钮 DOM 引用透传给父层（MetricsDetailPopover 定位锚点）。 */
+    buttonRef?: React.RefObject<HTMLButtonElement | null>;
 };
 
 export function AgentStreamMetricsBar({ metrics, onClick, buttonRef }: Props) {
-  const line = buildAgentStreamMetricsLabel(metrics);
+    const line = buildAgentStreamMetricsLabel(metrics);
 
-  return (
-    <button
-      type="button"
-      ref={buttonRef}
-      className="agent-stream-metrics-bar"
-      aria-live="polite"
-      aria-label={coreT({key: "ui.stats.metrics_bar_aria_desktop", params: {line}})}
-      onClick={onClick}
-    >
-      <span className="agent-stream-metrics-bar__line">{line}</span>
-    </button>
-  );
+    return (
+        <button
+            type="button"
+            ref={buttonRef}
+            className="agent-stream-metrics-bar"
+            aria-live="polite"
+            aria-label={coreT({key: "ui.stats.metrics_bar_aria_desktop", params: {line}})}
+            onClick={onClick}
+        >
+            <span className="agent-stream-metrics-bar__line">{line}</span>
+        </button>
+    );
 }

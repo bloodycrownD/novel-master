@@ -14,110 +14,110 @@ import {  tCore  } from "../helpers/core-i18n.js";
 novelMasterTestFixture();
 
 describe("MessageRollbackService S-13 empty-target guardrail (T-DS2)", () => {
-  it("T-DS2a: 首条 plain user 无任何 baseline 时 undo_send 报错且文件不减少", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-tds2a-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
+    it("T-DS2a: 首条 plain user 无任何 baseline 时 undo_send 报错且文件不减少", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-tds2a-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
 
-    // 会话开始就有文件，模拟角色卡导入前用户手写的内容。
-    await svfs.write("/keep-a.md", "a", { versionCheck: false });
-    await svfs.write("/keep-b.md", "b", { versionCheck: false });
+        // 会话开始就有文件，模拟角色卡导入前用户手写的内容。
+        await svfs.write("/keep-a.md", "a", { versionCheck: false });
+        await svfs.write("/keep-b.md", "b", { versionCheck: false });
 
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("hi")));
-    unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "hello" }],
-    }));
-    // assistant 又写了新文件，扩大「会被误删」的面。
-    await svfs.write("/later.md", "later", { versionCheck: false });
+        const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("hi")));
+        unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "hello" }],
+        }));
+        // assistant 又写了新文件，扩大「会被误删」的面。
+        await svfs.write("/later.md", "later", { versionCheck: false });
 
-    const filesBefore = unwrap(await svfs.list("/")).length;
+        const filesBefore = unwrap(await svfs.list("/")).length;
 
-    await rejectsErr(
-      () => ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, user1.id),
-      (error: unknown) => {
-        assert.equal(
-          isSessionFsError(error, "ROLLBACK_UNDO_SEND_EMPTY_TARGET"),
-          true,
-          "应报 ROLLBACK_UNDO_SEND_EMPTY_TARGET",
+        await rejectsErr(
+            () => ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, user1.id),
+            (error: unknown) => {
+                assert.equal(
+                    isSessionFsError(error, "ROLLBACK_UNDO_SEND_EMPTY_TARGET"),
+                    true,
+                    "应报 ROLLBACK_UNDO_SEND_EMPTY_TARGET",
+                );
+                assert.equal(
+                    (error as {messageKey?: string}).messageKey,
+                    "error.session_fs.rollback_undo_send_empty_target.undo_send",
+                );
+                return true;
+            },
         );
-        assert.equal(
-          (error as {messageKey?: string}).messageKey,
-          "error.session_fs.rollback_undo_send_empty_target.undo_send",
-        );
-        return true;
-      },
-    );
 
-    // 文件一个不少；消息也没被截断。
-    const filesAfter = unwrap(await svfs.list("/")).length;
-    assert.equal(filesAfter, filesBefore);
-    assert.equal(unwrap(await svfs.read("/keep-a.md")).content, "a");
-    assert.equal(unwrap(await svfs.read("/keep-b.md")).content, "b");
-    assert.equal(unwrap(await svfs.read("/later.md")).content, "later");
-    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
-    assert.equal(messages.length, 2);
-  });
-
-  it("T-DS2b: skipVfsReconcile 时不触发护栏，仅截断消息", async () => {
-    // skipVfsReconcile 不进入 reconcileVfsPaths，空 targetTree 不会造成删除，
-    // 护栏应放行——这是「仅截断消息」的降级回滚路径（DF-U1 同语义）。
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-tds2b-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
-
-    await svfs.write("/keep.md", "stable", { versionCheck: false });
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("hi")));
-    unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "hello" }],
-    }));
-
-    await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, user1.id, {
-      skipVfsReconcile: true,
+        // 文件一个不少；消息也没被截断。
+        const filesAfter = unwrap(await svfs.list("/")).length;
+        assert.equal(filesAfter, filesBefore);
+        assert.equal(unwrap(await svfs.read("/keep-a.md")).content, "a");
+        assert.equal(unwrap(await svfs.read("/keep-b.md")).content, "b");
+        assert.equal(unwrap(await svfs.read("/later.md")).content, "later");
+        const messages = outcomeValue(await ctx.messages.listBySession(session.id));
+        assert.equal(messages.length, 2);
     });
 
-    assert.equal(unwrap(await svfs.read("/keep.md")).content, "stable");
-    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
-    assert.equal(messages.length, 0);
-  });
+    it("T-DS2b: skipVfsReconcile 时不触发护栏，仅截断消息", async () => {
+        // skipVfsReconcile 不进入 reconcileVfsPaths，空 targetTree 不会造成删除，
+        // 护栏应放行——这是「仅截断消息」的降级回滚路径（DF-U1 同语义）。
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-tds2b-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
 
-  it("T-DS2c: anchor 自身有 baseline checkpoint 时不触发护栏", async () => {
-    // anchor 处有 capture（非空 targetTree）时即便 prior 为空也走正常回滚，
-    // 护栏只在「prior + anchor 都为空」时才拦。
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-tds2c-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
+        await svfs.write("/keep.md", "stable", { versionCheck: false });
+        const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("hi")));
+        unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "hello" }],
+        }));
 
-    await svfs.write("/anchor.md", "at-send", { versionCheck: false });
-    const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("anchor")));
-    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, user1.id));
+        await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, user1.id, {
+            skipVfsReconcile: true,
+        });
 
-    await svfs.write("/anchor.md", "after-send", { versionCheck: false });
-    await svfs.write("/later.md", "new file", { versionCheck: false });
-    unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "later" }],
-    }));
+        assert.equal(unwrap(await svfs.read("/keep.md")).content, "stable");
+        const messages = outcomeValue(await ctx.messages.listBySession(session.id));
+        assert.equal(messages.length, 0);
+    });
 
-    // anchor checkpoint 存在 → targetTree 非空 → 正常回滚，不抛护栏错误。
-    await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, user1.id);
+    it("T-DS2c: anchor 自身有 baseline checkpoint 时不触发护栏", async () => {
+        // anchor 处有 capture（非空 targetTree）时即便 prior 为空也走正常回滚，
+        // 护栏只在「prior + anchor 都为空」时才拦。
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-tds2c-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
 
-    assert.equal(unwrap(await svfs.read("/anchor.md")).content, "at-send");
-    assert.ok(!(await svfs.read("/later.md")).ok, "later.md 应已被回滚删除");
-  });
+        await svfs.write("/anchor.md", "at-send", { versionCheck: false });
+        const user1 = unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of("anchor")));
+        unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, user1.id));
+
+        await svfs.write("/anchor.md", "after-send", { versionCheck: false });
+        await svfs.write("/later.md", "new file", { versionCheck: false });
+        unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "later" }],
+        }));
+
+        // anchor checkpoint 存在 → targetTree 非空 → 正常回滚，不抛护栏错误。
+        await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, user1.id);
+
+        assert.equal(unwrap(await svfs.read("/anchor.md")).content, "at-send");
+        assert.ok(!(await svfs.read("/later.md")).ok, "later.md 应已被回滚删除");
+    });
 });
 
 /** 错误用户可见文案：带 messageKey 时经 tCore 渲染（G1-G3 descriptor 契约），否则回退 message。 */
 function renderError(error: unknown): string {
-  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
-  return textOf(error);
+    const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
+    return textOf(error);
 }
 
 /** 含 cause 链（ToolError 包装 AppError 时 messageKey 在 cause 上）。 */
 function textOf(error: unknown): string {
-  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
-  if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
-  if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
-  return e.message;
+    const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
+    if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
+    if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
+    return e.message;
 }

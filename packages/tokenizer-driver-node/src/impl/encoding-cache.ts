@@ -55,7 +55,7 @@ const DEFAULT_NODE_ENCODING_NAME: TiktokenEncoding = "cl100k_base";
 export type NodeEncodingFactory = (encodingName: string) => Tiktoken;
 
 export namespace EncodingCache {
-  /**
+    /**
    * 按**模型名**取（单例）编码表；模型名不被 tiktoken 认识时返回 `null`。
    *
    * 精确档（`counterKind: "tiktoken"`）走这里。`model:` 键废除后的取法：先用
@@ -69,18 +69,18 @@ export namespace EncodingCache {
    * `get_encoding`（Tiktoken 结构上满足 registry 的 `EncodingHandle` 契约：
    * `encode` 返回带 `length` 的序列，无需适配层）。
    */
-  export function forModel(tiktokenModel: TiktokenModel | string): Tiktoken | null {
-    let encodingName: TiktokenEncoding;
-    try {
-      encodingName = get_encoding_name_for_model(tiktokenModel as TiktokenModel);
-    } catch (err) {
-      console.warn(`[novel-master/tokenizer-driver-node] tiktoken model not recognized (${tiktokenModel})`, err);
-      return null;
+    export function forModel(tiktokenModel: TiktokenModel | string): Tiktoken | null {
+        let encodingName: TiktokenEncoding;
+        try {
+            encodingName = get_encoding_name_for_model(tiktokenModel as TiktokenModel);
+        } catch (err) {
+            console.warn(`[novel-master/tokenizer-driver-node] tiktoken model not recognized (${tiktokenModel})`, err);
+            return null;
+        }
+        return EncodingRegistry.get(encodingName, () => get_encoding(encodingName as TiktokenEncoding));
     }
-    return EncodingRegistry.get(encodingName, () => get_encoding(encodingName as TiktokenEncoding));
-  }
 
-  /**
+    /**
    * 按**编码名**取（单例）编码表；失败返回 `null`（TTL 内不重试，见模块头注释）。
    *
    * nm-style: keep-public — 「按编码名取表」语义入口，与 {@link EncodingCache.forModel}（按模型名取）
@@ -88,44 +88,44 @@ export namespace EncodingCache {
    * 共享同一张表」的不变量，该验证无等价替代入口——唯一生产调用方 {@link EncodingCache.getDefault}
    * 只是 cl100k 特化，own 不了「按任意编码名取」的语义。
    */
-  export function byName(name: TiktokenEncoding | string): Tiktoken | null {
-    return EncodingRegistry.get(name, () => get_encoding(name as TiktokenEncoding));
-  }
+    export function byName(name: TiktokenEncoding | string): Tiktoken | null {
+        return EncodingRegistry.get(name, () => get_encoding(name as TiktokenEncoding));
+    }
 
-  /** 默认（cl100k）编码表取用口。 */
-  export function getDefault(): Tiktoken | null {
-    return byName(DEFAULT_NODE_ENCODING_NAME);
-  }
+    /** 默认（cl100k）编码表取用口。 */
+    export function getDefault(): Tiktoken | null {
+        return byName(DEFAULT_NODE_ENCODING_NAME);
+    }
 
-  /**
+    /**
    * 用默认编码表（cl100k）计一段文本的 token 数。
    *
    * @param text 待计数文本。
    * @returns token 数（估算值，误差实测 ≤0.6%）；**编码表不可用时返回 `null`**，
    *   调用方须自行决定降级口径（不要把 `null` 当 0）。
    */
-  export function countText(text: string): number | null {
-    const encoding = getDefault();
-    if (encoding == null) {
-      return null;
+    export function countText(text: string): number | null {
+        const encoding = getDefault();
+        if (encoding == null) {
+            return null;
+        }
+        return TokenizerTextCount.count((chunk) => encoding.encode(chunk).length, text);
     }
-    return TokenizerTextCount.count((chunk) => encoding.encode(chunk).length, text);
-  }
 
-  /**
+    /**
    * 测试钩子：只清空编码表缓存（不动构造器）。转发 registry 的同名钩子。
    *
    * 注意这里**不 `free()`**（见模块头「free 生命周期」）。
    */
-  export function clearForTests(): void {
-    EncodingRegistry.clearForTests();
-  }
+    export function clearForTests(): void {
+        EncodingRegistry.clearForTests();
+    }
 
-  /**
+    /**
    * 测试钩子：覆盖编码表构造器（传 `null` 还原真实实现）。
    * 构造器换了，已缓存的表不再由它产出，registry 会一并作废缓存。
    */
-  export function __setFactoryForTests(factory: NodeEncodingFactory | null): void {
-    EncodingRegistry.setFactoryForTests(factory);
-  }
+    export function __setFactoryForTests(factory: NodeEncodingFactory | null): void {
+        EncodingRegistry.setFactoryForTests(factory);
+    }
 }

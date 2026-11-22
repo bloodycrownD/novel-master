@@ -6,7 +6,7 @@
 
 /** A module-scoped key-value row. */
 export interface KkvEntry {
-  readonly module: string;
-  readonly key: string;
-  readonly value: string;
+    readonly module: string;
+    readonly key: string;
+    readonly value: string;
 }

@@ -3,93 +3,93 @@
  */
 
 type WebViewMenuRow = {
-  kind: string;
-  role?: string;
-  text?: string;
-  hidden?: boolean;
+    kind: string;
+    role?: string;
+    text?: string;
+    hidden?: boolean;
 };
 
 type HitEl = {
-  closest?: (selector: string) => unknown;
+    closest?: (selector: string) => unknown;
 };
 
 /** Mirrors chat-transcript menu set-floor rules (webview-dist / src/menu.ts). */
 function buildWebViewMenuActions(
-  row: WebViewMenuRow,
-  hitEl?: HitEl | null,
+    row: WebViewMenuRow,
+    hitEl?: HitEl | null,
 ): string[] {
-  const items: string[] = [];
-  if (row.text) items.push('edit');
-  items.push('copy');
-  const showSetFloor =
-    row.kind === 'message' &&
-    row.role === 'user' &&
-    !hitEl?.closest?.('.tool-card, .tool-group-item');
-  if (showSetFloor) items.push('set-floor');
-  items.push('fork');
-  items.push('rollback');
-  return items;
+    const items: string[] = [];
+    if (row.text) items.push('edit');
+    items.push('copy');
+    const showSetFloor =
+        row.kind === 'message' &&
+        row.role === 'user' &&
+        !hitEl?.closest?.('.tool-card, .tool-group-item');
+    if (showSetFloor) items.push('set-floor');
+    items.push('fork');
+    items.push('rollback');
+    return items;
 }
 
 function mockHitEl(matchingSelector: string | null): HitEl {
-  return {
-    closest(selector: string) {
-      return matchingSelector === selector ? {} : null;
-    },
-  };
+    return {
+        closest(selector: string) {
+            return matchingSelector === selector ? {} : null;
+        },
+    };
 }
 
 describe('WebView buildMenuItems set-floor eligibility', () => {
-  it('T-SF12: tool-card hit 时 message 行菜单无 set-floor', () => {
-    const actions = buildWebViewMenuActions(
-      {
-        kind: 'message',
-        role: 'assistant',
-        text: 'tool reply',
-      },
-      mockHitEl('.tool-card, .tool-group-item'),
-    );
-    expect(actions).not.toContain('set-floor');
-    expect(actions).toEqual(['edit', 'copy', 'fork', 'rollback']);
-  });
-
-  it('普通 user message 行含 set-floor（T-MN1 集合）', () => {
-    const actions = buildWebViewMenuActions({
-      kind: 'message',
-      role: 'user',
-      text: 'hello',
+    it('T-SF12: tool-card hit 时 message 行菜单无 set-floor', () => {
+        const actions = buildWebViewMenuActions(
+            {
+                kind: 'message',
+                role: 'assistant',
+                text: 'tool reply',
+            },
+            mockHitEl('.tool-card, .tool-group-item'),
+        );
+        expect(actions).not.toContain('set-floor');
+        expect(actions).toEqual(['edit', 'copy', 'fork', 'rollback']);
     });
-    expect(actions).toEqual(['edit', 'copy', 'set-floor', 'fork', 'rollback']);
-  });
 
-  it('assistant message 行不含 set-floor', () => {
-    const actions = buildWebViewMenuActions({
-      kind: 'message',
-      role: 'assistant',
-      text: 'reply',
+    it('普通 user message 行含 set-floor（T-MN1 集合）', () => {
+        const actions = buildWebViewMenuActions({
+            kind: 'message',
+            role: 'user',
+            text: 'hello',
+        });
+        expect(actions).toEqual(['edit', 'copy', 'set-floor', 'fork', 'rollback']);
     });
-    expect(actions).not.toContain('set-floor');
-    expect(actions).toEqual(['edit', 'copy', 'fork', 'rollback']);
-  });
+
+    it('assistant message 行不含 set-floor', () => {
+        const actions = buildWebViewMenuActions({
+            kind: 'message',
+            role: 'assistant',
+            text: 'reply',
+        });
+        expect(actions).not.toContain('set-floor');
+        expect(actions).toEqual(['edit', 'copy', 'fork', 'rollback']);
+    });
 });
 
 describe('WebView buildMenuItems 回滚（T-UH3 订正）', () => {
-  it('hidden 行同样含 rollback、无 unhide', () => {
-    const actions = buildWebViewMenuActions({
-      kind: 'message',
-      role: 'user',
-      text: 'hi',
-      hidden: true,
+    it('hidden 行同样含 rollback、无 unhide', () => {
+        const actions = buildWebViewMenuActions({
+            kind: 'message',
+            role: 'user',
+            text: 'hi',
+            hidden: true,
+        });
+        expect(actions).toEqual(['edit', 'copy', 'set-floor', 'fork', 'rollback']);
     });
-    expect(actions).toEqual(['edit', 'copy', 'set-floor', 'fork', 'rollback']);
-  });
 
-  it('非 hidden 行菜单顺序不变', () => {
-    const actions = buildWebViewMenuActions({
-      kind: 'message',
-      role: 'user',
-      text: 'hi',
+    it('非 hidden 行菜单顺序不变', () => {
+        const actions = buildWebViewMenuActions({
+            kind: 'message',
+            role: 'user',
+            text: 'hi',
+        });
+        expect(actions).toEqual(['edit', 'copy', 'set-floor', 'fork', 'rollback']);
     });
-    expect(actions).toEqual(['edit', 'copy', 'set-floor', 'fork', 'rollback']);
-  });
 });

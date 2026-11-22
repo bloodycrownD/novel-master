@@ -13,5 +13,5 @@ import {coreT} from '@/i18n/core';
 
 /** 转录宿主用：仅「复制」。 */
 export const CHAT_TRANSCRIPT_SELECTION_MENU_ITEMS = [
-  {label: coreT({key: "ui.transcript.menu.copy"}), key: 'copy'},
+    {label: coreT({key: "ui.transcript.menu.copy"}), key: 'copy'},
 ] as const;

@@ -3,14 +3,14 @@
  * `state.labels.generating`），本文件不导入 state（E2 纪律）。
  */
 type ToolInvokingBarProps = {
-  label: string;
+    label: string;
 };
 
 export function ToolInvokingBar({label}: ToolInvokingBarProps) {
-  return (
-    <div className="tool-invoking-bar">
-      <span className="tool-invoking-dot" aria-hidden="true" />
-      <span className="tool-invoking-label">{label}</span>
-    </div>
-  );
+    return (
+        <div className="tool-invoking-bar">
+            <span className="tool-invoking-dot" aria-hidden="true" />
+            <span className="tool-invoking-label">{label}</span>
+        </div>
+    );
 }

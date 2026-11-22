@@ -18,88 +18,88 @@ import type { ProviderRepository } from "../provider.port.js";
 
 /** 列 JSON 根必须是对象；根非法（非对象/解析失败）降级 {}，不抛错。 */
 function parseJsonObject(json: string): Record<string, unknown> {
-  return Coerce.record(json) ?? {};
+    return Coerce.record(json) ?? {};
 }
 
 /** 毒行（display_name 为空等违反写入侧不变量的行）转 `Result.err`，不冒异常。 */
 function rowToProvider(row: Row): Result<LlmProvider, AppError> {
-  const displayRaw = row.display_name;
-  if (displayRaw == null || String(displayRaw).trim() === "") {
-    return Result.err(new AppError("PROVIDER_INVALID_ARGUMENT", { detail: `服务商 display_name 不得为空（id=${String(row.id)}）`, providerId: String(row.id) }));
-  }
-  const headers: Record<string, string> = {};
-  for (const [key, value] of Object.entries(parseJsonObject(String(row.headers_json ?? "{}")))) {
-    if (typeof value === "string") headers[key] = value;
-  }
-  return Result.ok({
-    id: String(row.id),
-    builtinKey: row.builtin_key != null ? String(row.builtin_key) : null,
-    protocol: String(row.protocol) as LlmProtocolKind,
-    baseUrl: String(row.base_url),
-    displayName: String(displayRaw),
-    secretRef: row.secret_ref != null ? String(row.secret_ref) : null,
-    headers,
-    bodyParams: parseJsonObject(String(row.body_params_json ?? "{}")),
-    isBuiltin: Number(row.is_builtin) === 1,
-    createdAtMs: Number(row.created_at_ms),
-    updatedAtMs: Number(row.updated_at_ms),
-  });
+    const displayRaw = row.display_name;
+    if (displayRaw == null || String(displayRaw).trim() === "") {
+        return Result.err(new AppError("PROVIDER_INVALID_ARGUMENT", { detail: `服务商 display_name 不得为空（id=${String(row.id)}）`, providerId: String(row.id) }));
+    }
+    const headers: Record<string, string> = {};
+    for (const [key, value] of Object.entries(parseJsonObject(String(row.headers_json ?? "{}")))) {
+        if (typeof value === "string") headers[key] = value;
+    }
+    return Result.ok({
+        id: String(row.id),
+        builtinKey: row.builtin_key != null ? String(row.builtin_key) : null,
+        protocol: String(row.protocol) as LlmProtocolKind,
+        baseUrl: String(row.base_url),
+        displayName: String(displayRaw),
+        secretRef: row.secret_ref != null ? String(row.secret_ref) : null,
+        headers,
+        bodyParams: parseJsonObject(String(row.body_params_json ?? "{}")),
+        isBuiltin: Number(row.is_builtin) === 1,
+        createdAtMs: Number(row.created_at_ms),
+        updatedAtMs: Number(row.updated_at_ms),
+    });
 }
 
 /** TDBC-backed `llm_provider` repository. */
 export class SqliteProviderRepository implements ProviderRepository {
-  private readonly parser = new SqlTemplateParser();
+    private readonly parser = new SqlTemplateParser();
 
-  constructor(private readonly conn: TdbcConnection) {}
+    constructor(private readonly conn: TdbcConnection) {}
 
-  async list(): Promise<Result<LlmProvider[], AppError>> {
-    const rows = await TdbcTemplate.query(this.conn, this.parser, LlmProviderSql.list, {});
-    const providers: LlmProvider[] = [];
-    for (const row of rows) {
-      const mapped = rowToProvider(row);
-      if (!mapped.ok) return Result.err(mapped.error);
-      providers.push(mapped.value);
+    async list(): Promise<Result<LlmProvider[], AppError>> {
+        const rows = await TdbcTemplate.query(this.conn, this.parser, LlmProviderSql.list, {});
+        const providers: LlmProvider[] = [];
+        for (const row of rows) {
+            const mapped = rowToProvider(row);
+            if (!mapped.ok) return Result.err(mapped.error);
+            providers.push(mapped.value);
+        }
+        return Result.ok(providers);
     }
-    return Result.ok(providers);
-  }
 
-  async findById(id: string): Promise<Result<LlmProvider | null, AppError>> {
-    const rows = await TdbcTemplate.query(this.conn, this.parser, LlmProviderSql.findById, { id });
-    if (rows.length === 0) return Result.ok(null);
-    return rowToProvider(rows[0]!);
-  }
+    async findById(id: string): Promise<Result<LlmProvider | null, AppError>> {
+        const rows = await TdbcTemplate.query(this.conn, this.parser, LlmProviderSql.findById, { id });
+        if (rows.length === 0) return Result.ok(null);
+        return rowToProvider(rows[0]!);
+    }
 
-  async insert(provider: LlmProvider): Promise<void> {
-    await TdbcTemplate.execute(this.conn, this.parser, LlmProviderSql.insert, {
-      id: provider.id,
-      builtinKey: provider.builtinKey,
-      protocol: provider.protocol,
-      baseUrl: provider.baseUrl,
-      displayName: provider.displayName,
-      secretRef: provider.secretRef,
-      headersJson: JSON.stringify(provider.headers),
-      bodyParamsJson: JSON.stringify(provider.bodyParams),
-      isBuiltin: provider.isBuiltin ? 1 : 0,
-      createdAtMs: provider.createdAtMs,
-      updatedAtMs: provider.updatedAtMs,
-    });
-  }
+    async insert(provider: LlmProvider): Promise<void> {
+        await TdbcTemplate.execute(this.conn, this.parser, LlmProviderSql.insert, {
+            id: provider.id,
+            builtinKey: provider.builtinKey,
+            protocol: provider.protocol,
+            baseUrl: provider.baseUrl,
+            displayName: provider.displayName,
+            secretRef: provider.secretRef,
+            headersJson: JSON.stringify(provider.headers),
+            bodyParamsJson: JSON.stringify(provider.bodyParams),
+            isBuiltin: provider.isBuiltin ? 1 : 0,
+            createdAtMs: provider.createdAtMs,
+            updatedAtMs: provider.updatedAtMs,
+        });
+    }
 
-  async update(provider: LlmProvider): Promise<void> {
-    await TdbcTemplate.execute(this.conn, this.parser, LlmProviderSql.update, {
-      id: provider.id,
-      protocol: provider.protocol,
-      baseUrl: provider.baseUrl,
-      displayName: provider.displayName,
-      secretRef: provider.secretRef,
-      headersJson: JSON.stringify(provider.headers),
-      bodyParamsJson: JSON.stringify(provider.bodyParams),
-      updatedAtMs: provider.updatedAtMs,
-    });
-  }
+    async update(provider: LlmProvider): Promise<void> {
+        await TdbcTemplate.execute(this.conn, this.parser, LlmProviderSql.update, {
+            id: provider.id,
+            protocol: provider.protocol,
+            baseUrl: provider.baseUrl,
+            displayName: provider.displayName,
+            secretRef: provider.secretRef,
+            headersJson: JSON.stringify(provider.headers),
+            bodyParamsJson: JSON.stringify(provider.bodyParams),
+            updatedAtMs: provider.updatedAtMs,
+        });
+    }
 
-  async delete(id: string): Promise<boolean> {
-    const result = await TdbcTemplate.execute(this.conn, this.parser, LlmProviderSql.delete, { id });
-    return result.changes > 0;
-  }
+    async delete(id: string): Promise<boolean> {
+        const result = await TdbcTemplate.execute(this.conn, this.parser, LlmProviderSql.delete, { id });
+        return result.changes > 0;
+    }
 }

@@ -11,94 +11,94 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {useTheme} from '@/theme/ThemeProvider';
 
 export interface SheetMenuItem {
-  readonly label: string;
-  readonly action: string;
-  readonly danger?: boolean;
-  /** 置灰不可点（对应原 SessionActionsDrawer 的「未传 action 回调」项）。 */
-  readonly disabled?: boolean;
+    readonly label: string;
+    readonly action: string;
+    readonly danger?: boolean;
+    /** 置灰不可点（对应原 SessionActionsDrawer 的「未传 action 回调」项）。 */
+    readonly disabled?: boolean;
 }
 
 type Props = {
-  visible: boolean;
-  title?: string;
-  items: SheetMenuItem[];
-  onSelect: (action: string) => void;
-  onClose: () => void;
+    visible: boolean;
+    title?: string;
+    items: SheetMenuItem[];
+    onSelect: (action: string) => void;
+    onClose: () => void;
 };
 
 export function BottomSheetMenu({
-  visible,
-  title,
-  items,
-  onSelect,
-  onClose,
+    visible,
+    title,
+    items,
+    onSelect,
+    onClose,
 }: Props) {
-  const {tokens} = useTheme();
-  const insets = useSafeAreaInsets();
+    const {tokens} = useTheme();
+    const insets = useSafeAreaInsets();
 
-  return (
-    <ModalShell
-      visible={visible}
-      onClose={onClose}
-      variant="bottom"
-      animationType="slide"
-      statusBarTranslucent
-      backdropOpacity={0.55}
-      panelStyle={[styles.sheet, {paddingBottom: Math.max(insets.bottom, 16)}]}
-    >
-      {title ? (
-        <Text style={[styles.title, {color: tokens.textSecondary}]}>
-          {title}
-        </Text>
-      ) : null}
-      {items.map(item => (
-        <Pressable
-          key={item.action}
-          style={[styles.item, {borderTopColor: tokens.border}]}
-          disabled={item.disabled}
-          onPress={() => {
-            onClose();
-            onSelect(item.action);
-          }}
+    return (
+        <ModalShell
+            visible={visible}
+            onClose={onClose}
+            variant="bottom"
+            animationType="slide"
+            statusBarTranslucent
+            backdropOpacity={0.55}
+            panelStyle={[styles.sheet, {paddingBottom: Math.max(insets.bottom, 16)}]}
         >
-          <Text
-            style={{
-              color: item.disabled
-                ? tokens.textTertiary
-                : item.danger
-                ? tokens.danger
-                : tokens.text,
-              fontSize: 16,
-            }}
-          >
-            {item.label}
-          </Text>
-        </Pressable>
-      ))}
-      <Pressable
-        style={[styles.item, {borderTopColor: tokens.border}]}
-        onPress={onClose}
-      >
-        <Text style={{color: tokens.textSecondary, fontSize: 16}}>{coreT({key: "ui.common.cancel"})}</Text>
-      </Pressable>
-    </ModalShell>
-  );
+            {title ? (
+                <Text style={[styles.title, {color: tokens.textSecondary}]}>
+                    {title}
+                </Text>
+            ) : null}
+            {items.map(item => (
+                <Pressable
+                    key={item.action}
+                    style={[styles.item, {borderTopColor: tokens.border}]}
+                    disabled={item.disabled}
+                    onPress={() => {
+                        onClose();
+                        onSelect(item.action);
+                    }}
+                >
+                    <Text
+                        style={{
+                            color: item.disabled
+                                ? tokens.textTertiary
+                                : item.danger
+                                ? tokens.danger
+                                : tokens.text,
+                            fontSize: 16,
+                        }}
+                    >
+                        {item.label}
+                    </Text>
+                </Pressable>
+            ))}
+            <Pressable
+                style={[styles.item, {borderTopColor: tokens.border}]}
+                onPress={onClose}
+            >
+                <Text style={{color: tokens.textSecondary, fontSize: 16}}>{coreT({key: "ui.common.cancel"})}</Text>
+            </Pressable>
+        </ModalShell>
+    );
 }
 
 const styles = StyleSheet.create({
-  sheet: {
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-    overflow: 'hidden',
-  },
-  title: {
-    textAlign: 'center',
-    paddingVertical: 12,
-    fontSize: 13,
-  },
-  item: {
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
+    sheet: {
+        borderTopLeftRadius: 12,
+        borderTopRightRadius: 12,
+        overflow: 'hidden',
+    },
+    title: {
+        textAlign: 'center',
+        paddingVertical: 12,
+        fontSize: 13,
+    },
+    item: {
+        paddingVertical: 16,
+        paddingHorizontal: 20,
+        borderTopWidth: StyleSheet.hairlineWidth,
+    },
 });

@@ -19,32 +19,32 @@ import {post} from '../bridge';
  * 所以这里显式 disconnect 上一只再新建，把「可重复调用」真正做成幂等。
  */
 const scrollerResizeObserverSlot = {
-  observer: null as ResizeObserver | null,
+    observer: null as ResizeObserver | null,
 };
 
 export const BindShellEvents = {
-  /** 绑定滚动与行区 click；可重复调用（listener 靠同引用去重，RO 走上面的 disconnect）。 */
-  bind: (): void => {
-    const scroller = document.getElementById('scroller');
-    const rows = document.getElementById('rows');
-    if (scroller) {
-      scroller.addEventListener('scroll', Scroll.on, {passive: true});
-      // 视口高度变化即时贴底（键盘顶起后消息「迟到上跳」修，语义见
-      // Scroll.stickIfNearBottomNow 注释）：键盘裁切逐帧、dock 留白过渡逐帧、
-      // 输入框换行长高、chips 显隐——所有让 #scroller 高度变化的源都在这
-      // 一处收口。typeof 守卫口径同 composer-input editor 的 visualViewport
-      // 绑定；无 RO 的老 WebView 退化回旧行为（靠流式贴底事件兜），不更差。
-      if (typeof ResizeObserver !== 'undefined') {
-        scrollerResizeObserverSlot.observer?.disconnect();
-        scrollerResizeObserverSlot.observer = new ResizeObserver(() =>
-          Scroll.stickIfNearBottomNow(),
-        );
-        scrollerResizeObserverSlot.observer.observe(scroller);
-      }
-    }
-    if (!rows) return;
-    rows.addEventListener('click', RowsClick.on);
-    // 代码块复制按钮：document 捕获委托，先于 rows 冒泡委托拦截
-    CodeCopy.attach(post);
-  },
+    /** 绑定滚动与行区 click；可重复调用（listener 靠同引用去重，RO 走上面的 disconnect）。 */
+    bind: (): void => {
+        const scroller = document.getElementById('scroller');
+        const rows = document.getElementById('rows');
+        if (scroller) {
+            scroller.addEventListener('scroll', Scroll.on, {passive: true});
+            // 视口高度变化即时贴底（键盘顶起后消息「迟到上跳」修，语义见
+            // Scroll.stickIfNearBottomNow 注释）：键盘裁切逐帧、dock 留白过渡逐帧、
+            // 输入框换行长高、chips 显隐——所有让 #scroller 高度变化的源都在这
+            // 一处收口。typeof 守卫口径同 composer-input editor 的 visualViewport
+            // 绑定；无 RO 的老 WebView 退化回旧行为（靠流式贴底事件兜），不更差。
+            if (typeof ResizeObserver !== 'undefined') {
+                scrollerResizeObserverSlot.observer?.disconnect();
+                scrollerResizeObserverSlot.observer = new ResizeObserver(() =>
+                    Scroll.stickIfNearBottomNow(),
+                );
+                scrollerResizeObserverSlot.observer.observe(scroller);
+            }
+        }
+        if (!rows) return;
+        rows.addEventListener('click', RowsClick.on);
+        // 代码块复制按钮：document 捕获委托，先于 rows 冒泡委托拦截
+        CodeCopy.attach(post);
+    },
 } as const;

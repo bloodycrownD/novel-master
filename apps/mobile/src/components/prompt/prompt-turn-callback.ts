@@ -13,16 +13,16 @@
 import {CallbackSlot} from '../../runtime/callback-slot';
 
 export type PromptTurnDetail = {
-  /** 轮标题（首行摘要），供详情页 header 覆盖用。 */
-  readonly title: string;
-  /** 正文：整轮为各段按序拼接的轮 body；叶子级为该卡片的 body。 */
-  readonly body: string;
-  /**
+    /** 轮标题（首行摘要），供详情页 header 覆盖用。 */
+    readonly title: string;
+    /** 正文：整轮为各段按序拼接的轮 body；叶子级为该卡片的 body。 */
+    readonly body: string;
+    /**
    * 叶子级全屏时带上（文本卡 id / 工具组格的派生 id）；整轮全屏不带。
    * 详情页据此拼稳定伪 path（`turn-<turnId>-leaf-<leafId>`），
    * 让 WebView 在不同叶子之间切换时重挂载而不是复用上一份文档。
    */
-  readonly leafId?: string;
+    readonly leafId?: string;
 };
 
 /**

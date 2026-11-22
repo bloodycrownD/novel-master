@@ -9,56 +9,56 @@ const SCHEMA_MIGRATIONS_DIR = join(CORE_SRC, "bootstrap/schema-migrations");
 
 /** 递归收集 core 源码目录下全部 .ts 文件。 */
 async function collectTsFiles(dir: string): Promise<string[]> {
-  const entries = await readdir(dir, { withFileTypes: true });
-  const files: string[] = [];
-  for (const entry of entries) {
-    const fullPath = join(dir, entry.name);
-    if (entry.isDirectory()) {
-      files.push(...(await collectTsFiles(fullPath)));
-    } else if (entry.name.endsWith(".ts")) {
-      files.push(fullPath);
+    const entries = await readdir(dir, { withFileTypes: true });
+    const files: string[] = [];
+    for (const entry of entries) {
+        const fullPath = join(dir, entry.name);
+        if (entry.isDirectory()) {
+            files.push(...(await collectTsFiles(fullPath)));
+        } else if (entry.name.endsWith(".ts")) {
+            files.push(fullPath);
+        }
     }
-  }
-  return files;
+    return files;
 }
 
 /** schema-migrations 目录内基础设施文件（不注册 migration）。 */
 const SCHEMA_MIGRATION_INFRA = new Set([
-  "index.ts",
-  "schema-migration.types.ts",
-  "schema-migrations-table.ts",
+    "index.ts",
+    "schema-migration.types.ts",
+    "schema-migrations-table.ts",
 ]);
 
 /** Step 21 后保留的冷回放备份模块：逻辑已融入 canonical DDL，不再注册。 */
 const BASELINE_BACKUP_MODULES = new Set<string>([
-  // 第二轮退役（最低支持 v1.4.27）后，9 个退役迁移源文件均已物理删除，
-  // 目录里只剩已注册模块与基建文件，本清单为空。
+    // 第二轮退役（最低支持 v1.4.27）后，9 个退役迁移源文件均已物理删除，
+    // 目录里只剩已注册模块与基建文件，本清单为空。
 ]);
 
 describe("bootstrap 无历史 migrate（T-B2 / T-SM10）", () => {
-  it("源码中不存在未登记的 migrate-*.ts 模块（schema-migrations 外）", async () => {
-    const files = await collectTsFiles(CORE_SRC);
-    const migrateFiles = files.filter((file) => {
-      const normalized = file.replace(/\\/g, "/");
-      if (!normalized.includes("/migrate-")) {
-        return false;
-      }
-      return !normalized.includes("/bootstrap/schema-migrations/");
+    it("源码中不存在未登记的 migrate-*.ts 模块（schema-migrations 外）", async () => {
+        const files = await collectTsFiles(CORE_SRC);
+        const migrateFiles = files.filter((file) => {
+            const normalized = file.replace(/\\/g, "/");
+            if (!normalized.includes("/migrate-")) {
+                return false;
+            }
+            return !normalized.includes("/bootstrap/schema-migrations/");
+        });
+        assert.deepEqual(
+            migrateFiles,
+            [],
+            `不应存在未登记目录下的 migrate 模块：${migrateFiles.join(", ")}`
+        );
     });
-    assert.deepEqual(
-      migrateFiles,
-      [],
-      `不应存在未登记目录下的 migrate 模块：${migrateFiles.join(", ")}`
-    );
-  });
 
-  it("源码中不存在 migrate- 模块 import（schema-migrations 登记模块除外）", async () => {
-    const files = await collectTsFiles(CORE_SRC);
-    const offenders: string[] = [];
-    for (const file of files) {
-      const text = await readFile(file, "utf8");
-      if (
-        /from\s+["'][^"']*migrate-[^"']*["']/.test(text) ||
+    it("源码中不存在 migrate- 模块 import（schema-migrations 登记模块除外）", async () => {
+        const files = await collectTsFiles(CORE_SRC);
+        const offenders: string[] = [];
+        for (const file of files) {
+            const text = await readFile(file, "utf8");
+            if (
+                /from\s+["'][^"']*migrate-[^"']*["']/.test(text) ||
         /import\s*\(\s*["'][^"']*migrate-[^"']*["']/.test(text)
       ) {
         offenders.push(file);

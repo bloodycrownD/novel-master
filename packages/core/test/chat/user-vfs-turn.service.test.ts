@@ -31,337 +31,337 @@ novelMasterTestFixture();
 
 /** 断言已停写 user_vfs_pending kkv（user ops 拆除后无操作日志半边）。 */
 async function loadPendingQueueJson(conn: TdbcConnection, sessionId: string): Promise<string | null> {
-  return SessionKkvServiceFactory.create(conn).get(sessionId, SESSION_KKV_DOMAIN_USER_VFS_PENDING, USER_VFS_PENDING_QUEUE_KEY);
+    return SessionKkvServiceFactory.create(conn).get(sessionId, SESSION_KKV_DOMAIN_USER_VFS_PENDING, USER_VFS_PENDING_QUEUE_KEY);
 }
 
 function makeToolCtx(conn: TdbcConnection, projectId: string, sessionId: string): BuiltinToolContext {
-  const messageRepo = new SqliteMessageRepository(conn);
-  return {
-    vfs: VfsServiceFactory.createScoped(conn, {
-      kind: "session",
-      projectId,
-      sessionId,
-    }),
-    projectId,
-    sessionId,
-    sessionKkv: SessionKkvServiceFactory.create(conn),
-  };
+    const messageRepo = new SqliteMessageRepository(conn);
+    return {
+        vfs: VfsServiceFactory.createScoped(conn, {
+            kind: "session",
+            projectId,
+            sessionId,
+        }),
+        projectId,
+        sessionId,
+        sessionKkv: SessionKkvServiceFactory.create(conn),
+    };
 }
 
 function makeUserVfsTurnDeps(conn: TdbcConnection, overrides: Partial<UserVfsTurnServiceDeps> = {}): UserVfsTurnServiceDeps {
-  const sessionRepo = new SqliteSessionRepository(conn);
-  const messageRepo = new SqliteMessageRepository(conn);
-  const vfsRepo = new SqliteVfsEntryRepository(conn);
-  const checkpointRepo = new CheckpointRepo(conn);
-  const revisionRepo = new SqliteVfsRevisionRepository(conn);
-  const messages = new DefaultMessageService({
-    conn,
-    sessions: sessionRepo,
-    messages: messageRepo,
-    vfs: vfsRepo,
-    checkpoints: checkpointRepo,
-    revisions: revisionRepo,
-  });
-
-  const registry = new ToolRegistry<BuiltinToolContext>();
-  BuiltinTools.register(registry);
-  const toolRunner = new ToolRunner(registry);
-
-  return {
-    conn,
-    sessions: sessionRepo,
-    sessionKkv: SessionKkvServiceFactory.create(conn),
-    messages,
-    chatMessages: messageRepo,
-    checkpoints: checkpointRepo,
-    entries: vfsRepo,
-    revisions: revisionRepo,
-    toolRunner,
-    resolveToolCtx: (sid, pid) => makeToolCtx(conn, pid, sid),
-    messageCheckpoint: MessageCheckpointFactory.create(conn),
-    ...overrides,
-  };
-}
-
-function writeOp(path: string, content: string, toolId = "tu_write") {
-  return {
-    actionXml: `<action name="write">\n${JSON.stringify({ path, content }, null, 2)}\n</action>`,
-    tools: [
-      {
-        id: toolId,
-        name: "write",
-        input: { path, content },
-      },
-    ],
-  };
-}
-
-describe("UserVfsTurnService", () => {
-  it("execute 失败不写盘；成功仅写盘并停写 pending kkv（无操作日志半边）", async () => {
-    const ctx = getNovelMasterTestContext();
-    const { userVfsTurn } = ChatServiceFactory.createUserVfsTurnBundle(ctx.conn);
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-
-    const fail = await userVfsTurn.executeOp(session.id, {
-      actionXml: '<action name="write">\n{"path":"/x.md","content":""}\n</action>',
-      tools: [
-        {
-          id: "tu_bad",
-          name: "write",
-          input: { path: "/x.md" },
-        },
-      ],
+    const sessionRepo = new SqliteSessionRepository(conn);
+    const messageRepo = new SqliteMessageRepository(conn);
+    const vfsRepo = new SqliteVfsEntryRepository(conn);
+    const checkpointRepo = new CheckpointRepo(conn);
+    const revisionRepo = new SqliteVfsRevisionRepository(conn);
+    const messages = new DefaultMessageService({
+        conn,
+        sessions: sessionRepo,
+        messages: messageRepo,
+        vfs: vfsRepo,
+        checkpoints: checkpointRepo,
+        revisions: revisionRepo,
     });
-    assert.equal(fail.ok, false);
-    assert.equal(await loadPendingQueueJson(ctx.conn, session.id), null);
-
-    const ok = await userVfsTurn.executeOp(session.id, writeOp("/ok.md", "hello", "tu_ok"));
-    assert.equal(ok.ok, true);
-    assert.equal(await loadPendingQueueJson(ctx.conn, session.id), null);
-    assert.equal(unwrap(await ctx.sessionVfs(project.id, session.id).read("/ok.md")).content, "hello");
-  });
-
-  it("user_ops write 新建文件补父链目录规则（与 agent 链路一致，C-orch-1）", async () => {
-    const ctx = getNovelMasterTestContext();
-    const { userVfsTurn } = ChatServiceFactory.createUserVfsTurnBundle(ctx.conn);
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-
-    const ok = await userVfsTurn.executeOp(session.id, writeOp("/u/v/w/a.md", "hello", "tu_wr"));
-    assert.equal(ok.ok, true);
-
-    // resolveToolCtx 注入了 session scope workplace：
-    // 新建文件的父链各层应补上默认 rule_on，与 agent 链路同款
-    const workplace = WorkplaceServiceFactory.create(ctx.conn, {
-      kind: "session",
-      projectId: project.id,
-      sessionId: session.id,
-    });
-    assert.equal(unwrap(await workplace.getDirRule("/u"))?.ruleEnabled, true);
-    assert.equal(unwrap(await workplace.getDirRule("/u/v"))?.ruleEnabled, true);
-    assert.equal(unwrap(await workplace.getDirRule("/u/v/w"))?.ruleEnabled, true);
-  });
-
-  it("execute 使用会抛错的 tool 时不写 pending", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-
-    const registry = new ToolRegistry<BuiltinToolContext>();
-    registry.register({
-      name: "test.boom",
-      description: () => "boom",
-      inputSchema: z.object({}),
-      async run() {
-        throw new Error("disk fail");
-      },
-    });
-    const toolRunner = new ToolRunner(registry);
-
-    const userVfsTurn = new DefaultUserVfsTurnService(makeUserVfsTurnDeps(ctx.conn, { toolRunner }));
-
-    const result = await userVfsTurn.executeOp(session.id, {
-      actionXml: '<action name="write">\n{"path":"/f.md","content":""}\n</action>',
-      tools: [{ id: "tu_boom", name: "test.boom", input: {} }],
-    });
-    assert.equal(result.ok, false);
-    assert.equal(await loadPendingQueueJson(ctx.conn, session.id), null);
-  });
-
-  it("T-UO-SWEEP1：第二次 tool 失败时回滚已成功 path，且 sweep+blob gc；composite 后仍 sweep", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
-    const revisions = new SqliteVfsRevisionRepository(ctx.conn);
-    const entries = new SqliteVfsEntryRepository(ctx.conn);
-    const scope = {
-      kind: "session" as const,
-      projectId: project.id,
-      sessionId: session.id,
-    };
 
     const registry = new ToolRegistry<BuiltinToolContext>();
     BuiltinTools.register(registry);
-    const innerRunner = new ToolRunner(registry);
-    const toolRunner = {
-      runParallel: async (calls, toolCtx) => {
-        const outcomes = [];
-        for (let index = 0; index < calls.length; index += 1) {
-          const call = calls[index];
-          if (index === 1) {
-            outcomes.push({ ok: false as const, error: new Error("second fail") });
-            continue;
-          }
-          try {
-            const output = await innerRunner.call(call.name, call.input, toolCtx);
-            outcomes.push({ ok: true as const, output });
-          } catch (error: unknown) {
-            outcomes.push({ ok: false as const, error });
-          }
-        }
-        return outcomes;
-      },
-      call: innerRunner.call.bind(innerRunner),
-    } as ToolRunner<BuiltinToolContext>;
+    const toolRunner = new ToolRunner(registry);
 
-    const userVfsTurn = new DefaultUserVfsTurnService(makeUserVfsTurnDeps(ctx.conn, { toolRunner }));
-
-    const result = await userVfsTurn.executeOp(session.id, {
-      actionXml: '<action name="write">\n{"path":"/a.md","content":""}\n</action>\n<action name="write">\n{"path":"/b.md","content":""}\n</action>',
-      tools: [
-        {
-          id: "tu_1",
-          name: "write",
-          input: { path: "/a.md", content: "A-orphan-body" },
-        },
-        {
-          id: "tu_2",
-          name: "write",
-          input: { path: "/b.md", content: "B" },
-        },
-      ],
-    });
-
-    assert.equal(result.ok, false);
-    assert.equal(await loadPendingQueueJson(ctx.conn, session.id), null);
-    await rejectsErr(() => svfs.read("/a.md"));
-    await rejectsErr(() => svfs.read("/b.md"));
-
-    // restore 后不可达 revision 被 sweep；无引用 blob 被全库 gc
-    const sk = LogicalPath.scopeKey(scope);
-    const keys = await revisions.listKeysUnderScope(sk, "/");
-    // entry 已被回滚清理，scope 下的 revision 均不可达，应全部被 sweep
-    assert.equal(keys.filter((k) => k.entryId !== undefined).length, 0, "失败回滚后 scope 下不应有残留 revision");
-    // content_hash 列始终存 ContentHash.hash() 输出的 hex 格式（SHA-256 hex），
-    // zlib b64 只影响 bytes 列编码，不影响 content_hash 列。可直接精确验证。
-    const orphanHash = ContentHash.hash("A-orphan-body");
-    const hashRows = await ctx.conn.query<{ content_hash: string }>(`SELECT content_hash FROM vfs_content_blob`, []);
-    assert.equal(
-      hashRows.some((r) => String(r.content_hash) === orphanHash),
-      false,
-      "orphan blob 应被 DeferredBlobGc.run 清理"
-    );
-
-    // composite restore 后仍执行 sweep：预埋不可达 revision，restore 抛错后须消失
-    await svfs.write("/orphan-sweep.md", "seed", { versionCheck: false });
-    const orphanEntry = unwrap(await entries.findByPath(sk, "/orphan-sweep.md"));
-    assert.ok(orphanEntry != null);
-    // 用 seed 产生 entry + revision 后，再 append 一个相同 entryId 但不可达的 revision
-    unwrap(await revisions.append({
-      entryId: orphanEntry.entryId,
-      version: 99,
-      content: "pre-sweep-orphan",
-      status: "active",
-      mtimeMs: Date.now(),
-    }));
-    const beforeOrphan = unwrap(await revisions.findByEntryAndVersion(orphanEntry.entryId, 99));
-    assert.ok(beforeOrphan);
-
-    const baseVfs = VfsServiceFactory.createScoped(ctx.conn, scope);
-    const failingVfs = new Proxy(baseVfs, {
-      get(target, prop, receiver) {
-        if (prop === "hardDelete" || prop === "resetHeadToVersion") {
-          // 错误通道迁移四期：restore 原语失败走 Result.err（不再 throw）
-          return async () => Result.err(new Error("restore composite boom"));
-        }
-        return Reflect.get(target, prop, receiver);
-      },
-    });
-
-    const compositeTurn = new DefaultUserVfsTurnService(
-      makeUserVfsTurnDeps(ctx.conn, {
+    return {
+        conn,
+        sessions: sessionRepo,
+        sessionKkv: SessionKkvServiceFactory.create(conn),
+        messages,
+        chatMessages: messageRepo,
+        checkpoints: checkpointRepo,
+        entries: vfsRepo,
+        revisions: revisionRepo,
         toolRunner,
-        resolveToolCtx: () => ({
-          vfs: failingVfs,
-          projectId: project.id,
-          sessionId: session.id,
-          sessionKkv: SessionKkvServiceFactory.create(ctx.conn),
-        }),
-      })
-    );
+        resolveToolCtx: (sid, pid) => makeToolCtx(conn, pid, sid),
+        messageCheckpoint: MessageCheckpointFactory.create(conn),
+        ...overrides,
+    };
+}
 
-    const compositeResult = await compositeTurn.executeOp(session.id, {
-      actionXml: '<action name="write">\n{"path":"/c.md","content":""}\n</action>\n<action name="write">\n{"path":"/d.md","content":""}\n</action>',
-      tools: [
-        {
-          id: "tu_c",
-          name: "write",
-          input: { path: "/c.md", content: "C" },
-        },
-        {
-          id: "tu_d",
-          name: "write",
-          input: { path: "/d.md", content: "D" },
-        },
-      ],
+function writeOp(path: string, content: string, toolId = "tu_write") {
+    return {
+        actionXml: `<action name="write">\n${JSON.stringify({ path, content }, null, 2)}\n</action>`,
+        tools: [
+            {
+                id: toolId,
+                name: "write",
+                input: { path, content },
+            },
+        ],
+    };
+}
+
+describe("UserVfsTurnService", () => {
+    it("execute 失败不写盘；成功仅写盘并停写 pending kkv（无操作日志半边）", async () => {
+        const ctx = getNovelMasterTestContext();
+        const { userVfsTurn } = ChatServiceFactory.createUserVfsTurnBundle(ctx.conn);
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+
+        const fail = await userVfsTurn.executeOp(session.id, {
+            actionXml: '<action name="write">\n{"path":"/x.md","content":""}\n</action>',
+            tools: [
+                {
+                    id: "tu_bad",
+                    name: "write",
+                    input: { path: "/x.md" },
+                },
+            ],
+        });
+        assert.equal(fail.ok, false);
+        assert.equal(await loadPendingQueueJson(ctx.conn, session.id), null);
+
+        const ok = await userVfsTurn.executeOp(session.id, writeOp("/ok.md", "hello", "tu_ok"));
+        assert.equal(ok.ok, true);
+        assert.equal(await loadPendingQueueJson(ctx.conn, session.id), null);
+        assert.equal(unwrap(await ctx.sessionVfs(project.id, session.id).read("/ok.md")).content, "hello");
     });
-    assert.equal(compositeResult.ok, false);
-    assert.ok(compositeResult.partialFailure);
-    const afterOrphan = unwrap(await revisions.findByEntryAndVersion(orphanEntry.entryId, 99));
-    assert.equal(afterOrphan, null, "restore 抛 composite 后仍须 sweep 掉不可达 revision");
-  });
 
-  it("T2：两次 tool 均成功时磁盘保留、停写 pending kkv", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
+    it("user_ops write 新建文件补父链目录规则（与 agent 链路一致，C-orch-1）", async () => {
+        const ctx = getNovelMasterTestContext();
+        const { userVfsTurn } = ChatServiceFactory.createUserVfsTurnBundle(ctx.conn);
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
 
-    const userVfsTurn = new DefaultUserVfsTurnService(makeUserVfsTurnDeps(ctx.conn));
+        const ok = await userVfsTurn.executeOp(session.id, writeOp("/u/v/w/a.md", "hello", "tu_wr"));
+        assert.equal(ok.ok, true);
 
-    const ok = await userVfsTurn.executeOp(session.id, {
-      actionXml: '<action name="write">\n{"path":"/1.md","content":""}\n</action>\n<action name="write">\n{"path":"/2.md","content":""}\n</action>',
-      tools: [
-        {
-          id: "tu_1",
-          name: "write",
-          input: { path: "/1.md", content: "one" },
-        },
-        {
-          id: "tu_2",
-          name: "write",
-          input: { path: "/2.md", content: "two" },
-        },
-      ],
+        // resolveToolCtx 注入了 session scope workplace：
+        // 新建文件的父链各层应补上默认 rule_on，与 agent 链路同款
+        const workplace = WorkplaceServiceFactory.create(ctx.conn, {
+            kind: "session",
+            projectId: project.id,
+            sessionId: session.id,
+        });
+        assert.equal(unwrap(await workplace.getDirRule("/u"))?.ruleEnabled, true);
+        assert.equal(unwrap(await workplace.getDirRule("/u/v"))?.ruleEnabled, true);
+        assert.equal(unwrap(await workplace.getDirRule("/u/v/w"))?.ruleEnabled, true);
     });
-    assert.equal(ok.ok, true);
 
-    assert.equal(await loadPendingQueueJson(ctx.conn, session.id), null);
-    assert.equal(unwrap(await svfs.read("/1.md")).content, "one");
-    assert.equal(unwrap(await svfs.read("/2.md")).content, "two");
-  });
+    it("execute 使用会抛错的 tool 时不写 pending", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
 
-  it("executeOp 可递归删除目录（不触发 IS_DIRECTORY）", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
-    const { userVfsTurn } = ChatServiceFactory.createUserVfsTurnBundle(ctx.conn);
+        const registry = new ToolRegistry<BuiltinToolContext>();
+        registry.register({
+            name: "test.boom",
+            description: () => "boom",
+            inputSchema: z.object({}),
+            async run() {
+                throw new Error("disk fail");
+            },
+        });
+        const toolRunner = new ToolRunner(registry);
 
-    unwrap(await svfs.mkdir("/55"));
-    await svfs.write("/55/诗歌.txt", "poem", { versionCheck: false });
+        const userVfsTurn = new DefaultUserVfsTurnService(makeUserVfsTurnDeps(ctx.conn, { toolRunner }));
 
-    const result = await userVfsTurn.executeOp(session.id, UserVfsTurnOps.buildDelete("/55", true));
-    assert.equal(result.ok, true);
-    await rejectsErr(() => svfs.list("/55"));
-  });
+        const result = await userVfsTurn.executeOp(session.id, {
+            actionXml: '<action name="write">\n{"path":"/f.md","content":""}\n</action>',
+            tools: [{ id: "tu_boom", name: "test.boom", input: {} }],
+        });
+        assert.equal(result.ok, false);
+        assert.equal(await loadPendingQueueJson(ctx.conn, session.id), null);
+    });
 
-  it("T-FC1 assembly: ChatServiceFactory.createUserVfsTurnBundle write 后有 file_cache full:{path}", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const { userVfsTurn } = ChatServiceFactory.createUserVfsTurnBundle(ctx.conn);
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
+    it("T-UO-SWEEP1：第二次 tool 失败时回滚已成功 path，且 sweep+blob gc；composite 后仍 sweep", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
+        const revisions = new SqliteVfsRevisionRepository(ctx.conn);
+        const entries = new SqliteVfsEntryRepository(ctx.conn);
+        const scope = {
+            kind: "session" as const,
+            projectId: project.id,
+            sessionId: session.id,
+        };
 
-    const result = await userVfsTurn.executeOp(session.id, writeOp("/asm-fc.md", "from-bundle"));
-    assert.equal(result.ok, true);
+        const registry = new ToolRegistry<BuiltinToolContext>();
+        BuiltinTools.register(registry);
+        const innerRunner = new ToolRunner(registry);
+        const toolRunner = {
+            runParallel: async (calls, toolCtx) => {
+                const outcomes = [];
+                for (let index = 0; index < calls.length; index += 1) {
+                    const call = calls[index];
+                    if (index === 1) {
+                        outcomes.push({ ok: false as const, error: new Error("second fail") });
+                        continue;
+                    }
+                    try {
+                        const output = await innerRunner.call(call.name, call.input, toolCtx);
+                        outcomes.push({ ok: true as const, output });
+                    } catch (error: unknown) {
+                        outcomes.push({ ok: false as const, error });
+                    }
+                }
+                return outcomes;
+            },
+            call: innerRunner.call.bind(innerRunner),
+        } as ToolRunner<BuiltinToolContext>;
 
-    const raw = unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", "/asm-fc.md")));
-    assert.ok(raw != null, "sessionKkv 须经 resolveToolCtx 注入");
-    const payload = RuleSnapshotCodec.parseFileCachePayload(raw!);
-    assert.ok(payload.ok);
-    assert.equal(payload.value.body, "from-bundle");
-  });
+        const userVfsTurn = new DefaultUserVfsTurnService(makeUserVfsTurnDeps(ctx.conn, { toolRunner }));
+
+        const result = await userVfsTurn.executeOp(session.id, {
+            actionXml: '<action name="write">\n{"path":"/a.md","content":""}\n</action>\n<action name="write">\n{"path":"/b.md","content":""}\n</action>',
+            tools: [
+                {
+                    id: "tu_1",
+                    name: "write",
+                    input: { path: "/a.md", content: "A-orphan-body" },
+                },
+                {
+                    id: "tu_2",
+                    name: "write",
+                    input: { path: "/b.md", content: "B" },
+                },
+            ],
+        });
+
+        assert.equal(result.ok, false);
+        assert.equal(await loadPendingQueueJson(ctx.conn, session.id), null);
+        await rejectsErr(() => svfs.read("/a.md"));
+        await rejectsErr(() => svfs.read("/b.md"));
+
+        // restore 后不可达 revision 被 sweep；无引用 blob 被全库 gc
+        const sk = LogicalPath.scopeKey(scope);
+        const keys = await revisions.listKeysUnderScope(sk, "/");
+        // entry 已被回滚清理，scope 下的 revision 均不可达，应全部被 sweep
+        assert.equal(keys.filter((k) => k.entryId !== undefined).length, 0, "失败回滚后 scope 下不应有残留 revision");
+        // content_hash 列始终存 ContentHash.hash() 输出的 hex 格式（SHA-256 hex），
+        // zlib b64 只影响 bytes 列编码，不影响 content_hash 列。可直接精确验证。
+        const orphanHash = ContentHash.hash("A-orphan-body");
+        const hashRows = await ctx.conn.query<{ content_hash: string }>(`SELECT content_hash FROM vfs_content_blob`, []);
+        assert.equal(
+            hashRows.some((r) => String(r.content_hash) === orphanHash),
+            false,
+            "orphan blob 应被 DeferredBlobGc.run 清理"
+        );
+
+        // composite restore 后仍执行 sweep：预埋不可达 revision，restore 抛错后须消失
+        await svfs.write("/orphan-sweep.md", "seed", { versionCheck: false });
+        const orphanEntry = unwrap(await entries.findByPath(sk, "/orphan-sweep.md"));
+        assert.ok(orphanEntry != null);
+        // 用 seed 产生 entry + revision 后，再 append 一个相同 entryId 但不可达的 revision
+        unwrap(await revisions.append({
+            entryId: orphanEntry.entryId,
+            version: 99,
+            content: "pre-sweep-orphan",
+            status: "active",
+            mtimeMs: Date.now(),
+        }));
+        const beforeOrphan = unwrap(await revisions.findByEntryAndVersion(orphanEntry.entryId, 99));
+        assert.ok(beforeOrphan);
+
+        const baseVfs = VfsServiceFactory.createScoped(ctx.conn, scope);
+        const failingVfs = new Proxy(baseVfs, {
+            get(target, prop, receiver) {
+                if (prop === "hardDelete" || prop === "resetHeadToVersion") {
+                    // 错误通道迁移四期：restore 原语失败走 Result.err（不再 throw）
+                    return async () => Result.err(new Error("restore composite boom"));
+                }
+                return Reflect.get(target, prop, receiver);
+            },
+        });
+
+        const compositeTurn = new DefaultUserVfsTurnService(
+            makeUserVfsTurnDeps(ctx.conn, {
+                toolRunner,
+                resolveToolCtx: () => ({
+                    vfs: failingVfs,
+                    projectId: project.id,
+                    sessionId: session.id,
+                    sessionKkv: SessionKkvServiceFactory.create(ctx.conn),
+                }),
+            })
+        );
+
+        const compositeResult = await compositeTurn.executeOp(session.id, {
+            actionXml: '<action name="write">\n{"path":"/c.md","content":""}\n</action>\n<action name="write">\n{"path":"/d.md","content":""}\n</action>',
+            tools: [
+                {
+                    id: "tu_c",
+                    name: "write",
+                    input: { path: "/c.md", content: "C" },
+                },
+                {
+                    id: "tu_d",
+                    name: "write",
+                    input: { path: "/d.md", content: "D" },
+                },
+            ],
+        });
+        assert.equal(compositeResult.ok, false);
+        assert.ok(compositeResult.partialFailure);
+        const afterOrphan = unwrap(await revisions.findByEntryAndVersion(orphanEntry.entryId, 99));
+        assert.equal(afterOrphan, null, "restore 抛 composite 后仍须 sweep 掉不可达 revision");
+    });
+
+    it("T2：两次 tool 均成功时磁盘保留、停写 pending kkv", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
+
+        const userVfsTurn = new DefaultUserVfsTurnService(makeUserVfsTurnDeps(ctx.conn));
+
+        const ok = await userVfsTurn.executeOp(session.id, {
+            actionXml: '<action name="write">\n{"path":"/1.md","content":""}\n</action>\n<action name="write">\n{"path":"/2.md","content":""}\n</action>',
+            tools: [
+                {
+                    id: "tu_1",
+                    name: "write",
+                    input: { path: "/1.md", content: "one" },
+                },
+                {
+                    id: "tu_2",
+                    name: "write",
+                    input: { path: "/2.md", content: "two" },
+                },
+            ],
+        });
+        assert.equal(ok.ok, true);
+
+        assert.equal(await loadPendingQueueJson(ctx.conn, session.id), null);
+        assert.equal(unwrap(await svfs.read("/1.md")).content, "one");
+        assert.equal(unwrap(await svfs.read("/2.md")).content, "two");
+    });
+
+    it("executeOp 可递归删除目录（不触发 IS_DIRECTORY）", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
+        const { userVfsTurn } = ChatServiceFactory.createUserVfsTurnBundle(ctx.conn);
+
+        unwrap(await svfs.mkdir("/55"));
+        await svfs.write("/55/诗歌.txt", "poem", { versionCheck: false });
+
+        const result = await userVfsTurn.executeOp(session.id, UserVfsTurnOps.buildDelete("/55", true));
+        assert.equal(result.ok, true);
+        await rejectsErr(() => svfs.list("/55"));
+    });
+
+    it("T-FC1 assembly: ChatServiceFactory.createUserVfsTurnBundle write 后有 file_cache full:{path}", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const { userVfsTurn } = ChatServiceFactory.createUserVfsTurnBundle(ctx.conn);
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+
+        const result = await userVfsTurn.executeOp(session.id, writeOp("/asm-fc.md", "from-bundle"));
+        assert.equal(result.ok, true);
+
+        const raw = unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", "/asm-fc.md")));
+        assert.ok(raw != null, "sessionKkv 须经 resolveToolCtx 注入");
+        const payload = RuleSnapshotCodec.parseFileCachePayload(raw!);
+        assert.ok(payload.ok);
+        assert.equal(payload.value.body, "from-bundle");
+    });
 });

@@ -18,33 +18,33 @@ const DESKTOP_UI_KEY_UPDATES_AUTO_CHECK = "updates.autoCheck";
 export const DESKTOP_UI_KEY_UPDATES_SNOOZE_UNTIL = "updates.snoozeUntil";
 
 const DESKTOP_UI_DEFAULTS: Record<string, string> = {
-  [DESKTOP_UI_KEY_THEME]: "light",
-  [DESKTOP_UI_KEY_CHAT_RICH_TEXT]: "false",
-  [DESKTOP_UI_KEY_UPDATES_AUTO_CHECK]: "true",
+    [DESKTOP_UI_KEY_THEME]: "light",
+    [DESKTOP_UI_KEY_CHAT_RICH_TEXT]: "false",
+    [DESKTOP_UI_KEY_UPDATES_AUTO_CHECK]: "true",
 };
 
 interface DesktopAppUiPreferences {
-  get(key: string): Promise<Result<string | undefined, AppError>>;
-  set(key: string, value: string): Promise<void>;
+    get(key: string): Promise<Result<string | undefined, AppError>>;
+    set(key: string, value: string): Promise<void>;
 }
 
 // nm-style 注记：命名镜像 mobile storage/app-ui-prefs.ts 的 AppUiPrefs 先例。
 export namespace AppUiPrefs {
-  export function create(kkv: KkvService): DesktopAppUiPreferences {
-    return {
-      async get(key: string): Promise<Result<string | undefined, AppError>> {
-        const raw = await kkv.get(DESKTOP_UI_KKV_MODULE, key);
-        if (!raw.ok) {
-          if (AppErrorOps.is(raw.error, "KKV_NOT_FOUND")) {
-            return Result.ok(key in DESKTOP_UI_DEFAULTS ? DESKTOP_UI_DEFAULTS[key] : undefined);
-          }
-          return raw;
-        }
-        return raw;
-      },
-      async set(key: string, value: string) {
-        await kkv.set(DESKTOP_UI_KKV_MODULE, key, value);
-      },
-    };
-  }
+    export function create(kkv: KkvService): DesktopAppUiPreferences {
+        return {
+            async get(key: string): Promise<Result<string | undefined, AppError>> {
+                const raw = await kkv.get(DESKTOP_UI_KKV_MODULE, key);
+                if (!raw.ok) {
+                    if (AppErrorOps.is(raw.error, "KKV_NOT_FOUND")) {
+                        return Result.ok(key in DESKTOP_UI_DEFAULTS ? DESKTOP_UI_DEFAULTS[key] : undefined);
+                    }
+                    return raw;
+                }
+                return raw;
+            },
+            async set(key: string, value: string) {
+                await kkv.set(DESKTOP_UI_KKV_MODULE, key, value);
+            },
+        };
+    }
 }

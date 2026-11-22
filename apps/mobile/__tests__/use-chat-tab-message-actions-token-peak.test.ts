@@ -25,174 +25,174 @@ const mockShowToast = jest.fn();
 const mockRefreshChatTokenLabel = jest.fn();
 
 jest.mock('@react-native-clipboard/clipboard', () => ({
-  __esModule: true,
-  default: {setString: jest.fn()},
+    __esModule: true,
+    default: {setString: jest.fn()},
 }));
 
 jest.mock('../src/services/message-rollback.service', () => {
-  const legacy = {
-  rollbackToMessage: (...args: unknown[]) => mockRollbackToMessage(...args),
+    const legacy = {
+    rollbackToMessage: (...args: unknown[]) => mockRollbackToMessage(...args),
 };
-  return {...legacy, MessageRollbackService: {rollback: legacy.rollbackToMessage}};
+    return {...legacy, MessageRollbackService: {rollback: legacy.rollbackToMessage}};
 });
 
 jest.mock('react-native', () => ({
-  Alert: {
-    alert: jest.fn(
-      (
-        _title: string,
-        _message: string,
-        buttons: {text: string; onPress?: () => void}[],
-      ) => {
-        buttons.find(b => b.text === '回滚')?.onPress?.();
-      },
-    ),
-  },
+    Alert: {
+        alert: jest.fn(
+            (
+                _title: string,
+                _message: string,
+                buttons: {text: string; onPress?: () => void}[],
+            ) => {
+                buttons.find(b => b.text === '回滚')?.onPress?.();
+            },
+        ),
+    },
 }));
 
 const mockRuntime = {};
 
 function plainUserMessage(text: string): ChatMessageData {
-  return {
-    id: 'm-user',
-    sessionId: 's1',
-    seq: 2,
-    role: 'user',
-    content: {blocks: [{type: 'text', text}]},
-    provider: null,
-    raw: null,
-    createdAtMs: 1,
-    hidden: false,
-  };
+    return {
+        id: 'm-user',
+        sessionId: 's1',
+        seq: 2,
+        role: 'user',
+        content: {blocks: [{type: 'text', text}]},
+        provider: null,
+        raw: null,
+        createdAtMs: 1,
+        hidden: false,
+    };
 }
 
 type MountOptions = {
-  snapshotCompleteSignal?: ReturnType<typeof createSnapshotCompleteSignal>;
+    snapshotCompleteSignal?: ReturnType<typeof createSnapshotCompleteSignal>;
 };
 
 function mountActions(chatMessages: ChatMessageData[], options?: MountOptions) {
-  let api: ReturnType<typeof useChatTabMessageActions> | undefined;
-  function Harness() {
-    api = useChatTabMessageActions({
-      runtime: mockRuntime as any,
-      projectId: 'p1',
-      sessionId: 's1',
-      chatMessages,
-      reloadMessages: mockReloadMessages,
-      setDraftRestoreToken: mockSetDraftRestoreToken,
-      agentRunning: false,
-      resetStreamingDisplay: jest.fn(),
-      showToast: mockShowToast,
-      refreshChatTokenLabel: mockRefreshChatTokenLabel,
-      snapshotCompleteSignal: options?.snapshotCompleteSignal,
-      bumpWorktreeUiToken: jest.fn(),
-      reloadLists: jest.fn(),
-      setCurrentSession: jest.fn(),
-      setChatSubview: jest.fn(),
-      setConversationPanel: jest.fn(),
-      setMessageEditPrompt: jest.fn(),
+    let api: ReturnType<typeof useChatTabMessageActions> | undefined;
+    function Harness() {
+        api = useChatTabMessageActions({
+            runtime: mockRuntime as any,
+            projectId: 'p1',
+            sessionId: 's1',
+            chatMessages,
+            reloadMessages: mockReloadMessages,
+            setDraftRestoreToken: mockSetDraftRestoreToken,
+            agentRunning: false,
+            resetStreamingDisplay: jest.fn(),
+            showToast: mockShowToast,
+            refreshChatTokenLabel: mockRefreshChatTokenLabel,
+            snapshotCompleteSignal: options?.snapshotCompleteSignal,
+            bumpWorktreeUiToken: jest.fn(),
+            reloadLists: jest.fn(),
+            setCurrentSession: jest.fn(),
+            setChatSubview: jest.fn(),
+            setConversationPanel: jest.fn(),
+            setMessageEditPrompt: jest.fn(),
+        });
+        return null;
+    }
+    act(() => {
+        TestRenderer.create(React.createElement(Harness));
     });
-    return null;
-  }
-  act(() => {
-    TestRenderer.create(React.createElement(Harness));
-  });
-  return api!;
+    return api!;
 }
 
 /** 排空微任务队列（回滚链跑到 consumeNext 挂起点）。 */
 async function flushMicrotasks(rounds = 8): Promise<void> {
-  for (let i = 0; i < rounds; i++) {
-    await Promise.resolve();
-  }
+    for (let i = 0; i < rounds; i++) {
+        await Promise.resolve();
+    }
 }
 
 describe('token 刷新错峰（T-R5 hook 半）', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    jest.useRealTimers();
-    mockRollbackToMessage.mockResolvedValue({ok: true, value: undefined});
-    mockReloadMessages.mockResolvedValue([]);
-    mockSetDraftRestoreToken.mockImplementation(
-      (updater: number | ((t: number) => number)) => {
-        if (typeof updater === 'function') {
-          updater(0);
-        }
-      },
-    );
-  });
-
-  afterEach(() => {
-    jest.useRealTimers();
-  });
-
-  it('T-R5a: 快照完成信号先于 token 重算——notify 前 refresh 不发起、notify 后发起', async () => {
-    const signal = SnapshotCompleteSignal.create();
-    const anchor = plainUserMessage('hello');
-    const api = mountActions([anchor], {snapshotCompleteSignal: signal});
-
-    await act(async () => {
-      api.handleMessageMenuAction(anchor, 'rollback');
-      await flushMicrotasks();
+    beforeEach(() => {
+        jest.clearAllMocks();
+        jest.useRealTimers();
+        mockRollbackToMessage.mockResolvedValue({ok: true, value: undefined});
+        mockReloadMessages.mockResolvedValue([]);
+        mockSetDraftRestoreToken.mockImplementation(
+            (updater: number | ((t: number) => number)) => {
+                if (typeof updater === 'function') {
+                    updater(0);
+                }
+            },
+        );
     });
 
-    // 回滚/重载/toast 已完成，但 token 重算仍等快照完成信号。
-    expect(mockRollbackToMessage).toHaveBeenCalled();
-    expect(mockReloadMessages).toHaveBeenCalled();
-    expect(mockShowToast).toHaveBeenCalled();
-    expect(mockRefreshChatTokenLabel).not.toHaveBeenCalled();
-
-    // 快照末片 post + deferred 排空 → notify → token 重算发起。
-    await act(async () => {
-      signal.notify();
-      await flushMicrotasks();
+    afterEach(() => {
+        jest.useRealTimers();
     });
-    expect(mockRefreshChatTokenLabel).toHaveBeenCalledTimes(1);
-  });
 
-  it('T-R5b: 超时兜底——信号迟到时超时后刷新最终仍执行（不悬挂）', async () => {
-    jest.useFakeTimers();
-    const signal = SnapshotCompleteSignal.create();
-    const anchor = plainUserMessage('hello');
-    const api = mountActions([anchor], {snapshotCompleteSignal: signal});
+    it('T-R5a: 快照完成信号先于 token 重算——notify 前 refresh 不发起、notify 后发起', async () => {
+        const signal = SnapshotCompleteSignal.create();
+        const anchor = plainUserMessage('hello');
+        const api = mountActions([anchor], {snapshotCompleteSignal: signal});
 
-    await act(async () => {
-      api.handleMessageMenuAction(anchor, 'rollback');
-      await flushMicrotasks();
+        await act(async () => {
+            api.handleMessageMenuAction(anchor, 'rollback');
+            await flushMicrotasks();
+        });
+
+        // 回滚/重载/toast 已完成，但 token 重算仍等快照完成信号。
+        expect(mockRollbackToMessage).toHaveBeenCalled();
+        expect(mockReloadMessages).toHaveBeenCalled();
+        expect(mockShowToast).toHaveBeenCalled();
+        expect(mockRefreshChatTokenLabel).not.toHaveBeenCalled();
+
+        // 快照末片 post + deferred 排空 → notify → token 重算发起。
+        await act(async () => {
+            signal.notify();
+            await flushMicrotasks();
+        });
+        expect(mockRefreshChatTokenLabel).toHaveBeenCalledTimes(1);
     });
-    expect(mockRefreshChatTokenLabel).not.toHaveBeenCalled();
 
-    // 推进超时窗（1500ms 兜底）：刷新最终执行。
-    await act(async () => {
-      jest.advanceTimersByTime(1500);
-      await flushMicrotasks();
+    it('T-R5b: 超时兜底——信号迟到时超时后刷新最终仍执行（不悬挂）', async () => {
+        jest.useFakeTimers();
+        const signal = SnapshotCompleteSignal.create();
+        const anchor = plainUserMessage('hello');
+        const api = mountActions([anchor], {snapshotCompleteSignal: signal});
+
+        await act(async () => {
+            api.handleMessageMenuAction(anchor, 'rollback');
+            await flushMicrotasks();
+        });
+        expect(mockRefreshChatTokenLabel).not.toHaveBeenCalled();
+
+        // 推进超时窗（1500ms 兜底）：刷新最终执行。
+        await act(async () => {
+            jest.advanceTimersByTime(1500);
+            await flushMicrotasks();
+        });
+        expect(mockRefreshChatTokenLabel).toHaveBeenCalledTimes(1);
     });
-    expect(mockRefreshChatTokenLabel).toHaveBeenCalledTimes(1);
-  });
 
-  it('T-R5c: 缺省不传信号——保持现状时机立即刷新（既有场景零影响）', async () => {
-    const anchor = plainUserMessage('hello');
-    const api = mountActions([anchor]);
+    it('T-R5c: 缺省不传信号——保持现状时机立即刷新（既有场景零影响）', async () => {
+        const anchor = plainUserMessage('hello');
+        const api = mountActions([anchor]);
 
-    await act(async () => {
-      api.handleMessageMenuAction(anchor, 'rollback');
-      await flushMicrotasks();
+        await act(async () => {
+            api.handleMessageMenuAction(anchor, 'rollback');
+            await flushMicrotasks();
+        });
+        expect(mockRefreshChatTokenLabel).toHaveBeenCalledTimes(1);
     });
-    expect(mockRefreshChatTokenLabel).toHaveBeenCalledTimes(1);
-  });
 
-  it('T-R5d: 信号早于 consumeNext 到达（notify 先行）——立即放行刷新', async () => {
-    const signal = SnapshotCompleteSignal.create();
-    const anchor = plainUserMessage('hello');
-    const api = mountActions([anchor], {snapshotCompleteSignal: signal});
+    it('T-R5d: 信号早于 consumeNext 到达（notify 先行）——立即放行刷新', async () => {
+        const signal = SnapshotCompleteSignal.create();
+        const anchor = plainUserMessage('hello');
+        const api = mountActions([anchor], {snapshotCompleteSignal: signal});
 
-    // reloadMessages mock 立即 resolve，随后组件快照（mock 外） notify
-    // 可能早于 consumeNext——latch 语义下 pending 被记住、立即放行。
-    signal.notify();
-    await act(async () => {
-      api.handleMessageMenuAction(anchor, 'rollback');
-      await flushMicrotasks();
+        // reloadMessages mock 立即 resolve，随后组件快照（mock 外） notify
+        // 可能早于 consumeNext——latch 语义下 pending 被记住、立即放行。
+        signal.notify();
+        await act(async () => {
+            api.handleMessageMenuAction(anchor, 'rollback');
+            await flushMicrotasks();
+        });
+        expect(mockRefreshChatTokenLabel).toHaveBeenCalledTimes(1);
     });
-    expect(mockRefreshChatTokenLabel).toHaveBeenCalledTimes(1);
-  });
 });

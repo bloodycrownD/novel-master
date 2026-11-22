@@ -18,210 +18,210 @@ import path from 'path';
 
 // ── SessionDetailScreen 依赖 mock（jest.mock 会被 babel 提升到 import 之前） ──
 const mockSessionsGet = jest.fn(async () => ({
-  ok: true as const,
-  value: {id: 's1', title: '我的会话'},
+    ok: true as const,
+    value: {id: 's1', title: '我的会话'},
 }));
 const mockSessionsRename = jest.fn(async () => undefined);
 const mockSessionsGetSessionAgentConfig = jest.fn(async () => ({
-  ok: true as const,
-  value: {agentId: 'workspace-agent'},
+    ok: true as const,
+    value: {agentId: 'workspace-agent'},
 }));
 const mockSessionsUpdateSessionAgentConfig = jest.fn(async () => ({
-  agentId: 'workspace-agent',
+    agentId: 'workspace-agent',
 }));
 const mockStateGetCurrentAgentId = jest.fn(async () => ({
-  ok: true as const,
-  value: 'workspace-agent',
+    ok: true as const,
+    value: 'workspace-agent',
 }));
 const mockStateGetCurrentModelId = jest.fn(async () => ({
-  ok: true as const,
-  value: 'model-ws',
+    ok: true as const,
+    value: 'model-ws',
 }));
 const mockStateSetCurrentModelId = jest.fn(async () => undefined);
 const mockStateSetCurrentAgentId = jest.fn(async () => undefined);
 // 技能汇总：两条有效（一条禁用）+ 一条无效，验证 n/m 剔除无效口径
 const mockEffectiveSkills = jest.fn(async () => [
-  {name: 'a', domain: 'global', valid: true, disabled: false},
-  {name: 'b', domain: 'global', valid: true, disabled: true},
-  {name: 'broken', domain: 'project', valid: false, disabled: false},
+    {name: 'a', domain: 'global', valid: true, disabled: false},
+    {name: 'b', domain: 'global', valid: true, disabled: true},
+    {name: 'broken', domain: 'project', valid: false, disabled: false},
 ]);
 
 const mockRuntime = {
-  sessions: {
-    get: mockSessionsGet,
-    rename: mockSessionsRename,
-    getSessionAgentConfig: mockSessionsGetSessionAgentConfig,
-    updateSessionAgentConfig: mockSessionsUpdateSessionAgentConfig,
-  },
-  state: {
-    getCurrentAgentId: mockStateGetCurrentAgentId,
-    getCurrentModelId: mockStateGetCurrentModelId,
-    setCurrentModelId: mockStateSetCurrentModelId,
-    setCurrentAgentId: mockStateSetCurrentAgentId,
-  },
-  skills: () => ({
-    effectiveSkills: mockEffectiveSkills,
-  }),
+    sessions: {
+        get: mockSessionsGet,
+        rename: mockSessionsRename,
+        getSessionAgentConfig: mockSessionsGetSessionAgentConfig,
+        updateSessionAgentConfig: mockSessionsUpdateSessionAgentConfig,
+    },
+    state: {
+        getCurrentAgentId: mockStateGetCurrentAgentId,
+        getCurrentModelId: mockStateGetCurrentModelId,
+        setCurrentModelId: mockStateSetCurrentModelId,
+        setCurrentAgentId: mockStateSetCurrentAgentId,
+    },
+    skills: () => ({
+        effectiveSkills: mockEffectiveSkills,
+    }),
 };
 
 const mockShowToast = jest.fn();
 let mockRouteParams: {projectId: string; sessionId: string} = {
-  projectId: 'p1',
-  sessionId: 's1',
+    projectId: 'p1',
+    sessionId: 's1',
 };
 
 jest.mock('@/hooks/useRuntime', () => ({
-  useRuntime: () => mockRuntime,
+    useRuntime: () => mockRuntime,
 }));
 
 jest.mock('@/theme/ThemeProvider', () => ({
-  useTheme: () => ({
-    tokens: {
-      background: '#fff',
-      surface: '#f5f5f5',
-      text: '#111',
-      textSecondary: '#666',
-      textTertiary: '#999',
-      border: '#ddd',
-      primary: '#007aff',
-      danger: '#f00',
-    },
-  }),
+    useTheme: () => ({
+        tokens: {
+            background: '#fff',
+            surface: '#f5f5f5',
+            text: '#111',
+            textSecondary: '#666',
+            textTertiary: '#999',
+            border: '#ddd',
+            primary: '#007aff',
+            danger: '#f00',
+        },
+    }),
 }));
 
 jest.mock('@/components/chrome/ToastHost', () => ({
-  useToast: () => ({showToast: mockShowToast}),
+    useToast: () => ({showToast: mockShowToast}),
 }));
 
 jest.mock('@/errors/toast-message', () => {
-  const legacy = {
-  toastMessage: (_title: string, err: unknown) => String(err),
+    const legacy = {
+    toastMessage: (_title: string, err: unknown) => String(err),
 };
-  return {...legacy, ToastMessage: {toast: legacy.toastMessage}};
+    return {...legacy, ToastMessage: {toast: legacy.toastMessage}};
 });
 
 const mockLoadChatAgentMeta = jest.fn();
 // isAgentLocked / isModelLocked / isAgentDeleted 的 mock 跟真实逻辑保持一致：
 // agent 卡仅 meta 未加载时锁（none 态放开为待重选）；model 卡 none 态仍锁。
 jest.mock('@/services/chat-agent-meta', () => {
-  const legacy = {
-  loadChatAgentMeta: (...args: unknown[]) => mockLoadChatAgentMeta(...args),
-  isAgentLocked: (meta: {source?: string} | undefined) => meta == null,
-  isAgentDeleted: (meta: {source?: string} | undefined) =>
-    meta != null && meta.source === 'none',
-  isModelLocked: (
-    meta:
-      | {
-          source?: string;
-          modelSource?: string;
-          hasDedicatedModel?: boolean;
-        }
-      | undefined,
-  ) =>
-    !meta ||
-    meta.source !== 'session' ||
-    meta.modelSource === 'agent-pin' ||
-    Boolean(meta.hasDedicatedModel),
-  AGENT_LOCK_TOAST_STATEMENT: '智能体信息加载中，请稍候再试',
-  AGENT_RESELECT_HINT: '智能体已删除 · 点击重选',
-  MODEL_LOCK_TOAST: '当前智能体已锁定模型，会话内无法覆盖',
+    const legacy = {
+    loadChatAgentMeta: (...args: unknown[]) => mockLoadChatAgentMeta(...args),
+    isAgentLocked: (meta: {source?: string} | undefined) => meta == null,
+    isAgentDeleted: (meta: {source?: string} | undefined) =>
+        meta != null && meta.source === 'none',
+    isModelLocked: (
+        meta:
+            | {
+                    source?: string;
+                    modelSource?: string;
+                    hasDedicatedModel?: boolean;
+                }
+            | undefined,
+    ) =>
+        !meta ||
+        meta.source !== 'session' ||
+        meta.modelSource === 'agent-pin' ||
+        Boolean(meta.hasDedicatedModel),
+    AGENT_LOCK_TOAST_STATEMENT: '智能体信息加载中，请稍候再试',
+    AGENT_RESELECT_HINT: '智能体已删除 · 点击重选',
+    MODEL_LOCK_TOAST: '当前智能体已锁定模型，会话内无法覆盖',
 };
-  return {...legacy, ChatAgentMeta: {load: legacy.loadChatAgentMeta, isLocked: legacy.isAgentLocked, isModelLocked: legacy.isModelLocked, isDeleted: legacy.isAgentDeleted}};
+    return {...legacy, ChatAgentMeta: {load: legacy.loadChatAgentMeta, isLocked: legacy.isAgentLocked, isModelLocked: legacy.isModelLocked, isDeleted: legacy.isAgentDeleted}};
 });
 
 jest.mock('@/components/agent/AgentPickerModal', () => {
-  const React = require('react');
-  return {
-    // onSelected 透传到节点 props（au/G-4 切换成功重拉用例的断言面）。
-    AgentPickerModal: (props: {
-      visible: boolean;
-      sessionId?: string;
-      onClose: () => void;
-      onSelected?: () => void;
-    }) =>
-      React.createElement('View', {
-        testID: 'agent-picker-modal',
-        visible: String(props.visible),
-        sessionId: props.sessionId,
-        onSelected: props.onSelected,
-      }),
-  };
+    const React = require('react');
+    return {
+        // onSelected 透传到节点 props（au/G-4 切换成功重拉用例的断言面）。
+        AgentPickerModal: (props: {
+            visible: boolean;
+            sessionId?: string;
+            onClose: () => void;
+            onSelected?: () => void;
+        }) =>
+            React.createElement('View', {
+                testID: 'agent-picker-modal',
+                visible: String(props.visible),
+                sessionId: props.sessionId,
+                onSelected: props.onSelected,
+            }),
+    };
 });
 jest.mock('@/components/provider/ModelPickerModal', () => {
-  const React = require('react');
-  return {
-    ModelPickerModal: (props: {
-      visible: boolean;
-      sessionId?: string;
-      onClose: () => void;
-    }) =>
-      React.createElement('View', {
-        testID: 'model-picker-modal',
-        visible: String(props.visible),
-        sessionId: props.sessionId,
-      }),
-  };
+    const React = require('react');
+    return {
+        ModelPickerModal: (props: {
+            visible: boolean;
+            sessionId?: string;
+            onClose: () => void;
+        }) =>
+            React.createElement('View', {
+                testID: 'model-picker-modal',
+                visible: String(props.visible),
+                sessionId: props.sessionId,
+            }),
+    };
 });
 
 const mockNavigate = jest.fn();
 const mockGoBack = jest.fn();
 jest.mock('@react-navigation/native', () => ({
-  useRoute: () => ({params: mockRouteParams}),
-  useNavigation: () => ({navigate: mockNavigate, goBack: mockGoBack}),
-  useFocusEffect: () => undefined,
+    useRoute: () => ({params: mockRouteParams}),
+    useNavigation: () => ({navigate: mockNavigate, goBack: mockGoBack}),
+    useFocusEffect: () => undefined,
 }));
 
 jest.mock('react-native', () => {
-  const RnReact = require('react');
-  return {
-    ScrollView: ({
-      children,
-      testID,
-    }: {
-      children?: React.ReactNode;
-      testID?: string;
-    }) => RnReact.createElement('View', {testID}, children),
-    TextInput: (props: {
-      testID?: string;
-      value?: string;
-      onChangeText?: (v: string) => void;
-      onSubmitEditing?: () => void;
-      onEndEditing?: () => void;
-    }) =>
-      RnReact.createElement('TextInput', {
-        testID: props.testID,
-        value: props.value,
-        onChangeText: props.onChangeText,
-        onSubmitEditing: props.onSubmitEditing,
-        onEndEditing: props.onEndEditing,
-      }),
-    Pressable: (props: {
-      children?: React.ReactNode;
-      onPress?: () => void;
-      disabled?: boolean;
-      accessibilityLabel?: string;
-      testID?: string;
-    }) =>
-      RnReact.createElement(
-        'View',
-        {
-          testID: props.testID ?? props.accessibilityLabel,
-          onPress: props.onPress,
-          disabled: String(props.disabled ?? false),
-        },
-        props.children,
-      ),
-    StyleSheet: {create: (s: object) => s, hairlineWidth: 1},
-    Platform: {OS: 'ios'},
-    Text: ({children, testID}: {children?: React.ReactNode; testID?: string}) =>
-      RnReact.createElement('Text', {testID}, children),
-    View: ({children, testID}: {children?: React.ReactNode; testID?: string}) =>
-      RnReact.createElement('View', {testID}, children),
-    // 工厂内不能引用外部变量（react-native 会在 keyboard-controller 等 import
-    // 阶段被提前 require，此时外部 const 尚在 TDZ，工厂抛错会回退真实模块），
-    // 故内联 jest.fn()，断言处用 require('react-native') 取 emit（同 T-KB4 范式）。
-    DeviceEventEmitter: {emit: jest.fn()},
-  };
+    const RnReact = require('react');
+    return {
+        ScrollView: ({
+            children,
+            testID,
+        }: {
+            children?: React.ReactNode;
+            testID?: string;
+        }) => RnReact.createElement('View', {testID}, children),
+        TextInput: (props: {
+            testID?: string;
+            value?: string;
+            onChangeText?: (v: string) => void;
+            onSubmitEditing?: () => void;
+            onEndEditing?: () => void;
+        }) =>
+            RnReact.createElement('TextInput', {
+                testID: props.testID,
+                value: props.value,
+                onChangeText: props.onChangeText,
+                onSubmitEditing: props.onSubmitEditing,
+                onEndEditing: props.onEndEditing,
+            }),
+        Pressable: (props: {
+            children?: React.ReactNode;
+            onPress?: () => void;
+            disabled?: boolean;
+            accessibilityLabel?: string;
+            testID?: string;
+        }) =>
+            RnReact.createElement(
+                'View',
+                {
+                    testID: props.testID ?? props.accessibilityLabel,
+                    onPress: props.onPress,
+                    disabled: String(props.disabled ?? false),
+                },
+                props.children,
+            ),
+        StyleSheet: {create: (s: object) => s, hairlineWidth: 1},
+        Platform: {OS: 'ios'},
+        Text: ({children, testID}: {children?: React.ReactNode; testID?: string}) =>
+            RnReact.createElement('Text', {testID}, children),
+        View: ({children, testID}: {children?: React.ReactNode; testID?: string}) =>
+            RnReact.createElement('View', {testID}, children),
+        // 工厂内不能引用外部变量（react-native 会在 keyboard-controller 等 import
+        // 阶段被提前 require，此时外部 const 尚在 TDZ，工厂抛错会回退真实模块），
+        // 故内联 jest.fn()，断言处用 require('react-native') 取 emit（同 T-KB4 范式）。
+        DeviceEventEmitter: {emit: jest.fn()},
+    };
 });
 
 import {SessionDetailScreen} from '@/screens/stack/SessionDetailScreen';
@@ -229,269 +229,269 @@ import {AgentPicker} from '@/services/agent-picker'
 import type {ChatAgentMeta} from '@/services/chat-agent-meta';
 
 function flushPromises(): Promise<void> {
-  return new Promise(resolve => setImmediate(resolve));
+    return new Promise(resolve => setImmediate(resolve));
 }
 
 function meta(overrides: Partial<ChatAgentMeta> = {}): ChatAgentMeta {
-  return {
-    source: 'session',
-    agentId: 'agent-a',
-    agentName: 'Alpha',
-    modelLabel: 'Model-1',
-    tokenLabel: '',
-    hasDedicatedModel: false,
-    modelSource: 'session',
-    ...overrides,
-  };
+    return {
+        source: 'session',
+        agentId: 'agent-a',
+        agentName: 'Alpha',
+        modelLabel: 'Model-1',
+        tokenLabel: '',
+        hasDedicatedModel: false,
+        modelSource: 'session',
+        ...overrides,
+    };
 }
 
 describe('T-M2 SessionDetailScreen', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockRouteParams = {projectId: 'p1', sessionId: 's1'};
-    mockSessionsGet.mockResolvedValue({
-      ok: true,
-      value: {id: 's1', title: '我的会话'},
-    });
-    mockLoadChatAgentMeta.mockResolvedValue({ok: true, value: meta()});
-  });
-
-  it('渲染聊天名 / agent / model 卡片（不再有来源标签）', async () => {
-    let tree!: TestRenderer.ReactTestRenderer;
-    await act(async () => {
-      tree = TestRenderer.create(<SessionDetailScreen />);
-      await flushPromises();
-    });
-    const json = JSON.stringify(tree.toJSON());
-    expect(json).toContain('我的会话');
-    expect(json).toContain('Alpha');
-    expect(json).toContain('Model-1');
-    // 已去除来源标签 badge，确认不再残留
-    expect(json).not.toContain('会话引用');
-    expect(json).not.toContain('点击编辑');
-    // 卡片右侧 chevron 暗示可点（非锁定场景）
-    expect(json).toContain('›');
-  });
-
-  it('点击当前智能体卡片打开 AgentPickerModal（session 模式：传 sessionId）', async () => {
-    let tree!: TestRenderer.ReactTestRenderer;
-    await act(async () => {
-      tree = TestRenderer.create(<SessionDetailScreen />);
-      await flushPromises();
-    });
-    await act(async () => {
-      tree.root.findByProps({testID: 'agent-row'}).props.onPress();
-    });
-    const picker = tree.root.findByProps({testID: 'agent-picker-modal'});
-    expect(picker.props.visible).toBe('true');
-    expect(picker.props.sessionId).toBe('s1');
-  });
-
-  it('点击当前大模型卡片打开 ModelPickerModal（session 模式：传 sessionId）', async () => {
-    let tree!: TestRenderer.ReactTestRenderer;
-    await act(async () => {
-      tree = TestRenderer.create(<SessionDetailScreen />);
-      await flushPromises();
-    });
-    await act(async () => {
-      tree.root.findByProps({testID: 'model-row'}).props.onPress();
-    });
-    const picker = tree.root.findByProps({testID: 'model-picker-modal'});
-    expect(picker.props.visible).toBe('true');
-    expect(picker.props.sessionId).toBe('s1');
-  });
-
-  it('agent pin（modelSource=agent-pin）时点击大模型卡片不进 picker，弹锁定提示', async () => {
-    mockLoadChatAgentMeta.mockResolvedValue({
-      ok: true,
-      value: meta({modelSource: 'agent-pin', hasDedicatedModel: true}),
-    });
-    let tree!: TestRenderer.ReactTestRenderer;
-    await act(async () => {
-      tree = TestRenderer.create(<SessionDetailScreen />);
-      await flushPromises();
-    });
-    await act(async () => {
-      tree.root.findByProps({testID: 'model-row'}).props.onPress();
-    });
-    const picker = tree.root.findByProps({testID: 'model-picker-modal'});
-    expect(picker.props.visible).toBe('false');
-    expect(mockShowToast).toHaveBeenCalled();
-  });
-
-  // session-agent-locked-after-delete：source='none'（绑定的智能体已被删除）时
-  // 智能体卡放开为「待重选」——可点击弹 picker 重选；模型卡保持锁定。
-  it("source='none' 时智能体卡待重选可弹 picker，模型卡锁定只弹提示", async () => {
-    // chat-agent-meta.ts 在 AgentRunResolveError 时会回填这条 meta
-    mockLoadChatAgentMeta.mockResolvedValue({ok: true, value: meta({source: 'none'})});
-    let tree!: TestRenderer.ReactTestRenderer;
-    await act(async () => {
-      tree = TestRenderer.create(<SessionDetailScreen />);
-      await flushPromises();
-    });
-    const json = JSON.stringify(tree.toJSON());
-    // 智能体卡：待重选 badge 可见，chevron 仍为 › 暗示可点
-    expect(json).toContain('智能体已删除 · 点击重选');
-    expect(json).toContain('›');
-    // 模型卡：维持锁定（🔒）
-    expect(json).toContain('🔒');
-    // 点击智能体卡 → 正常弹 picker（不再锁死，也不再弹重选 toast）
-    await act(async () => {
-      tree.root.findByProps({testID: 'agent-row'}).props.onPress();
-    });
-    expect(
-      tree.root.findByProps({testID: 'agent-picker-modal'}).props.visible,
-    ).toBe('true');
-    // 点击模型卡 → 维持锁定：不进 picker，只弹锁定提示
-    await act(async () => {
-      tree.root.findByProps({testID: 'model-row'}).props.onPress();
-    });
-    expect(
-      tree.root.findByProps({testID: 'model-picker-modal'}).props.visible,
-    ).toBe('false');
-    // 仅模型卡弹一次锁定提示：智能体卡点击不再弹「请重新选择」toast
-    expect(mockShowToast).toHaveBeenCalledTimes(1);
-    expect(mockShowToast).not.toHaveBeenCalledWith(
-      '智能体已被删除，请重新选择',
-    );
-  });
-
-  // review-mobile/G-2：loadChatAgentMeta 抛非 AgentRunResolveError 时走异常路径，
-  // 详情页弹错误提示并停留在加载态（卡片不渲染，自然不可点）。
-  it('loadChatAgentMeta reject 时弹加载失败提示，卡片不渲染', async () => {
-    mockLoadChatAgentMeta.mockResolvedValue({ok: false, error: new Error('boom')});
-    let tree!: TestRenderer.ReactTestRenderer;
-    await act(async () => {
-      tree = TestRenderer.create(<SessionDetailScreen />);
-      await flushPromises();
-    });
-    expect(mockShowToast).toHaveBeenCalled();
-    const json = JSON.stringify(tree.toJSON());
-    // 仍在加载态，没有渲染卡片
-    expect(json).not.toContain('agent-row');
-    expect(json).not.toContain('model-row');
-  });
-
-  it('session 时智能体可切换（不锁、不弹提示）', async () => {
-    mockLoadChatAgentMeta.mockResolvedValue({ok: true, value: meta({source: 'session'})});
-    let tree!: TestRenderer.ReactTestRenderer;
-    await act(async () => {
-      tree = TestRenderer.create(<SessionDetailScreen />);
-      await flushPromises();
-    });
-    await act(async () => {
-      tree.root.findByProps({testID: 'agent-row'}).props.onPress();
-    });
-    expect(mockShowToast).not.toHaveBeenCalled();
-    const picker = tree.root.findByProps({testID: 'agent-picker-modal'});
-    expect(picker.props.visible).toBe('true');
-  });
-
-  // au/G-4（cr-fix-spec 条目 11c）：切换成功回调 onSelected 后详情页 load()
-  // 重拉——会话与 meta 都要重新查询，顶栏/卡片随新绑定刷新。
-  it('切换智能体成功（onSelected）后 load() 重拉会话与 meta', async () => {
-    let tree!: TestRenderer.ReactTestRenderer;
-    await act(async () => {
-      tree = TestRenderer.create(<SessionDetailScreen />);
-      await flushPromises();
-    });
-    expect(mockSessionsGet).toHaveBeenCalledTimes(1);
-    expect(mockLoadChatAgentMeta).toHaveBeenCalledTimes(1);
-
-    // 打开 picker 并触发「切换成功」回调
-    await act(async () => {
-      tree.root.findByProps({testID: 'agent-row'}).props.onPress();
-    });
-    const picker = tree.root.findByProps({testID: 'agent-picker-modal'});
-    expect(picker.props.visible).toBe('true');
-    await act(async () => {
-      picker.props.onSelected();
-      await flushPromises();
+    beforeEach(() => {
+        jest.clearAllMocks();
+        mockRouteParams = {projectId: 'p1', sessionId: 's1'};
+        mockSessionsGet.mockResolvedValue({
+            ok: true,
+            value: {id: 's1', title: '我的会话'},
+        });
+        mockLoadChatAgentMeta.mockResolvedValue({ok: true, value: meta()});
     });
 
-    // 重拉断言：sessions.get 与 loadChatAgentMeta 均再次发起。
-    expect(mockSessionsGet).toHaveBeenCalledTimes(2);
-    expect(mockLoadChatAgentMeta).toHaveBeenCalledTimes(2);
-  });
+    it('渲染聊天名 / agent / model 卡片（不再有来源标签）', async () => {
+        let tree!: TestRenderer.ReactTestRenderer;
+        await act(async () => {
+            tree = TestRenderer.create(<SessionDetailScreen />);
+            await flushPromises();
+        });
+        const json = JSON.stringify(tree.toJSON());
+        expect(json).toContain('我的会话');
+        expect(json).toContain('Alpha');
+        expect(json).toContain('Model-1');
+        // 已去除来源标签 badge，确认不再残留
+        expect(json).not.toContain('会话引用');
+        expect(json).not.toContain('点击编辑');
+        // 卡片右侧 chevron 暗示可点（非锁定场景）
+        expect(json).toContain('›');
+    });
 
-  it('点击聊天名进入 inline 编辑，提交后调用 sessions.rename', async () => {
-    let tree!: TestRenderer.ReactTestRenderer;
-    await act(async () => {
-      tree = TestRenderer.create(<SessionDetailScreen />);
-      await flushPromises();
+    it('点击当前智能体卡片打开 AgentPickerModal（session 模式：传 sessionId）', async () => {
+        let tree!: TestRenderer.ReactTestRenderer;
+        await act(async () => {
+            tree = TestRenderer.create(<SessionDetailScreen />);
+            await flushPromises();
+        });
+        await act(async () => {
+            tree.root.findByProps({testID: 'agent-row'}).props.onPress();
+        });
+        const picker = tree.root.findByProps({testID: 'agent-picker-modal'});
+        expect(picker.props.visible).toBe('true');
+        expect(picker.props.sessionId).toBe('s1');
     });
-    await act(async () => {
-      tree.root.findByProps({testID: 'session-title'}).props.onPress();
-    });
-    const input = tree.root.findByProps({testID: 'session-title-input'});
-    await act(async () => {
-      input.props.onChangeText('新名字');
-    });
-    await act(async () => {
-      input.props.onSubmitEditing();
-    });
-    expect(mockSessionsRename).toHaveBeenCalledWith('s1', '新名字');
-  });
 
-  it('inline 编辑提交空串或未改动时不调 rename', async () => {
-    let tree!: TestRenderer.ReactTestRenderer;
-    await act(async () => {
-      tree = TestRenderer.create(<SessionDetailScreen />);
-      await flushPromises();
+    it('点击当前大模型卡片打开 ModelPickerModal（session 模式：传 sessionId）', async () => {
+        let tree!: TestRenderer.ReactTestRenderer;
+        await act(async () => {
+            tree = TestRenderer.create(<SessionDetailScreen />);
+            await flushPromises();
+        });
+        await act(async () => {
+            tree.root.findByProps({testID: 'model-row'}).props.onPress();
+        });
+        const picker = tree.root.findByProps({testID: 'model-picker-modal'});
+        expect(picker.props.visible).toBe('true');
+        expect(picker.props.sessionId).toBe('s1');
     });
-    await act(async () => {
-      tree.root.findByProps({testID: 'session-title'}).props.onPress();
+
+    it('agent pin（modelSource=agent-pin）时点击大模型卡片不进 picker，弹锁定提示', async () => {
+        mockLoadChatAgentMeta.mockResolvedValue({
+            ok: true,
+            value: meta({modelSource: 'agent-pin', hasDedicatedModel: true}),
+        });
+        let tree!: TestRenderer.ReactTestRenderer;
+        await act(async () => {
+            tree = TestRenderer.create(<SessionDetailScreen />);
+            await flushPromises();
+        });
+        await act(async () => {
+            tree.root.findByProps({testID: 'model-row'}).props.onPress();
+        });
+        const picker = tree.root.findByProps({testID: 'model-picker-modal'});
+        expect(picker.props.visible).toBe('false');
+        expect(mockShowToast).toHaveBeenCalled();
     });
-    const input = tree.root.findByProps({testID: 'session-title-input'});
-    // 未改动（仍是原标题「我的会话」）→ 不调 rename
-    await act(async () => {
-      input.props.onChangeText('我的会话');
+
+    // session-agent-locked-after-delete：source='none'（绑定的智能体已被删除）时
+    // 智能体卡放开为「待重选」——可点击弹 picker 重选；模型卡保持锁定。
+    it("source='none' 时智能体卡待重选可弹 picker，模型卡锁定只弹提示", async () => {
+        // chat-agent-meta.ts 在 AgentRunResolveError 时会回填这条 meta
+        mockLoadChatAgentMeta.mockResolvedValue({ok: true, value: meta({source: 'none'})});
+        let tree!: TestRenderer.ReactTestRenderer;
+        await act(async () => {
+            tree = TestRenderer.create(<SessionDetailScreen />);
+            await flushPromises();
+        });
+        const json = JSON.stringify(tree.toJSON());
+        // 智能体卡：待重选 badge 可见，chevron 仍为 › 暗示可点
+        expect(json).toContain('智能体已删除 · 点击重选');
+        expect(json).toContain('›');
+        // 模型卡：维持锁定（🔒）
+        expect(json).toContain('🔒');
+        // 点击智能体卡 → 正常弹 picker（不再锁死，也不再弹重选 toast）
+        await act(async () => {
+            tree.root.findByProps({testID: 'agent-row'}).props.onPress();
+        });
+        expect(
+            tree.root.findByProps({testID: 'agent-picker-modal'}).props.visible,
+        ).toBe('true');
+        // 点击模型卡 → 维持锁定：不进 picker，只弹锁定提示
+        await act(async () => {
+            tree.root.findByProps({testID: 'model-row'}).props.onPress();
+        });
+        expect(
+            tree.root.findByProps({testID: 'model-picker-modal'}).props.visible,
+        ).toBe('false');
+        // 仅模型卡弹一次锁定提示：智能体卡点击不再弹「请重新选择」toast
+        expect(mockShowToast).toHaveBeenCalledTimes(1);
+        expect(mockShowToast).not.toHaveBeenCalledWith(
+            '智能体已被删除，请重新选择',
+        );
     });
-    await act(async () => {
-      input.props.onSubmitEditing();
+
+    // review-mobile/G-2：loadChatAgentMeta 抛非 AgentRunResolveError 时走异常路径，
+    // 详情页弹错误提示并停留在加载态（卡片不渲染，自然不可点）。
+    it('loadChatAgentMeta reject 时弹加载失败提示，卡片不渲染', async () => {
+        mockLoadChatAgentMeta.mockResolvedValue({ok: false, error: new Error('boom')});
+        let tree!: TestRenderer.ReactTestRenderer;
+        await act(async () => {
+            tree = TestRenderer.create(<SessionDetailScreen />);
+            await flushPromises();
+        });
+        expect(mockShowToast).toHaveBeenCalled();
+        const json = JSON.stringify(tree.toJSON());
+        // 仍在加载态，没有渲染卡片
+        expect(json).not.toContain('agent-row');
+        expect(json).not.toContain('model-row');
     });
-    expect(mockSessionsRename).not.toHaveBeenCalled();
-  });
+
+    it('session 时智能体可切换（不锁、不弹提示）', async () => {
+        mockLoadChatAgentMeta.mockResolvedValue({ok: true, value: meta({source: 'session'})});
+        let tree!: TestRenderer.ReactTestRenderer;
+        await act(async () => {
+            tree = TestRenderer.create(<SessionDetailScreen />);
+            await flushPromises();
+        });
+        await act(async () => {
+            tree.root.findByProps({testID: 'agent-row'}).props.onPress();
+        });
+        expect(mockShowToast).not.toHaveBeenCalled();
+        const picker = tree.root.findByProps({testID: 'agent-picker-modal'});
+        expect(picker.props.visible).toBe('true');
+    });
+
+    // au/G-4（cr-fix-spec 条目 11c）：切换成功回调 onSelected 后详情页 load()
+    // 重拉——会话与 meta 都要重新查询，顶栏/卡片随新绑定刷新。
+    it('切换智能体成功（onSelected）后 load() 重拉会话与 meta', async () => {
+        let tree!: TestRenderer.ReactTestRenderer;
+        await act(async () => {
+            tree = TestRenderer.create(<SessionDetailScreen />);
+            await flushPromises();
+        });
+        expect(mockSessionsGet).toHaveBeenCalledTimes(1);
+        expect(mockLoadChatAgentMeta).toHaveBeenCalledTimes(1);
+
+        // 打开 picker 并触发「切换成功」回调
+        await act(async () => {
+            tree.root.findByProps({testID: 'agent-row'}).props.onPress();
+        });
+        const picker = tree.root.findByProps({testID: 'agent-picker-modal'});
+        expect(picker.props.visible).toBe('true');
+        await act(async () => {
+            picker.props.onSelected();
+            await flushPromises();
+        });
+
+        // 重拉断言：sessions.get 与 loadChatAgentMeta 均再次发起。
+        expect(mockSessionsGet).toHaveBeenCalledTimes(2);
+        expect(mockLoadChatAgentMeta).toHaveBeenCalledTimes(2);
+    });
+
+    it('点击聊天名进入 inline 编辑，提交后调用 sessions.rename', async () => {
+        let tree!: TestRenderer.ReactTestRenderer;
+        await act(async () => {
+            tree = TestRenderer.create(<SessionDetailScreen />);
+            await flushPromises();
+        });
+        await act(async () => {
+            tree.root.findByProps({testID: 'session-title'}).props.onPress();
+        });
+        const input = tree.root.findByProps({testID: 'session-title-input'});
+        await act(async () => {
+            input.props.onChangeText('新名字');
+        });
+        await act(async () => {
+            input.props.onSubmitEditing();
+        });
+        expect(mockSessionsRename).toHaveBeenCalledWith('s1', '新名字');
+    });
+
+    it('inline 编辑提交空串或未改动时不调 rename', async () => {
+        let tree!: TestRenderer.ReactTestRenderer;
+        await act(async () => {
+            tree = TestRenderer.create(<SessionDetailScreen />);
+            await flushPromises();
+        });
+        await act(async () => {
+            tree.root.findByProps({testID: 'session-title'}).props.onPress();
+        });
+        const input = tree.root.findByProps({testID: 'session-title-input'});
+        // 未改动（仍是原标题「我的会话」）→ 不调 rename
+        await act(async () => {
+            input.props.onChangeText('我的会话');
+        });
+        await act(async () => {
+            input.props.onSubmitEditing();
+        });
+        expect(mockSessionsRename).not.toHaveBeenCalled();
+    });
 });
 
 // ── T-SD1 改名成功后广播 session-renamed ──────────────────────────────
 describe('T-SD1 SessionDetailScreen 改名广播', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockRouteParams = {projectId: 'p1', sessionId: 's1'};
-    mockSessionsGet.mockResolvedValue({
-      ok: true,
-      value: {id: 's1', title: '我的会话'},
+    beforeEach(() => {
+        jest.clearAllMocks();
+        mockRouteParams = {projectId: 'p1', sessionId: 's1'};
+        mockSessionsGet.mockResolvedValue({
+            ok: true,
+            value: {id: 's1', title: '我的会话'},
+        });
+        mockLoadChatAgentMeta.mockResolvedValue({ok: true, value: meta()});
     });
-    mockLoadChatAgentMeta.mockResolvedValue({ok: true, value: meta()});
-  });
 
-  it('改名成功后 emit session-renamed，payload 含 sessionId 与新标题', async () => {
-    let tree!: TestRenderer.ReactTestRenderer;
-    await act(async () => {
-      tree = TestRenderer.create(<SessionDetailScreen />);
-      await flushPromises();
+    it('改名成功后 emit session-renamed，payload 含 sessionId 与新标题', async () => {
+        let tree!: TestRenderer.ReactTestRenderer;
+        await act(async () => {
+            tree = TestRenderer.create(<SessionDetailScreen />);
+            await flushPromises();
+        });
+        await act(async () => {
+            tree.root.findByProps({testID: 'session-title'}).props.onPress();
+        });
+        const input = tree.root.findByProps({testID: 'session-title-input'});
+        await act(async () => {
+            input.props.onChangeText('新名字');
+        });
+        await act(async () => {
+            input.props.onSubmitEditing();
+            await flushPromises();
+        });
+        expect(mockSessionsRename).toHaveBeenCalledWith('s1', '新名字');
+        const {DeviceEventEmitter} = require('react-native') as {
+            DeviceEventEmitter: {emit: jest.Mock};
+        };
+        expect(DeviceEventEmitter.emit).toHaveBeenCalledWith('session-renamed', {
+            sessionId: 's1',
+            title: '新名字',
+        });
     });
-    await act(async () => {
-      tree.root.findByProps({testID: 'session-title'}).props.onPress();
-    });
-    const input = tree.root.findByProps({testID: 'session-title-input'});
-    await act(async () => {
-      input.props.onChangeText('新名字');
-    });
-    await act(async () => {
-      input.props.onSubmitEditing();
-      await flushPromises();
-    });
-    expect(mockSessionsRename).toHaveBeenCalledWith('s1', '新名字');
-    const {DeviceEventEmitter} = require('react-native') as {
-      DeviceEventEmitter: {emit: jest.Mock};
-    };
-    expect(DeviceEventEmitter.emit).toHaveBeenCalledWith('session-renamed', {
-      sessionId: 's1',
-      title: '新名字',
-    });
-  });
 });
 
 // ── T-SD2 useChatTabScope session-renamed 订阅契约（源码正则断言） ────────
@@ -499,17 +499,17 @@ describe('T-SD1 SessionDetailScreen 改名广播', () => {
 // 行为化需要拉起整个 chat tab（runtime+navigation+DeviceEventEmitter 全链），
 // 代价过高；本文件其余部分已是 TestRenderer 行为断言，仅此 describe 保留源码断言。
 describe('T-SD2 useChatTabScope session-renamed 订阅契约', () => {
-  it('源码含 session-renamed 订阅、reloadLists 调用与 sub.remove() 清理', () => {
-    const source = fs.readFileSync(
-      path.join(__dirname, '../src/screens/tabs/chat-tab/useChatTabScope.ts'),
-      'utf8',
-    );
-    expect(source).toMatch(
-      /DeviceEventEmitter\.addListener\(\s*'session-renamed'/,
-    );
-    expect(source).toMatch(/reloadLists\(\)\.catch/);
-    expect(source).toMatch(/return \(\) => sub\.remove\(\)/);
-  });
+    it('源码含 session-renamed 订阅、reloadLists 调用与 sub.remove() 清理', () => {
+        const source = fs.readFileSync(
+            path.join(__dirname, '../src/screens/tabs/chat-tab/useChatTabScope.ts'),
+            'utf8',
+        );
+        expect(source).toMatch(
+            /DeviceEventEmitter\.addListener\(\s*'session-renamed'/,
+        );
+        expect(source).toMatch(/reloadLists\(\)\.catch/);
+        expect(source).toMatch(/return \(\) => sub\.remove\(\)/);
+    });
 });
 
 // ── T-SD3 会话详情页失焦提交契约（源码正则断言） ────────────────────────────
@@ -519,152 +519,152 @@ describe('T-SD2 useChatTabScope session-renamed 订阅契约', () => {
 // 历史坑：keyboardShouldPersistTaps="handled" 时页面 Pressable 卡片在 bubble 阶段
 // 抢走 responder，输入框永不失焦，inline 重命名提交不了（2026-10 真机反馈）。
 describe('T-SD3 会话详情页失焦提交契约', () => {
-  it('ScrollView 用 keyboardShouldPersistTaps="never" 保障编辑态点任意处失焦提交', () => {
-    const source = fs.readFileSync(
-      path.join(__dirname, '../src/screens/stack/SessionDetailScreen.tsx'),
-      'utf8',
-    );
-    expect(source).toMatch(/keyboardShouldPersistTaps="never"/);
-    expect(source).not.toMatch(/keyboardShouldPersistTaps="handled"/);
-  });
+    it('ScrollView 用 keyboardShouldPersistTaps="never" 保障编辑态点任意处失焦提交', () => {
+        const source = fs.readFileSync(
+            path.join(__dirname, '../src/screens/stack/SessionDetailScreen.tsx'),
+            'utf8',
+        );
+        expect(source).toMatch(/keyboardShouldPersistTaps="never"/);
+        expect(source).not.toMatch(/keyboardShouldPersistTaps="handled"/);
+    });
 });
 
 // ── T-M5 picker select 分流 ─────────────────────────────────────────────────
 describe('T-M5 picker select 分流', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
-  it('会话内 agent 选择：selectSessionAgent 写 session agentId，不碰 workspace 全局', async () => {
-    await AgentPicker.selectSession(mockRuntime as never, 's1', 'agent-a');
-    expect(mockSessionsUpdateSessionAgentConfig).toHaveBeenCalledWith('s1', {
-      agentId: 'agent-a',
+    beforeEach(() => {
+        jest.clearAllMocks();
     });
-    expect(mockStateGetCurrentAgentId).not.toHaveBeenCalled();
-  });
 
-  it('全局 agent 选择：selectWorkspaceAgent 调 setCurrentAgentId，不写 session 绑定', async () => {
-    await AgentPicker.selectWorkspace(mockRuntime as never, 'agent-a');
-    expect(mockStateSetCurrentAgentId).toHaveBeenCalledWith('agent-a');
-    expect(mockSessionsUpdateSessionAgentConfig).not.toHaveBeenCalled();
-  });
-
-  it('会话内 model 选择：写全量 session 配置（保留 agentId 换 modelId）', async () => {
-    // ModelPickerModal 的 select 在 session 模式下需要先读 current config 再写回全量
-    const current = await mockRuntime.sessions.getSessionAgentConfig('s1');
-    await mockRuntime.sessions.updateSessionAgentConfig('s1', {
-      agentId: current.agentId,
-      modelId: 'model-x',
+    it('会话内 agent 选择：selectSessionAgent 写 session agentId，不碰 workspace 全局', async () => {
+        await AgentPicker.selectSession(mockRuntime as never, 's1', 'agent-a');
+        expect(mockSessionsUpdateSessionAgentConfig).toHaveBeenCalledWith('s1', {
+            agentId: 'agent-a',
+        });
+        expect(mockStateGetCurrentAgentId).not.toHaveBeenCalled();
     });
-    expect(mockSessionsUpdateSessionAgentConfig).toHaveBeenCalledWith('s1', {
-      agentId: current.agentId,
-      modelId: 'model-x',
-    });
-  });
 
-  it('全局 model 选择：调 setCurrentModelId，不写 session 绑定', async () => {
-    mockStateSetCurrentModelId.mockClear();
-    mockSessionsUpdateSessionAgentConfig.mockClear();
-    // ModelPickerModal 的 select 在 workspace 模式下调
-    // runtime.state.setCurrentModelId(savedModelId)
-    await mockRuntime.state.setCurrentModelId('model-x');
-    expect(mockStateSetCurrentModelId).toHaveBeenCalledWith('model-x');
-    expect(mockSessionsUpdateSessionAgentConfig).not.toHaveBeenCalled();
-  });
+    it('全局 agent 选择：selectWorkspaceAgent 调 setCurrentAgentId，不写 session 绑定', async () => {
+        await AgentPicker.selectWorkspace(mockRuntime as never, 'agent-a');
+        expect(mockStateSetCurrentAgentId).toHaveBeenCalledWith('agent-a');
+        expect(mockSessionsUpdateSessionAgentConfig).not.toHaveBeenCalled();
+    });
+
+    it('会话内 model 选择：写全量 session 配置（保留 agentId 换 modelId）', async () => {
+        // ModelPickerModal 的 select 在 session 模式下需要先读 current config 再写回全量
+        const current = await mockRuntime.sessions.getSessionAgentConfig('s1');
+        await mockRuntime.sessions.updateSessionAgentConfig('s1', {
+            agentId: current.agentId,
+            modelId: 'model-x',
+        });
+        expect(mockSessionsUpdateSessionAgentConfig).toHaveBeenCalledWith('s1', {
+            agentId: current.agentId,
+            modelId: 'model-x',
+        });
+    });
+
+    it('全局 model 选择：调 setCurrentModelId，不写 session 绑定', async () => {
+        mockStateSetCurrentModelId.mockClear();
+        mockSessionsUpdateSessionAgentConfig.mockClear();
+        // ModelPickerModal 的 select 在 workspace 模式下调
+        // runtime.state.setCurrentModelId(savedModelId)
+        await mockRuntime.state.setCurrentModelId('model-x');
+        expect(mockStateSetCurrentModelId).toHaveBeenCalledWith('model-x');
+        expect(mockSessionsUpdateSessionAgentConfig).not.toHaveBeenCalled();
+    });
 });
 
 // ── T-MO1 查看提示词入口 ─────────────────────────────────────────────────
 describe('T-MO1 SessionDetailScreen 查看提示词入口', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockRouteParams = {projectId: 'p1', sessionId: 's1'};
-    mockSessionsGet.mockResolvedValue({
-      ok: true,
-      value: {id: 's1', title: '我的会话'},
+    beforeEach(() => {
+        jest.clearAllMocks();
+        mockRouteParams = {projectId: 'p1', sessionId: 's1'};
+        mockSessionsGet.mockResolvedValue({
+            ok: true,
+            value: {id: 's1', title: '我的会话'},
+        });
+        mockLoadChatAgentMeta.mockResolvedValue({ok: true, value: meta()});
     });
-    mockLoadChatAgentMeta.mockResolvedValue({ok: true, value: meta()});
-  });
 
-  // ── T-AM3-3 提示词入口必须带 scope（AM-3）────────────────────────────────
-  it('渲染「查看提示词」入口卡片，点击 navigate 到 RealPrompt 且带 scope', async () => {
-    let tree!: TestRenderer.ReactTestRenderer;
-    await act(async () => {
-      tree = TestRenderer.create(<SessionDetailScreen />);
-      await flushPromises();
+    // ── T-AM3-3 提示词入口必须带 scope（AM-3）────────────────────────────────
+    it('渲染「查看提示词」入口卡片，点击 navigate 到 RealPrompt 且带 scope', async () => {
+        let tree!: TestRenderer.ReactTestRenderer;
+        await act(async () => {
+            tree = TestRenderer.create(<SessionDetailScreen />);
+            await flushPromises();
+        });
+        const json = JSON.stringify(tree.toJSON());
+        expect(json).toContain('查看提示词');
+        await act(async () => {
+            tree.root.findByProps({testID: 'real-prompt-row'}).props.onPress();
+        });
+        // 不传 scope 的话屏内回落读全局 scope，后台通知栈外改过 scope 时
+        // 就会显示别的会话的提示词。
+        expect(mockNavigate).toHaveBeenCalledWith('RealPrompt', {
+            projectId: 'p1',
+            sessionId: 's1',
+        });
     });
-    const json = JSON.stringify(tree.toJSON());
-    expect(json).toContain('查看提示词');
-    await act(async () => {
-      tree.root.findByProps({testID: 'real-prompt-row'}).props.onPress();
-    });
-    // 不传 scope 的话屏内回落读全局 scope，后台通知栈外改过 scope 时
-    // 就会显示别的会话的提示词。
-    expect(mockNavigate).toHaveBeenCalledWith('RealPrompt', {
-      projectId: 'p1',
-      sessionId: 's1',
-    });
-  });
 });
 
 // ── T-KB4 Android 键盘避让（范式 A：marginBottom 裁切窗口） ────────────────
 describe('T-KB4 SessionDetailScreen Android 键盘避让', () => {
-  // 这个 describe 里的 mock 与前面共用（react-native 被 mock，Platform 可直接改）。
-  const RN = require('react-native');
+    // 这个 describe 里的 mock 与前面共用（react-native 被 mock，Platform 可直接改）。
+    const RN = require('react-native');
 
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockRouteParams = {projectId: 'p1', sessionId: 's1'};
-    mockSessionsGet.mockResolvedValue({
-      ok: true,
-      value: {id: 's1', title: '会话'},
-    });
-    mockLoadChatAgentMeta.mockResolvedValue({ok: true, value: meta()});
-  });
-
-  afterEach(() => {
-    // 还原为 iOS（与其他 describe 默认一致）
-    RN.Platform.OS = 'ios';
-  });
-
-  it('Android 分支：用 marginBottom 裁切窗口（Animated.View + clipStyle），不走 KeyboardAvoidingView', async () => {
-    RN.Platform.OS = 'android';
-    let tree!: TestRenderer.ReactTestRenderer;
-    await act(async () => {
-      tree = TestRenderer.create(<SessionDetailScreen />);
-      await flushPromises();
+    beforeEach(() => {
+        jest.clearAllMocks();
+        mockRouteParams = {projectId: 'p1', sessionId: 's1'};
+        mockSessionsGet.mockResolvedValue({
+            ok: true,
+            value: {id: 's1', title: '会话'},
+        });
+        mockLoadChatAgentMeta.mockResolvedValue({ok: true, value: meta()});
     });
 
-    // reanimated mock 把 Animated.View 映射为 View、useAnimatedStyle 执行 factory。
-    // clipStyle 产出 {marginBottom: -0}（键盘收起时 height=0），所以我 marginBottom 样式的节点。
-    const nodesWithMarginBottom = tree.root.findAll(node => {
-      const style = node.props?.style;
-      if (style == null) {
-        return false;
-      }
-      const styles = Array.isArray(style) ? style : [style];
-      return styles.some(
-        s =>
-          s != null &&
-          typeof s === 'object' &&
-          typeof (s as {marginBottom?: unknown}).marginBottom === 'number',
-      );
+    afterEach(() => {
+        // 还原为 iOS（与其他 describe 默认一致）
+        RN.Platform.OS = 'ios';
     });
-    expect(nodesWithMarginBottom.length).toBeGreaterThanOrEqual(1);
 
-    // Android 分支外层是 Animated.View 不是 KeyboardAvoidingView。
-    // 直接引用 mock 的 KeyboardAvoidingView 函数做类型断言（参照 T-KB1 的做法）。
-    const kabvNodes = tree.root.findAllByType(KeyboardAvoidingView as never);
-    expect(kabvNodes.length).toBe(0);
-  });
+    it('Android 分支：用 marginBottom 裁切窗口（Animated.View + clipStyle），不走 KeyboardAvoidingView', async () => {
+        RN.Platform.OS = 'android';
+        let tree!: TestRenderer.ReactTestRenderer;
+        await act(async () => {
+            tree = TestRenderer.create(<SessionDetailScreen />);
+            await flushPromises();
+        });
 
-  it('iOS 分支：仍走 KeyboardAvoidingView（回归保护）', async () => {
-    RN.Platform.OS = 'ios';
-    let tree!: TestRenderer.ReactTestRenderer;
-    await act(async () => {
-      tree = TestRenderer.create(<SessionDetailScreen />);
-      await flushPromises();
+        // reanimated mock 把 Animated.View 映射为 View、useAnimatedStyle 执行 factory。
+        // clipStyle 产出 {marginBottom: -0}（键盘收起时 height=0），所以我 marginBottom 样式的节点。
+        const nodesWithMarginBottom = tree.root.findAll(node => {
+            const style = node.props?.style;
+            if (style == null) {
+                return false;
+            }
+            const styles = Array.isArray(style) ? style : [style];
+            return styles.some(
+                s =>
+                    s != null &&
+                    typeof s === 'object' &&
+                    typeof (s as {marginBottom?: unknown}).marginBottom === 'number',
+            );
+        });
+        expect(nodesWithMarginBottom.length).toBeGreaterThanOrEqual(1);
+
+        // Android 分支外层是 Animated.View 不是 KeyboardAvoidingView。
+        // 直接引用 mock 的 KeyboardAvoidingView 函数做类型断言（参照 T-KB1 的做法）。
+        const kabvNodes = tree.root.findAllByType(KeyboardAvoidingView as never);
+        expect(kabvNodes.length).toBe(0);
     });
-    const kabvNodes = tree.root.findAllByType(KeyboardAvoidingView as never);
-    expect(kabvNodes.length).toBeGreaterThanOrEqual(1);
-  });
+
+    it('iOS 分支：仍走 KeyboardAvoidingView（回归保护）', async () => {
+        RN.Platform.OS = 'ios';
+        let tree!: TestRenderer.ReactTestRenderer;
+        await act(async () => {
+            tree = TestRenderer.create(<SessionDetailScreen />);
+            await flushPromises();
+        });
+        const kabvNodes = tree.root.findAllByType(KeyboardAvoidingView as never);
+        expect(kabvNodes.length).toBeGreaterThanOrEqual(1);
+    });
 });

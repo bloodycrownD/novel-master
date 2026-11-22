@@ -10,45 +10,45 @@ import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 
 const source = readFileSync(
-  fileURLToPath(
-    new URL(
-      "../renderer/features/settings/SkillsManageView.tsx",
-      import.meta.url,
+    fileURLToPath(
+        new URL(
+            "../renderer/features/settings/SkillsManageView.tsx",
+            import.meta.url,
+        ),
     ),
-  ),
-  "utf8",
+    "utf8",
 );
 
 describe("SkillsManageView 导出 ZIP 入口（源码断言）", () => {
-  it("行菜单含「导出 ZIP」，排在编辑后、删除前", () => {
-    // i18n 后菜单四项锁 coreT 调用形态+键名（文案由 catalog 保证），顺序意图不变。
-    const exportIdx = source.indexOf('{ label: coreT({key: "ui.skills.export_zip"}), action: "export-zip" }');
-    const editIdx = source.indexOf('{ label: coreT({key: "ui.common.edit"}), action: "edit" }');
-    const deleteIdx = source.indexOf('{ label: coreT({key: "ui.common.delete"}), action: "delete", danger: true }');
-    assert.ok(exportIdx > 0, "缺少「导出 ZIP」菜单项");
-    assert.ok(editIdx > 0 && editIdx < exportIdx, "导出应排在编辑之后");
-    assert.ok(deleteIdx > exportIdx, "导出应排在删除之前");
-  });
+    it("行菜单含「导出 ZIP」，排在编辑后、删除前", () => {
+        // i18n 后菜单四项锁 coreT 调用形态+键名（文案由 catalog 保证），顺序意图不变。
+        const exportIdx = source.indexOf('{ label: coreT({key: "ui.skills.export_zip"}), action: "export-zip" }');
+        const editIdx = source.indexOf('{ label: coreT({key: "ui.common.edit"}), action: "edit" }');
+        const deleteIdx = source.indexOf('{ label: coreT({key: "ui.common.delete"}), action: "delete", danger: true }');
+        assert.ok(exportIdx > 0, "缺少「导出 ZIP」菜单项");
+        assert.ok(editIdx > 0 && editIdx < exportIdx, "导出应排在编辑之后");
+        assert.ok(deleteIdx > exportIdx, "导出应排在删除之前");
+    });
 
-  it("导出分支调 ipcVfsZipExport 并附 fileName 与技能目录", () => {
-    assert.ok(source.includes("ipcVfsZipExport({"));
-    assert.ok(
-      source.includes(
-        'current.ref.domain === "global" ? "global-meta" : "project-meta"',
-      ),
-      "workspaceScope 应按技能域映射 global-meta/project-meta",
-    );
-    assert.ok(
-      source.includes("projectId: current.ref.projectId"),
-      "project 域应携带 projectId",
-    );
-    assert.ok(
-      source.includes("directoryPath: `/meta/skills/${current.ref.name}`"),
-      "directoryPath 应指向技能目录",
-    );
-    assert.ok(
-      source.includes("fileName: `${current.ref.name}.zip`"),
-      "fileName 应为 {技能名}.zip",
-    );
-  });
+    it("导出分支调 ipcVfsZipExport 并附 fileName 与技能目录", () => {
+        assert.ok(source.includes("ipcVfsZipExport({"));
+        assert.ok(
+            source.includes(
+                'current.ref.domain === "global" ? "global-meta" : "project-meta"',
+            ),
+            "workspaceScope 应按技能域映射 global-meta/project-meta",
+        );
+        assert.ok(
+            source.includes("projectId: current.ref.projectId"),
+            "project 域应携带 projectId",
+        );
+        assert.ok(
+            source.includes("directoryPath: `/meta/skills/${current.ref.name}`"),
+            "directoryPath 应指向技能目录",
+        );
+        assert.ok(
+            source.includes("fileName: `${current.ref.name}.zip`"),
+            "fileName 应为 {技能名}.zip",
+        );
+    });
 });

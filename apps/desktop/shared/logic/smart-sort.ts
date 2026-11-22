@@ -3,6 +3,6 @@
  * renderer 不得直接 import core（X1 gate），纯函数经 shared 再导出单源共享。
  */
 export {
-  PatternInput,
-  SmartSortHighlight,
+    PatternInput,
+    SmartSortHighlight,
 } from "@novel-master/core/smart-sort-rule";

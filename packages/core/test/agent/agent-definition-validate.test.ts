@@ -12,186 +12,186 @@ import {  unwrap  } from "../helpers/result-unwrap.js";
 
 /** decode 已改返回 Result（四期签名）：测试内统一解包——Ok 取 value，Err 抛 error。 */
 function decode<T>(raw: unknown, schema: ZodType<T>): T {
-  return unwrap(SerializationDecode.decode(raw, schema));
+    return unwrap(SerializationDecode.decode(raw, schema));
 }
 
 const TEST_SAVED_MODEL = "11111111-1111-4111-8111-111111111111";
 const TEST_SAVED_MODEL_GHOST = "22222222-2222-4222-8222-222222222222";
 
 async function expectInvalid(def: AgentDefinition, key: ErrorKey, messageReOrKey: RegExp | string, options?: ValidateAgentDefinitionOptions): Promise<void> {
-  const result = await AgentDefinitionValidator.validate(def, options);
-  assert.equal(result.ok, false);
-  if (result.ok) {
-    return;
-  }
-  assert.ok(AppErrorOps.is(result.error, key));
-  if (typeof messageReOrKey === "string") {
-    assert.equal(result.error.messageKey, messageReOrKey);
-  } else {
-    assert.match(renderError(result.error), messageReOrKey);
-  }
+    const result = await AgentDefinitionValidator.validate(def, options);
+    assert.equal(result.ok, false);
+    if (result.ok) {
+        return;
+    }
+    assert.ok(AppErrorOps.is(result.error, key));
+    if (typeof messageReOrKey === "string") {
+        assert.equal(result.error.messageKey, messageReOrKey);
+    } else {
+        assert.match(renderError(result.error), messageReOrKey);
+    }
 }
 
 describe("AgentDefinitionValidator.validate", () => {
-  it("D2: assertSavedModel runs for valid model pin", async () => {
-    const def = decode(
-      {
-        schemaVersion: 1,
-        name: "pinned",
-        prompts: { persist: {}, dynamic: {} },
-        model: TEST_SAVED_MODEL,
-      },
-      agentDefinitionSchema
-    );
-    let seen = "";
-    const result = await AgentDefinitionValidator.validate(def, {
-      assertSavedModel: async (savedModelId) => {
-        seen = savedModelId;
-      },
+    it("D2: assertSavedModel runs for valid model pin", async () => {
+        const def = decode(
+            {
+                schemaVersion: 1,
+                name: "pinned",
+                prompts: { persist: {}, dynamic: {} },
+                model: TEST_SAVED_MODEL,
+            },
+            agentDefinitionSchema
+        );
+        let seen = "";
+        const result = await AgentDefinitionValidator.validate(def, {
+            assertSavedModel: async (savedModelId) => {
+                seen = savedModelId;
+            },
+        });
+        assert.equal(result.ok, true);
+        assert.equal(seen, TEST_SAVED_MODEL);
     });
-    assert.equal(result.ok, true);
-    assert.equal(seen, TEST_SAVED_MODEL);
-  });
 
-  it("D2: assertSavedModel failure returns INVALID_MODEL for unknown pin", async () => {
-    const def = decode(
-      {
-        schemaVersion: 1,
-        name: "pinned",
-        prompts: { persist: {}, dynamic: {} },
-        model: TEST_SAVED_MODEL_GHOST,
-      },
-      agentDefinitionSchema
-    );
-    await expectInvalid(def, "AGENT_INVALID_MODEL", new RegExp(`unknown model: ${TEST_SAVED_MODEL_GHOST}`), {
-      assertSavedModel: async () => {
-        throw new Error(`unknown model: ${TEST_SAVED_MODEL_GHOST}`);
-      },
+    it("D2: assertSavedModel failure returns INVALID_MODEL for unknown pin", async () => {
+        const def = decode(
+            {
+                schemaVersion: 1,
+                name: "pinned",
+                prompts: { persist: {}, dynamic: {} },
+                model: TEST_SAVED_MODEL_GHOST,
+            },
+            agentDefinitionSchema
+        );
+        await expectInvalid(def, "AGENT_INVALID_MODEL", new RegExp(`unknown model: ${TEST_SAVED_MODEL_GHOST}`), {
+            assertSavedModel: async () => {
+                throw new Error(`unknown model: ${TEST_SAVED_MODEL_GHOST}`);
+            },
+        });
     });
-  });
 
-  it("skips assertSavedModel when model absent", async () => {
-    const def = decode(
-      {
-        schemaVersion: 1,
-        name: "bare",
-        prompts: { persist: {}, dynamic: {} },
-      },
-      agentDefinitionSchema
-    );
-    let called = false;
-    const result = await AgentDefinitionValidator.validate(def, {
-      assertSavedModel: async () => {
-        called = true;
-      },
+    it("skips assertSavedModel when model absent", async () => {
+        const def = decode(
+            {
+                schemaVersion: 1,
+                name: "bare",
+                prompts: { persist: {}, dynamic: {} },
+            },
+            agentDefinitionSchema
+        );
+        let called = false;
+        const result = await AgentDefinitionValidator.validate(def, {
+            assertSavedModel: async () => {
+                called = true;
+            },
+        });
+        assert.equal(result.ok, true);
+        assert.equal(called, false);
     });
-    assert.equal(result.ok, true);
-    assert.equal(called, false);
-  });
 });
 
 describe("AgentDefinitionValidator.validate 写入门禁（毒行拦截）", () => {
-  /** 直接构造宽松收包形态（不经过 schema decode），模拟 agent 工具收到的 LLM 原始 JSON。 */
-  function rawDef(extra: Record<string, unknown>): AgentDefinition {
-    return {
-      prompts: { persist: [], dynamic: [] },
-      ...extra,
-    } as unknown as AgentDefinition;
-  }
+    /** 直接构造宽松收包形态（不经过 schema decode），模拟 agent 工具收到的 LLM 原始 JSON。 */
+    function rawDef(extra: Record<string, unknown>): AgentDefinition {
+        return {
+            prompts: { persist: [], dynamic: [] },
+            ...extra,
+        } as unknown as AgentDefinition;
+    }
 
-  it("name 缺失：报 INVALID_SCHEMA 且文案指向 definition.name（不再是裸 TypeError）", async () => {
-    await expectInvalid(rawDef({}), "AGENT_INVALID_SCHEMA", "error.agent.invalid_schema.name_required");
-  });
-
-  it("name 空白串 / 非字符串：同样拒绝", async () => {
-    await expectInvalid(rawDef({ name: "   " }), "AGENT_INVALID_SCHEMA", "error.agent.invalid_schema.name_required");
-    await expectInvalid(rawDef({ name: 123 }), "AGENT_INVALID_SCHEMA", "error.agent.invalid_schema.name_required");
-  });
-
-  it("prompts 缺失：报 INVALID_SCHEMA 且文案说明必填", async () => {
-    // 分层：registry.upsert 会先补默认空布局再调本函数，此守卫仅拦截
-    // 绕过 registry 的直接调用方（public API / project.service 均自带完整 def）。
-    await expectInvalid({ name: "x" } as unknown as AgentDefinition, "AGENT_INVALID_SCHEMA", "error.agent.invalid_schema.prompts_shape");
-  });
-
-  it("prompts 为 wire 格式（dynamic/persist 是对象映射而非块数组）：拒绝并提示对齐 get 输出", async () => {
-    await expectInvalid(
-      rawDef({
-        name: "x",
-        prompts: {
-          dynamicEnabled: true,
-          persist: {},
-          dynamic: {
-            "dynamic-1": {
-              type: "text",
-              role: "assistant",
-              content: " hi ",
-            },
-          },
-        },
-      }),
-      "AGENT_INVALID_SCHEMA",
-      "error.agent.invalid_schema.prompts_shape"
-    );
-  });
-
-  it("mode 非法枚举（toWire 原样透传、读侧 strict 拒收的真毒化向量）：wire 往返拒绝", async () => {
-    await expectInvalid(rawDef({ name: "x", mode: "custommode" }), "AGENT_INVALID_SCHEMA", "error.agent.invalid_schema.field_invalid");
-  });
-
-  it("未知顶层键（LLM 自创字段）：toWire 投影丢弃，不毒化、不拒绝", async () => {
-    // 不报错即通过：definitionToDocument 只投影已知字段，自创键落盘前被洗掉。
-    const result = await AgentDefinitionValidator.validate(rawDef({ name: "x", persona: "y" }));
-    assert.equal(result.ok, true);
-  });
-
-  it("model 非 UUID：wire 往返拒绝", async () => {
-    await expectInvalid(rawDef({ name: "x", model: "gpt-4" }), "AGENT_INVALID_SCHEMA", "error.agent.invalid_schema.field_invalid");
-  });
-
-  it("真实场景 payload（system/workplace/customAttach/dynamic 块/runtime）补 name 后通过", async () => {
-    const def = rawDef({
-      name: "执笔者",
-      description: "文笔顶尖的执笔者",
-      mode: "subagent",
-      runtime: { maxSteps: 20 },
-      prompts: {
-        system: "## 你是谁\\n\\n你是专职执笔者。",
-        workplace: "我看到工作区了",
-        customAttach: "当前工作区如下：\\n{{$filetree}}",
-        dynamicEnabled: true,
-        persist: [],
-        dynamic: [
-          {
-            name: "dynamic-1",
-            type: "text",
-            role: "assistant",
-            content: "请问还有什么要补充的吗？",
-          },
-          {
-            name: "dynamic-2",
-            type: "text",
-            role: "user",
-            content: "没有了，按照我的命令执行就好了。",
-          },
-        ],
-      },
+    it("name 缺失：报 INVALID_SCHEMA 且文案指向 definition.name（不再是裸 TypeError）", async () => {
+        await expectInvalid(rawDef({}), "AGENT_INVALID_SCHEMA", "error.agent.invalid_schema.name_required");
     });
-    const result = await AgentDefinitionValidator.validate(def);
-    assert.equal(result.ok, true);
-  });
+
+    it("name 空白串 / 非字符串：同样拒绝", async () => {
+        await expectInvalid(rawDef({ name: "   " }), "AGENT_INVALID_SCHEMA", "error.agent.invalid_schema.name_required");
+        await expectInvalid(rawDef({ name: 123 }), "AGENT_INVALID_SCHEMA", "error.agent.invalid_schema.name_required");
+    });
+
+    it("prompts 缺失：报 INVALID_SCHEMA 且文案说明必填", async () => {
+        // 分层：registry.upsert 会先补默认空布局再调本函数，此守卫仅拦截
+        // 绕过 registry 的直接调用方（public API / project.service 均自带完整 def）。
+        await expectInvalid({ name: "x" } as unknown as AgentDefinition, "AGENT_INVALID_SCHEMA", "error.agent.invalid_schema.prompts_shape");
+    });
+
+    it("prompts 为 wire 格式（dynamic/persist 是对象映射而非块数组）：拒绝并提示对齐 get 输出", async () => {
+        await expectInvalid(
+            rawDef({
+                name: "x",
+                prompts: {
+                    dynamicEnabled: true,
+                    persist: {},
+                    dynamic: {
+                        "dynamic-1": {
+                            type: "text",
+                            role: "assistant",
+                            content: " hi ",
+                        },
+                    },
+                },
+            }),
+            "AGENT_INVALID_SCHEMA",
+            "error.agent.invalid_schema.prompts_shape"
+        );
+    });
+
+    it("mode 非法枚举（toWire 原样透传、读侧 strict 拒收的真毒化向量）：wire 往返拒绝", async () => {
+        await expectInvalid(rawDef({ name: "x", mode: "custommode" }), "AGENT_INVALID_SCHEMA", "error.agent.invalid_schema.field_invalid");
+    });
+
+    it("未知顶层键（LLM 自创字段）：toWire 投影丢弃，不毒化、不拒绝", async () => {
+        // 不报错即通过：definitionToDocument 只投影已知字段，自创键落盘前被洗掉。
+        const result = await AgentDefinitionValidator.validate(rawDef({ name: "x", persona: "y" }));
+        assert.equal(result.ok, true);
+    });
+
+    it("model 非 UUID：wire 往返拒绝", async () => {
+        await expectInvalid(rawDef({ name: "x", model: "gpt-4" }), "AGENT_INVALID_SCHEMA", "error.agent.invalid_schema.field_invalid");
+    });
+
+    it("真实场景 payload（system/workplace/customAttach/dynamic 块/runtime）补 name 后通过", async () => {
+        const def = rawDef({
+            name: "执笔者",
+            description: "文笔顶尖的执笔者",
+            mode: "subagent",
+            runtime: { maxSteps: 20 },
+            prompts: {
+                system: "## 你是谁\\n\\n你是专职执笔者。",
+                workplace: "我看到工作区了",
+                customAttach: "当前工作区如下：\\n{{$filetree}}",
+                dynamicEnabled: true,
+                persist: [],
+                dynamic: [
+                    {
+                        name: "dynamic-1",
+                        type: "text",
+                        role: "assistant",
+                        content: "请问还有什么要补充的吗？",
+                    },
+                    {
+                        name: "dynamic-2",
+                        type: "text",
+                        role: "user",
+                        content: "没有了，按照我的命令执行就好了。",
+                    },
+                ],
+            },
+        });
+        const result = await AgentDefinitionValidator.validate(def);
+        assert.equal(result.ok, true);
+    });
 });
 
 /** 错误用户可见文案：带 messageKey 时经 tCore 渲染（G1-G3 descriptor 契约），否则回退 message。 */
 function renderError(error: unknown): string {
-  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
-  return textOf(error);
+    const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
+    return textOf(error);
 }
 
 /** 含 cause 链（ToolError 包装 AppError 时 messageKey 在 cause 上）。 */
 function textOf(error: unknown): string {
-  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
-  if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
-  if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
-  return e.message;
+    const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
+    if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
+    if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
+    return e.message;
 }

@@ -11,197 +11,197 @@ import {  DefaultSavedModelSettings  } from "../../src/domain/provider/model/def
 import type { SavedModelSettings } from "../../src/domain/provider/model/saved-model-settings.js";
 
 const secretStore: SecretStore = {
-  get: async () => "k",
-  set: async () => undefined,
-  delete: async () => undefined,
+    get: async () => "k",
+    set: async () => undefined,
+    delete: async () => undefined,
 };
 
 const noRetryPolicies: ModelRetryPolicyService = {
-  // port 已改返回 Result：getPolicy 成功未设置 => ok(null)，set/clear 幂等成功
-  getPolicy: async () => Result.ok(null),
-  setPolicy: async () => Result.ok(undefined),
-  clearPolicy: async () => Result.ok(undefined),
+    // port 已改返回 Result：getPolicy 成功未设置 => ok(null)，set/clear 幂等成功
+    getPolicy: async () => Result.ok(null),
+    setPolicy: async () => Result.ok(undefined),
+    clearPolicy: async () => Result.ok(undefined),
 };
 
 const TEST_SAVED_MODEL_ID = "00000000-0000-4000-8000-000000000099";
 
 function createService(
-  settings: SavedModelSettings,
-  protocol: "openai" | "anthropic" | "gemini",
-  onChat: (req: LlmChatRequest) => void,
-  vendorModelId = "test-model",
+    settings: SavedModelSettings,
+    protocol: "openai" | "anthropic" | "gemini",
+    onChat: (req: LlmChatRequest) => void,
+    vendorModelId = "test-model",
 ) {
-  const providerRepo: ProviderRepository = {
-    list: async () => Result.ok([]),
-    findById: async () => Result.ok({
-      id: protocol,
-      builtinKey: null,
-      protocol,
-      baseUrl: "https://api.example.com/v1",
-      displayName: protocol,
-      secretRef: null,
-      headers: {},
-      isBuiltin: false,
-      createdAtMs: 0,
-      updatedAtMs: 0,
-    }),
-    insert: async () => undefined,
-    update: async () => undefined,
-    delete: async () => false,
-  };
+    const providerRepo: ProviderRepository = {
+        list: async () => Result.ok([]),
+        findById: async () => Result.ok({
+            id: protocol,
+            builtinKey: null,
+            protocol,
+            baseUrl: "https://api.example.com/v1",
+            displayName: protocol,
+            secretRef: null,
+            headers: {},
+            isBuiltin: false,
+            createdAtMs: 0,
+            updatedAtMs: 0,
+        }),
+        insert: async () => undefined,
+        update: async () => undefined,
+        delete: async () => false,
+    };
 
-  const savedModels: SavedModelRepository = {
-    listByProvider: async () => Result.ok([]),
-    findById: async () =>
-      Result.ok({
-        id: TEST_SAVED_MODEL_ID,
-        providerId: protocol,
-        vendorModelId,
-        modelName: vendorModelId,
-        settings,
-        createdAtMs: 0,
-        updatedAtMs: 0,
-      }),
-    insert: async () => undefined,
-    updateById: async () => undefined,
-    deleteById: async () => false,
-    deleteByProvider: async () => undefined,
-  };
+    const savedModels: SavedModelRepository = {
+        listByProvider: async () => Result.ok([]),
+        findById: async () =>
+            Result.ok({
+                id: TEST_SAVED_MODEL_ID,
+                providerId: protocol,
+                vendorModelId,
+                modelName: vendorModelId,
+                settings,
+                createdAtMs: 0,
+                updatedAtMs: 0,
+            }),
+        insert: async () => undefined,
+        updateById: async () => undefined,
+        deleteById: async () => false,
+        deleteByProvider: async () => undefined,
+    };
 
-  const adapter: LlmProtocolAdapter = {
-    kind: protocol,
-    listModels: async () => ({ models: [] }),
-    chat: async (req) => {
-      onChat(req);
-      return { assistantText: "ok", blocks: [{ type: "text", text: "ok" }], raw: {} };
-    },
-  };
+    const adapter: LlmProtocolAdapter = {
+        kind: protocol,
+        listModels: async () => ({ models: [] }),
+        chat: async (req) => {
+            onChat(req);
+            return { assistantText: "ok", blocks: [{ type: "text", text: "ok" }], raw: {} };
+        },
+    };
 
-  return new DefaultModelRequestService({
-    providers: providerRepo,
-    savedModels,
-    secretStore,
-    retryPolicies: noRetryPolicies,
-    retryPolicy: { maxRetries: 0, baseDelayMs: 0, maxDelayMs: 0, jitterRatio: 0 },
-    resolveAdapter: () => adapter,
-  });
+    return new DefaultModelRequestService({
+        providers: providerRepo,
+        savedModels,
+        secretStore,
+        retryPolicies: noRetryPolicies,
+        retryPolicy: { maxRetries: 0, baseDelayMs: 0, maxDelayMs: 0, jitterRatio: 0 },
+        resolveAdapter: () => adapter,
+    });
 }
 
 describe("DefaultModelRequestService thinking", () => {
-  it("thinkingLevel 为 off 时不向 adapter 传 thinking", async () => {
-    let captured: LlmChatRequest | undefined;
-    const settings: SavedModelSettings = {
-      ...DefaultSavedModelSettings.of("gpt-4o"),
-      generation: {
-        sampling: { enabled: false },
-        thinkingLevel: "off",
-      },
-    };
-    const svc = createService(settings, "openai", (req) => {
-      captured = req;
+    it("thinkingLevel 为 off 时不向 adapter 传 thinking", async () => {
+        let captured: LlmChatRequest | undefined;
+        const settings: SavedModelSettings = {
+            ...DefaultSavedModelSettings.of("gpt-4o"),
+            generation: {
+                sampling: { enabled: false },
+                thinkingLevel: "off",
+            },
+        };
+        const svc = createService(settings, "openai", (req) => {
+            captured = req;
+        });
+
+        await svc.request(TEST_SAVED_MODEL_ID, "hello");
+
+        assert.equal(captured?.thinking, undefined);
     });
 
-    await svc.request(TEST_SAVED_MODEL_ID, "hello");
+    it("新建默认 thinkingLevel 为 high 时解析并传给 adapter", async () => {
+        let captured: LlmChatRequest | undefined;
+        const settings = DefaultSavedModelSettings.of("gpt-4o");
+        const svc = createService(settings, "openai", (req) => {
+            captured = req;
+        });
 
-    assert.equal(captured?.thinking, undefined);
-  });
+        await svc.request(TEST_SAVED_MODEL_ID, "hello");
 
-  it("新建默认 thinkingLevel 为 high 时解析并传给 adapter", async () => {
-    let captured: LlmChatRequest | undefined;
-    const settings = DefaultSavedModelSettings.of("gpt-4o");
-    const svc = createService(settings, "openai", (req) => {
-      captured = req;
+        assert.deepEqual(captured?.thinking, {
+            protocol: "openai",
+            openai: { reasoning_effort: "high" },
+        });
     });
 
-    await svc.request(TEST_SAVED_MODEL_ID, "hello");
+    it("thinkingLevel medium 时解析并传给 adapter", async () => {
+        let captured: LlmChatRequest | undefined;
+        const settings: SavedModelSettings = {
+            ...DefaultSavedModelSettings.of("gpt-4o"),
+            generation: {
+                sampling: { enabled: false },
+                thinkingLevel: "medium",
+            },
+        };
+        const svc = createService(settings, "openai", (req) => {
+            captured = req;
+        });
 
-    assert.deepEqual(captured?.thinking, {
-      protocol: "openai",
-      openai: { reasoning_effort: "high" },
-    });
-  });
+        await svc.request(TEST_SAVED_MODEL_ID, "hello");
 
-  it("thinkingLevel medium 时解析并传给 adapter", async () => {
-    let captured: LlmChatRequest | undefined;
-    const settings: SavedModelSettings = {
-      ...DefaultSavedModelSettings.of("gpt-4o"),
-      generation: {
-        sampling: { enabled: false },
-        thinkingLevel: "medium",
-      },
-    };
-    const svc = createService(settings, "openai", (req) => {
-      captured = req;
-    });
-
-    await svc.request(TEST_SAVED_MODEL_ID, "hello");
-
-    assert.deepEqual(captured?.thinking, {
-      protocol: "openai",
-      openai: { reasoning_effort: "medium" },
-    });
-  });
-
-  it("GLM vendorModelId 与 gpt-* 解析结果一致", async () => {
-    let captured: LlmChatRequest | undefined;
-    const settings: SavedModelSettings = {
-      ...DefaultSavedModelSettings.of("glm-4.7"),
-      generation: {
-        sampling: { enabled: false },
-        thinkingLevel: "medium",
-      },
-    };
-    const svc = createService(settings, "openai", (req) => {
-      captured = req;
-    }, "glm-4.7");
-
-    await svc.request(TEST_SAVED_MODEL_ID, "hello");
-
-    assert.equal(captured?.vendorModelId, "glm-4.7");
-    assert.deepEqual(captured?.thinking, {
-      protocol: "openai",
-      openai: { reasoning_effort: "medium" },
-    });
-  });
-
-  it("GLM vendorModelId 档位为 off 时不向 adapter 传 thinking", async () => {
-    let captured: LlmChatRequest | undefined;
-    const settings: SavedModelSettings = {
-      ...DefaultSavedModelSettings.of("glm-4.7"),
-      generation: {
-        sampling: { enabled: false },
-        thinkingLevel: "off",
-      },
-    };
-    const svc = createService(settings, "openai", (req) => {
-      captured = req;
-    }, "glm-4.7");
-
-    await svc.request(TEST_SAVED_MODEL_ID, "hello");
-
-    assert.equal(captured?.thinking, undefined);
-  });
-
-  it("options.thinking 覆盖已保存设置", async () => {
-    let captured: LlmChatRequest | undefined;
-    const settings: SavedModelSettings = {
-      ...DefaultSavedModelSettings.of("gpt-4o"),
-      generation: {
-        sampling: { enabled: false },
-        thinkingLevel: "off",
-      },
-    };
-    const svc = createService(settings, "openai", (req) => {
-      captured = req;
+        assert.deepEqual(captured?.thinking, {
+            protocol: "openai",
+            openai: { reasoning_effort: "medium" },
+        });
     });
 
-    await svc.request(TEST_SAVED_MODEL_ID, "hello", {
-      thinking: { protocol: "openai", openai: { reasoning_effort: "high" } },
+    it("GLM vendorModelId 与 gpt-* 解析结果一致", async () => {
+        let captured: LlmChatRequest | undefined;
+        const settings: SavedModelSettings = {
+            ...DefaultSavedModelSettings.of("glm-4.7"),
+            generation: {
+                sampling: { enabled: false },
+                thinkingLevel: "medium",
+            },
+        };
+        const svc = createService(settings, "openai", (req) => {
+            captured = req;
+        }, "glm-4.7");
+
+        await svc.request(TEST_SAVED_MODEL_ID, "hello");
+
+        assert.equal(captured?.vendorModelId, "glm-4.7");
+        assert.deepEqual(captured?.thinking, {
+            protocol: "openai",
+            openai: { reasoning_effort: "medium" },
+        });
     });
 
-    assert.deepEqual(captured?.thinking, {
-      protocol: "openai",
-      openai: { reasoning_effort: "high" },
+    it("GLM vendorModelId 档位为 off 时不向 adapter 传 thinking", async () => {
+        let captured: LlmChatRequest | undefined;
+        const settings: SavedModelSettings = {
+            ...DefaultSavedModelSettings.of("glm-4.7"),
+            generation: {
+                sampling: { enabled: false },
+                thinkingLevel: "off",
+            },
+        };
+        const svc = createService(settings, "openai", (req) => {
+            captured = req;
+        }, "glm-4.7");
+
+        await svc.request(TEST_SAVED_MODEL_ID, "hello");
+
+        assert.equal(captured?.thinking, undefined);
     });
-  });
+
+    it("options.thinking 覆盖已保存设置", async () => {
+        let captured: LlmChatRequest | undefined;
+        const settings: SavedModelSettings = {
+            ...DefaultSavedModelSettings.of("gpt-4o"),
+            generation: {
+                sampling: { enabled: false },
+                thinkingLevel: "off",
+            },
+        };
+        const svc = createService(settings, "openai", (req) => {
+            captured = req;
+        });
+
+        await svc.request(TEST_SAVED_MODEL_ID, "hello", {
+            thinking: { protocol: "openai", openai: { reasoning_effort: "high" } },
+        });
+
+        assert.deepEqual(captured?.thinking, {
+            protocol: "openai",
+            openai: { reasoning_effort: "high" },
+        });
+    });
 });

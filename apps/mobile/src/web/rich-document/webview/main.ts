@@ -17,19 +17,19 @@ const docRoot = document.getElementById('doc');
 const documentSeq = { counter: 0 };
 
 documentViewSlot.register(payload => {
-  const seq = ++documentSeq.counter;
-  // 换文档前先销毁 Recogito，避免挂在已卸载 DOM 上
-  Annotate.destroy();
-  if (!docRoot) return;
-  render(h(DocumentApp, {payload}), docRoot);
-  // 先渲 mermaid（会移动源码 pre 进保留容器），再重建 Recogito，批注文本流按最终 DOM 计算；
-  // 序号过期说明已有更新一轮 setDocument，按中间态重建 Recogito 会错乱
-  void Mermaid.render(docRoot).finally(() => {
-    if (seq !== documentSeq.counter) {
-      return;
-    }
-    Annotate.refreshAfterDocument();
-  });
+    const seq = ++documentSeq.counter;
+    // 换文档前先销毁 Recogito，避免挂在已卸载 DOM 上
+    Annotate.destroy();
+    if (!docRoot) return;
+    render(h(DocumentApp, {payload}), docRoot);
+    // 先渲 mermaid（会移动源码 pre 进保留容器），再重建 Recogito，批注文本流按最终 DOM 计算；
+    // 序号过期说明已有更新一轮 setDocument，按中间态重建 Recogito 会错乱
+    void Mermaid.render(docRoot).finally(() => {
+        if (seq !== documentSeq.counter) {
+            return;
+        }
+        Annotate.refreshAfterDocument();
+    });
 });
 
 Annotate.bindUi();

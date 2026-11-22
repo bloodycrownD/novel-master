@@ -6,8 +6,8 @@ export type { PhysicalVfsService } from "../service/vfs/physical-vfs.port.js";
 // 归属例外（check-public-ownership）：角色卡经 VFS 导入，上限常量留本门面。
 export { CHARACTER_CARD_MAX_INPUT_BYTES } from "../domain/character-card/logic/character-card-limits.js";
 export type {
-  CharacterCardImportService,
-  CharacterCardImportOptions,
+    CharacterCardImportService,
+    CharacterCardImportOptions,
 } from "../domain/vfs/ports/character-card-import.port.js";
 export { UserVfsTurnOps } from "../service/vfs/build-user-vfs-turn-op.js";
 export { VfsZipBuild } from "../domain/vfs/logic/vfs-zip-build.js";
@@ -15,28 +15,28 @@ export { VfsZipParse } from "../domain/vfs/logic/vfs-zip-parse.js";
 export { VfsZipPath } from "../domain/vfs/logic/vfs-zip-path.js";
 export { VfsZipArchive } from "../domain/vfs/logic/vfs-zip-archive.js";
 export type {
-  VfsZipIoService,
-  VfsZipImportOptions,
-  ZipPathOptions,
+    VfsZipIoService,
+    VfsZipImportOptions,
+    ZipPathOptions,
 } from "../domain/vfs/ports/vfs-zip-io.port.js";
 export type {
-  VfsBatchIoService,
-  BatchIngestRawEntry,
-  BatchIngestPlanEntry,
-  BatchIngestPlan,
-  BatchConflict,
-  BatchApplyReport,
-  BatchApplyOptions,
-  BatchExportPlan,
-  BatchExportSkip,
-  BatchIngestWriter,
+    VfsBatchIoService,
+    BatchIngestRawEntry,
+    BatchIngestPlanEntry,
+    BatchIngestPlan,
+    BatchConflict,
+    BatchApplyReport,
+    BatchApplyOptions,
+    BatchExportPlan,
+    BatchExportSkip,
+    BatchIngestWriter,
 } from "../domain/vfs/ports/vfs-batch-io.port.js";
 export { VfsBatchPath } from "../domain/vfs/logic/vfs-batch-path.js";
 export type {
-  VfsService,
-  VfsReadResult,
-  VfsGrepMatch,
-  VfsContentSize,
+    VfsService,
+    VfsReadResult,
+    VfsGrepMatch,
+    VfsContentSize,
 } from "../domain/vfs/ports/vfs-service.port.js";
 // revision 仓库出口：checkpoint / 回滚 / VFS 服务层等装配同 conn 单实例时
 // 构造（read 计数通道与 hydrate 链已随 E1 清理版退役，v1.5.40 同批）。

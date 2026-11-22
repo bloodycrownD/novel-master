@@ -37,29 +37,29 @@ type LayoutBox = {offsetTop: number; offsetHeight: number};
 
 /** 窗口渲染态（模块内 holder，对象管理；测试经 isolateModules 取干净实例）。 */
 const winState = {
-  /** 当前窗口。 */
-  current: {start: 0, end: 0} as RowWindowRange,
-  /** 实测平均槽高（px）。 */
-  avgSlot: ROW_WINDOW_FALLBACK_SLOT_PX,
-  /** 上次实测过的窗口（相同窗口跳过重测，避免流式期高频 reflow）。 */
-  lastMeasured: null as RowWindowRange | null,
+    /** 当前窗口。 */
+    current: {start: 0, end: 0} as RowWindowRange,
+    /** 实测平均槽高（px）。 */
+    avgSlot: ROW_WINDOW_FALLBACK_SLOT_PX,
+    /** 上次实测过的窗口（相同窗口跳过重测，避免流式期高频 reflow）。 */
+    lastMeasured: null as RowWindowRange | null,
 };
 
 function clamp(v: number, lo: number, hi: number): number {
-  if (!(v >= lo)) return lo;
-  if (!(v <= hi)) return hi;
-  return v;
+    if (!(v >= lo)) return lo;
+    if (!(v <= hi)) return hi;
+    return v;
 }
 
 export const RowWindow = {
-  /** RowList 渲染取窗口：对当前 rows 总数做防御性 clamp。 */
-  getRange: (total: number): RowWindowRange => {
-    const end = clamp(winState.current.end, 0, Math.max(0, total));
-    const start = clamp(winState.current.start, 0, end);
-    return {start, end};
-  },
+    /** RowList 渲染取窗口：对当前 rows 总数做防御性 clamp。 */
+    getRange: (total: number): RowWindowRange => {
+        const end = clamp(winState.current.end, 0, Math.max(0, total));
+        const start = clamp(winState.current.start, 0, end);
+        return {start, end};
+    },
 
-  /**
+    /**
    * RowList 渲染取上下占位高度（未渲染行数 × 实测平均槽高）。
    * `pinnedTail`（spec C19）：流式行被窗口滚出后钉在下占位之后单独渲染，下占位
    * 必须少算这 1 行——它的真实高度由 DOM 自己贡献，不能被估算重复计算。
@@ -67,38 +67,38 @@ export const RowWindow = {
    * nm-style: keep-public — 跨层唯一读出口（ui/render/RowList）；winState.avgSlot 是
    * 本模块私有渲染态，ui 层不能直读，内联会把状态估算搬到 ui。
    */
-  getSpacerHeights: (total: number, pinnedTail = false) => {
-    const range = RowWindow.getRange(total);
-    const bottomRows = Math.max(0, total - range.end - (pinnedTail ? 1 : 0));
-    return {
-      top: Math.round(range.start * winState.avgSlot),
-      bottom: Math.round(bottomRows * winState.avgSlot),
-    };
-  },
+    getSpacerHeights: (total: number, pinnedTail = false) => {
+        const range = RowWindow.getRange(total);
+        const bottomRows = Math.max(0, total - range.end - (pinnedTail ? 1 : 0));
+        return {
+            top: Math.round(range.start * winState.avgSlot),
+            bottom: Math.round(bottomRows * winState.avgSlot),
+        };
+    },
 
-  /**
+    /**
    * 测试 / 调试窥视当前平均槽高估算。
    *
    * nm-style: keep-public — 测试支持 API：window 测试经 isolateModules 直接
    * 断言 EWMA 收敛；生产无读取入口，也不该把私有 winState.avgSlot 直接暴露成字段。
    */
-  getAvgSlotPx: (): number => {
-    return winState.avgSlot;
-  },
+    getAvgSlotPx: (): number => {
+        return winState.avgSlot;
+    },
 
-  /** 目标窗口（纯函数）：视口行 ± 缓冲，clamp 到 [0, total]。 */
-  desired: (total: number, first: number): RowWindowRange => {
-    const bufferRows = ROW_WINDOW_BUFFER_ROWS;
-    const steadyRows = ROW_WINDOW_ROWS + 2 * bufferRows;
-    // 短列表（总行数不足一个稳态窗口）始终全量渲染：不留上占位，
-    // 也避免短会话中间出现占位空段。
-    const maxStart = Math.max(0, total - steadyRows);
-    const start = clamp(Math.floor(first) - bufferRows, 0, maxStart);
-    const end = clamp(Math.ceil(first) + steadyRows - bufferRows, 0, total);
-    return {start, end};
-  },
+    /** 目标窗口（纯函数）：视口行 ± 缓冲，clamp 到 [0, total]。 */
+    desired: (total: number, first: number): RowWindowRange => {
+        const bufferRows = ROW_WINDOW_BUFFER_ROWS;
+        const steadyRows = ROW_WINDOW_ROWS + 2 * bufferRows;
+        // 短列表（总行数不足一个稳态窗口）始终全量渲染：不留上占位，
+        // 也避免短会话中间出现占位空段。
+        const maxStart = Math.max(0, total - steadyRows);
+        const start = clamp(Math.floor(first) - bufferRows, 0, maxStart);
+        const end = clamp(Math.ceil(first) + steadyRows - bufferRows, 0, total);
+        return {start, end};
+    },
 
-  /**
+    /**
    * 窗口移动计划（纯函数）：对两端分别判扩 / 缩（缩带滞回），
    * 无移动返回 null。一次计划允许两端同时动——上端动由调用方做
    * scrollHeight 差值补偿，下端动不影响视口上方内容（文档流性质）无需补偿。
@@ -107,61 +107,61 @@ export const RowWindow = {
    * 测试直接钉边界；内联进 handleScroll 会把这些策略断言改写成
    * 整表滚动集成用例，失去策略级覆盖。
    */
-  // nm style 要求签名单行；四参签名超过 prettier 默认宽度，用忽略标记保留单行。
-  // prettier-ignore
-  planMove: (total: number, start: number, end: number, v: number): RowWindowMove | null => {
-    if (total <= 0) return null;
-    const desired = RowWindow.desired(total, v);
-    let startDelta = 0;
-    let endDelta = 0;
-    if (desired.start < start) {
-      startDelta = desired.start - start;
-    } else if (desired.start > start + ROW_WINDOW_SHRINK_HYSTERESIS_ROWS) {
-      startDelta = desired.start - start;
-    }
-    if (desired.end > end) {
-      endDelta = desired.end - end;
-    } else if (desired.end < end - ROW_WINDOW_SHRINK_HYSTERESIS_ROWS) {
-      endDelta = desired.end - end;
-    }
-    if (startDelta === 0 && endDelta === 0) return null;
-    return {startDelta, endDelta};
-  },
+    // nm style 要求签名单行；四参签名超过 prettier 默认宽度，用忽略标记保留单行。
+    // prettier-ignore
+    planMove: (total: number, start: number, end: number, v: number): RowWindowMove | null => {
+        if (total <= 0) return null;
+        const desired = RowWindow.desired(total, v);
+        let startDelta = 0;
+        let endDelta = 0;
+        if (desired.start < start) {
+            startDelta = desired.start - start;
+        } else if (desired.start > start + ROW_WINDOW_SHRINK_HYSTERESIS_ROWS) {
+            startDelta = desired.start - start;
+        }
+        if (desired.end > end) {
+            endDelta = desired.end - end;
+        } else if (desired.end < end - ROW_WINDOW_SHRINK_HYSTERESIS_ROWS) {
+            endDelta = desired.end - end;
+        }
+        if (startDelta === 0 && endDelta === 0) return null;
+        return {startDelta, endDelta};
+    },
 
-  /** 窗口首行的文档纵坐标（上占位底缘；无占位时取首个消息行顶缘）。 */
-  windowTopPxInDocument: (): number | null => {
-    const topSpacer = document.getElementById(ROW_WINDOW_TOP_SPACER_ID);
-    if (topSpacer) return topSpacer.offsetTop + topSpacer.offsetHeight;
-    const first = RowWindow.firstOrLastRowEl(false);
-    if (first) return first.offsetTop;
-    return null;
-  },
+    /** 窗口首行的文档纵坐标（上占位底缘；无占位时取首个消息行顶缘）。 */
+    windowTopPxInDocument: (): number | null => {
+        const topSpacer = document.getElementById(ROW_WINDOW_TOP_SPACER_ID);
+        if (topSpacer) return topSpacer.offsetTop + topSpacer.offsetHeight;
+        const first = RowWindow.firstOrLastRowEl(false);
+        if (first) return first.offsetTop;
+        return null;
+    },
 
-  /** 直接把窗口设为目标（不渲染、不补偿——渲染与读位锚定由调用方统一处理）。 */
-  retarget: (total: number, firstRow: number): void => {
-    winState.current = RowWindow.desired(total, firstRow);
-    // 窗口内容大换血：下次 render 后必须重测平均槽高。
-    winState.lastMeasured = null;
-  },
+    /** 直接把窗口设为目标（不渲染、不补偿——渲染与读位锚定由调用方统一处理）。 */
+    retarget: (total: number, firstRow: number): void => {
+        winState.current = RowWindow.desired(total, firstRow);
+        // 窗口内容大换血：下次 render 后必须重测平均槽高。
+        winState.lastMeasured = null;
+    },
 
-  /**
+    /**
    * applySnapshot 全量替换 rows 后的窗口重置：
    * stick 贴尾；restore / preserve 按距底偏移从底反推视口行。
    * 无 scroller（clientHeight 未知）时退化为贴尾。
    */
-  // nm style 要求签名单行；签名超过 prettier 默认宽度，用忽略标记保留单行。
-  // prettier-ignore
-  resetForSnapshot: (total: number, positioning: RowWindowPositioning): void => {
-    if (positioning.kind === 'tail' || positioning.clientHeight <= 0) {
-      RowWindow.retarget(total, total);
-      return;
-    }
-    const offsetBottom = Math.max(0, positioning.offsetFromBottom);
-    const v = total - (offsetBottom + positioning.clientHeight) / winState.avgSlot;
-    RowWindow.retarget(total, v);
-  },
+    // nm style 要求签名单行；签名超过 prettier 默认宽度，用忽略标记保留单行。
+    // prettier-ignore
+    resetForSnapshot: (total: number, positioning: RowWindowPositioning): void => {
+        if (positioning.kind === 'tail' || positioning.clientHeight <= 0) {
+            RowWindow.retarget(total, total);
+            return;
+        }
+        const offsetBottom = Math.max(0, positioning.offsetFromBottom);
+        const v = total - (offsetBottom + positioning.clientHeight) / winState.avgSlot;
+        RowWindow.retarget(total, v);
+    },
 
-  /**
+    /**
    * prependPage 头部插入行后的窗口重定位（渲染前调用）：
    * 上占位清零（新行全部进窗口）、下占位行数保持不变——这样渲染后的
    * scrollHeight 差值恰为窗口内新行的真实总高（上下占位零变化），
@@ -171,15 +171,15 @@ export const RowWindow = {
    * nm-style: keep-public — 跨模块唯一入口（snapshot.applyPrependPage）：
    * 直接改写模块私有 winState.current/winState.lastMeasured，调用方不能 own 这份状态。
    */
-  retargetForPrepend: (prependedRows: number): void => {
-    const total = state.rows.length;
-    const oldTotal = Math.max(0, total - prependedRows);
-    const bottomRows = Math.max(0, oldTotal - winState.current.end);
-    winState.current = {start: 0, end: clamp(total - bottomRows, 0, total)};
-    winState.lastMeasured = null;
-  },
+    retargetForPrepend: (prependedRows: number): void => {
+        const total = state.rows.length;
+        const oldTotal = Math.max(0, total - prependedRows);
+        const bottomRows = Math.max(0, oldTotal - winState.current.end);
+        winState.current = {start: 0, end: clamp(total - bottomRows, 0, total)};
+        winState.lastMeasured = null;
+    },
 
-  /**
+    /**
    * 滚动驱动的窗口维护（onScroll / 快照读位设定后调用，幂等）：
    * 估算视口行 → 计划移动 → 应用（含渲染与读位补偿）。
    * 返回是否发生窗口移动。
@@ -192,53 +192,53 @@ export const RowWindow = {
    * 残余误差仅在窗口内行高分布不均（±1 平均行高容差内）。
    * 下端移动不影响视口上方内容（文档流性质），scrollTop 原地不动。
    */
-  handleScroll: (): boolean => {
-    const total = state.rows.length;
-    const scroller = document.getElementById('scroller');
-    if (!scroller) return false;
-    const top = RowWindow.windowTopPxInDocument();
-    if (top == null) return false;
-    const v = winState.current.start + (scroller.scrollTop - top) / winState.avgSlot;
-    if (!isFinite(v)) return false;
-    const firstRow = clamp(v, 0, Math.max(0, total - 1));
-    const move = RowWindow.planMove(total, winState.current.start, winState.current.end, firstRow);
-    if (!move) return false;
-    // 贴底守卫：窗口已含全部尾部行时，视口高度变化（输入框换行长高 /
-    // 键盘弹收把 webview 挤矮）引发的 scrollTop 钳制会把视口行估算推高、
-    // 误判为用户上滚并触发上端收缩——收缩把顶部真实行换成估算占位，
-    // scrollHeight 突变一整个估算误差，视口内容跳一格（打字时的突然抖动）。
-    // 贴底时上端收缩对可视区零收益（顶部缓冲行不影响底部视口），跳过。
-    if (move.startDelta > 0 && winState.current.end >= total) {
-      return false;
-    }
-    // 两端分步：先上端（渲染 + 读位重映射），后下端（渲染，不动 scrollTop）。
-    if (move.startDelta !== 0) {
-      const topBefore = RowWindow.windowTopPxInDocument();
-      let rowBefore: number | null = null;
-      if (topBefore != null) {
-        rowBefore = winState.current.start + (scroller.scrollTop - topBefore) / winState.avgSlot;
-      }
-      const nextStart = clamp(winState.current.start + move.startDelta, 0, winState.current.end);
-      winState.current = {start: nextStart, end: winState.current.end};
-      RowLogic.render();
-      if (rowBefore != null && isFinite(rowBefore)) {
-        const topAfter = RowWindow.windowTopPxInDocument();
-        if (topAfter != null) {
-          scroller.scrollTop = topAfter + (rowBefore - winState.current.start) * winState.avgSlot;
+    handleScroll: (): boolean => {
+        const total = state.rows.length;
+        const scroller = document.getElementById('scroller');
+        if (!scroller) return false;
+        const top = RowWindow.windowTopPxInDocument();
+        if (top == null) return false;
+        const v = winState.current.start + (scroller.scrollTop - top) / winState.avgSlot;
+        if (!isFinite(v)) return false;
+        const firstRow = clamp(v, 0, Math.max(0, total - 1));
+        const move = RowWindow.planMove(total, winState.current.start, winState.current.end, firstRow);
+        if (!move) return false;
+        // 贴底守卫：窗口已含全部尾部行时，视口高度变化（输入框换行长高 /
+        // 键盘弹收把 webview 挤矮）引发的 scrollTop 钳制会把视口行估算推高、
+        // 误判为用户上滚并触发上端收缩——收缩把顶部真实行换成估算占位，
+        // scrollHeight 突变一整个估算误差，视口内容跳一格（打字时的突然抖动）。
+        // 贴底时上端收缩对可视区零收益（顶部缓冲行不影响底部视口），跳过。
+        if (move.startDelta > 0 && winState.current.end >= total) {
+            return false;
         }
-      }
-    }
-    if (move.endDelta !== 0) {
-      const nextEnd = clamp(winState.current.end + move.endDelta, winState.current.start, total);
-      if (nextEnd !== winState.current.end) {
-        winState.current = {start: winState.current.start, end: nextEnd};
-        RowLogic.render();
-      }
-    }
-    return true;
-  },
+        // 两端分步：先上端（渲染 + 读位重映射），后下端（渲染，不动 scrollTop）。
+        if (move.startDelta !== 0) {
+            const topBefore = RowWindow.windowTopPxInDocument();
+            let rowBefore: number | null = null;
+            if (topBefore != null) {
+                rowBefore = winState.current.start + (scroller.scrollTop - topBefore) / winState.avgSlot;
+            }
+            const nextStart = clamp(winState.current.start + move.startDelta, 0, winState.current.end);
+            winState.current = {start: nextStart, end: winState.current.end};
+            RowLogic.render();
+            if (rowBefore != null && isFinite(rowBefore)) {
+                const topAfter = RowWindow.windowTopPxInDocument();
+                if (topAfter != null) {
+                    scroller.scrollTop = topAfter + (rowBefore - winState.current.start) * winState.avgSlot;
+                }
+            }
+        }
+        if (move.endDelta !== 0) {
+            const nextEnd = clamp(winState.current.end + move.endDelta, winState.current.start, total);
+            if (nextEnd !== winState.current.end) {
+                winState.current = {start: winState.current.start, end: nextEnd};
+                RowLogic.render();
+            }
+        }
+        return true;
+    },
 
-  /**
+    /**
    * renderRows 后的实测钩子（main 装配点回调）：
    * 以上 / 下占位边界量出窗口行实际占高（含行间 gap），EWMA 更新平均槽高。
    * 窗口未变时跳过——流式期间高频 renderRows 不产生额外 reflow。
@@ -251,81 +251,81 @@ export const RowWindow = {
    * nm-style: keep-public — renderRows 后唯一装配回调（runtime/factory 挂点）：
    * 直接更新模块私有 winState.avgSlot/winState.lastMeasured，调用方无法持有这份渲染态。
    */
-  measure: (): void => {
-    // 删行后 winState.current.end 可能仍大于当前 rows 总数（RowList 渲染用 clamp 后的窗口）：
-    // 计数必须同口径 clamp，否则分母偏大、平均槽高被系统性低估（P2-8）。
-    const range = RowWindow.getRange(state.rows.length);
-    const count = range.end - range.start;
-    if (count <= 0) return;
-    if (
-      winState.lastMeasured != null &&
-      winState.lastMeasured.start === range.start &&
-      winState.lastMeasured.end === range.end
-    ) {
-      return;
-    }
-    const topSpacer = document.getElementById(ROW_WINDOW_TOP_SPACER_ID);
-    const bottomSpacer = document.getElementById(ROW_WINDOW_BOTTOM_SPACER_ID);
-    let topPx: number | null = null;
-    let bottomPx: number | null = null;
-    let effectiveCount = count;
-    if (topSpacer) {
-      topPx = topSpacer.offsetTop + topSpacer.offsetHeight;
-    } else {
-      const first = RowWindow.firstOrLastRowEl(false);
-      if (first) topPx = first.offsetTop;
-    }
-    if (bottomSpacer) {
-      bottomPx = bottomSpacer.offsetTop;
-    } else {
-      let streamingTail: LayoutBox | null = null;
-      if (
-        typeof document !== 'undefined' &&
-        typeof document.getElementById === 'function'
-      ) {
-        const el = document.getElementById('stream-tail');
-        streamingTail = el == null ? null : (el as unknown as LayoutBox);
-      }
-      if (streamingTail != null && range.end >= state.rows.length) {
-        // 贴底流式行：测量区间收到它之前，槽高不含流式行高度。
-        bottomPx = streamingTail.offsetTop;
-        effectiveCount = count - 1;
-      } else {
-        const lastRow = RowWindow.firstOrLastRowEl(true);
-        if (lastRow) bottomPx = lastRow.offsetTop + lastRow.offsetHeight;
-      }
-    }
-    if (topPx == null || bottomPx == null || effectiveCount <= 0) return;
-    const measuredPx = bottomPx - topPx;
-    if (!(measuredPx > 0)) return;
-    const measuredSlot = measuredPx / effectiveCount;
-    winState.avgSlot += (measuredSlot - winState.avgSlot) * ROW_WINDOW_AVG_ALPHA;
-    winState.lastMeasured = {start: range.start, end: range.end};
-  },
+    measure: (): void => {
+        // 删行后 winState.current.end 可能仍大于当前 rows 总数（RowList 渲染用 clamp 后的窗口）：
+        // 计数必须同口径 clamp，否则分母偏大、平均槽高被系统性低估（P2-8）。
+        const range = RowWindow.getRange(state.rows.length);
+        const count = range.end - range.start;
+        if (count <= 0) return;
+        if (
+            winState.lastMeasured != null &&
+            winState.lastMeasured.start === range.start &&
+            winState.lastMeasured.end === range.end
+        ) {
+            return;
+        }
+        const topSpacer = document.getElementById(ROW_WINDOW_TOP_SPACER_ID);
+        const bottomSpacer = document.getElementById(ROW_WINDOW_BOTTOM_SPACER_ID);
+        let topPx: number | null = null;
+        let bottomPx: number | null = null;
+        let effectiveCount = count;
+        if (topSpacer) {
+            topPx = topSpacer.offsetTop + topSpacer.offsetHeight;
+        } else {
+            const first = RowWindow.firstOrLastRowEl(false);
+            if (first) topPx = first.offsetTop;
+        }
+        if (bottomSpacer) {
+            bottomPx = bottomSpacer.offsetTop;
+        } else {
+            let streamingTail: LayoutBox | null = null;
+            if (
+                typeof document !== 'undefined' &&
+                typeof document.getElementById === 'function'
+            ) {
+                const el = document.getElementById('stream-tail');
+                streamingTail = el == null ? null : (el as unknown as LayoutBox);
+            }
+            if (streamingTail != null && range.end >= state.rows.length) {
+                // 贴底流式行：测量区间收到它之前，槽高不含流式行高度。
+                bottomPx = streamingTail.offsetTop;
+                effectiveCount = count - 1;
+            } else {
+                const lastRow = RowWindow.firstOrLastRowEl(true);
+                if (lastRow) bottomPx = lastRow.offsetTop + lastRow.offsetHeight;
+            }
+        }
+        if (topPx == null || bottomPx == null || effectiveCount <= 0) return;
+        const measuredPx = bottomPx - topPx;
+        if (!(measuredPx > 0)) return;
+        const measuredSlot = measuredPx / effectiveCount;
+        winState.avgSlot += (measuredSlot - winState.avgSlot) * ROW_WINDOW_AVG_ALPHA;
+        winState.lastMeasured = {start: range.start, end: range.end};
+    },
 
-  firstOrLastRowEl: (last: boolean): LayoutBox | null => {
-    const rows = document.getElementById('rows');
-    if (!rows || typeof rows.querySelectorAll !== 'function') return null;
-    const list = rows.querySelectorAll('[data-id]');
-    if (!list || list.length === 0) return null;
-    const el = list[last ? list.length - 1 : 0];
-    return el as unknown as LayoutBox;
-  },
+    firstOrLastRowEl: (last: boolean): LayoutBox | null => {
+        const rows = document.getElementById('rows');
+        if (!rows || typeof rows.querySelectorAll !== 'function') return null;
+        const list = rows.querySelectorAll('[data-id]');
+        if (!list || list.length === 0) return null;
+        const el = list[last ? list.length - 1 : 0];
+        return el as unknown as LayoutBox;
+    },
 
-  /**
+    /**
    * 当前上下占位的像素总高（无占位元素按 0 计）：prepend 差值采样时
    * 扣除占位漂移用（DOM 真值，不受 avg 实测更新与渲染先后差影响）。
    */
-  getSpacerPxTotal: (): number => {
-    let total = 0;
-    const topSpacer = document.getElementById(ROW_WINDOW_TOP_SPACER_ID);
-    if (topSpacer) total += topSpacer.offsetHeight;
-    const bottomSpacer = document.getElementById(ROW_WINDOW_BOTTOM_SPACER_ID);
-    if (bottomSpacer) total += bottomSpacer.offsetHeight;
-    return total;
-  },
+    getSpacerPxTotal: (): number => {
+        let total = 0;
+        const topSpacer = document.getElementById(ROW_WINDOW_TOP_SPACER_ID);
+        if (topSpacer) total += topSpacer.offsetHeight;
+        const bottomSpacer = document.getElementById(ROW_WINDOW_BOTTOM_SPACER_ID);
+        if (bottomSpacer) total += bottomSpacer.offsetHeight;
+        return total;
+    },
 
-  /**
+    /**
    * prepend 后的占位估算校正（任务点：按 scrollHeight 差值校正一次）：
    * 差值折算到新行的平均高度，并入 EWMA 样本——新行未全进窗口时
    * （差值里混有占位估算），measure 覆盖不到的部分由此兜底收敛。
@@ -341,32 +341,32 @@ export const RowWindow = {
    * nm-style: keep-public — 跨模块唯一入口（snapshot.applyPrependPageNow）：
    * 把差值样本并入模块私有 winState.avgSlot 的 EWMA，不能搬进调用方。
    */
-  // nm style 要求签名单行；三参签名超过 prettier 默认宽度，用忽略标记保留单行。
-  // prettier-ignore
-  notePrependHeightDelta: (heightDeltaPx: number, prependedRows: number, topSpacerBefore?: SpacerBefore): void => {
-    const displacedRows = topSpacerBefore?.rows ?? 0;
-    const beforePx = topSpacerBefore?.spacerPx ?? RowWindow.getSpacerPxTotal();
-    const sampledRows = prependedRows + displacedRows;
-    if (prependedRows <= 0 || sampledRows <= 0) {
-      return;
-    }
-    const spacerDelta = RowWindow.getSpacerPxTotal() - beforePx;
-    const per = (heightDeltaPx - spacerDelta) / sampledRows;
-    if (!(per > 0)) return;
-    const keep = 1 - ROW_WINDOW_AVG_ALPHA;
-    winState.avgSlot = winState.avgSlot * keep + per * ROW_WINDOW_AVG_ALPHA;
-  },
+    // nm style 要求签名单行；三参签名超过 prettier 默认宽度，用忽略标记保留单行。
+    // prettier-ignore
+    notePrependHeightDelta: (heightDeltaPx: number, prependedRows: number, topSpacerBefore?: SpacerBefore): void => {
+        const displacedRows = topSpacerBefore?.rows ?? 0;
+        const beforePx = topSpacerBefore?.spacerPx ?? RowWindow.getSpacerPxTotal();
+        const sampledRows = prependedRows + displacedRows;
+        if (prependedRows <= 0 || sampledRows <= 0) {
+            return;
+        }
+        const spacerDelta = RowWindow.getSpacerPxTotal() - beforePx;
+        const per = (heightDeltaPx - spacerDelta) / sampledRows;
+        if (!(per > 0)) return;
+        const keep = 1 - ROW_WINDOW_AVG_ALPHA;
+        winState.avgSlot = winState.avgSlot * keep + per * ROW_WINDOW_AVG_ALPHA;
+    },
 } as const;
 
 type RowWindowMove = {startDelta: number; endDelta: number};
 
 /** applySnapshot 的窗口预定位口径。 */
 export type RowWindowPositioning =
-  | {kind: 'tail'}
-  | {
-      kind: 'fromBottom';
-      offsetFromBottom: number;
-      clientHeight: number;
-    };
+    | {kind: 'tail'}
+    | {
+            kind: 'fromBottom';
+            offsetFromBottom: number;
+            clientHeight: number;
+        };
 
 type SpacerBefore = {rows: number; spacerPx: number};

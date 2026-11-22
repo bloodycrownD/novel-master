@@ -22,239 +22,239 @@ const SESSION_ID = "s1";
 const SNAPSHOT_BODY = "WORKTREE_SNAPSHOT";
 
 function mockVfs(): VfsService {
-  const files = new Map<string, string>();
-  return {
-    async read(path: string) {
-      return { path, content: files.get(path) ?? "", version: 1, mtimeMs: 0 };
-    },
-    async write(path: string, content: string) {
-      files.set(path, content);
-      return { version: 1 };
-    },
-    async replace(path: string, oldString: string, newString: string) {
-      const content = files.get(path) ?? "";
-      files.set(path, content.replace(oldString, newString));
-      return { version: 1, replacements: 1 };
-    },
-    async list() {
-      return [...files.keys()];
-    },
-    async glob() {
-      return [];
-    },
-    async grep() {
-      return [];
-    },
-    async delete() {
-      return { deleted: true };
-    },
-  } as unknown as VfsService;
+    const files = new Map<string, string>();
+    return {
+        async read(path: string) {
+            return { path, content: files.get(path) ?? "", version: 1, mtimeMs: 0 };
+        },
+        async write(path: string, content: string) {
+            files.set(path, content);
+            return { version: 1 };
+        },
+        async replace(path: string, oldString: string, newString: string) {
+            const content = files.get(path) ?? "";
+            files.set(path, content.replace(oldString, newString));
+            return { version: 1, replacements: 1 };
+        },
+        async list() {
+            return [...files.keys()];
+        },
+        async glob() {
+            return [];
+        },
+        async grep() {
+            return [];
+        },
+        async delete() {
+            return { deleted: true };
+        },
+    } as unknown as VfsService;
 }
 
 function mockToolCtx(vfs: VfsService): BuiltinToolContext {
-  return {
-    vfs,
-    projectId: PROJECT_ID,
-    sessionId: SESSION_ID,
-  };
+    return {
+        vfs,
+        projectId: PROJECT_ID,
+        sessionId: SESSION_ID,
+    };
 }
 
 import {  noopSavedModelRepository  } from "../helpers/noop-saved-model-repo.js";
 
 async function seedWorkplaceKkv(
-  sessionKkv: SessionKkvService,
-  body: string,
+    sessionKkv: SessionKkvService,
+    body: string,
 ): Promise<void> {
-  await sessionKkv.set(
-    SESSION_ID,
-    SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
-    RULE_SNAPSHOT_CANON_KEY,
-    RuleSnapshotCodec.serialize([{ path: "/snap.md", status: "full" }]),
-  );
-  await sessionKkv.set(
-    SESSION_ID,
-    SESSION_KKV_DOMAIN_FILE_CACHE,
-    RuleSnapshotCodec.fileCacheKey("full", "/snap.md"),
-    RuleSnapshotCodec.serializeFileCachePayload({ body, mtimeMs: 1 }),
-  );
+    await sessionKkv.set(
+        SESSION_ID,
+        SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+        RULE_SNAPSHOT_CANON_KEY,
+        RuleSnapshotCodec.serialize([{ path: "/snap.md", status: "full" }]),
+    );
+    await sessionKkv.set(
+        SESSION_ID,
+        SESSION_KKV_DOMAIN_FILE_CACHE,
+        RuleSnapshotCodec.fileCacheKey("full", "/snap.md"),
+        RuleSnapshotCodec.serializeFileCachePayload({ body, mtimeMs: 1 }),
+    );
 }
 
 function runnerDeps(
-  deps: Omit<
-    CreateAgentRunnerDeps,
-    "eventBus" | "sessionKkv" | "workplace" | "savedModels"
-  > &
-    Partial<Pick<CreateAgentRunnerDeps, "savedModels" | "sessionKkv">>,
+    deps: Omit<
+        CreateAgentRunnerDeps,
+        "eventBus" | "sessionKkv" | "workplace" | "savedModels"
+    > &
+        Partial<Pick<CreateAgentRunnerDeps, "savedModels" | "sessionKkv">>,
 ): CreateAgentRunnerDeps {
-  return {
-    savedModels: noopSavedModelRepository(),
-    sessionKkv: createMemorySessionKkv(),
-    ...deps,
-    eventBus: new SimpleEventBus(),
-    workplace: () =>
-      ({
-        scope: {
-          kind: "session",
-          projectId: PROJECT_ID,
-          sessionId: SESSION_ID,
-        },
-        renderDisplay: async () => "",
-        buildListRows: async () => [],
-        materializePersistBlock: async () => ({ workplaceDisplay: "" }),
-        evaluateRuleView: async () => ({
-          rows: [],
-          displayByPath: new Map(),
-        }),
-      } as never),
-  };
+    return {
+        savedModels: noopSavedModelRepository(),
+        sessionKkv: createMemorySessionKkv(),
+        ...deps,
+        eventBus: new SimpleEventBus(),
+        workplace: () =>
+            ({
+                scope: {
+                    kind: "session",
+                    projectId: PROJECT_ID,
+                    sessionId: SESSION_ID,
+                },
+                renderDisplay: async () => "",
+                buildListRows: async () => [],
+                materializePersistBlock: async () => ({ workplaceDisplay: "" }),
+                evaluateRuleView: async () => ({
+                    rows: [],
+                    displayByPath: new Map(),
+                }),
+            } as never),
+    };
 }
 
 describe("AgentRunner template blocks", () => {
-  it("T-WT16: history 含 worktree 双消息 + 会话 user", async () => {
-    const session = new InMemoryAgentSession(SESSION_ID);
-    await session.append("user", TextBlocks.of("go"));
+    it("T-WT16: history 含 worktree 双消息 + 会话 user", async () => {
+        const session = new InMemoryAgentSession(SESSION_ID);
+        await session.append("user", TextBlocks.of("go"));
 
-    const definition: AgentDefinition = {
-      name: "ctx-agent",
-      prompts: {
-        persistEnabled: true,
-        workplace: "【done】",
-        persist: [],
-        dynamic: [],
-      },
-    };
+        const definition: AgentDefinition = {
+            name: "ctx-agent",
+            prompts: {
+                persistEnabled: true,
+                workplace: "【done】",
+                persist: [],
+                dynamic: [],
+            },
+        };
 
-    const sessionKkv = createMemorySessionKkv();
-    await seedWorkplaceKkv(sessionKkv, SNAPSHOT_BODY);
+        const sessionKkv = createMemorySessionKkv();
+        await seedWorkplaceKkv(sessionKkv, SNAPSHOT_BODY);
 
-    const captured: { options?: ModelRequestOptions } = {};
-    const model: ModelRequestService = {
-      request: mock.fn(async (_modelId, _content, options) => {
-        captured.options = options;
-        return Result.ok({
-          assistantText: "ok",
-          blocks: [{ type: "text", text: "ok" }],
-          raw: {},
-        }) satisfies LlmChatResult;
-      }),
-    };
+        const captured: { options?: ModelRequestOptions } = {};
+        const model: ModelRequestService = {
+            request: mock.fn(async (_modelId, _content, options) => {
+                captured.options = options;
+                return Result.ok({
+                    assistantText: "ok",
+                    blocks: [{ type: "text", text: "ok" }],
+                    raw: {},
+                }) satisfies LlmChatResult;
+            }),
+        };
 
-    const runner = AgentServiceFactory.createRunner(
-      runnerDeps({
-        session,
-        modelRequests: model,
-        registry: new ToolRegistry(),
-        toolCtx: mockToolCtx(mockVfs()),
-        sessionKkv,
-      }),
-    );
+        const runner = AgentServiceFactory.createRunner(
+            runnerDeps({
+                session,
+                modelRequests: model,
+                registry: new ToolRegistry(),
+                toolCtx: mockToolCtx(mockVfs()),
+                sessionKkv,
+            }),
+        );
 
-    unwrap(await runner.run({
-      maxSteps: 1,
-      definition,
-      sessionId: SESSION_ID,
-      projectId: PROJECT_ID,
-      savedModelId: RUN_MODEL_ID,
-      workspaceModelId: RUN_MODEL_ID,
-    }));
+        unwrap(await runner.run({
+            maxSteps: 1,
+            definition,
+            sessionId: SESSION_ID,
+            projectId: PROJECT_ID,
+            savedModelId: RUN_MODEL_ID,
+            workspaceModelId: RUN_MODEL_ID,
+        }));
 
-    const history = captured.options?.history ?? [];
-    assert.equal(history.length, 3);
-    assert.equal(history[0]!.id, "prompt:workplace");
-    assert.match(MessageBodyText.fromBlocks(history[0]!.content.blocks), new RegExp(SNAPSHOT_BODY));
-    assert.equal(history[1]!.id, "prompt:workplace:done");
-    assert.equal(MessageBodyText.fromBlocks(history[1]!.content.blocks), "【done】");
-    assert.equal(history[2]!.role, "user");
-  });
+        const history = captured.options?.history ?? [];
+        assert.equal(history.length, 3);
+        assert.equal(history[0]!.id, "prompt:workplace");
+        assert.match(MessageBodyText.fromBlocks(history[0]!.content.blocks), new RegExp(SNAPSHOT_BODY));
+        assert.equal(history[1]!.id, "prompt:workplace:done");
+        assert.equal(MessageBodyText.fromBlocks(history[1]!.content.blocks), "【done】");
+        assert.equal(history[2]!.role, "user");
+    });
 
-  it("T-WT16 R3: 多步 history 均含 worktree 双消息", async () => {
-    const session = new InMemoryAgentSession(SESSION_ID);
-    await session.append("user", TextBlocks.of("go"));
+    it("T-WT16 R3: 多步 history 均含 worktree 双消息", async () => {
+        const session = new InMemoryAgentSession(SESSION_ID);
+        await session.append("user", TextBlocks.of("go"));
 
-    const definition: AgentDefinition = {
-      name: "ctx-agent",
-      prompts: {
-        persistEnabled: true,
-        workplace: "【done】",
-        persist: [],
-        dynamic: [],
-      },
-    };
+        const definition: AgentDefinition = {
+            name: "ctx-agent",
+            prompts: {
+                persistEnabled: true,
+                workplace: "【done】",
+                persist: [],
+                dynamic: [],
+            },
+        };
 
-    const sessionKkv = createMemorySessionKkv();
-    await seedWorkplaceKkv(sessionKkv, SNAPSHOT_BODY);
+        const sessionKkv = createMemorySessionKkv();
+        await seedWorkplaceKkv(sessionKkv, SNAPSHOT_BODY);
 
-    const histories: ModelRequestOptions[] = [];
-    const model: ModelRequestService = {
-      request: mock.fn(async (_modelId, _content, options) => {
-        histories.push(options);
-        if (histories.length < 2) {
-          return Result.ok({
-            assistantText: "",
-            blocks: [
-              {
-                type: "tool_use",
-                id: "tu1",
-                name: "write",
-                input: { path: "/out.txt", content: "x" },
-              },
-            ],
-            raw: {},
-          }) satisfies LlmChatResult;
+        const histories: ModelRequestOptions[] = [];
+        const model: ModelRequestService = {
+            request: mock.fn(async (_modelId, _content, options) => {
+                histories.push(options);
+                if (histories.length < 2) {
+                    return Result.ok({
+                        assistantText: "",
+                        blocks: [
+                            {
+                                type: "tool_use",
+                                id: "tu1",
+                                name: "write",
+                                input: { path: "/out.txt", content: "x" },
+                            },
+                        ],
+                        raw: {},
+                    }) satisfies LlmChatResult;
+                }
+                return Result.ok({
+                    assistantText: "ok",
+                    blocks: [{ type: "text", text: "ok" }],
+                    raw: {},
+                }) satisfies LlmChatResult;
+            }),
+        };
+
+        const registry = new ToolRegistry();
+        BuiltinTools.register(registry);
+        const vfs = mockVfs();
+        const runner = AgentServiceFactory.createRunner(
+            runnerDeps({
+                session,
+                modelRequests: model,
+                registry,
+                toolCtx: mockToolCtx(vfs),
+                sessionKkv,
+            }),
+        );
+
+        unwrap(await runner.run({
+            maxSteps: 3,
+            definition,
+            sessionId: SESSION_ID,
+            projectId: PROJECT_ID,
+            savedModelId: RUN_MODEL_ID,
+            workspaceModelId: RUN_MODEL_ID,
+        }));
+
+        assert.equal(histories.length, 2);
+        for (const opts of histories) {
+            const history = opts.history ?? [];
+            assert.equal(
+                history.some((m) => m.id === "prompt:workplace"),
+                true,
+            );
+            assert.equal(
+                history.some((m) => m.id === "prompt:workplace:done"),
+                true,
+            );
+            const ctxMsg = history.find((m) => m.id === "prompt:workplace");
+            const doneMsg = history.find(
+                (m) => m.id === "prompt:workplace:done",
+            );
+            assert.match(
+                ctxMsg != null ? MessageBodyText.fromBlocks(ctxMsg.content.blocks) : "",
+                new RegExp(SNAPSHOT_BODY),
+            );
+            assert.equal(
+                doneMsg != null ? MessageBodyText.fromBlocks(doneMsg.content.blocks) : "",
+                "【done】",
+            );
         }
-        return Result.ok({
-          assistantText: "ok",
-          blocks: [{ type: "text", text: "ok" }],
-          raw: {},
-        }) satisfies LlmChatResult;
-      }),
-    };
-
-    const registry = new ToolRegistry();
-    BuiltinTools.register(registry);
-    const vfs = mockVfs();
-    const runner = AgentServiceFactory.createRunner(
-      runnerDeps({
-        session,
-        modelRequests: model,
-        registry,
-        toolCtx: mockToolCtx(vfs),
-        sessionKkv,
-      }),
-    );
-
-    unwrap(await runner.run({
-      maxSteps: 3,
-      definition,
-      sessionId: SESSION_ID,
-      projectId: PROJECT_ID,
-      savedModelId: RUN_MODEL_ID,
-      workspaceModelId: RUN_MODEL_ID,
-    }));
-
-    assert.equal(histories.length, 2);
-    for (const opts of histories) {
-      const history = opts.history ?? [];
-      assert.equal(
-        history.some((m) => m.id === "prompt:workplace"),
-        true,
-      );
-      assert.equal(
-        history.some((m) => m.id === "prompt:workplace:done"),
-        true,
-      );
-      const ctxMsg = history.find((m) => m.id === "prompt:workplace");
-      const doneMsg = history.find(
-        (m) => m.id === "prompt:workplace:done",
-      );
-      assert.match(
-        ctxMsg != null ? MessageBodyText.fromBlocks(ctxMsg.content.blocks) : "",
-        new RegExp(SNAPSHOT_BODY),
-      );
-      assert.equal(
-        doneMsg != null ? MessageBodyText.fromBlocks(doneMsg.content.blocks) : "",
-        "【done】",
-      );
-    }
-  });
+    });
 });

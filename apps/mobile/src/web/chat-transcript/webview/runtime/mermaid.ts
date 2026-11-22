@@ -15,32 +15,32 @@ const mermaidCache = MermaidCore.createSourceCache();
 const SCAN_DEBOUNCE_MS = 150;
 /** 防抖定时器槽（模块内 holder，对象管理）。 */
 const scanTimerSlot = {
-  timer: null as number | null,
+    timer: null as number | null,
 };
 
 export const Mermaid = {
-  /** 防抖触发一次历史行 mermaid 扫描（多次连发只跑一轮）。 */
-  scheduleScan: (): void => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-    if (scanTimerSlot.timer != null) {
-      window.clearTimeout(scanTimerSlot.timer);
-    }
-    scanTimerSlot.timer = window.setTimeout(() => {
-      scanTimerSlot.timer = null;
-      void Mermaid.runScan();
-    }, SCAN_DEBOUNCE_MS);
-  },
+    /** 防抖触发一次历史行 mermaid 扫描（多次连发只跑一轮）。 */
+    scheduleScan: (): void => {
+        if (typeof window === 'undefined') {
+            return;
+        }
+        if (scanTimerSlot.timer != null) {
+            window.clearTimeout(scanTimerSlot.timer);
+        }
+        scanTimerSlot.timer = window.setTimeout(() => {
+            scanTimerSlot.timer = null;
+            void Mermaid.runScan();
+        }, SCAN_DEBOUNCE_MS);
+    },
 
-  /** 立即扫描 #rows（历史行）；#stream-tail 子树在流式期由宿主整段替换，跳过。 */
-  runScan: async (): Promise<void> => {
-    const rows = document.getElementById('rows');
-    if (!rows) {
-      return;
-    }
-    await MermaidCore.renderCodeBlocks(rows, mermaidCache, {
-      skip: code => !!code.closest('#stream-tail'),
-    });
-  },
+    /** 立即扫描 #rows（历史行）；#stream-tail 子树在流式期由宿主整段替换，跳过。 */
+    runScan: async (): Promise<void> => {
+        const rows = document.getElementById('rows');
+        if (!rows) {
+            return;
+        }
+        await MermaidCore.renderCodeBlocks(rows, mermaidCache, {
+            skip: code => !!code.closest('#stream-tail'),
+        });
+    },
 } as const;

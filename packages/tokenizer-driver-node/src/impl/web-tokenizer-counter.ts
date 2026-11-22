@@ -26,7 +26,7 @@ const heuristic = new HeuristicTokenCounter();
 
 // nm-style 注记：文件名 PascalCase（WebTokenizerCounter）撞同文件 export 类 WebTokenizerCounter，按「WEB 家族计数入口」主体起名（WebFamilyCount）。
 export namespace WebFamilyCount {
-  /**
+    /**
    * 真 tokenizer 加载失败时的**兜底计数**（stream-metrics-native ④）。
    *
    * 为什么不直接 `heuristic.countText`（即 `ceil(字符数 / 3.35)`）：3.35 是**英文**
@@ -39,102 +39,102 @@ export namespace WebFamilyCount {
    * 只有「连 cl100k 表都建不起来」才退回字符折算：那是环境级故障（ranks 资源缺失），
    * 别无选择，且失败被缓存、本进程不再重试。
    */
-  // nm-style 注记：本应保持 namespace 私有，但顶层 export 类 WebTokenizerCounter（不收口）的兜底路径依赖它，须以 namespace 成员形态暴露（不经 barrel，包外不可见）。
-  export function fallbackCount(text: string): number {
-    const real = EncodingCache.countText(text);
-    return real ?? heuristic.countText(text);
-  }
+    // nm-style 注记：本应保持 namespace 私有，但顶层 export 类 WebTokenizerCounter（不收口）的兜底路径依赖它，须以 namespace 成员形态暴露（不经 barrel，包外不可见）。
+    export function fallbackCount(text: string): number {
+        const real = EncodingCache.countText(text);
+        return real ?? heuristic.countText(text);
+    }
 
-  /**
+    /**
    * nm-style: keep-public — WEB 家族计数入口，与 `SentencePieceFamilyCount.countPrompt`（SP）构成同形
    * 家族工厂对（`family, serialized → {count, estimated}`，fallback-caliber 契约）：把 counter 生命
    * 周期（构造一次、`failedLoad` 读一次）封装成结果快照，fallback-count.test 的 F1/F2 成对锁名。
    * 内联单个会把 counter 构造细节漏进调用方、与 SP 分支形成深浅不一的两层。
    */
-  export async function countPrompt(family: TokenizerFamily, serialized: string): Promise<TokenCountEstimate> {
-    const counter = new WebTokenizerCounter(family as WebTokenizerFamily);
-    const count = await counter.countSerializedPrompt(serialized);
-    return { count, estimated: counter.failedLoad };
-  }
+    export async function countPrompt(family: TokenizerFamily, serialized: string): Promise<TokenCountEstimate> {
+        const counter = new WebTokenizerCounter(family as WebTokenizerFamily);
+        const count = await counter.countSerializedPrompt(serialized);
+        return { count, estimated: counter.failedLoad };
+    }
 }
 
 /** Loads JSON assets and counts via ST web-tokenizer message conversion. */
 export class WebTokenizerCounter implements TokenCounter {
-  readonly kind: TokenizerFamily;
-  private instance: Tokenizer | null = null;
-  private loadError = false;
+    readonly kind: TokenizerFamily;
+    private instance: Tokenizer | null = null;
+    private loadError = false;
 
-  constructor(private readonly family: WebTokenizerFamily) {
-    this.kind = family;
-  }
+    constructor(private readonly family: WebTokenizerFamily) {
+        this.kind = family;
+    }
 
-  /** nm-style: keep-local — 懒加载状态机（instance 缓存 + loadError 锁存），内联会把错误缓存塞进计数路径。 */
-  private async getInstance(): Promise<Tokenizer | null> {
-    if (this.instance != null) {
-      return this.instance;
-    }
-    if (this.loadError) {
-      return null;
-    }
-    const paths = TokenizerAssetPaths.forFamily(this.family);
-    if (paths == null || paths.kind !== "json") {
-      this.loadError = true;
-      return null;
-    }
-    const loader = NodeTokenizerLoader.get();
-    try {
-      const primary = loader.readJson(paths.primary);
-      this.instance = await Tokenizer.fromJSON(primary);
-      return this.instance;
-    } catch {
-      if (paths.fallback != null) {
-        try {
-          const fallback = loader.readJson(paths.fallback);
-          this.instance = await Tokenizer.fromJSON(fallback);
-          return this.instance;
-        } catch {
-          this.loadError = true;
-          return null;
+    /** nm-style: keep-local — 懒加载状态机（instance 缓存 + loadError 锁存），内联会把错误缓存塞进计数路径。 */
+    private async getInstance(): Promise<Tokenizer | null> {
+        if (this.instance != null) {
+            return this.instance;
         }
-      }
-      this.loadError = true;
-      return null;
+        if (this.loadError) {
+            return null;
+        }
+        const paths = TokenizerAssetPaths.forFamily(this.family);
+        if (paths == null || paths.kind !== "json") {
+            this.loadError = true;
+            return null;
+        }
+        const loader = NodeTokenizerLoader.get();
+        try {
+            const primary = loader.readJson(paths.primary);
+            this.instance = await Tokenizer.fromJSON(primary);
+            return this.instance;
+        } catch {
+            if (paths.fallback != null) {
+                try {
+                    const fallback = loader.readJson(paths.fallback);
+                    this.instance = await Tokenizer.fromJSON(fallback);
+                    return this.instance;
+                } catch {
+                    this.loadError = true;
+                    return null;
+                }
+            }
+            this.loadError = true;
+            return null;
+        }
     }
-  }
 
-  // 以下两个是**同步** `TokenCounter` port 的实现，保持字符折算不变（stream-metrics-native ④）：
-  // port 契约是同步的，而真 tiktoken 的编码表是 WASM 对象、只能惰性异步构造；
-  // 把同步方法改成「同步构造编码表」会在每次调用上白付一张 ranks 表的建表代价。
-  // 真正需要读数的路径都走 async `countSerializedPrompt` / 驱动的
-  // `countPromptLlmInput`，那里已经全部换成真计数。
-  countText(text: string): number {
-    return Math.ceil(text.length / CHARACTERS_PER_TOKEN_RATIO);
-  }
-
-  /** nm-style: keep-public — TokenCounter 端口实现（经接口分发调用，检查器按方法名计数漏计）。 */
-  countMessages(messages: readonly ChatMessage[]): number {
-    let chars = 0;
-    for (const m of messages) {
-      chars += MessageBodyText.fromBlocks(m.content.blocks).length;
+    // 以下两个是**同步** `TokenCounter` port 的实现，保持字符折算不变（stream-metrics-native ④）：
+    // port 契约是同步的，而真 tiktoken 的编码表是 WASM 对象、只能惰性异步构造；
+    // 把同步方法改成「同步构造编码表」会在每次调用上白付一张 ranks 表的建表代价。
+    // 真正需要读数的路径都走 async `countSerializedPrompt` / 驱动的
+    // `countPromptLlmInput`，那里已经全部换成真计数。
+    countText(text: string): number {
+        return Math.ceil(text.length / CHARACTERS_PER_TOKEN_RATIO);
     }
-    return Math.ceil(chars / CHARACTERS_PER_TOKEN_RATIO);
-  }
 
-  /**
+    /** nm-style: keep-public — TokenCounter 端口实现（经接口分发调用，检查器按方法名计数漏计）。 */
+    countMessages(messages: readonly ChatMessage[]): number {
+        let chars = 0;
+        for (const m of messages) {
+            chars += MessageBodyText.fromBlocks(m.content.blocks).length;
+        }
+        return Math.ceil(chars / CHARACTERS_PER_TOKEN_RATIO);
+    }
+
+    /**
    * ST-aligned prompt count; 加载失败时兜底到默认 cl100k 真计数
    * （cl100k 也建不起来才退字符折算，见 {@link fallbackCount}）。
    */
-  async countSerializedPrompt(serialized: string): Promise<number> {
-    const instance = await this.getInstance();
-    if (instance == null) {
-      return WebFamilyCount.fallbackCount(serialized);
+    async countSerializedPrompt(serialized: string): Promise<number> {
+        const instance = await this.getInstance();
+        if (instance == null) {
+            return WebFamilyCount.fallbackCount(serialized);
+        }
+        const wrapped = OpenAiStyleMessageCount.wrapSerializedPromptAsSystemMessage(serialized);
+        return OpenAiStyleMessageCount.countWebTokenizerMessages((t) => instance.encode(t), [wrapped]);
     }
-    const wrapped = OpenAiStyleMessageCount.wrapSerializedPromptAsSystemMessage(serialized);
-    return OpenAiStyleMessageCount.countWebTokenizerMessages((t) => instance.encode(t), [wrapped]);
-  }
 
-  /** Whether the last load attempt failed (for `estimated` flag). */
-  get failedLoad(): boolean {
-    return this.loadError;
-  }
+    /** Whether the last load attempt failed (for `estimated` flag). */
+    get failedLoad(): boolean {
+        return this.loadError;
+    }
 }

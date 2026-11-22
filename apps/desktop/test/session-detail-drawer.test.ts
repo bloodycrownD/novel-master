@@ -21,162 +21,162 @@ const rendererRoot = join(__dirname, "..", "renderer");
  * 按 spec「源码字符串断言轻量风格」原则，结构与渲染标记走源码断言。
  */
 function readDrawer(): string {
-  return readFileSync(
-    join(rendererRoot, "features", "chat", "SessionDetailDrawer.tsx"),
-    "utf8",
-  );
+    return readFileSync(
+        join(rendererRoot, "features", "chat", "SessionDetailDrawer.tsx"),
+        "utf8",
+    );
 }
 
 describe("SessionDetailDrawer (T-D3)", () => {
-  it("渲染聊天名（点击编辑）/ Agent / 模型 / 操作入口（切换 / 查看提示词 / 压缩）", () => {
-    const src = readDrawer();
-    // 聊天名行内编辑入口（点击 name 进入编辑）
-    assert.match(src, /session-detail-drawer__name/);
-    assert.match(src, /\{sessionName\}/);
-    assert.match(src, /data-session-detail-action="rename"/);
-    assert.match(src, /data-session-detail-action="rename-input"/);
-    // 不再使用 TextPromptModal 弹窗重命名
-    assert.doesNotMatch(src, /TextPromptModal/);
-    assert.doesNotMatch(src, /setRenameOpen/);
-    // 不再保留「点击重命名」的 title tooltip
-    assert.doesNotMatch(src, /title="点击重命名"/);
-    // Agent / 模型 区块
-    assert.match(src, /session-detail-pick__label.*Agent/s);
-    assert.match(src, /session-detail-pick__label.*模型/s);
-    // 不再使用 source 标签 / AGENT_SOURCE_LABEL 常量
-    assert.doesNotMatch(src, /AGENT_SOURCE_LABEL/);
-    assert.doesNotMatch(src, /MODEL_SOURCE_LABEL/);
-    assert.doesNotMatch(src, /session-detail-pick__source/);
-    // 锁定指示仍保留；meta==null 的 badge 按 au/B-3 分「加载中…/加载失败」
-    // 两态（旧「智能体未绑定」文案已退役——失败态不得冒充未绑定/已删）。
-    assert.match(src, /session-detail-pick__lock/);
-    // i18n 后锁 coreT 调用形态+键名（文案由 catalog 保证）。
-    assert.match(src, /coreT\(\{key: "ui\.common\.loading"\}\)/);
-    assert.match(src, /coreT\(\{key: "ui\.session\.agent_info_load_failed"\}\)/);
-    assert.doesNotMatch(src, /智能体未绑定/);
-    assert.match(src, /coreT\(\{key: "ui\.session\.agent_locked"\}\)/);
-    // 操作入口 data hook
-    assert.match(src, /data-session-detail-action="switch-agent"/);
-    assert.match(src, /data-session-detail-action="switch-model"/);
-    assert.match(src, /data-session-detail-action="view-prompt"/);
-    assert.match(src, /data-session-detail-action="compact"/);
-    // 文案（i18n 后锁 coreT 调用形态+键名）
-    assert.match(src, /coreT\(\{key: "ui\.nav\.view_prompt"\}\)/);
-    assert.match(src, /coreT\(\{key: "ui\.session\.compact_context"\}\)/);
-    // 行内编辑交互：Enter 提交 / Escape 取消 / blur 提交
-    assert.match(src, /commitRename/);
-    assert.match(src, /cancelRename/);
-  });
+    it("渲染聊天名（点击编辑）/ Agent / 模型 / 操作入口（切换 / 查看提示词 / 压缩）", () => {
+        const src = readDrawer();
+        // 聊天名行内编辑入口（点击 name 进入编辑）
+        assert.match(src, /session-detail-drawer__name/);
+        assert.match(src, /\{sessionName\}/);
+        assert.match(src, /data-session-detail-action="rename"/);
+        assert.match(src, /data-session-detail-action="rename-input"/);
+        // 不再使用 TextPromptModal 弹窗重命名
+        assert.doesNotMatch(src, /TextPromptModal/);
+        assert.doesNotMatch(src, /setRenameOpen/);
+        // 不再保留「点击重命名」的 title tooltip
+        assert.doesNotMatch(src, /title="点击重命名"/);
+        // Agent / 模型 区块
+        assert.match(src, /session-detail-pick__label.*Agent/s);
+        assert.match(src, /session-detail-pick__label.*模型/s);
+        // 不再使用 source 标签 / AGENT_SOURCE_LABEL 常量
+        assert.doesNotMatch(src, /AGENT_SOURCE_LABEL/);
+        assert.doesNotMatch(src, /MODEL_SOURCE_LABEL/);
+        assert.doesNotMatch(src, /session-detail-pick__source/);
+        // 锁定指示仍保留；meta==null 的 badge 按 au/B-3 分「加载中…/加载失败」
+        // 两态（旧「智能体未绑定」文案已退役——失败态不得冒充未绑定/已删）。
+        assert.match(src, /session-detail-pick__lock/);
+        // i18n 后锁 coreT 调用形态+键名（文案由 catalog 保证）。
+        assert.match(src, /coreT\(\{key: "ui\.common\.loading"\}\)/);
+        assert.match(src, /coreT\(\{key: "ui\.session\.agent_info_load_failed"\}\)/);
+        assert.doesNotMatch(src, /智能体未绑定/);
+        assert.match(src, /coreT\(\{key: "ui\.session\.agent_locked"\}\)/);
+        // 操作入口 data hook
+        assert.match(src, /data-session-detail-action="switch-agent"/);
+        assert.match(src, /data-session-detail-action="switch-model"/);
+        assert.match(src, /data-session-detail-action="view-prompt"/);
+        assert.match(src, /data-session-detail-action="compact"/);
+        // 文案（i18n 后锁 coreT 调用形态+键名）
+        assert.match(src, /coreT\(\{key: "ui\.nav\.view_prompt"\}\)/);
+        assert.match(src, /coreT\(\{key: "ui\.session\.compact_context"\}\)/);
+        // 行内编辑交互：Enter 提交 / Escape 取消 / blur 提交
+        assert.match(src, /commitRename/);
+        assert.match(src, /cancelRename/);
+    });
 
-  it("open=false 时不渲染抽屉", () => {
-    const src = readDrawer();
-    // 提前返回保护
-    assert.match(src, /if \(!open\)/);
-  });
+    it("open=false 时不渲染抽屉", () => {
+        const src = readDrawer();
+        // 提前返回保护
+        assert.match(src, /if \(!open\)/);
+    });
 
-  it("源码：none 态智能体卡放开为待重选，模型卡仍锁定（防已删 agent 死锁）", () => {
-    const src = readDrawer();
-    // source 默认 'none'（meta 未加载或 session.agentId 指向已删 agent）
-    assert.match(src, /meta\?\.source \?\? "none"/);
-    // agent 锁：仅在 meta 未加载完时锁定，防加载中被误点
-    assert.match(src, /agentLocked = meta == null/);
-    // none 态（已加载）识别为「已删待重选」：不早退、直接弹 picker
-    // （badge 已提示已删，不再额外弹「请重新选择」toast）
-    assert.match(src, /agentDeleted = meta != null && source === "none"/);
-    assert.doesNotMatch(src, /智能体已被删除，请重新选择/);
-    // i18n 后锁 coreT 调用形态+键名（badge 文案由 catalog 保证）。
-    assert.match(src, /coreT\(\{key: "ui\.session\.agent_deleted_hint"\}\)/);
-    // 待重选 badge 样式与可点 chevron 保留（agentLocked 为 false 时渲染 ›）
-    assert.match(src, /session-detail-pick__lock--reselect/);
-    // model 卡维持 source !== 'session' 锁定（重选智能体后自然解锁）
-    assert.match(src, /modelLocked = source !== "session"/);
-    // i18n 后锁 coreT 调用形态+键名（旧「已锁定模型/会话内无法覆盖」两断言同键，锁定 toast 文案由 catalog 保证）。
-    assert.match(src, /coreT\(\{key: "ui\.session\.agent_model_locked_hint"\}\)/);
-    // 旧的 agent-pin / hasDedicatedModel 判定不应再出现
-    assert.doesNotMatch(src, /"agent-pin"/);
-    assert.doesNotMatch(src, /hasDedicatedModel/);
-    // 旧「无法在会话内切换」的锁死文案已退役
-    assert.doesNotMatch(src, /未绑定有效智能体，无法在会话内切换/);
-  });
+    it("源码：none 态智能体卡放开为待重选，模型卡仍锁定（防已删 agent 死锁）", () => {
+        const src = readDrawer();
+        // source 默认 'none'（meta 未加载或 session.agentId 指向已删 agent）
+        assert.match(src, /meta\?\.source \?\? "none"/);
+        // agent 锁：仅在 meta 未加载完时锁定，防加载中被误点
+        assert.match(src, /agentLocked = meta == null/);
+        // none 态（已加载）识别为「已删待重选」：不早退、直接弹 picker
+        // （badge 已提示已删，不再额外弹「请重新选择」toast）
+        assert.match(src, /agentDeleted = meta != null && source === "none"/);
+        assert.doesNotMatch(src, /智能体已被删除，请重新选择/);
+        // i18n 后锁 coreT 调用形态+键名（badge 文案由 catalog 保证）。
+        assert.match(src, /coreT\(\{key: "ui\.session\.agent_deleted_hint"\}\)/);
+        // 待重选 badge 样式与可点 chevron 保留（agentLocked 为 false 时渲染 ›）
+        assert.match(src, /session-detail-pick__lock--reselect/);
+        // model 卡维持 source !== 'session' 锁定（重选智能体后自然解锁）
+        assert.match(src, /modelLocked = source !== "session"/);
+        // i18n 后锁 coreT 调用形态+键名（旧「已锁定模型/会话内无法覆盖」两断言同键，锁定 toast 文案由 catalog 保证）。
+        assert.match(src, /coreT\(\{key: "ui\.session\.agent_model_locked_hint"\}\)/);
+        // 旧的 agent-pin / hasDedicatedModel 判定不应再出现
+        assert.doesNotMatch(src, /"agent-pin"/);
+        assert.doesNotMatch(src, /hasDedicatedModel/);
+        // 旧「无法在会话内切换」的锁死文案已退役
+        assert.doesNotMatch(src, /未绑定有效智能体，无法在会话内切换/);
+    });
 
-  it("源码：重命名走行内编辑（ipcSessionsRename）；agent/model 切换走 session 级 IPC", () => {
-    const src = readDrawer();
-    // 聊天名行内编辑调用 ipcSessionsRename
-    assert.match(src, /ipcSessionsRename\(/);
-    assert.match(src, /ipcSessionsSetAgentBinding\(/);
-    assert.match(src, /ipcSessionsSetModelOverride\(/);
-    // 不应再调用 workspace 级 setCurrent
-    assert.doesNotMatch(src, /ipcAgentSetCurrent\(/);
-    assert.doesNotMatch(src, /ipcModelSetCurrent\(/);
-  });
+    it("源码：重命名走行内编辑（ipcSessionsRename）；agent/model 切换走 session 级 IPC", () => {
+        const src = readDrawer();
+        // 聊天名行内编辑调用 ipcSessionsRename
+        assert.match(src, /ipcSessionsRename\(/);
+        assert.match(src, /ipcSessionsSetAgentBinding\(/);
+        assert.match(src, /ipcSessionsSetModelOverride\(/);
+        // 不应再调用 workspace 级 setCurrent
+        assert.doesNotMatch(src, /ipcAgentSetCurrent\(/);
+        assert.doesNotMatch(src, /ipcModelSetCurrent\(/);
+    });
 
-  it("源码：行内编辑竞态防护（submittingRef + 空串短路）[G-1]", () => {
-    const src = readDrawer();
-    // submittingRef：防止 blur 与 keydown Enter 重复提交
-    assert.match(src, /submittingRef/);
-    assert.match(src, /if \(submittingRef\.current\)/);
-    // 空串或未改动 → 直接退出，不调用 IPC
-    assert.match(src, /!trimmed/);
-    assert.match(src, /trimmed === sessionName/);
-  });
+    it("源码：行内编辑竞态防护（submittingRef + 空串短路）[G-1]", () => {
+        const src = readDrawer();
+        // submittingRef：防止 blur 与 keydown Enter 重复提交
+        assert.match(src, /submittingRef/);
+        assert.match(src, /if \(submittingRef\.current\)/);
+        // 空串或未改动 → 直接退出，不调用 IPC
+        assert.match(src, /!trimmed/);
+        assert.match(src, /trimmed === sessionName/);
+    });
 
-  it("源码：agent picker 不允许 none；model picker 允许 none 且措辞修正", () => {
-    const src = readDrawer();
-    // 会话必须持有 agentId → agent picker 不允许 none，无“回退工作区”措辞
-    assert.doesNotMatch(src, /解除会话绑定/);
-    // model picker 保留 allowNone，措辞改为“清除会话覆盖（使用智能体锁定模型）”（i18n 后锁 coreT 形态+键名）
-    assert.match(src, /noneLabel=\{coreT\(\{key: "ui\.session\.clear_model_override_aria"\}\)\}/);
-    // 旧的“回退工作区”措辞已全部移除
-    assert.doesNotMatch(src, /回退工作区/);
-  });
+    it("源码：agent picker 不允许 none；model picker 允许 none 且措辞修正", () => {
+        const src = readDrawer();
+        // 会话必须持有 agentId → agent picker 不允许 none，无“回退工作区”措辞
+        assert.doesNotMatch(src, /解除会话绑定/);
+        // model picker 保留 allowNone，措辞改为“清除会话覆盖（使用智能体锁定模型）”（i18n 后锁 coreT 形态+键名）
+        assert.match(src, /noneLabel=\{coreT\(\{key: "ui\.session\.clear_model_override_aria"\}\)\}/);
+        // 旧的“回退工作区”措辞已全部移除
+        assert.doesNotMatch(src, /回退工作区/);
+    });
 });
 
 describe("SessionDetailDrawer meta 加载失败态（cr-fix-spec 条目 10，au/B-3）", () => {
-  it("源码：metaRes.ok=false 时 showToast 固定中文兜底「智能体信息加载失败」，不透出 metaRes.error.message", () => {
-    const src = readDrawer();
-    // 失败可见：metaLoadFailed 置位 + 固定中文 toast（main 侧 formatIpcError
-    // 可能直出英文，不直接透出 error.message）
-    assert.match(src, /metaLoadFailed/);
-    assert.match(src, /setMetaLoadFailed\(true\)/);
-    // i18n 后锁 coreT 调用形态+键名（固定兜底文案由 catalog 保证，不透出 metaRes.error.message 的意图不变）。
-    assert.match(src, /showToast\(coreT\(\{key: "ui\.session\.agent_info_load_failed"\}\)\)/);
-    assert.doesNotMatch(src, /showToast\(metaRes\.error\.message\)/);
-    // 成功路径清失败标记；抽屉重开/会话切换重置（重开即重试的入口语义）
-    assert.match(src, /setMetaLoadFailed\(false\)/);
-  });
+    it("源码：metaRes.ok=false 时 showToast 固定中文兜底「智能体信息加载失败」，不透出 metaRes.error.message", () => {
+        const src = readDrawer();
+        // 失败可见：metaLoadFailed 置位 + 固定中文 toast（main 侧 formatIpcError
+        // 可能直出英文，不直接透出 error.message）
+        assert.match(src, /metaLoadFailed/);
+        assert.match(src, /setMetaLoadFailed\(true\)/);
+        // i18n 后锁 coreT 调用形态+键名（固定兜底文案由 catalog 保证，不透出 metaRes.error.message 的意图不变）。
+        assert.match(src, /showToast\(coreT\(\{key: "ui\.session\.agent_info_load_failed"\}\)\)/);
+        assert.doesNotMatch(src, /showToast\(metaRes\.error\.message\)/);
+        // 成功路径清失败标记；抽屉重开/会话切换重置（重开即重试的入口语义）
+        assert.match(src, /setMetaLoadFailed\(false\)/);
+    });
 
-  it("源码：badge 三态可辨——加载中…/智能体信息加载失败/已删待重选文案互不相同", () => {
-    const src = readDrawer();
-    // 三态文案各自出现（i18n 后锁 coreT 调用形态+键名，文案互异由 catalog 保证）。
-    assert.match(src, /coreT\(\{key: "ui\.common\.loading"\}\)/);
-    assert.match(src, /coreT\(\{key: "ui\.session\.agent_info_load_failed"\}\)/);
-    assert.match(src, /coreT\(\{key: "ui\.session\.agent_deleted_hint"\}\)/);
-    // 失败后点击智能体卡提示错误文案（不再「加载中请稍候」永不发生）；
-    // i18n 后锁三元两侧的 coreT 键名（guide 句号版与 toast 无句号版是两个键）。
-    assert.match(
-      src,
-      /metaLoadFailed\s*\?\s*coreT\(\{key: "ui\.session\.agent_info_load_failed"\}\)\s*:\s*coreT\(\{key: "ui\.session\.agent_loading_guide"\}\)/,
-    );
-  });
+    it("源码：badge 三态可辨——加载中…/智能体信息加载失败/已删待重选文案互不相同", () => {
+        const src = readDrawer();
+        // 三态文案各自出现（i18n 后锁 coreT 调用形态+键名，文案互异由 catalog 保证）。
+        assert.match(src, /coreT\(\{key: "ui\.common\.loading"\}\)/);
+        assert.match(src, /coreT\(\{key: "ui\.session\.agent_info_load_failed"\}\)/);
+        assert.match(src, /coreT\(\{key: "ui\.session\.agent_deleted_hint"\}\)/);
+        // 失败后点击智能体卡提示错误文案（不再「加载中请稍候」永不发生）；
+        // i18n 后锁三元两侧的 coreT 键名（guide 句号版与 toast 无句号版是两个键）。
+        assert.match(
+            src,
+            /metaLoadFailed\s*\?\s*coreT\(\{key: "ui\.session\.agent_info_load_failed"\}\)\s*:\s*coreT\(\{key: "ui\.session\.agent_loading_guide"\}\)/,
+        );
+    });
 });
 
 describe("App.tsx 入口替换 (T-D4)", () => {
-  it("不再渲染 #session-actions-menu；改为挂载 SessionDetailDrawer", () => {
-    const appSrc = readFileSync(join(rendererRoot, "App.tsx"), "utf8");
-    // 原 session-actions-menu 浮动菜单块已移除
-    assert.doesNotMatch(appSrc, /id="session-actions-menu"/);
-    // 入口挂载 SessionDetailDrawer
-    assert.match(appSrc, /SessionDetailDrawer/);
-    // openSessionActions 改为打开抽屉
-    assert.match(appSrc, /setSessionDetailOpen\(true\)/);
-  });
+    it("不再渲染 #session-actions-menu；改为挂载 SessionDetailDrawer", () => {
+        const appSrc = readFileSync(join(rendererRoot, "App.tsx"), "utf8");
+        // 原 session-actions-menu 浮动菜单块已移除
+        assert.doesNotMatch(appSrc, /id="session-actions-menu"/);
+        // 入口挂载 SessionDetailDrawer
+        assert.match(appSrc, /SessionDetailDrawer/);
+        // openSessionActions 改为打开抽屉
+        assert.match(appSrc, /setSessionDetailOpen\(true\)/);
+    });
 });
 
 describe("Bug5：置位/手动压缩后 SessionDetailDrawer token 计数刷新", () => {
-  it("SessionDetailDrawer 源码：监听 context-changed，命中后 reload", () => {
-    const src = readDrawer();
-    // 新增 context-changed 监听（与 messages-rollback 同范式）
-    assert.match(src, /addEventListener\(['"]context-changed['"]\s*,\s*handler\)/);
+    it("SessionDetailDrawer 源码：监听 context-changed，命中后 reload", () => {
+        const src = readDrawer();
+        // 新增 context-changed 监听（与 messages-rollback 同范式）
+        assert.match(src, /addEventListener\(['"]context-changed['"]\s*,\s*handler\)/);
     assert.match(src, /removeEventListener\(['"]context-changed['"]\s*,\s*handler\)/);
     // 命中后调 reload（与 messages-rollback 块共用同一个 handler 形状）
     assert.match(src, /context-changed[\s\S]*?void reload\(\)/);
@@ -191,9 +191,9 @@ describe("Bug5：置位/手动压缩后 SessionDetailDrawer token 计数刷新",
     assert.match(
       convSrc,
       /kind === ['"]set-floor['"][\s\S]*?dispatchEvent\([\s\S]*?context-changed[\s\S]*?\)/,
-    );
-    // 语义不复用 messages-rollback：context-changed 是独立事件
-    assert.match(convSrc, /new CustomEvent\(['"]context-changed['"]\s*,/);
+        );
+        // 语义不复用 messages-rollback：context-changed 是独立事件
+        assert.match(convSrc, /new CustomEvent\(['"]context-changed['"]\s*,/);
   });
 
   it("ConversationPanel 源码：手动压缩（runCompaction）成功后 dispatch context-changed", () => {

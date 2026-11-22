@@ -38,289 +38,289 @@ import {CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION} from '@/services/chat-transcript-
  * 终态由 `streamStatus{row}` 表达。
  */
 const RN_HOST_MESSAGE_TYPES: Record<ConversationHostMessage['type'], true> = {
-  init: true,
-  themeUpdate: true,
-  sessionSnapshot: true,
-  prependPage: true,
-  appendTailRows: true,
-  streamDelta: true,
-  streamBlockCommit: true,
-  streamStatus: true,
-  streamReset: true,
-  flagsUpdate: true,
-  closeMenu: true,
-  closeMermaidViewer: true,
+    init: true,
+    themeUpdate: true,
+    sessionSnapshot: true,
+    prependPage: true,
+    appendTailRows: true,
+    streamDelta: true,
+    streamBlockCommit: true,
+    streamStatus: true,
+    streamReset: true,
+    flagsUpdate: true,
+    closeMenu: true,
+    closeMermaidViewer: true,
 };
 
 describe('chat-conversation 桥协议 v2 · 单源形态锁', () => {
-  it('T-CU3: CONVERSATION_BRIDGE_V 为 2（宿主下行信封 v；web 侧对账面已随合成包退役）', () => {
-    expect(CONVERSATION_BRIDGE_V).toBe(2);
-  });
+    it('T-CU3: CONVERSATION_BRIDGE_V 为 2（宿主下行信封 v；web 侧对账面已随合成包退役）', () => {
+        expect(CONVERSATION_BRIDGE_V).toBe(2);
+    });
 
-  it('ready 的 t2 标识：RN 侧与转录域真源同源（独立入口 t2），宿主判定只认 v===2', () => {
-    // 宿主对 ready 的判定只认 v === 2（decodeConversationUpstream），version
-    // 是辅助信息；同源断言保证「标识字符串」不出现第二份手抄。
-    expect(CONVERSATION_READY_VERSION).toBe(TRANSCRIPT_READY_VERSION);
-    expect(CONVERSATION_READY_VERSION).toBe('t2');
-  });
+    it('ready 的 t2 标识：RN 侧与转录域真源同源（独立入口 t2），宿主判定只认 v===2', () => {
+        // 宿主对 ready 的判定只认 v === 2（decodeConversationUpstream），version
+        // 是辅助信息；同源断言保证「标识字符串」不出现第二份手抄。
+        expect(CONVERSATION_READY_VERSION).toBe(TRANSCRIPT_READY_VERSION);
+        expect(CONVERSATION_READY_VERSION).toBe('t2');
+    });
 
-  it('主题 9 键超集同源于 HOST_THEME_KEYS（web 侧同取此真源）', () => {
-    expect(CONVERSATION_THEME_KEYS).toHaveLength(9);
-    expect(CONVERSATION_THEME_KEYS).toContain('selection');
-    expect([...CONVERSATION_THEME_KEYS].sort()).toEqual(
-      [...HOST_THEME_KEYS].sort(),
-    );
-    // 两份键集不是各抄一份，而是同一个数组引用——宿主改 THEME_VARS 一处即全跟随
-    expect(CONVERSATION_THEME_KEYS).toBe(HOST_THEME_KEYS);
-  });
+    it('主题 9 键超集同源于 HOST_THEME_KEYS（web 侧同取此真源）', () => {
+        expect(CONVERSATION_THEME_KEYS).toHaveLength(9);
+        expect(CONVERSATION_THEME_KEYS).toContain('selection');
+        expect([...CONVERSATION_THEME_KEYS].sort()).toEqual(
+            [...HOST_THEME_KEYS].sort(),
+        );
+        // 两份键集不是各抄一份，而是同一个数组引用——宿主改 THEME_VARS 一处即全跟随
+        expect(CONVERSATION_THEME_KEYS).toBe(HOST_THEME_KEYS);
+    });
 
-  it('下行 type 全集：RN 联合为纯转录 12 键', () => {
-    // 合成包退役后 web 侧无集中清单可对账（独立入口 runtime 用 switch 分发）；
-    // RN 侧的增删由上面的 Record 类型编译期锁住，此处钉运行时形态。
-    const rnDownstreamTypes = Object.keys(RN_HOST_MESSAGE_TYPES);
-    expect(rnDownstreamTypes).toHaveLength(12);
-    // 流式旧通道已随投影协议删除（单条 streamDelta + streamStatus）
-    for (const retired of [
-      'streamBatch',
-      'streamCommit',
-      'streamToolInvoking',
-    ]) {
-      expect(rnDownstreamTypes).not.toContain(retired);
-    }
-    // stickIfNearBottom 已在 RN 联合移除（BASE 起无生产方）
-    expect(rnDownstreamTypes).not.toContain('stickIfNearBottom');
-    // composer/dock 域 7 条下行已随 D4c 从 RN 联合退役
-    for (const retired of [
-      'setText',
-      'setSelection',
-      'setDisabled',
-      'blur',
-      'composerState',
-      'composerPaste',
-      'selectAll',
-    ]) {
-      expect(rnDownstreamTypes).not.toContain(retired);
-    }
-  });
+    it('下行 type 全集：RN 联合为纯转录 12 键', () => {
+        // 合成包退役后 web 侧无集中清单可对账（独立入口 runtime 用 switch 分发）；
+        // RN 侧的增删由上面的 Record 类型编译期锁住，此处钉运行时形态。
+        const rnDownstreamTypes = Object.keys(RN_HOST_MESSAGE_TYPES);
+        expect(rnDownstreamTypes).toHaveLength(12);
+        // 流式旧通道已随投影协议删除（单条 streamDelta + streamStatus）
+        for (const retired of [
+            'streamBatch',
+            'streamCommit',
+            'streamToolInvoking',
+        ]) {
+            expect(rnDownstreamTypes).not.toContain(retired);
+        }
+        // stickIfNearBottom 已在 RN 联合移除（BASE 起无生产方）
+        expect(rnDownstreamTypes).not.toContain('stickIfNearBottom');
+        // composer/dock 域 7 条下行已随 D4c 从 RN 联合退役
+        for (const retired of [
+            'setText',
+            'setSelection',
+            'setDisabled',
+            'blur',
+            'composerState',
+            'composerPaste',
+            'selectAll',
+        ]) {
+            expect(rnDownstreamTypes).not.toContain(retired);
+        }
+    });
 
-  it('列表域下行协议面已随回滚整体退役（RN 侧不该再有这些 type）', () => {
-    // 会话列表回到 RN：sessionList / viewState 下行两条协议面已删除。
-    // 这里的 Record 类型锁 + 显式名单是防「只删一半」的静默放过；web 侧
-    // 对账面（合成包 model 的 LIST 常量）已随包退役，无从再查。
-    const rnDownstreamTypes = Object.keys(RN_HOST_MESSAGE_TYPES);
-    for (const retired of ['sessionList', 'viewState']) {
-      expect(rnDownstreamTypes).not.toContain(retired);
-    }
-  });
+    it('列表域下行协议面已随回滚整体退役（RN 侧不该再有这些 type）', () => {
+        // 会话列表回到 RN：sessionList / viewState 下行两条协议面已删除。
+        // 这里的 Record 类型锁 + 显式名单是防「只删一半」的静默放过；web 侧
+        // 对账面（合成包 model 的 LIST 常量）已随包退役，无从再查。
+        const rnDownstreamTypes = Object.keys(RN_HOST_MESSAGE_TYPES);
+        for (const retired of ['sessionList', 'viewState']) {
+            expect(rnDownstreamTypes).not.toContain(retired);
+        }
+    });
 
-  it('能力协商：转录域能力位可判定（真源 = 独立入口 TRANSCRIPT_CAPABILITIES）', () => {
-    // 独立入口 ready 上报的 capabilities 是真源（RN 桥与 web main.ts 同源
-    // import）；RN 侧 ready 消费面为转录域 streamBlockCommit + 流式投影
-    // streamProjection（spec §2.2.1 / C3）。
-    expect(TRANSCRIPT_CAPABILITIES).toContain(
-      TRANSCRIPT_CAPABILITY_STREAM_BLOCK_COMMIT,
-    );
-    expect(TRANSCRIPT_CAPABILITIES).toContain(
-      TRANSCRIPT_CAPABILITY_STREAM_PROJECTION,
-    );
-    expect(
-      TranscriptCapabilities.include(
-        TRANSCRIPT_CAPABILITIES,
-        'streamBlockCommit',
-      ),
-    ).toBe(true);
-    expect(
-      TranscriptCapabilities.include(
-        TRANSCRIPT_CAPABILITIES,
-        'streamProjection',
-      ),
-    ).toBe(true);
-    // 「未声明 = 不支持」：空清单一律 false
-    expect(TranscriptCapabilities.include([], 'streamBlockCommit')).toBe(
-      false,
-    );
-    expect(
-      TranscriptCapabilities.include(undefined, 'streamBlockCommit'),
-    ).toBe(false);
-  });
+    it('能力协商：转录域能力位可判定（真源 = 独立入口 TRANSCRIPT_CAPABILITIES）', () => {
+        // 独立入口 ready 上报的 capabilities 是真源（RN 桥与 web main.ts 同源
+        // import）；RN 侧 ready 消费面为转录域 streamBlockCommit + 流式投影
+        // streamProjection（spec §2.2.1 / C3）。
+        expect(TRANSCRIPT_CAPABILITIES).toContain(
+            TRANSCRIPT_CAPABILITY_STREAM_BLOCK_COMMIT,
+        );
+        expect(TRANSCRIPT_CAPABILITIES).toContain(
+            TRANSCRIPT_CAPABILITY_STREAM_PROJECTION,
+        );
+        expect(
+            TranscriptCapabilities.include(
+                TRANSCRIPT_CAPABILITIES,
+                'streamBlockCommit',
+            ),
+        ).toBe(true);
+        expect(
+            TranscriptCapabilities.include(
+                TRANSCRIPT_CAPABILITIES,
+                'streamProjection',
+            ),
+        ).toBe(true);
+        // 「未声明 = 不支持」：空清单一律 false
+        expect(TranscriptCapabilities.include([], 'streamBlockCommit')).toBe(
+            false,
+        );
+        expect(
+            TranscriptCapabilities.include(undefined, 'streamBlockCommit'),
+        ).toBe(false);
+    });
 });
 
 describe('chat-conversation 宽松 decoder', () => {
-  it('ready 只认 v === 2', () => {
-    const ok = ChatConversationBridge.decodeConversationUpstream(
-      JSON.stringify({
-        v: 2,
-        type: 'ready',
-        payload: {version: TRANSCRIPT_READY_VERSION, capabilities: []},
-      }),
-    );
-    expect(ok.ok).toBe(true);
+    it('ready 只认 v === 2', () => {
+        const ok = ChatConversationBridge.decodeConversationUpstream(
+            JSON.stringify({
+                v: 2,
+                type: 'ready',
+                payload: {version: TRANSCRIPT_READY_VERSION, capabilities: []},
+            }),
+        );
+        expect(ok.ok).toBe(true);
 
-    // 旧 dist 的 v:1 ready 被拒（不得置位 webReady → 走 8s 超时兜底）
-    const stale = ChatConversationBridge.decodeConversationUpstream(
-      JSON.stringify({v: 1, type: 'ready', payload: {version: 'm4'}}),
-    );
-    expect(stale.ok).toBe(false);
-    if (!stale.ok) {
-      expect(stale.reason).toBe('stale-ready');
-    }
-  });
-
-  it('ready 缺 v（undefined）同样按 stale 拒——不得「无 v 也放行」', () => {
-    const res = ChatConversationBridge.decodeConversationUpstream(
-      JSON.stringify({type: 'ready', payload: {}}),
-    );
-    expect(res.ok).toBe(false);
-  });
-
-  it('其余 type **不校验 v**：转录域上行恒为 v:1 也要收', () => {
-    // 转录 runtime 的 post 是模块级单例、BRIDGE_V=1 硬编码，上行必然是 v:1。
-    // change / selectionChange 是剥离后的残余 composer 域上行（旧 dist 仍在发）：
-    // decoder 宽松放行、宿主不消费。
-    for (const type of [
-      'scrollSnapshot',
-      'loadOlder',
-      'visibility',
-      'menuOpened',
-      'openMessageMenu',
-      'copyCode',
-      'change',
-      'selectionChange',
-    ]) {
-      const res = ChatConversationBridge.decodeConversationUpstream(
-        JSON.stringify({v: 1, type, payload: {}}),
-      );
-      expect(res.ok).toBe(true);
-      if (res.ok) {
-        expect(res.message.type).toBe(type);
-      }
-    }
-    // 缺 v 的普通上行同样收
-    const noV = ChatConversationBridge.decodeConversationUpstream(
-      JSON.stringify({type: 'visibility', payload: {hidden: false}}),
-    );
-    expect(noV.ok).toBe(true);
-  });
-
-  it('dockAction（v:2）宽松收下（宿主已不消费该上行，decoder 不做白名单过滤）', () => {
-    const res = ChatConversationBridge.decodeConversationUpstream(
-      JSON.stringify({v: 2, type: 'dockAction', payload: {action: 'send'}}),
-    );
-    expect(res.ok).toBe(true);
-    if (res.ok) {
-      expect(res.message.payload.action).toBe('send');
-    }
-  });
-
-  it('坏 JSON / 非对象 / 无 type 一律 malformed（宽容丢弃，绝不 throw）', () => {
-    for (const raw of [
-      '{not json',
-      '',
-      'null',
-      '[1,2,3]',
-      '"just-a-string"',
-      JSON.stringify({v: 2, payload: {}}),
-      JSON.stringify({v: 2, type: 42, payload: {}}),
-      JSON.stringify({v: 2, type: '', payload: {}}),
-    ]) {
-      const res = ChatConversationBridge.decodeConversationUpstream(raw);
-      expect(res.ok).toBe(false);
-      if (!res.ok) {
-        expect(res.reason).toBe('malformed');
-      }
-    }
-  });
-
-  it('payload 缺省 / 非对象按空对象处理（不因载荷畸形丢整条消息）', () => {
-    const res = ChatConversationBridge.decodeConversationUpstream(
-      JSON.stringify({v: 1, type: 'visibility'}),
-    );
-    expect(res.ok).toBe(true);
-    if (res.ok) {
-      expect(res.message.payload).toEqual({});
-    }
-  });
-
-  it('已解析对象（非字符串）入参同样可解（测试与 RN 内部调用皆覆盖）', () => {
-    const res = ChatConversationBridge.decodeConversationUpstream({
-      v: 2,
-      type: 'ready',
-      payload: {capabilities: ['streamBlockCommit']},
+        // 旧 dist 的 v:1 ready 被拒（不得置位 webReady → 走 8s 超时兜底）
+        const stale = ChatConversationBridge.decodeConversationUpstream(
+            JSON.stringify({v: 1, type: 'ready', payload: {version: 'm4'}}),
+        );
+        expect(stale.ok).toBe(false);
+        if (!stale.ok) {
+            expect(stale.reason).toBe('stale-ready');
+        }
     });
-    expect(res.ok).toBe(true);
-    if (res.ok) {
-      expect(ChatConversationBridge.readReadyCapabilities(res.message.payload)).toEqual([
-        'streamBlockCommit',
-      ]);
-    }
-  });
 
-  it('capabilities 缺省 / 非数组 → 空清单（「未声明 = 不支持」）', () => {
-    expect(ChatConversationBridge.readReadyCapabilities({})).toEqual([]);
-    expect(ChatConversationBridge.readReadyCapabilities({capabilities: 'nope'})).toEqual([]);
-  });
+    it('ready 缺 v（undefined）同样按 stale 拒——不得「无 v 也放行」', () => {
+        const res = ChatConversationBridge.decodeConversationUpstream(
+            JSON.stringify({type: 'ready', payload: {}}),
+        );
+        expect(res.ok).toBe(false);
+    });
+
+    it('其余 type **不校验 v**：转录域上行恒为 v:1 也要收', () => {
+        // 转录 runtime 的 post 是模块级单例、BRIDGE_V=1 硬编码，上行必然是 v:1。
+        // change / selectionChange 是剥离后的残余 composer 域上行（旧 dist 仍在发）：
+        // decoder 宽松放行、宿主不消费。
+        for (const type of [
+            'scrollSnapshot',
+            'loadOlder',
+            'visibility',
+            'menuOpened',
+            'openMessageMenu',
+            'copyCode',
+            'change',
+            'selectionChange',
+        ]) {
+            const res = ChatConversationBridge.decodeConversationUpstream(
+                JSON.stringify({v: 1, type, payload: {}}),
+            );
+            expect(res.ok).toBe(true);
+            if (res.ok) {
+                expect(res.message.type).toBe(type);
+            }
+        }
+        // 缺 v 的普通上行同样收
+        const noV = ChatConversationBridge.decodeConversationUpstream(
+            JSON.stringify({type: 'visibility', payload: {hidden: false}}),
+        );
+        expect(noV.ok).toBe(true);
+    });
+
+    it('dockAction（v:2）宽松收下（宿主已不消费该上行，decoder 不做白名单过滤）', () => {
+        const res = ChatConversationBridge.decodeConversationUpstream(
+            JSON.stringify({v: 2, type: 'dockAction', payload: {action: 'send'}}),
+        );
+        expect(res.ok).toBe(true);
+        if (res.ok) {
+            expect(res.message.payload.action).toBe('send');
+        }
+    });
+
+    it('坏 JSON / 非对象 / 无 type 一律 malformed（宽容丢弃，绝不 throw）', () => {
+        for (const raw of [
+            '{not json',
+            '',
+            'null',
+            '[1,2,3]',
+            '"just-a-string"',
+            JSON.stringify({v: 2, payload: {}}),
+            JSON.stringify({v: 2, type: 42, payload: {}}),
+            JSON.stringify({v: 2, type: '', payload: {}}),
+        ]) {
+            const res = ChatConversationBridge.decodeConversationUpstream(raw);
+            expect(res.ok).toBe(false);
+            if (!res.ok) {
+                expect(res.reason).toBe('malformed');
+            }
+        }
+    });
+
+    it('payload 缺省 / 非对象按空对象处理（不因载荷畸形丢整条消息）', () => {
+        const res = ChatConversationBridge.decodeConversationUpstream(
+            JSON.stringify({v: 1, type: 'visibility'}),
+        );
+        expect(res.ok).toBe(true);
+        if (res.ok) {
+            expect(res.message.payload).toEqual({});
+        }
+    });
+
+    it('已解析对象（非字符串）入参同样可解（测试与 RN 内部调用皆覆盖）', () => {
+        const res = ChatConversationBridge.decodeConversationUpstream({
+            v: 2,
+            type: 'ready',
+            payload: {capabilities: ['streamBlockCommit']},
+        });
+        expect(res.ok).toBe(true);
+        if (res.ok) {
+            expect(ChatConversationBridge.readReadyCapabilities(res.message.payload)).toEqual([
+                'streamBlockCommit',
+            ]);
+        }
+    });
+
+    it('capabilities 缺省 / 非数组 → 空清单（「未声明 = 不支持」）', () => {
+        expect(ChatConversationBridge.readReadyCapabilities({})).toEqual([]);
+        expect(ChatConversationBridge.readReadyCapabilities({capabilities: 'nope'})).toEqual([]);
+    });
 });
 
 describe('scrollSnapshot 解析（口径照旧宿主）', () => {
-  it('schema 版本不符 → null；缺字段 → null；正常 → 快照', () => {
-    expect(
-      ChatConversationBridge.parseConversationScrollSnapshot(
-        {
-          v: 1,
-          type: 'scrollSnapshot',
-          payload: {
-            schemaVersion: 999,
-            offsetY: 10,
-            nearBottom: true,
-          },
-        },
-        CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION,
-      ),
-    ).toBeNull();
+    it('schema 版本不符 → null；缺字段 → null；正常 → 快照', () => {
+        expect(
+            ChatConversationBridge.parseConversationScrollSnapshot(
+                {
+                    v: 1,
+                    type: 'scrollSnapshot',
+                    payload: {
+                        schemaVersion: 999,
+                        offsetY: 10,
+                        nearBottom: true,
+                    },
+                },
+                CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION,
+            ),
+        ).toBeNull();
 
-    expect(
-      ChatConversationBridge.parseConversationScrollSnapshot(
-        {
-          v: 1,
-          type: 'scrollSnapshot',
-          payload: {
-            schemaVersion: CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION,
-            offsetY: 'x',
-            nearBottom: true,
-          },
-        },
-        CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION,
-      ),
-    ).toBeNull();
+        expect(
+            ChatConversationBridge.parseConversationScrollSnapshot(
+                {
+                    v: 1,
+                    type: 'scrollSnapshot',
+                    payload: {
+                        schemaVersion: CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION,
+                        offsetY: 'x',
+                        nearBottom: true,
+                    },
+                },
+                CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION,
+            ),
+        ).toBeNull();
 
-    expect(
-      ChatConversationBridge.parseConversationScrollSnapshot(
-        {
-          v: 1,
-          type: 'loadOlder',
-          payload: {},
-        },
-        CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION,
-      ),
-    ).toBeNull();
+        expect(
+            ChatConversationBridge.parseConversationScrollSnapshot(
+                {
+                    v: 1,
+                    type: 'loadOlder',
+                    payload: {},
+                },
+                CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION,
+            ),
+        ).toBeNull();
 
-    expect(
-      ChatConversationBridge.parseConversationScrollSnapshot(
-        {
-          v: 1,
-          type: 'scrollSnapshot',
-          payload: {
+        expect(
+            ChatConversationBridge.parseConversationScrollSnapshot(
+                {
+                    v: 1,
+                    type: 'scrollSnapshot',
+                    payload: {
+                        schemaVersion: CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION,
+                        offsetY: 42,
+                        nearBottom: true,
+                    },
+                },
+                CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION,
+            ),
+        ).toEqual({
             schemaVersion: CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION,
             offsetY: 42,
             nearBottom: true,
-          },
-        },
-        CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION,
-      ),
-    ).toEqual({
-      schemaVersion: CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION,
-      offsetY: 42,
-      nearBottom: true,
+        });
     });
-  });
 });

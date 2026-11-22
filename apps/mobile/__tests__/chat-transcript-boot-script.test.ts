@@ -13,36 +13,36 @@ import {join} from 'node:path';
 import {readWebViewDistFile} from './helpers/read-webview-dist';
 
 function bootScript(): string {
-  return readWebViewDistFile('chat-transcript', 'app.js');
+    return readWebViewDistFile('chat-transcript', 'app.js');
 }
 
 function indexHtml(): string {
-  return readWebViewDistFile('chat-transcript', 'index.html');
+    return readWebViewDistFile('chat-transcript', 'index.html');
 }
 
 function appCss(): string {
-  return readWebViewDistFile('chat-transcript', 'app.css');
+    return readWebViewDistFile('chat-transcript', 'app.css');
 }
 
 describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
-  it('T-PH-07: build-webview 保持 minify:true（dist 契约测断言 minify 稳定面）', () => {
-    const buildScript = readFileSync(
-      join(__dirname, '../scripts/build-webview.mjs'),
-      'utf8',
-    );
-    // 2026-10-05 SPA 回滚轮起 minify:true。本断言原先钉 minify:false，压缩打开后
-    // 它会被脚本里那段讲「未压缩 8.8MiB 产物病态回溯」的**注释**里的 `minify:false`
-    // 命中而假通过——比红还坏。改成钉真实配置行（注释里那处前面带 `minify:false 的
-    // 8.8 MiB`，前后都有中文，用「行首即配置项」区分）。
-    expect(buildScript).toMatch(/^\s*minify:\s*true,?\s*$/m);
-    expect(buildScript).not.toMatch(/^\s*minify:\s*false,?\s*$/m);
-  });
+    it('T-PH-07: build-webview 保持 minify:true（dist 契约测断言 minify 稳定面）', () => {
+        const buildScript = readFileSync(
+            join(__dirname, '../scripts/build-webview.mjs'),
+            'utf8',
+        );
+        // 2026-10-05 SPA 回滚轮起 minify:true。本断言原先钉 minify:false，压缩打开后
+        // 它会被脚本里那段讲「未压缩 8.8MiB 产物病态回溯」的**注释**里的 `minify:false`
+        // 命中而假通过——比红还坏。改成钉真实配置行（注释里那处前面带 `minify:false 的
+        // 8.8 MiB`，前后都有中文，用「行首即配置项」区分）。
+        expect(buildScript).toMatch(/^\s*minify:\s*true,?\s*$/m);
+        expect(buildScript).not.toMatch(/^\s*minify:\s*false,?\s*$/m);
+    });
 
-  it('T-BR-ASM-01: script parses and has readyState fallback', () => {
-    const script = bootScript();
-    // minify 会把 `readyState === "loading"` 的空格压掉 → `readyState==="loading"`，
-    // 故用容忍空白的正则锁「DOMContentLoaded 兜底」这一形态。
-    expect(script).toMatch(/readyState\s*===\s*['"]loading['"]/);
+    it('T-BR-ASM-01: script parses and has readyState fallback', () => {
+        const script = bootScript();
+        // minify 会把 `readyState === "loading"` 的空格压掉 → `readyState==="loading"`，
+        // 故用容忍空白的正则锁「DOMContentLoaded 兜底」这一形态。
+        expect(script).toMatch(/readyState\s*===\s*['"]loading['"]/);
     // minify 重命名 bootTranscript 本体；换它唯一产出的稳定面——转录 runtime
     // 自发 ready 代码里的版本标识字面量 `version:"m4"`（emitReady:false 下不
     // 调用但代码在包；入口层自持的 ready 是 't1'，别混）。装配行为由
@@ -63,32 +63,32 @@ describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
     expect(html).toContain('<script src="./app.js"');
     expect(html).not.toContain('type="module"');
     expect(html).not.toContain('https://novel-master.local/');
-  });
+    });
 
-  it('T-PF8(chat-transcript): head 内联 bootstrap 先于 stylesheet（C′ fix-D 契约）', () => {
-    // dist 面契约：会话屏冷挂载白窗（2026-10-18 二轮取证）的 C′ 堵法——
-    // bootstrap 物理先于 stylesheet（解析期同步执行、先于首绘），
-    // 参数取 search+hash 双形态（宿主发 `#bg=`），只预置 --bg。
-    const html = indexHtml();
-    const scriptAt = html.indexOf('decodeURIComponent');
-    const linkAt = html.indexOf('<link rel="stylesheet"');
-    expect(scriptAt).toBeGreaterThan(-1);
-    expect(linkAt).toBeGreaterThan(-1);
-    expect(scriptAt).toBeLessThan(linkAt);
-    expect(html).toContain('location.search + location.hash');
-    expect(html).toContain("setProperty('--bg'");
-    expect(html).not.toContain("setProperty('--editor-bg'");
-  });
+    it('T-PF8(chat-transcript): head 内联 bootstrap 先于 stylesheet（C′ fix-D 契约）', () => {
+        // dist 面契约：会话屏冷挂载白窗（2026-10-18 二轮取证）的 C′ 堵法——
+        // bootstrap 物理先于 stylesheet（解析期同步执行、先于首绘），
+        // 参数取 search+hash 双形态（宿主发 `#bg=`），只预置 --bg。
+        const html = indexHtml();
+        const scriptAt = html.indexOf('decodeURIComponent');
+        const linkAt = html.indexOf('<link rel="stylesheet"');
+        expect(scriptAt).toBeGreaterThan(-1);
+        expect(linkAt).toBeGreaterThan(-1);
+        expect(scriptAt).toBeLessThan(linkAt);
+        expect(html).toContain('location.search + location.hash');
+        expect(html).toContain("setProperty('--bg'");
+        expect(html).not.toContain("setProperty('--editor-bg'");
+    });
 
-  it('T-BR-ASM-04: ready post and bootTranscript present', () => {
-    const script = bootScript();
-    // 独立入口：转录 runtime 以 `emitReady:!1` 装配（runtime 自发的 ready 是
-    // v:1 形态，入口显式关掉），ready 由入口层自持的 post 发（version 't1'，
-    // runtime 代码里的 `version:"m4"` 不再被调用但字面量仍在包内）。
-    // minify 会把 post 绑定本身重命名（post / post2 / _t / mot…），函数名锚恒失；
-    // 锚「(type 字面量, {version:…} payload)」这个调用形态——发单条 ready 的
-    // 意图由 T-BR-ASM-01 的 version:"m4" 与本条的 version payload 共同钉住。
-    expect(script).toMatch(/\(\s*['"]ready['"]\s*,\s*\{\s*version:/);
+    it('T-BR-ASM-04: ready post and bootTranscript present', () => {
+        const script = bootScript();
+        // 独立入口：转录 runtime 以 `emitReady:!1` 装配（runtime 自发的 ready 是
+        // v:1 形态，入口显式关掉），ready 由入口层自持的 post 发（version 't1'，
+        // runtime 代码里的 `version:"m4"` 不再被调用但字面量仍在包内）。
+        // minify 会把 post 绑定本身重命名（post / post2 / _t / mot…），函数名锚恒失；
+        // 锚「(type 字面量, {version:…} payload)」这个调用形态——发单条 ready 的
+        // 意图由 T-BR-ASM-01 的 version:"m4" 与本条的 version payload 共同钉住。
+        expect(script).toMatch(/\(\s*['"]ready['"]\s*,\s*\{\s*version:/);
     expect(script).toMatch(/version:\s*['"]m4['"]/);
   });
 
@@ -103,8 +103,8 @@ describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
     // 装配行为本身由 chat-transcript-row-window.test.ts /
     // chat-transcript-snapshot-chunk.test.ts 真跑 renderRows 的行为断言锁。
     expect(script).toMatch(/getElementById\(['"]rows['"]\)/);
-    expect(script).toContain('message-menu-row');
-    expect(script).toMatch(/['"]toggle-tool-group['"]/);
+        expect(script).toContain('message-menu-row');
+        expect(script).toMatch(/['"]toggle-tool-group['"]/);
     expect(script).toMatch(/['"]toggle-attach-group['"]/);
     expect(script).toMatch(/dangerouslySetInnerHTML:\{__html:\w+\}/);
     // 行列表主路径不再 list.innerHTML = 拼串骨架
@@ -133,9 +133,9 @@ describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
     expect(script).toMatch(/menuOverlayHandler/);
     expect(script).toMatch(
       /addEventListener\(\s*['"]touchend['"]\s*,\s*\w+\.menuOverlayHandler/,
-    );
-    expect(script).toMatch(
-      /addEventListener\(\s*['"]click['"]\s*,\s*\w+\.menuOverlayHandler/,
+        );
+        expect(script).toMatch(
+            /addEventListener\(\s*['"]click['"]\s*,\s*\w+\.menuOverlayHandler/,
     );
     // ② 原生长按菜单拦截：contextmenu/selectstart 挂在
     //    state.menuNativeTextBlockHandler 上，且 handler 同时取
@@ -159,27 +159,27 @@ describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
     // ⑤ 菜单壳：portal / backdrop / 项 / 协议 type
     expect(html).toContain('id="menu-portal"');
     expect(script).toMatch(/getElementById\(\s*['"]menu-portal['"]\s*\)/);
-    expect(script).toContain('context-menu');
-    expect(script).toContain('menu-backdrop');
-    expect(script).toMatch(/className:\s*['"]menu-item['"]/);
+        expect(script).toContain('context-menu');
+        expect(script).toContain('menu-backdrop');
+        expect(script).toMatch(/className:\s*['"]menu-item['"]/);
     expect(script).toMatch(/['"]data-action['"]\s*:\s*['"]menu-action['"]/);
-    expect(script).toMatch(/getAttribute\(\s*['"]data-menu-action['"]\s*\)/);
+        expect(script).toMatch(/getAttribute\(\s*['"]data-menu-action['"]\s*\)/);
     // 菜单开/关/动作三段上行协议 type（openContextMenuFromAnchor / closeContextMenu
     // / handleMenuOverlayEvent 的唯一外部可见面）
     expect(script).toMatch(/['"]openMessageMenu['"]\s*,\s*\{\s*messageId:/);
     expect(script).toMatch(/['"]menuOpened['"]\s*,\s*\{\}/);
-    expect(script).toMatch(/['"]menuClosed['"]\s*,\s*\{\}/);
+        expect(script).toMatch(/['"]menuClosed['"]\s*,\s*\{\}/);
     expect(script).toMatch(/['"]messageMenuAction['"]\s*,\s*\{\s*messageId:/);
     // P1-4 弱证据：visibility 上下行 + measure 形态（menuEl.offsetHeight ||
     // menuEl.scrollHeight → 非 0 才定位）。原先锚的 `measuredHeight` 是局部变量名，
     // minify 恒失——换它读的属性名。
     expect(script).toMatch(/['"]visibility['"]\s*,\s*\{\s*hidden:/);
-    expect(script).toMatch(/\.offsetHeight\|\|\w+\.scrollHeight/);
-    // 布局 / 锚点意图（⋯ 传按钮 rect；长按开菜单主路径已移除）
-    expect(script).toContain('message-menu-btn');
-    expect(script).toContain('scrollable');
-    expect(script).toMatch(
-      /className:\s*['"]message-menu-btn['"][\s\S]{0,400}?getBoundingClientRect\(\)/,
+        expect(script).toMatch(/\.offsetHeight\|\|\w+\.scrollHeight/);
+        // 布局 / 锚点意图（⋯ 传按钮 rect；长按开菜单主路径已移除）
+        expect(script).toContain('message-menu-btn');
+        expect(script).toContain('scrollable');
+        expect(script).toMatch(
+            /className:\s*['"]message-menu-btn['"][\s\S]{0,400}?getBoundingClientRect\(\)/,
     );
     // 项数门禁已迁 MenuOverlay（不再是 menu.items.length）：常量
     // MESSAGE_ACTION_MENU_ITEM_COUNT(5) 被内联，故钉 `<len> <= 5 &&` 比较形态
@@ -195,14 +195,14 @@ describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
     // minify 下 not.toContain 恒真失效——换事件名形态（产物里一个 touchstart
     // 监听都不该有）。
     expect(script).not.toMatch(/addEventListener\(\s*['"]touchstart['"]/);
-    // 菜单项不再手拼 html +=
-    expect(script).not.toMatch(/['"][^'"]*<button[^'"]*menu-item/);
-    // 防回潮：菜单壳不得再 createElement + appendChild(body)
-    expect(script).not.toMatch(
-      /document\.createElement\([\s\S]{0,400}?\.appendChild\s*\(\s*(?:document\.)?body\s*\)/,
-    );
-    // overlay 关闭入口可检（允许删精确 addEventListener 整行字面）
-    expect(script).toMatch(/addEventListener\s*\(\s*["']click["']/);
+        // 菜单项不再手拼 html +=
+        expect(script).not.toMatch(/['"][^'"]*<button[^'"]*menu-item/);
+        // 防回潮：菜单壳不得再 createElement + appendChild(body)
+        expect(script).not.toMatch(
+            /document\.createElement\([\s\S]{0,400}?\.appendChild\s*\(\s*(?:document\.)?body\s*\)/,
+        );
+        // overlay 关闭入口可检（允许删精确 addEventListener 整行字面）
+        expect(script).toMatch(/addEventListener\s*\(\s*["']click["']/);
   });
 
   it('T-MN2: ⋯ 为菜单主入口；bind-shell 无长按开菜单', () => {
@@ -212,11 +212,11 @@ describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
     // （openMessageMenu 带 messageId/pageX/pageY —— 「⋯ 传按钮 rect 作锚点」
     // 的外部可见面）+ 按钮类名。
     expect(script).toMatch(/['"]openMessageMenu['"]\s*,\s*\{\s*messageId:/);
-    expect(script).toContain('message-menu-btn');
-    expect(css).toContain('.message-menu-btn');
-    // 长按开菜单主路径已从 boot 移除：原先锚的 onMessagePointerDown 是标识符，
-    // minify 下恒真失效——换事件名形态（产物里不应再有 touchstart 监听）。
-    expect(script).not.toMatch(/addEventListener\(\s*['"]touchstart['"]/);
+        expect(script).toContain('message-menu-btn');
+        expect(css).toContain('.message-menu-btn');
+        // 长按开菜单主路径已从 boot 移除：原先锚的 onMessagePointerDown 是标识符，
+        // minify 下恒真失效——换事件名形态（产物里不应再有 touchstart 监听）。
+        expect(script).not.toMatch(/addEventListener\(\s*['"]touchstart['"]/);
   });
 
   it('T-BR-CT-02: openContextMenuFromAnchor 使用按钮 rect 作 MenuAnchor', () => {
@@ -249,37 +249,37 @@ describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
     // ② 有内容判定（streamHasContent）：row.text / row.thinking trim 或 tools 非空
     expect(script).toMatch(
       /String\(\w+\.text\|\|['"]{2}\)\.trim\(\)\.length>0\|\|String\(\w+\.thinking\|\|['"]{2}\)\.trim\(\)\.length>0/,
-    );
-    // ③ 文本壳（ensureStreamTextBody）：.bubble-body 容器 + data-text-shell 标记
-    expect(script).toMatch(/querySelector\(['"]\.bubble-body['"]\)/);
+        );
+        // ③ 文本壳（ensureStreamTextBody）：.bubble-body 容器 + data-text-shell 标记
+        expect(script).toMatch(/querySelector\(['"]\.bubble-body['"]\)/);
     expect(script).toMatch(
       /setAttribute\(\s*['"]data-text-shell['"],\s*['"]1['"]\s*\)/,
-    );
-    // ④ kind 分派（appendStreamDelta 的 text|thinking 二分）
-    expect(script).toMatch(
-      /kind===\s*['"]thinking['"]\s*\?\s*['"]thinking['"]\s*:\s*['"]text['"]/,
-    );
-    // ⑤ 尾块增量按 kind 分桶累积（`<parts>[kind].push(delta)`）
-    expect(script).toMatch(/\w+\[\w+\]\.push\(/);
-    // ⑥ 下行协议分支：streamDelta / streamBlockCommit / streamStatus；
-    //    旧 streamBatch / streamCommit 已删（C1/C21）
-    expect(script).toMatch(/case\s*['"]streamDelta['"]\s*:/);
+        );
+        // ④ kind 分派（appendStreamDelta 的 text|thinking 二分）
+        expect(script).toMatch(
+            /kind===\s*['"]thinking['"]\s*\?\s*['"]thinking['"]\s*:\s*['"]text['"]/,
+        );
+        // ⑤ 尾块增量按 kind 分桶累积（`<parts>[kind].push(delta)`）
+        expect(script).toMatch(/\w+\[\w+\]\.push\(/);
+        // ⑥ 下行协议分支：streamDelta / streamBlockCommit / streamStatus；
+        //    旧 streamBatch / streamCommit 已删（C1/C21）
+        expect(script).toMatch(/case\s*['"]streamDelta['"]\s*:/);
     expect(script).toMatch(/case\s*['"]streamBlockCommit['"]\s*:/);
     expect(script).toMatch(/case\s*['"]streamStatus['"]\s*:/);
-    expect(script).not.toMatch(/case\s*['"]streamBatch['"]\s*:/);
+        expect(script).not.toMatch(/case\s*['"]streamBatch['"]\s*:/);
     expect(script).not.toMatch(/case\s*['"]streamCommit['"]\s*:/);
     // 可改为 token：waiting-first / text-shell / TrustedHtml（壳在 ui/stream）
     expect(script).toContain('stream--waiting-first');
     expect(script).toContain('stream-waiting-indicator');
     expect(script).toContain('data-text-shell');
     expect(script).toMatch(/querySelector\(\s*['"]\.bubble['"]\s*\)/);
-    // TrustedHtml 组件标识符被重命名；锁它唯一产出的 {__html:…} 属性字面量
-    expect(script).toMatch(/dangerouslySetInnerHTML:\{__html:\w+\}/);
-    // 流式行壳（StreamingMessageRow）：行类名 + data-stream-* 稳定面；
-    // #stream-tail 只挂 streaming 行（runtime 增量路径仍按 id 找目标）
-    expect(script).toContain('data-stream-status');
-    expect(script).toContain('data-stream-id');
-    expect(script).toMatch(/['"]row message ['"]/);
+        // TrustedHtml 组件标识符被重命名；锁它唯一产出的 {__html:…} 属性字面量
+        expect(script).toMatch(/dangerouslySetInnerHTML:\{__html:\w+\}/);
+        // 流式行壳（StreamingMessageRow）：行类名 + data-stream-* 稳定面；
+        // #stream-tail 只挂 streaming 行（runtime 增量路径仍按 id 找目标）
+        expect(script).toContain('data-stream-status');
+        expect(script).toContain('data-stream-id');
+        expect(script).toMatch(/['"]row message ['"]/);
     expect(script).toContain('getElementById("stream-tail")');
     // 允许删除：renderStream* / renderAssistantBubbleInner 纯 HTML 壳函数。
     // 换成它们**产出**的形态——一旦有人把拼串 HTML 壳搬回来，产物里就会重新
@@ -287,27 +287,27 @@ describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
     expect(script).not.toMatch(/['"][^'"]*<div[^'"]*stream/);
     expect(script).not.toMatch(/['"][^'"]*<div[^'"]*bubble/);
     expect(script).not.toMatch(/['"][^'"]*class=['"]?[^'"]*bubble/);
-    // tool-invoking 单路径：壳归 Preact ToolInvokingBar（StreamingMessageRow 传
-    // label）；runtime 不得再拼串/createElement 插条。
-    expect(script).toContain('tool-invoking-bar');
-    expect(script).toContain('tool-invoking-dot');
-    expect(script).toContain('tool-invoking-label');
-    expect(script).not.toMatch(/['"][^'"]*<div[^'"]*tool-invoking-bar/);
-  });
+        // tool-invoking 单路径：壳归 Preact ToolInvokingBar（StreamingMessageRow 传
+        // label）；runtime 不得再拼串/createElement 插条。
+        expect(script).toContain('tool-invoking-bar');
+        expect(script).toContain('tool-invoking-dot');
+        expect(script).toContain('tool-invoking-label');
+        expect(script).not.toMatch(/['"][^'"]*<div[^'"]*tool-invoking-bar/);
+    });
 
-  it('T-PH-06: 流式壳/增量分离与 P0-2 所有权', () => {
-    const script = bootScript();
-    // minify 重命名 appendStreamDeltaIncremental / applyStreamDelta /
-    // StreamingMessageRow / StreamBodyHost / applyTrustedHtml。断言换稳定面：
-    // 尾块增量分桶（appendStreamDelta* 的热路径）+ 按 kind 分派 +
-    // 流式行 data-* 标记 + TrustedHtml 的 __html 字面量。
-    expect(script).toMatch(/\w+\[\w+\]\.push\(/);
-    expect(script).toMatch(
-      /kind===\s*['"]thinking['"]\s*\?\s*['"]thinking['"]\s*:\s*['"]text['"]/,
-    );
-    expect(script).toContain('data-stream-status');
-    expect(script).toContain('data-stream-id');
-    expect(script).toMatch(/['"]row message ['"]/);
+    it('T-PH-06: 流式壳/增量分离与 P0-2 所有权', () => {
+        const script = bootScript();
+        // minify 重命名 appendStreamDeltaIncremental / applyStreamDelta /
+        // StreamingMessageRow / StreamBodyHost / applyTrustedHtml。断言换稳定面：
+        // 尾块增量分桶（appendStreamDelta* 的热路径）+ 按 kind 分派 +
+        // 流式行 data-* 标记 + TrustedHtml 的 __html 字面量。
+        expect(script).toMatch(/\w+\[\w+\]\.push\(/);
+        expect(script).toMatch(
+            /kind===\s*['"]thinking['"]\s*\?\s*['"]thinking['"]\s*:\s*['"]text['"]/,
+        );
+        expect(script).toContain('data-stream-status');
+        expect(script).toContain('data-stream-id');
+        expect(script).toMatch(/['"]row message ['"]/);
     expect(script).toMatch(/dangerouslySetInnerHTML:\{__html:\w+\}/);
     // delta 热路径不得整表重建流式行内容根：增量优先，失败才整表回退。
     // 回退判据的稳定面 = 相位三档字面量（增量判据读的就是它）。

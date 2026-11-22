@@ -8,30 +8,30 @@
  */
 
 export const types = {
-  images: 'image/*',
-  json: 'application/json',
-  plainText: 'text/plain',
-  allFiles: '*/*',
+    images: 'image/*',
+    json: 'application/json',
+    plainText: 'text/plain',
+    allFiles: '*/*',
 };
 
 export const errorCodes = {
-  IN_PROGRESS: 'IN_PROGRESS',
-  OPERATION_CANCELED: 'OPERATION_CANCELED',
-  INVALID_TYPE: 'INVALID_TYPE',
-  UNKNOWN_ERROR: 'UNKNOWN_ERROR',
+    IN_PROGRESS: 'IN_PROGRESS',
+    OPERATION_CANCELED: 'OPERATION_CANCELED',
+    INVALID_TYPE: 'INVALID_TYPE',
+    UNKNOWN_ERROR: 'UNKNOWN_ERROR',
 };
 
 export function isErrorWithCode(error: unknown): error is {code?: string} {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in (error as Record<string, unknown>)
-  );
+    return (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in (error as Record<string, unknown>)
+    );
 }
 
 /** 非测试关注路径下始终返回未知类型，与「无法识别」分支行为一致。 */
 export function isKnownType(): {mimeType: string} | undefined {
-  return undefined;
+    return undefined;
 }
 
 export const pick = jest.fn();

@@ -11,13 +11,13 @@ import {RuleSnapshot} from '@novel-master/core/workplace';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
 export namespace WorkplaceRuleDeltaDraftService {
-  /**
+    /**
    * 规则变更后刷新会话规则快照并清空 file_cache。
    */
-  export async function refreshRuleSnapshot(runtime: MobileNovelMasterRuntime, workplace: WorkplaceService, sessionId: string): Promise<void> {
-    await RuleSnapshot.refresh(sessionId, {
-      sessionKkv: runtime.sessionKkv,
-      workplace,
-    });
-  }
+    export async function refreshRuleSnapshot(runtime: MobileNovelMasterRuntime, workplace: WorkplaceService, sessionId: string): Promise<void> {
+        await RuleSnapshot.refresh(sessionId, {
+            sessionKkv: runtime.sessionKkv,
+            workplace,
+        });
+    }
 }

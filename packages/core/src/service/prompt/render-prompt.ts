@@ -27,40 +27,40 @@ export type { PromptLlmInput, PromptRenderContext } from "../../domain/prompt/mo
 
 /** One segment from the single assembly traversal (preview / serialize / preview turns). */
 interface PromptAssemblySegment {
-  readonly id: string;
-  readonly role: string;
-  readonly title: string;
-  readonly body: string;
-  readonly source: "template" | "message" | "system";
-  /** 来源 ChatMessageData id（仅 `source === "message"` 有值）；轮聚合按它分组。 */
-  readonly messageId?: string;
-  /** 来源 ChatMessageData 的会话内序号（仅 `source === "message"` 有值）。 */
-  readonly seq?: number;
+    readonly id: string;
+    readonly role: string;
+    readonly title: string;
+    readonly body: string;
+    readonly source: "template" | "message" | "system";
+    /** 来源 ChatMessageData id（仅 `source === "message"` 有值）；轮聚合按它分组。 */
+    readonly messageId?: string;
+    /** 来源 ChatMessageData 的会话内序号（仅 `source === "message"` 有值）。 */
+    readonly seq?: number;
 }
 
 /** One collapsible preview card in CLI / mobile real-prompt UI. */
 interface PromptPreviewSegment {
-  readonly id: string;
-  readonly role: string;
-  readonly title: string;
-  readonly body: string;
+    readonly id: string;
+    readonly role: string;
+    readonly title: string;
+    readonly body: string;
 }
 
 /** Agent run step context for prompt assembly (defaults to step 0). */
 export interface PromptAssemblyOptions {
-  /** Agent run step index; 0 = first LLM round after user action. */
-  readonly agentStepIndex?: number;
-  /**
+    /** Agent run step index; 0 = first LLM round after user action. */
+    readonly agentStepIndex?: number;
+    /**
    * 预览时是否产出 thinking 段（opt-in，默认 false）：CLI 文本与
    * `serializePromptLlmInput` token 计数 parity 沿用不含 thinking 的现状。
    */
-  readonly includeThinkingBlocks?: boolean;
+    readonly includeThinkingBlocks?: boolean;
 }
 
 /** `PromptBuilder.zones` 的可选区来源：workplace 展示串 / 技能索引条目。 */
 interface LlmExportZonesOptions extends PromptAssemblyOptions {
-  readonly workplaceDisplay?: string;
-  readonly skillsIndex?: readonly PromptSkillIndexEntry[];
+    readonly workplaceDisplay?: string;
+    readonly skillsIndex?: readonly PromptSkillIndexEntry[];
 }
 
 /**
@@ -70,43 +70,43 @@ interface LlmExportZonesOptions extends PromptAssemblyOptions {
  * `skillsIndex` 非空时计入 persist 前缀（技能索引合成消息 1 条）。
  */
 function computeLlmExportZonesFromLayout(layout: AgentPromptLayout, options?: LlmExportZonesOptions): LlmExportZones {
-  const agentStepIndex = resolveAgentStepIndex(options);
-  const injectWorkplace = AgentPromptLayout.hasWorkplace(layout) && (options?.workplaceDisplay === undefined || options.workplaceDisplay.trim() !== "");
-  const textBlockCount = layout.persist.length;
-  const persistCount = (options?.skillsIndex?.length ? 1 : 0) + (injectWorkplace ? 2 : 0) + (layout.persistEnabled === true ? textBlockCount : 0);
-  // dynamic 区一律 once 语义：仅 step 0 注入（缺省 0 ⇒ preview/token 链恒含）。
-  const dynamicCount = layout.dynamicEnabled === true && agentStepIndex === 0 ? layout.dynamic.length : 0;
-  return { persistCount, dynamicCount };
+    const agentStepIndex = resolveAgentStepIndex(options);
+    const injectWorkplace = AgentPromptLayout.hasWorkplace(layout) && (options?.workplaceDisplay === undefined || options.workplaceDisplay.trim() !== "");
+    const textBlockCount = layout.persist.length;
+    const persistCount = (options?.skillsIndex?.length ? 1 : 0) + (injectWorkplace ? 2 : 0) + (layout.persistEnabled === true ? textBlockCount : 0);
+    // dynamic 区一律 once 语义：仅 step 0 注入（缺省 0 ⇒ preview/token 链恒含）。
+    const dynamicCount = layout.dynamicEnabled === true && agentStepIndex === 0 ? layout.dynamic.length : 0;
+    return { persistCount, dynamicCount };
 }
 
 function resolveAgentStepIndex(options?: PromptAssemblyOptions): number {
-  return options?.agentStepIndex ?? 0;
+    return options?.agentStepIndex ?? 0;
 }
 
 /** 合成提示词消息：id / role / 正文由调用方定，会话 id 取首个消息（与 wire 端一致）。 */
 function syntheticPromptMessage(id: string, role: string, body: string, ctx: PromptRenderContext): ChatMessageData {
-  return {
-    id,
-    sessionId: ctx.messages[0]?.sessionId ?? "",
-    seq: 0,
-    role,
-    content: TextBlocks.of(body),
-    provider: null,
-    raw: null,
-    createdAtMs: 0,
-    hidden: false,
-  };
+    return {
+        id,
+        sessionId: ctx.messages[0]?.sessionId ?? "",
+        seq: 0,
+        role,
+        content: TextBlocks.of(body),
+        provider: null,
+        raw: null,
+        createdAtMs: 0,
+        hidden: false,
+    };
 }
 
 /** 技能索引段正文：前缀语（缺省默认）+ 每条「名称：描述（来源域）」。 */
 function formatSkillsIndexBody(entries: readonly PromptSkillIndexEntry[], prefix?: string): string {
-  const lines = entries.map((entry) => {
-    const description = entry.description.trim();
-    const descSuffix = description !== "" ? `：${description}` : "";
-    return `- ${entry.name}${descSuffix}（${entry.domain}）`;
-  });
-  const header = prefix != null && prefix.trim().length > 0 ? prefix.trim() : DEFAULT_SKILLS_INDEX_PREFIX;
-  return [header, ...lines].join("\n");
+    const lines = entries.map((entry) => {
+        const description = entry.description.trim();
+        const descSuffix = description !== "" ? `：${description}` : "";
+        return `- ${entry.name}${descSuffix}（${entry.domain}）`;
+    });
+    const header = prefix != null && prefix.trim().length > 0 ? prefix.trim() : DEFAULT_SKILLS_INDEX_PREFIX;
+    return [header, ...lines].join("\n");
 }
 
 /**
@@ -117,102 +117,102 @@ function formatSkillsIndexBody(entries: readonly PromptSkillIndexEntry[], prefix
  * 两端 buildSessionPromptInput / chip 读口）按 `!ok` 分支收口。
  */
 async function buildPromptAssemblyFromLayout(layout: AgentPromptLayout, ctx: PromptRenderContext, options?: PromptAssemblyOptions): Promise<Result<readonly PromptAssemblySegment[], AppError>> {
-  const agentStepIndex = resolveAgentStepIndex(options);
-  const segments: PromptAssemblySegment[] = [];
-  let segmentIndex = 0;
+    const agentStepIndex = resolveAgentStepIndex(options);
+    const segments: PromptAssemblySegment[] = [];
+    let segmentIndex = 0;
 
-  if (layout.system != null && layout.system.trim() !== "") {
-    segments.push({
-      id: "system",
-      role: "system",
-      title: "system",
-      body: layout.system,
-      source: "system",
-    });
-  }
-
-  // skillsEnabled=false（技能总开关关）：不注入索引段（resolve 侧已摘 skill 工具，
-  // 此处渲染层双保险——ctx 直接携带 skillsIndex 也不注入）。
-  if (layout.skillsEnabled !== false && ctx.skillsIndex != null && ctx.skillsIndex.length > 0) {
-    segments.push({
-      id: "prompt-skills",
-      role: "user",
-      title: "skills",
-      body: formatSkillsIndexBody(ctx.skillsIndex, layout.skillsPrefix),
-      source: "template",
-    });
-  }
-
-  // `workplace` 开且展示非空时追加 user 文件树 + assistant 配置确认语两段。
-  if (AgentPromptLayout.hasWorkplace(layout) && ctx.workplaceDisplay.trim() !== "") {
-    segments.push({
-      id: "prompt-workplace",
-      role: "user",
-      title: "workplace",
-      body: ctx.workplaceDisplay,
-      source: "template",
-    });
-    segments.push({
-      id: "prompt-workplace-done",
-      role: "assistant",
-      title: "workplace · done",
-      body: layout.workplace!,
-      source: "template",
-    });
-  }
-
-  if (layout.persistEnabled === true) {
-    for (const block of layout.persist) {
-      segments.push({
-        id: `persist-${block.name}`,
-        role: block.role,
-        title: block.name,
-        body: block.content,
-        source: "template",
-      });
+    if (layout.system != null && layout.system.trim() !== "") {
+        segments.push({
+            id: "system",
+            role: "system",
+            title: "system",
+            body: layout.system,
+            source: "system",
+        });
     }
-  }
 
-  for (let messageIndex = 0; messageIndex < ctx.messages.length; messageIndex++) {
-    const message = ctx.messages[messageIndex]!;
-    if (message.hidden) {
-      continue;
+    // skillsEnabled=false（技能总开关关）：不注入索引段（resolve 侧已摘 skill 工具，
+    // 此处渲染层双保险——ctx 直接携带 skillsIndex 也不注入）。
+    if (layout.skillsEnabled !== false && ctx.skillsIndex != null && ctx.skillsIndex.length > 0) {
+        segments.push({
+            id: "prompt-skills",
+            role: "user",
+            title: "skills",
+            body: formatSkillsIndexBody(ctx.skillsIndex, layout.skillsPrefix),
+            source: "template",
+        });
     }
-    const messageSegments = MessageBodyText.formatForCliPreview(message, {
-      includeThinking: options?.includeThinkingBlocks === true,
-    });
-    for (let i = 0; i < messageSegments.length; i++) {
-      const segment = messageSegments[i]!;
-      segments.push({
-        id: `chat-${message.id}-${segmentIndex}`,
-        role: segment.role,
-        title: `#${message.seq} · ${segment.role}`,
-        body: segment.body,
-        source: "message",
-        messageId: message.id,
-        seq: message.seq,
-      });
-      segmentIndex += 1;
-    }
-  }
 
-  if (layout.dynamicEnabled === true && agentStepIndex === 0) {
-    for (const block of layout.dynamic) {
-      const expanded = await DynamicMacrosExpansion.expand(block.content, { now: ctx.now, workplace: ctx.workplace, filetree: ctx.filetree });
-      if (!expanded.ok) {
-        return Result.err(expanded.error);
-      }
-      segments.push({
-        id: `dynamic-${block.name}`,
-        role: block.role,
-        title: block.name,
-        body: expanded.value,
-        source: "template",
-      });
+    // `workplace` 开且展示非空时追加 user 文件树 + assistant 配置确认语两段。
+    if (AgentPromptLayout.hasWorkplace(layout) && ctx.workplaceDisplay.trim() !== "") {
+        segments.push({
+            id: "prompt-workplace",
+            role: "user",
+            title: "workplace",
+            body: ctx.workplaceDisplay,
+            source: "template",
+        });
+        segments.push({
+            id: "prompt-workplace-done",
+            role: "assistant",
+            title: "workplace · done",
+            body: layout.workplace!,
+            source: "template",
+        });
     }
-  }
 
-  return Result.ok(segments);
+    if (layout.persistEnabled === true) {
+        for (const block of layout.persist) {
+            segments.push({
+                id: `persist-${block.name}`,
+                role: block.role,
+                title: block.name,
+                body: block.content,
+                source: "template",
+            });
+        }
+    }
+
+    for (let messageIndex = 0; messageIndex < ctx.messages.length; messageIndex++) {
+        const message = ctx.messages[messageIndex]!;
+        if (message.hidden) {
+            continue;
+        }
+        const messageSegments = MessageBodyText.formatForCliPreview(message, {
+            includeThinking: options?.includeThinkingBlocks === true,
+        });
+        for (let i = 0; i < messageSegments.length; i++) {
+            const segment = messageSegments[i]!;
+            segments.push({
+                id: `chat-${message.id}-${segmentIndex}`,
+                role: segment.role,
+                title: `#${message.seq} · ${segment.role}`,
+                body: segment.body,
+                source: "message",
+                messageId: message.id,
+                seq: message.seq,
+            });
+            segmentIndex += 1;
+        }
+    }
+
+    if (layout.dynamicEnabled === true && agentStepIndex === 0) {
+        for (const block of layout.dynamic) {
+            const expanded = await DynamicMacrosExpansion.expand(block.content, { now: ctx.now, workplace: ctx.workplace, filetree: ctx.filetree });
+            if (!expanded.ok) {
+                return Result.err(expanded.error);
+            }
+            segments.push({
+                id: `dynamic-${block.name}`,
+                role: block.role,
+                title: block.name,
+                body: expanded.value,
+                source: "template",
+            });
+        }
+    }
+
+    return Result.ok(segments);
 }
 
 /**
@@ -230,49 +230,49 @@ async function buildPromptAssemblyFromLayout(layout: AgentPromptLayout, ctx: Pro
  * 由 lifecycle 测试（zones/assembly/llmInput 三组）共同钉住。
  */
 async function buildPromptLlmInputFromLayout(layout: AgentPromptLayout, ctx: PromptRenderContext, options?: PromptAssemblyOptions): Promise<Result<PromptLlmInput, AppError>> {
-  const agentStepIndex = resolveAgentStepIndex(options);
-  const messages: ChatMessageData[] = [];
+    const agentStepIndex = resolveAgentStepIndex(options);
+    const messages: ChatMessageData[] = [];
 
-  if (layout.skillsEnabled !== false && ctx.skillsIndex != null && ctx.skillsIndex.length > 0) {
-    messages.push(syntheticPromptMessage("prompt:skills", "user", formatSkillsIndexBody(ctx.skillsIndex, layout.skillsPrefix), ctx));
-  }
-
-  // `workplace` 开且展示非空时追加 user 文件树 + assistant 配置确认语（assemble 已包 `<workplace>`，此处勿再包）。
-  if (AgentPromptLayout.hasWorkplace(layout) && ctx.workplaceDisplay.trim() !== "") {
-    messages.push(syntheticPromptMessage("prompt:workplace", "user", ctx.workplaceDisplay, ctx));
-    messages.push(syntheticPromptMessage("prompt:workplace:done", "assistant", layout.workplace!, ctx));
-  }
-
-  if (layout.persistEnabled === true) {
-    for (const block of layout.persist) {
-      messages.push(syntheticPromptMessage(`prompt:${block.name}`, block.role, block.content, ctx));
+    if (layout.skillsEnabled !== false && ctx.skillsIndex != null && ctx.skillsIndex.length > 0) {
+        messages.push(syntheticPromptMessage("prompt:skills", "user", formatSkillsIndexBody(ctx.skillsIndex, layout.skillsPrefix), ctx));
     }
-  }
 
-  messages.push(...ctx.messages.filter((m) => !m.hidden));
-
-  if (layout.dynamicEnabled === true && agentStepIndex === 0) {
-    for (const block of layout.dynamic) {
-      const expanded = await DynamicMacrosExpansion.expand(block.content, { now: ctx.now, workplace: ctx.workplace, filetree: ctx.filetree });
-      if (!expanded.ok) {
-        return Result.err(expanded.error);
-      }
-      messages.push(syntheticPromptMessage(`prompt:${block.name}`, block.role, expanded.value, ctx));
+    // `workplace` 开且展示非空时追加 user 文件树 + assistant 配置确认语（assemble 已包 `<workplace>`，此处勿再包）。
+    if (AgentPromptLayout.hasWorkplace(layout) && ctx.workplaceDisplay.trim() !== "") {
+        messages.push(syntheticPromptMessage("prompt:workplace", "user", ctx.workplaceDisplay, ctx));
+        messages.push(syntheticPromptMessage("prompt:workplace:done", "assistant", layout.workplace!, ctx));
     }
-  }
 
-  const system = layout.system != null && layout.system.trim() !== "" ? layout.system : undefined;
+    if (layout.persistEnabled === true) {
+        for (const block of layout.persist) {
+            messages.push(syntheticPromptMessage(`prompt:${block.name}`, block.role, block.content, ctx));
+        }
+    }
 
-  return Result.ok({ system, messages });
+    messages.push(...ctx.messages.filter((m) => !m.hidden));
+
+    if (layout.dynamicEnabled === true && agentStepIndex === 0) {
+        for (const block of layout.dynamic) {
+            const expanded = await DynamicMacrosExpansion.expand(block.content, { now: ctx.now, workplace: ctx.workplace, filetree: ctx.filetree });
+            if (!expanded.ok) {
+                return Result.err(expanded.error);
+            }
+            messages.push(syntheticPromptMessage(`prompt:${block.name}`, block.role, expanded.value, ctx));
+        }
+    }
+
+    const system = layout.system != null && layout.system.trim() !== "" ? layout.system : undefined;
+
+    return Result.ok({ system, messages });
 }
 
 /** 构建有序预览分段（每段一张卡片）。 */
 async function buildPromptPreviewSegmentsFromLayout(layout: AgentPromptLayout, ctx: PromptRenderContext, options?: PromptAssemblyOptions): Promise<Result<PromptPreviewSegment[], AppError>> {
-  const assembled = await buildPromptAssemblyFromLayout(layout, ctx, options);
-  if (!assembled.ok) {
-    return Result.err(assembled.error);
-  }
-  return Result.ok(assembled.value.map((segment) => ({ id: segment.id, role: segment.role, title: segment.title, body: segment.body })));
+    const assembled = await buildPromptAssemblyFromLayout(layout, ctx, options);
+    if (!assembled.ok) {
+        return Result.err(assembled.error);
+    }
+    return Result.ok(assembled.value.map((segment) => ({ id: segment.id, role: segment.role, title: segment.title, body: segment.body })));
 }
 
 /**
@@ -282,15 +282,15 @@ async function buildPromptPreviewSegmentsFromLayout(layout: AgentPromptLayout, c
  * （`PromptBuilder.cliText`），三端 token 面（含 tokenizer-driver-node/rn）消费。
  */
 async function formatPromptLlmInputForCliFromLayout(layout: AgentPromptLayout, ctx: PromptRenderContext, options?: PromptAssemblyOptions): Promise<Result<string, AppError>> {
-  const assembled = await buildPromptAssemblyFromLayout(layout, ctx, options);
-  if (!assembled.ok) {
-    return Result.err(assembled.error);
-  }
-  const lines = assembled.value.map((segment) => {
-    const bodyLines = segment.body.replace(/\r\n/g, "\n").split("\n");
-    return bodyLines.length === 1 ? `${segment.role}: ${bodyLines[0]}` : `${segment.role}: ${bodyLines[0]}\n${bodyLines.slice(1).join("\n")}`;
-  });
-  return Result.ok(lines.join("\n"));
+    const assembled = await buildPromptAssemblyFromLayout(layout, ctx, options);
+    if (!assembled.ok) {
+        return Result.err(assembled.error);
+    }
+    const lines = assembled.value.map((segment) => {
+        const bodyLines = segment.body.replace(/\r\n/g, "\n").split("\n");
+        return bodyLines.length === 1 ? `${segment.role}: ${bodyLines[0]}` : `${segment.role}: ${bodyLines[0]}\n${bodyLines.slice(1).join("\n")}`;
+    });
+    return Result.ok(lines.join("\n"));
 }
 
 // ==== Preview turns（显示层口径：行号剥离只发生在本区段，wire 成员不得引用） ====
@@ -300,47 +300,47 @@ type PromptToolGroupStatus = "ok" | "error" | "lost";
 
 /** 工具组卡的结果格数据；`null` 表示悬挂 use（丢失占位，槽位保留）。 */
 interface PromptToolGroupResultData {
-  readonly toolUseId: string;
-  /** `ToolResultBlock.resolveOk` 产出（显式 `ok` 优先，legacy 回落 `Error:` 前缀）。 */
-  readonly ok: boolean;
-  /**
+    readonly toolUseId: string;
+    /** `ToolResultBlock.resolveOk` 产出（显式 `ok` 优先，legacy 回落 `Error:` 前缀）。 */
+    readonly ok: boolean;
+    /**
    * 结果正文 —— **cards 为显示层口径（已剥行号），items/body 为 wire parity 口径（保留行号）**。
    *
    * @remarks 剥的是 read / skill load 的 `padStart(6," ")` 右对齐行号（判据
    * `TOOL_RESULT_LINE_PREFIX`，经 `Text.stripLinePrefix` 逐行至多剥一次）；wire 侧
    * 同源正文在 `PromptPreviewTurn.items` / `.body` 里原样保留。
    */
-  readonly body: string;
+    readonly body: string;
 }
 
 /** 工具调用组卡：一次 `tool_use` 一张，跨消息按 `toolUseId` 与 `tool_result` 配对。 */
 export interface PromptToolGroupCardData {
-  readonly type: "toolGroup";
-  readonly id: string;
-  readonly toolName: string;
-  /** `JSON.stringify(input, null, 2)`；`input` 为 `{}` 时退化为 `[tool_use name=… id=…]` 单行（与 CLI 形态一致）。 */
-  readonly inputJson: string;
-  readonly result: PromptToolGroupResultData | null;
-  readonly status: PromptToolGroupStatus;
-  /** 同一消息内多个 `tool_use`（并行调用徽标）。 */
-  readonly parallel: boolean;
+    readonly type: "toolGroup";
+    readonly id: string;
+    readonly toolName: string;
+    /** `JSON.stringify(input, null, 2)`；`input` 为 `{}` 时退化为 `[tool_use name=… id=…]` 单行（与 CLI 形态一致）。 */
+    readonly inputJson: string;
+    readonly result: PromptToolGroupResultData | null;
+    readonly status: PromptToolGroupStatus;
+    /** 同一消息内多个 `tool_use`（并行调用徽标）。 */
+    readonly parallel: boolean;
 }
 
 /** 文本 / thinking 卡：正文即「发给模型（或预览开关打开时的思考块）」的形态。 */
 export interface PromptTextCardData {
-  readonly type: "text" | "thinking";
-  /** 独立命名空间 `card-${message.id}-${blockIndex}`（合成段轮卡用段 id）；仅要求轮内唯一。 */
-  readonly id: string;
-  /** 展示标签用（详情标题源）：user / assistant / 合成段名（system、skills、workplace…）。 */
-  readonly role: string;
-  /**
+    readonly type: "text" | "thinking";
+    /** 独立命名空间 `card-${message.id}-${blockIndex}`（合成段轮卡用段 id）；仅要求轮内唯一。 */
+    readonly id: string;
+    /** 展示标签用（详情标题源）：user / assistant / 合成段名（system、skills、workplace…）。 */
+    readonly role: string;
+    /**
    * 卡片正文 —— **cards 为显示层口径**，与 items/body 的 wire parity 口径可能不同。
    *
    * @remarks 唯一的差异面：user 轮附件 action 块 `"content"` 值内的**转义行号已剥**
    * （见 {@link stripAttachmentContentLinePrefix}）。对话正文 / assistant 正文 /
    * thinking 正文**一律一字不动**（不剥行号，避免误伤用户与模型的正文）。
    */
-  readonly body: string;
+    readonly body: string;
 }
 
 /**
@@ -348,9 +348,9 @@ export interface PromptTextCardData {
  * workplace 单文件格：块内正文（**cards 已剥行号**）+ 展示档（快照条目原值）。
  */
 export interface PromptWorkplaceFileCardData {
-  /** VFS 逻辑路径（规则快照条目原值）。 */
-  readonly path: string;
-  /**
+    /** VFS 逻辑路径（规则快照条目原值）。 */
+    readonly path: string;
+    /**
    * 块内正文 —— **cards 为显示层口径（已剥行号），items/body 为 wire parity 口径（保留行号）**。
    *
    * @remarks 判据 `WORKPLACE_LINE_PREFIX`（`^\d+\|`，零前导空格），经 `Text.stripLinePrefix`
@@ -358,9 +358,9 @@ export interface PromptWorkplaceFileCardData {
    * （`（无 Front Matter）` / `（空 Front Matter）`）同形，一并剥前缀。
    * wire 侧的带行号原文在 `ctx.workplaceFiles` 与 `PromptPreviewTurn.body` 里原样保留。
    */
-  readonly body: string;
-  /** 展示档：full（行号全文）/ filename（单行文件名）/ header（front-matter）。 */
-  readonly display: "full" | "header" | "filename";
+    readonly body: string;
+    /** 展示档：full（行号全文）/ filename（单行文件名）/ header（front-matter）。 */
+    readonly display: "full" | "header" | "filename";
 }
 
 /**
@@ -371,10 +371,10 @@ export interface PromptWorkplaceFileCardData {
  * 点文件卡看该文件块内正文全屏（用户拍板的三级结构）。
  */
 export interface PromptWorkplaceCardData {
-  readonly type: "workplace";
-  /** 段 id（`prompt-workplace`）。 */
-  readonly id: string;
-  readonly files: readonly PromptWorkplaceFileCardData[];
+    readonly type: "workplace";
+    /** 段 id（`prompt-workplace`）。 */
+    readonly id: string;
+    readonly files: readonly PromptWorkplaceFileCardData[];
 }
 
 /** 轮内有序卡片流。 */
@@ -396,24 +396,24 @@ export type PromptTurnCardData = PromptTextCardData | PromptToolGroupCardData | 
  * 重建出结构化卡片流（工具调用一对一组卡），承载新 UI 的就地展开与全屏。
  */
 export interface PromptPreviewTurn {
-  readonly id: string;
-  readonly kind: "system" | "user" | "assistant";
-  /** CLI parity 冻结面：合成段各占一轮，段 body **一字不动**（**保留行号**）。 */
-  readonly items: PromptPreviewSegment[];
-  readonly summary: string;
-  /** CLI parity 冻结面：`items` 段正文拼接，**保留行号**（wire 口径）。 */
-  readonly body: string;
-  /**
+    readonly id: string;
+    readonly kind: "system" | "user" | "assistant";
+    /** CLI parity 冻结面：合成段各占一轮，段 body **一字不动**（**保留行号**）。 */
+    readonly items: PromptPreviewSegment[];
+    readonly summary: string;
+    /** CLI parity 冻结面：`items` 段正文拼接，**保留行号**（wire 口径）。 */
+    readonly body: string;
+    /**
    * 有序卡片流（就地展开与全屏的渲染源），顺序=消息块序重建的因果序，与 `items` 段序无关。
    *
    * @remarks **显示层口径：workplace / tool result / user 附件的行号已剥**；
    * 与 `items` / `.body` 的 wire parity 口径刻意不同（见模块头「行号口径」段）。
    */
-  readonly cards: ReadonlyArray<PromptTurnCardData>;
-  /** 真摘要：单行语义（>70 字截断，三类轮统一；原文 string 或 descriptor）。 */
-  readonly summaryText: MessageLike;
-  /** 计数行各段（字数 / 工具调用次数 / 失败丢失计数 / 附件计数），消费方翻译后以 ` · ` join。 */
-  readonly metaText: readonly MessageLike[];
+    readonly cards: ReadonlyArray<PromptTurnCardData>;
+    /** 真摘要：单行语义（>70 字截断，三类轮统一；原文 string 或 descriptor）。 */
+    readonly summaryText: MessageLike;
+    /** 计数行各段（字数 / 工具调用次数 / 失败丢失计数 / 附件计数），消费方翻译后以 ` · ` join。 */
+    readonly metaText: readonly MessageLike[];
 }
 
 /** 轮摘要文本位上限：首行**超** 70 字才截断（恰好 70 字原样保留）。 */
@@ -421,9 +421,9 @@ const TURN_SUMMARY_TEXT_LIMIT = 70;
 
 /** 首条 assistant 文本的首行；超上限截断为 `slice(0, 69) + "…"`。 */
 function summarizeFirstLine(text: string): string {
-  const firstLine = text.split("\n", 1)[0] ?? "";
-  const trimmed = firstLine.trim();
-  return trimmed.length > TURN_SUMMARY_TEXT_LIMIT ? `${trimmed.slice(0, TURN_SUMMARY_TEXT_LIMIT - 1)}…` : trimmed;
+    const firstLine = text.split("\n", 1)[0] ?? "";
+    const trimmed = firstLine.trim();
+    return trimmed.length > TURN_SUMMARY_TEXT_LIMIT ? `${trimmed.slice(0, TURN_SUMMARY_TEXT_LIMIT - 1)}…` : trimmed;
 }
 
 /** 空摘要兜底文案（user 轮内层解析为空串时用；descriptor，UI 翻译）。 */
@@ -435,11 +435,11 @@ const USER_INPUT_CLOSE = "</user-input>";
 
 /** 单块的纯文本（复用 `MessageBodyText.fromBlocks` 的清洗口径：剥离孤立闭合思考标签）。 */
 function blockTextForCard(block: ContentBlock): string | null {
-  if (block.type !== "text" && block.type !== "image") {
-    return null;
-  }
-  const text = MessageBodyText.fromBlocks([block]);
-  return text === "" ? null : text;
+    if (block.type !== "text" && block.type !== "image") {
+        return null;
+    }
+    const text = MessageBodyText.fromBlocks([block]);
+    return text === "" ? null : text;
 }
 
 /**

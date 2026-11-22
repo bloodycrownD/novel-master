@@ -8,37 +8,37 @@
 import {ChatTranscriptEngine} from '@/storage/chat-transcript-engine';
 
 describe('chat-transcript-engine（legacy-rn 已退役）', () => {
-  it('默认恒为 webview', () => {
-    expect(ChatTranscriptEngine.default()).toBe('webview');
-  });
+    it('默认恒为 webview', () => {
+        expect(ChatTranscriptEngine.default()).toBe('webview');
+    });
 
-  it('KKV 留着 legacy-rn 也按 webview 走（值忽略）', async () => {
-    const appUi = {
-      get: jest.fn(async () => ({ok: true, value: 'legacy-rn'})),
-    };
-    expect(await ChatTranscriptEngine.read(appUi as never)).toBe('webview');
-    // 键仍被读：读动作保留是为了留消费点，不是死代码
-    expect(appUi.get).toHaveBeenCalledWith('chatTranscriptEngine');
-  });
+    it('KKV 留着 legacy-rn 也按 webview 走（值忽略）', async () => {
+        const appUi = {
+            get: jest.fn(async () => ({ok: true, value: 'legacy-rn'})),
+        };
+        expect(await ChatTranscriptEngine.read(appUi as never)).toBe('webview');
+        // 键仍被读：读动作保留是为了留消费点，不是死代码
+        expect(appUi.get).toHaveBeenCalledWith('chatTranscriptEngine');
+    });
 
-  it('KKV 未设 / 读失败都回落 webview', async () => {
-    expect(
-      await ChatTranscriptEngine.read({
-        get: jest.fn(async () => ({ok: true, value: undefined})),
-      } as never),
-    ).toBe('webview');
-    expect(
-      await ChatTranscriptEngine.read({
-        get: jest.fn(async () => ({
-          ok: false,
-          error: new Error('KKV 炸了'),
-        })),
-      } as never),
-    ).toBe('webview');
-  });
+    it('KKV 未设 / 读失败都回落 webview', async () => {
+        expect(
+            await ChatTranscriptEngine.read({
+                get: jest.fn(async () => ({ok: true, value: undefined})),
+            } as never),
+        ).toBe('webview');
+        expect(
+            await ChatTranscriptEngine.read({
+                get: jest.fn(async () => ({
+                    ok: false,
+                    error: new Error('KKV 炸了'),
+                })),
+            } as never),
+        ).toBe('webview');
+    });
 
-  it('appUi 缺失时也返回 webview（不抛）', async () => {
-    expect(await ChatTranscriptEngine.read(null)).toBe('webview');
-    expect(await ChatTranscriptEngine.read(undefined)).toBe('webview');
-  });
+    it('appUi 缺失时也返回 webview（不抛）', async () => {
+        expect(await ChatTranscriptEngine.read(null)).toBe('webview');
+        expect(await ChatTranscriptEngine.read(undefined)).toBe('webview');
+    });
 });

@@ -30,330 +30,330 @@ description: 演示技能
 `;
 
 function entry(name: string, description: string): string {
-  return `---\nname: ${name}\ndescription: ${description}\n---\n\n正文\n`;
+    return `---\nname: ${name}\ndescription: ${description}\n---\n\n正文\n`;
 }
 
 describe("SkillService（T-SK5）", () => {
-  it("write 新建技能（缺省 SKILL.md）后 listSkills 可见且有效", async () => {
-    const ctx = getNovelMasterTestContext();
-    const skills = SkillsServiceFactory.create(ctx.conn);
-    const name = `new-skill-${testIsolationSuffix()}`;
+    it("write 新建技能（缺省 SKILL.md）后 listSkills 可见且有效", async () => {
+        const ctx = getNovelMasterTestContext();
+        const skills = SkillsServiceFactory.create(ctx.conn);
+        const name = `new-skill-${testIsolationSuffix()}`;
 
-    unwrap(await skills.writeSkillFile("global", name, undefined, VALID_SKILL_MD));
+        unwrap(await skills.writeSkillFile("global", name, undefined, VALID_SKILL_MD));
 
-    const list = outcomeValue(await skills.listSkills("global"));
-    const item = list.find((s) => s.name === name);
-    assert.ok(item != null, "新建技能应出现在全局清单");
-    assert.equal(item.valid, true);
-    assert.equal(item.description, "演示技能");
-    assert.deepEqual(item.files, ["SKILL.md"]);
-  });
-
-  it("write 对已存在文件：缺省 last-write-wins，版本比对已从底层移除", async () => {
-    const ctx = getNovelMasterTestContext();
-    const skills = SkillsServiceFactory.create(ctx.conn);
-    const name = `ovw-${testIsolationSuffix()}`;
-
-    unwrap(await skills.writeSkillFile("global", name, undefined, VALID_SKILL_MD));
-    const read = unwrap(await skills.readSkillFile("global", name));
-
-    // 不带版本（skill 工具的 LLM 路径）：直接覆盖成功，不再要求先 read 拿版本
-    const blind = unwrap(await skills.writeSkillFile(
-      "global",
-      name,
-      undefined,
-      "# 盲写",
-    ));
-    assert.ok(blind.version > read.version, "盲写覆盖后版本应递增");
-
-    // 多轮覆盖：每轮版本递增，无 CONFLICT
-    const again = unwrap(await skills.writeSkillFile(
-      "global",
-      name,
-      undefined,
-      "# 再写",
-    ));
-    assert.ok(again.version > blind.version, "二次覆盖版本应递增");
-
-    const fresh = unwrap(await skills.readSkillFile("global", name));
-    assert.equal(fresh.content, "# 再写");
-  });
-
-  it("T-S10 listSkills 中途 abort：返回 Outcome.cancelled 而非半份清单", async () => {
-    const ctx = getNovelMasterTestContext();
-    const skills = SkillsServiceFactory.create(ctx.conn);
-    const suffix = testIsolationSuffix();
-    for (const name of [`abort-a-${suffix}`, `abort-b-${suffix}`, `abort-c-${suffix}`]) {
-      unwrap(await skills.writeSkillFile("global", name, undefined, entry(name, "中止用例")));
-    }
-    let calls = 0;
-    const outcome = await skills.listSkills("global", {
-      checkpoint: () => (++calls >= 2 ? { kind: "cancelled", reason: "user-stop" } : null),
+        const list = outcomeValue(await skills.listSkills("global"));
+        const item = list.find((s) => s.name === name);
+        assert.ok(item != null, "新建技能应出现在全局清单");
+        assert.equal(item.valid, true);
+        assert.equal(item.description, "演示技能");
+        assert.deepEqual(item.files, ["SKILL.md"]);
     });
-    assert.deepEqual(outcome, { kind: "cancelled", reason: "user-stop" }, "中途 abort 必须返回 Outcome.cancelled 而非半份清单");
-    assert.ok(calls >= 2, "检查点必须在每个技能边界真实触发");
-  });
 
-  it("listSkills：front matter 坏 / 缺 SKILL.md 的技能标无效", async () => {
-    const ctx = getNovelMasterTestContext();
-    const skills = SkillsServiceFactory.create(ctx.conn);
-    const suffix = testIsolationSuffix();
+    it("write 对已存在文件：缺省 last-write-wins，版本比对已从底层移除", async () => {
+        const ctx = getNovelMasterTestContext();
+        const skills = SkillsServiceFactory.create(ctx.conn);
+        const name = `ovw-${testIsolationSuffix()}`;
 
-    unwrap(await skills.writeSkillFile(
-      "global",
-      `bad-fm-${suffix}`,
-      undefined,
-      "没有 front matter 的正文",
-    ));
-    // 只有辅助文件、没有 SKILL.md 的技能目录（技能落 meta 域）
-    await ctx.globalMetaVfs().write(
-      `/meta/skills/no-entry-${suffix}/notes.md`,
-      "辅助文件",
-    );
+        unwrap(await skills.writeSkillFile("global", name, undefined, VALID_SKILL_MD));
+        const read = unwrap(await skills.readSkillFile("global", name));
 
-    const list = outcomeValue(await skills.listSkills("global"));
-    const badFm = list.find((s) => s.name === `bad-fm-${suffix}`);
-    assert.ok(badFm != null);
-    assert.equal(badFm.valid, false);
-    assert.ok(badFm.invalidReason != null);
+        // 不带版本（skill 工具的 LLM 路径）：直接覆盖成功，不再要求先 read 拿版本
+        const blind = unwrap(await skills.writeSkillFile(
+            "global",
+            name,
+            undefined,
+            "# 盲写",
+        ));
+        assert.ok(blind.version > read.version, "盲写覆盖后版本应递增");
 
-    const noEntry = list.find((s) => s.name === `no-entry-${suffix}`);
-    assert.ok(noEntry != null);
-    assert.equal(noEntry.valid, false);
-    assert.deepEqual(noEntry.files, ["notes.md"]);
-  });
+        // 多轮覆盖：每轮版本递增，无 CONFLICT
+        const again = unwrap(await skills.writeSkillFile(
+            "global",
+            name,
+            undefined,
+            "# 再写",
+        ));
+        assert.ok(again.version > blind.version, "二次覆盖版本应递增");
 
-  it("write 缺域报错（MISSING_DOMAIN）", async () => {
-    const ctx = getNovelMasterTestContext();
-    const skills = SkillsServiceFactory.create(ctx.conn);
+        const fresh = unwrap(await skills.readSkillFile("global", name));
+        assert.equal(fresh.content, "# 再写");
+    });
 
-    await rejectsErr(
-      () =>
-        skills.writeSkillFile(
-          undefined,
-          `no-domain-${testIsolationSuffix()}`,
-          undefined,
-          VALID_SKILL_MD,
-        ),
-      (error: unknown) =>
-        AppErrorOps.is(error, "SKILL_MISSING_DOMAIN"),
-    );
-  });
+    it("T-S10 listSkills 中途 abort：返回 Outcome.cancelled 而非半份清单", async () => {
+        const ctx = getNovelMasterTestContext();
+        const skills = SkillsServiceFactory.create(ctx.conn);
+        const suffix = testIsolationSuffix();
+        for (const name of [`abort-a-${suffix}`, `abort-b-${suffix}`, `abort-c-${suffix}`]) {
+            unwrap(await skills.writeSkillFile("global", name, undefined, entry(name, "中止用例")));
+        }
+        let calls = 0;
+        const outcome = await skills.listSkills("global", {
+            checkpoint: () => (++calls >= 2 ? { kind: "cancelled", reason: "user-stop" } : null),
+        });
+        assert.deepEqual(outcome, { kind: "cancelled", reason: "user-stop" }, "中途 abort 必须返回 Outcome.cancelled 而非半份清单");
+        assert.ok(calls >= 2, "检查点必须在每个技能边界真实触发");
+    });
 
-  it("read/write 的 `..` 路径拒绝且不得逃逸技能目录", async () => {
-    const ctx = getNovelMasterTestContext();
-    const skills = SkillsServiceFactory.create(ctx.conn);
-    const name = `path-guard-${testIsolationSuffix()}`;
-    unwrap(await skills.writeSkillFile("global", name, undefined, VALID_SKILL_MD));
+    it("listSkills：front matter 坏 / 缺 SKILL.md 的技能标无效", async () => {
+        const ctx = getNovelMasterTestContext();
+        const skills = SkillsServiceFactory.create(ctx.conn);
+        const suffix = testIsolationSuffix();
 
-    // read：显式 .. 段
-    await rejectsErr(
-      () => skills.readSkillFile("global", name, "../other/SKILL.md"),
-      (error: unknown) =>
-        AppErrorOps.is(error, "SKILL_INVALID_PATH"),
-    );
-    // write：`..` 会被 PathNormalizer.normalize 静默消化成回溯，必须在这里拦截
-    await rejectsErr(
-      () =>
-        skills.writeSkillFile(
-          "global",
-          name,
-          "notes/../../victim.md",
-          "逃逸内容",
-        ),
-      (error: unknown) =>
-        AppErrorOps.is(error, "SKILL_INVALID_PATH"),
-    );
-    // edit 同样拒绝
-    await rejectsErr(
-      () =>
-        skills.editSkillFile("global", name, "../SKILL.md", {
-          oldString: "a",
-          newString: "b",
-        }),
-      (error: unknown) =>
-        AppErrorOps.is(error, "SKILL_INVALID_PATH"),
-    );
-    // 隔壁技能目录未被写脏（VFS 读口已改返回 Result，NOT_FOUND 走 Err 通道）
-    const victim = await ctx.globalMetaVfs().read("/meta/skills/victim.md");
-    assert.ok(!victim.ok, "逃逸路径读口应走 Err 通道");
-    if (!victim.ok) assert.ok(AppErrorOps.is(victim.error, "VFS_NOT_FOUND"));
-  });
+        unwrap(await skills.writeSkillFile(
+            "global",
+            `bad-fm-${suffix}`,
+            undefined,
+            "没有 front matter 的正文",
+        ));
+        // 只有辅助文件、没有 SKILL.md 的技能目录（技能落 meta 域）
+        await ctx.globalMetaVfs().write(
+            `/meta/skills/no-entry-${suffix}/notes.md`,
+            "辅助文件",
+        );
 
-  it("write 新建技能名须过 SKILL_NAME_PATTERN 校验", async () => {
-    const ctx = getNovelMasterTestContext();
-    const skills = SkillsServiceFactory.create(ctx.conn);
+        const list = outcomeValue(await skills.listSkills("global"));
+        const badFm = list.find((s) => s.name === `bad-fm-${suffix}`);
+        assert.ok(badFm != null);
+        assert.equal(badFm.valid, false);
+        assert.ok(badFm.invalidReason != null);
 
-    for (const bad of [".hidden", "has space", "a/b", "SKILL.md"]) {
-      await rejectsErr(
-        () => skills.writeSkillFile("global", bad, undefined, VALID_SKILL_MD),
-        (error: unknown) =>
-          AppErrorOps.is(error, "SKILL_INVALID_NAME"),
-        `技能名 ${bad} 应被拒绝`,
-      );
-    }
-  });
+        const noEntry = list.find((s) => s.name === `no-entry-${suffix}`);
+        assert.ok(noEntry != null);
+        assert.equal(noEntry.valid, false);
+        assert.deepEqual(noEntry.files, ["notes.md"]);
+    });
 
-  it("read 域缺省按生效副本解析：同名项目副本优先，显式域读原件", async () => {
-    const ctx = getNovelMasterTestContext();
-    const skills = SkillsServiceFactory.create(ctx.conn);
-    const suffix = testIsolationSuffix();
-    const project = unwrap(await ctx.projects.create(`P-${suffix}`));
-    const name = `dual-${suffix}`;
+    it("write 缺域报错（MISSING_DOMAIN）", async () => {
+        const ctx = getNovelMasterTestContext();
+        const skills = SkillsServiceFactory.create(ctx.conn);
 
-    unwrap(await skills.writeSkillFile(
-      "global",
-      name,
-      undefined,
-      entry(name, "全局版"),
-    ));
-    unwrap(await skills.writeSkillFile(
-      "project",
-      name,
-      undefined,
-      entry(name, "项目版"),
-      project.id,
-    ));
+        await rejectsErr(
+            () =>
+                skills.writeSkillFile(
+                    undefined,
+                    `no-domain-${testIsolationSuffix()}`,
+                    undefined,
+                    VALID_SKILL_MD,
+                ),
+            (error: unknown) =>
+                AppErrorOps.is(error, "SKILL_MISSING_DOMAIN"),
+        );
+    });
 
-    // 域缺省：项目副本优先
-    const effective = unwrap(await skills.readSkillFile(
-      undefined,
-      name,
-      undefined,
-      project.id,
-    ));
-    assert.equal(effective.domain, "project");
-    assert.match(effective.content, /项目版/);
+    it("read/write 的 `..` 路径拒绝且不得逃逸技能目录", async () => {
+        const ctx = getNovelMasterTestContext();
+        const skills = SkillsServiceFactory.create(ctx.conn);
+        const name = `path-guard-${testIsolationSuffix()}`;
+        unwrap(await skills.writeSkillFile("global", name, undefined, VALID_SKILL_MD));
 
-    // 显式 global：读全局原件
-    const globalCopy = unwrap(await skills.readSkillFile("global", name));
-    assert.equal(globalCopy.domain, "global");
-    assert.match(globalCopy.content, /全局版/);
+        // read：显式 .. 段
+        await rejectsErr(
+            () => skills.readSkillFile("global", name, "../other/SKILL.md"),
+            (error: unknown) =>
+                AppErrorOps.is(error, "SKILL_INVALID_PATH"),
+        );
+        // write：`..` 会被 PathNormalizer.normalize 静默消化成回溯，必须在这里拦截
+        await rejectsErr(
+            () =>
+                skills.writeSkillFile(
+                    "global",
+                    name,
+                    "notes/../../victim.md",
+                    "逃逸内容",
+                ),
+            (error: unknown) =>
+                AppErrorOps.is(error, "SKILL_INVALID_PATH"),
+        );
+        // edit 同样拒绝
+        await rejectsErr(
+            () =>
+                skills.editSkillFile("global", name, "../SKILL.md", {
+                    oldString: "a",
+                    newString: "b",
+                }),
+            (error: unknown) =>
+                AppErrorOps.is(error, "SKILL_INVALID_PATH"),
+        );
+        // 隔壁技能目录未被写脏（VFS 读口已改返回 Result，NOT_FOUND 走 Err 通道）
+        const victim = await ctx.globalMetaVfs().read("/meta/skills/victim.md");
+        assert.ok(!victim.ok, "逃逸路径读口应走 Err 通道");
+        if (!victim.ok) assert.ok(AppErrorOps.is(victim.error, "VFS_NOT_FOUND"));
+    });
 
-    // 项目无同名副本时回落 global
-    const other = unwrap(await ctx.projects.create(`P2-${suffix}`));
-    const fallback = unwrap(await skills.readSkillFile(
-      undefined,
-      name,
-      undefined,
-      other.id,
-    ));
-    assert.equal(fallback.domain, "global");
+    it("write 新建技能名须过 SKILL_NAME_PATTERN 校验", async () => {
+        const ctx = getNovelMasterTestContext();
+        const skills = SkillsServiceFactory.create(ctx.conn);
 
-    // 不存在：NOT_FOUND
-    await rejectsErr(
-      () =>
-        skills.readSkillFile(undefined, `missing-${suffix}`, undefined, project.id),
-      (error: unknown) =>
-        AppErrorOps.is(error, "SKILL_NOT_FOUND"),
-    );
-  });
+        for (const bad of [".hidden", "has space", "a/b", "SKILL.md"]) {
+            await rejectsErr(
+                () => skills.writeSkillFile("global", bad, undefined, VALID_SKILL_MD),
+                (error: unknown) =>
+                    AppErrorOps.is(error, "SKILL_INVALID_NAME"),
+                `技能名 ${bad} 应被拒绝`,
+            );
+        }
+    });
 
-  it("editSkillFile 局部修改（normalize-for-match 语义）", async () => {
-    const ctx = getNovelMasterTestContext();
-    const skills = SkillsServiceFactory.create(ctx.conn);
-    const name = `edit-${testIsolationSuffix()}`;
-    unwrap(await skills.writeSkillFile("global", name, undefined, VALID_SKILL_MD));
+    it("read 域缺省按生效副本解析：同名项目副本优先，显式域读原件", async () => {
+        const ctx = getNovelMasterTestContext();
+        const skills = SkillsServiceFactory.create(ctx.conn);
+        const suffix = testIsolationSuffix();
+        const project = unwrap(await ctx.projects.create(`P-${suffix}`));
+        const name = `dual-${suffix}`;
 
-    const result = unwrap(await skills.editSkillFile("global", name, undefined, {
-      oldString: "演示技能正文",
-      newString: "改过的正文",
-    }));
-    assert.equal(result.replacements, 1);
+        unwrap(await skills.writeSkillFile(
+            "global",
+            name,
+            undefined,
+            entry(name, "全局版"),
+        ));
+        unwrap(await skills.writeSkillFile(
+            "project",
+            name,
+            undefined,
+            entry(name, "项目版"),
+            project.id,
+        ));
 
-    const read = unwrap(await skills.readSkillFile("global", name));
-    assert.match(read.content, /改过的正文/);
-    assert.doesNotMatch(read.content, /演示技能正文/);
-    // front matter 未动，技能仍有效
-    const item = (outcomeValue(await skills.listSkills("global"))).find(
-      (s) => s.name === name,
-    );
-    assert.ok(item != null && item.valid);
-  });
+        // 域缺省：项目副本优先
+        const effective = unwrap(await skills.readSkillFile(
+            undefined,
+            name,
+            undefined,
+            project.id,
+        ));
+        assert.equal(effective.domain, "project");
+        assert.match(effective.content, /项目版/);
 
-  it("setDisabled + effectiveSkills：落行/删行与合并视图联动", async () => {
-    const ctx = getNovelMasterTestContext();
-    const skills = SkillsServiceFactory.create(ctx.conn);
-    const suffix = testIsolationSuffix();
-    const project = unwrap(await ctx.projects.create(`P-${suffix}`));
+        // 显式 global：读全局原件
+        const globalCopy = unwrap(await skills.readSkillFile("global", name));
+        assert.equal(globalCopy.domain, "global");
+        assert.match(globalCopy.content, /全局版/);
 
-    unwrap(await skills.writeSkillFile("global", "g-skill", undefined, entry("g-skill", "全局技能")));
-    unwrap(await skills.writeSkillFile(
-      "project",
-      "p-skill",
-      undefined,
-      entry("p-skill", "项目技能"),
-      project.id,
-    ));
+        // 项目无同名副本时回落 global
+        const other = unwrap(await ctx.projects.create(`P2-${suffix}`));
+        const fallback = unwrap(await skills.readSkillFile(
+            undefined,
+            name,
+            undefined,
+            other.id,
+        ));
+        assert.equal(fallback.domain, "global");
 
-    let view = unwrap(await skills.effectiveSkills(project.id));
-    const gSkill = view.find((s) => s.name === "g-skill");
-    const pSkill = view.find((s) => s.name === "p-skill");
-    assert.ok(gSkill != null && pSkill != null);
-    assert.equal(gSkill.effective, true);
-    assert.equal(pSkill.effective, true);
-    assert.equal(pSkill.domain, "project");
+        // 不存在：NOT_FOUND
+        await rejectsErr(
+            () =>
+                skills.readSkillFile(undefined, `missing-${suffix}`, undefined, project.id),
+            (error: unknown) =>
+                AppErrorOps.is(error, "SKILL_NOT_FOUND"),
+        );
+    });
 
-    unwrap(await skills.setDisabled(project.id, "g-skill", true));
-    view = unwrap(await skills.effectiveSkills(project.id));
-    const disabledOne = view.find((s) => s.name === "g-skill");
-    assert.ok(disabledOne != null);
-    assert.equal(disabledOne.disabled, true);
-    assert.equal(disabledOne.effective, false);
+    it("editSkillFile 局部修改（normalize-for-match 语义）", async () => {
+        const ctx = getNovelMasterTestContext();
+        const skills = SkillsServiceFactory.create(ctx.conn);
+        const name = `edit-${testIsolationSuffix()}`;
+        unwrap(await skills.writeSkillFile("global", name, undefined, VALID_SKILL_MD));
 
-    unwrap(await skills.setDisabled(project.id, "g-skill", false));
-    view = unwrap(await skills.effectiveSkills(project.id));
-    assert.equal(view.find((s) => s.name === "g-skill")?.effective, true);
-  });
+        const result = unwrap(await skills.editSkillFile("global", name, undefined, {
+            oldString: "演示技能正文",
+            newString: "改过的正文",
+        }));
+        assert.equal(result.replacements, 1);
+
+        const read = unwrap(await skills.readSkillFile("global", name));
+        assert.match(read.content, /改过的正文/);
+        assert.doesNotMatch(read.content, /演示技能正文/);
+        // front matter 未动，技能仍有效
+        const item = (outcomeValue(await skills.listSkills("global"))).find(
+            (s) => s.name === name,
+        );
+        assert.ok(item != null && item.valid);
+    });
+
+    it("setDisabled + effectiveSkills：落行/删行与合并视图联动", async () => {
+        const ctx = getNovelMasterTestContext();
+        const skills = SkillsServiceFactory.create(ctx.conn);
+        const suffix = testIsolationSuffix();
+        const project = unwrap(await ctx.projects.create(`P-${suffix}`));
+
+        unwrap(await skills.writeSkillFile("global", "g-skill", undefined, entry("g-skill", "全局技能")));
+        unwrap(await skills.writeSkillFile(
+            "project",
+            "p-skill",
+            undefined,
+            entry("p-skill", "项目技能"),
+            project.id,
+        ));
+
+        let view = unwrap(await skills.effectiveSkills(project.id));
+        const gSkill = view.find((s) => s.name === "g-skill");
+        const pSkill = view.find((s) => s.name === "p-skill");
+        assert.ok(gSkill != null && pSkill != null);
+        assert.equal(gSkill.effective, true);
+        assert.equal(pSkill.effective, true);
+        assert.equal(pSkill.domain, "project");
+
+        unwrap(await skills.setDisabled(project.id, "g-skill", true));
+        view = unwrap(await skills.effectiveSkills(project.id));
+        const disabledOne = view.find((s) => s.name === "g-skill");
+        assert.ok(disabledOne != null);
+        assert.equal(disabledOne.disabled, true);
+        assert.equal(disabledOne.effective, false);
+
+        unwrap(await skills.setDisabled(project.id, "g-skill", false));
+        view = unwrap(await skills.effectiveSkills(project.id));
+        assert.equal(view.find((s) => s.name === "g-skill")?.effective, true);
+    });
 
 
-  it("deleteSkill project 域：清目录且只清本项目负清单行", async () => {
-    const ctx = getNovelMasterTestContext();
-    const skills = SkillsServiceFactory.create(ctx.conn);
-    const suffix = testIsolationSuffix();
-    const p1 = unwrap(await ctx.projects.create(`P1-${suffix}`));
-    const p2 = unwrap(await ctx.projects.create(`P2-${suffix}`));
+    it("deleteSkill project 域：清目录且只清本项目负清单行", async () => {
+        const ctx = getNovelMasterTestContext();
+        const skills = SkillsServiceFactory.create(ctx.conn);
+        const suffix = testIsolationSuffix();
+        const p1 = unwrap(await ctx.projects.create(`P1-${suffix}`));
+        const p2 = unwrap(await ctx.projects.create(`P2-${suffix}`));
 
-    unwrap(await skills.writeSkillFile(
-      "project",
-      "del-skill",
-      undefined,
-      entry("del-skill", "待删"),
-      p1.id,
-    ));
-    // 同名技能种在另一个项目（负清单行也落一份），删除 p1 不应影响它
-    unwrap(await skills.writeSkillFile(
-      "project",
-      "del-skill",
-      undefined,
-      entry("del-skill", "另一个项目的同名技能"),
-      p2.id,
-    ));
-    unwrap(await skills.setDisabled(p1.id, "del-skill", true));
-    unwrap(await skills.setDisabled(p2.id, "del-skill", true));
+        unwrap(await skills.writeSkillFile(
+            "project",
+            "del-skill",
+            undefined,
+            entry("del-skill", "待删"),
+            p1.id,
+        ));
+        // 同名技能种在另一个项目（负清单行也落一份），删除 p1 不应影响它
+        unwrap(await skills.writeSkillFile(
+            "project",
+            "del-skill",
+            undefined,
+            entry("del-skill", "另一个项目的同名技能"),
+            p2.id,
+        ));
+        unwrap(await skills.setDisabled(p1.id, "del-skill", true));
+        unwrap(await skills.setDisabled(p2.id, "del-skill", true));
 
-    unwrap(await skills.deleteSkill({ domain: "project", projectId: p1.id, name: "del-skill" }));
+        unwrap(await skills.deleteSkill({ domain: "project", projectId: p1.id, name: "del-skill" }));
 
-    const p1List = outcomeValue(await skills.listSkills({ projectId: p1.id }));
-    assert.equal(p1List.find((s) => s.name === "del-skill"), undefined);
+        const p1List = outcomeValue(await skills.listSkills({ projectId: p1.id }));
+        assert.equal(p1List.find((s) => s.name === "del-skill"), undefined);
 
-    // p1 的负清单行被清理；p2 的技能与负清单行原样保留
-    const p1View = unwrap(await skills.effectiveSkills(p1.id));
-    assert.equal(p1View.find((s) => s.name === "del-skill"), undefined);
-    const p2View = unwrap(await skills.effectiveSkills(p2.id));
-    const p2Item = p2View.find((s) => s.name === "del-skill");
-    assert.ok(p2Item != null);
-    assert.equal(p2Item.disabled, true);
+        // p1 的负清单行被清理；p2 的技能与负清单行原样保留
+        const p1View = unwrap(await skills.effectiveSkills(p1.id));
+        assert.equal(p1View.find((s) => s.name === "del-skill"), undefined);
+        const p2View = unwrap(await skills.effectiveSkills(p2.id));
+        const p2Item = p2View.find((s) => s.name === "del-skill");
+        assert.ok(p2Item != null);
+        assert.equal(p2Item.disabled, true);
 
-    // 删除后原目录不可读
-    await rejectsErr(
-      () => skills.readSkillFile("project", "del-skill", undefined, p1.id),
-      (error: unknown) =>
-        AppErrorOps.is(error, "SKILL_NOT_FOUND"),
-    );
-  });
+        // 删除后原目录不可读
+        await rejectsErr(
+            () => skills.readSkillFile("project", "del-skill", undefined, p1.id),
+            (error: unknown) =>
+                AppErrorOps.is(error, "SKILL_NOT_FOUND"),
+        );
+    });
 
-  /**
+    /**
    * L1-1 / core1-C-2（OQ3 乙案）blob 口径牙齿：技能整目录删除跑完后，
    * **被删掉的独有内容**不得留下 `ref_count <= 0` 的 blob 行。
    *
@@ -365,259 +365,259 @@ describe("SkillService（T-SK5）", () => {
    * description 带 isolation suffix ⇒ SKILL.md 正文本次唯一，不被别处共享，
    * 残留若有必是本链自己留下的。
    */
-  it("deleteSkill 后无 ref_count<=0 的 blob 残留行", async () => {
-    const ctx = getNovelMasterTestContext();
-    const skills = SkillsServiceFactory.create(ctx.conn);
-    const suffix = testIsolationSuffix();
-    const p = unwrap(await ctx.projects.create(`P-delgc-${suffix}`));
-    const name = `del-gc-skill`;
+    it("deleteSkill 后无 ref_count<=0 的 blob 残留行", async () => {
+        const ctx = getNovelMasterTestContext();
+        const skills = SkillsServiceFactory.create(ctx.conn);
+        const suffix = testIsolationSuffix();
+        const p = unwrap(await ctx.projects.create(`P-delgc-${suffix}`));
+        const name = `del-gc-skill`;
 
-    const skillMd = entry(name, `待删-gc-${suffix}`);
-    unwrap(await skills.writeSkillFile("project", name, undefined, skillMd, p.id));
-    const skillHash = await new SqliteVfsContentStore(ctx.conn).put(skillMd);
+        const skillMd = entry(name, `待删-gc-${suffix}`);
+        unwrap(await skills.writeSkillFile("project", name, undefined, skillMd, p.id));
+        const skillHash = await new SqliteVfsContentStore(ctx.conn).put(skillMd);
 
-    unwrap(await skills.deleteSkill({ domain: "project", projectId: p.id, name }));
+        unwrap(await skills.deleteSkill({ domain: "project", projectId: p.id, name }));
 
-    const residue = await ctx.conn.query<{ n: number }>(
-      `SELECT COUNT(*) AS n
+        const residue = await ctx.conn.query<{ n: number }>(
+            `SELECT COUNT(*) AS n
     FROM vfs_content_blob
     WHERE content_hash = ? AND ref_count <= 0`,
-      [skillHash],
-    );
-    assert.equal(
-      Number(residue[0]!.n),
-      0,
-      "deleteSkill 后不应残留 ref_count<=0 的 blob 行（本链不调 DeferredBlobGc.run）",
-    );
-  });
+            [skillHash],
+        );
+        assert.equal(
+            Number(residue[0]!.n),
+            0,
+            "deleteSkill 后不应残留 ref_count<=0 的 blob 行（本链不调 DeferredBlobGc.run）",
+        );
+    });
 
-  it("deleteSkill global 域：清所有项目的同名负清单行", async () => {
-    const ctx = getNovelMasterTestContext();
-    const skills = SkillsServiceFactory.create(ctx.conn);
-    const suffix = testIsolationSuffix();
-    const p1 = unwrap(await ctx.projects.create(`PG1-${suffix}`));
-    const p2 = unwrap(await ctx.projects.create(`PG2-${suffix}`));
+    it("deleteSkill global 域：清所有项目的同名负清单行", async () => {
+        const ctx = getNovelMasterTestContext();
+        const skills = SkillsServiceFactory.create(ctx.conn);
+        const suffix = testIsolationSuffix();
+        const p1 = unwrap(await ctx.projects.create(`PG1-${suffix}`));
+        const p2 = unwrap(await ctx.projects.create(`PG2-${suffix}`));
 
-    unwrap(await skills.writeSkillFile("global", "g-del", undefined, entry("g-del", "全局待删")));
-    unwrap(await skills.setDisabled(p1.id, "g-del", true));
-    unwrap(await skills.setDisabled(p2.id, "g-del", true));
+        unwrap(await skills.writeSkillFile("global", "g-del", undefined, entry("g-del", "全局待删")));
+        unwrap(await skills.setDisabled(p1.id, "g-del", true));
+        unwrap(await skills.setDisabled(p2.id, "g-del", true));
 
-    unwrap(await skills.deleteSkill({ domain: "global", name: "g-del" }));
+        unwrap(await skills.deleteSkill({ domain: "global", name: "g-del" }));
 
-    // 直接查表确认负清单行全清（listDisabledNames 无公开 service 入口）
-    const rows = await ctx.conn.query<{ scope_key: string }>(
-      "SELECT scope_key FROM skill_disabled_rule WHERE skill_name = 'g-del'",
-    );
-    assert.equal(rows.length, 0, "global 技能删除后所有项目的负清单行都应清理");
+        // 直接查表确认负清单行全清（listDisabledNames 无公开 service 入口）
+        const rows = await ctx.conn.query<{ scope_key: string }>(
+            "SELECT scope_key FROM skill_disabled_rule WHERE skill_name = 'g-del'",
+        );
+        assert.equal(rows.length, 0, "global 技能删除后所有项目的负清单行都应清理");
 
-    const globalList = outcomeValue(await skills.listSkills("global"));
-    assert.equal(globalList.find((s) => s.name === "g-del"), undefined);
-  });
+        const globalList = outcomeValue(await skills.listSkills("global"));
+        assert.equal(globalList.find((s) => s.name === "g-del"), undefined);
+    });
 
-  it("project 域操作缺 projectId 报错", async () => {
-    const ctx = getNovelMasterTestContext();
-    const skills = SkillsServiceFactory.create(ctx.conn);
+    it("project 域操作缺 projectId 报错", async () => {
+        const ctx = getNovelMasterTestContext();
+        const skills = SkillsServiceFactory.create(ctx.conn);
 
-    await rejectsErr(
-      () =>
-        skills.writeSkillFile("project", "no-pid", undefined, VALID_SKILL_MD),
-      (error: unknown) =>
-        AppErrorOps.is(error, "SKILL_MISSING_PROJECT_ID"),
-    );
-  });
+        await rejectsErr(
+            () =>
+                skills.writeSkillFile("project", "no-pid", undefined, VALID_SKILL_MD),
+            (error: unknown) =>
+                AppErrorOps.is(error, "SKILL_MISSING_PROJECT_ID"),
+        );
+    });
 
-  it("deleteSkill global 域内置名抛 BUILTIN_SKILL（中文 message）且目录仍在（T-AS2）", async () => {
-    const ctx = getNovelMasterTestContext();
-    const skills = SkillsServiceFactory.create(ctx.conn);
+    it("deleteSkill global 域内置名抛 BUILTIN_SKILL（中文 message）且目录仍在（T-AS2）", async () => {
+        const ctx = getNovelMasterTestContext();
+        const skills = SkillsServiceFactory.create(ctx.conn);
 
-    // 测试库经 bootstrap 种入，global 域 agent-config 目录存在
-    await rejectsErr(
-      () => skills.deleteSkill({ domain: "global", name: "agent-config" }),
-      (error: unknown) =>
-        AppErrorOps.is(error, "SKILL_BUILTIN") &&
-        renderError(error).includes("内置技能不支持删除：agent-config"),
-    );
+        // 测试库经 bootstrap 种入，global 域 agent-config 目录存在
+        await rejectsErr(
+            () => skills.deleteSkill({ domain: "global", name: "agent-config" }),
+            (error: unknown) =>
+                AppErrorOps.is(error, "SKILL_BUILTIN") &&
+                renderError(error).includes("内置技能不支持删除：agent-config"),
+        );
 
-    // 拦截后技能目录仍在，清单还能查到
-    const item = (outcomeValue(await skills.listSkills("global"))).find(
-      (s) => s.name === "agent-config",
-    );
-    assert.ok(item != null, "内置技能目录应仍在");
-    assert.equal(item.valid, true);
-  });
+        // 拦截后技能目录仍在，清单还能查到
+        const item = (outcomeValue(await skills.listSkills("global"))).find(
+            (s) => s.name === "agent-config",
+        );
+        assert.ok(item != null, "内置技能目录应仍在");
+        assert.equal(item.valid, true);
+    });
 
-  it("deleteSkill project 域历史同名副本可正常删（T-AS2）", async () => {
-    const ctx = getNovelMasterTestContext();
-    const skills = SkillsServiceFactory.create(ctx.conn);
-    const suffix = testIsolationSuffix();
-    const project = unwrap(await ctx.projects.create(`P-AC-${suffix}`));
+    it("deleteSkill project 域历史同名副本可正常删（T-AS2）", async () => {
+        const ctx = getNovelMasterTestContext();
+        const skills = SkillsServiceFactory.create(ctx.conn);
+        const suffix = testIsolationSuffix();
+        const project = unwrap(await ctx.projects.create(`P-AC-${suffix}`));
 
-    // 升级前建的 project 域同名副本：writeSkillFile 的新建拦截会挡住正常通道，
-    // 存量数据只能经 VFS 直写落盘（模拟）
-    await ctx
-      .projectMetaVfs(project.id)
-      .write("/meta/skills/agent-config/SKILL.md", entry("agent-config", "项目域历史副本"));
+        // 升级前建的 project 域同名副本：writeSkillFile 的新建拦截会挡住正常通道，
+        // 存量数据只能经 VFS 直写落盘（模拟）
+        await ctx
+            .projectMetaVfs(project.id)
+            .write("/meta/skills/agent-config/SKILL.md", entry("agent-config", "项目域历史副本"));
 
-    unwrap(await skills.deleteSkill({
-      domain: "project",
-      projectId: project.id,
-      name: "agent-config",
-    }));
+        unwrap(await skills.deleteSkill({
+            domain: "project",
+            projectId: project.id,
+            name: "agent-config",
+        }));
 
-    const list = outcomeValue(await skills.listSkills({ projectId: project.id }));
-    assert.equal(
-      list.find((s) => s.name === "agent-config"),
-      undefined,
-      "project 域同名副本应可正常删除",
-    );
-  });
+        const list = outcomeValue(await skills.listSkills({ projectId: project.id }));
+        assert.equal(
+            list.find((s) => s.name === "agent-config"),
+            undefined,
+            "project 域同名副本应可正常删除",
+        );
+    });
 
-  it("writeSkillFile 内置保留名：目录已存在编辑放行，目录不存在新建拒绝（T-AS6）", async () => {
-    const ctx = getNovelMasterTestContext();
-    const skills = SkillsServiceFactory.create(ctx.conn);
-    const suffix = testIsolationSuffix();
-    const project = unwrap(await ctx.projects.create(`P-ACR-${suffix}`));
+    it("writeSkillFile 内置保留名：目录已存在编辑放行，目录不存在新建拒绝（T-AS6）", async () => {
+        const ctx = getNovelMasterTestContext();
+        const skills = SkillsServiceFactory.create(ctx.conn);
+        const suffix = testIsolationSuffix();
+        const project = unwrap(await ctx.projects.create(`P-ACR-${suffix}`));
 
-    // global 域目录已存在（bootstrap 种入）：编辑放行。writeSkillFile
-    // 无版本校验，固定 last-write-wins：写入内容直接覆盖现有文件。
-    // 这里用辅助文件覆盖放行路径
-    unwrap(await skills.writeSkillFile(
-      "global",
-      "agent-config",
-      "notes.md",
-      "内置技能的辅助文件",
-    ));
-    const note = unwrap(await skills.readSkillFile("global", "agent-config", "notes.md"));
-    assert.equal(note.content, "内置技能的辅助文件");
+        // global 域目录已存在（bootstrap 种入）：编辑放行。writeSkillFile
+        // 无版本校验，固定 last-write-wins：写入内容直接覆盖现有文件。
+        // 这里用辅助文件覆盖放行路径
+        unwrap(await skills.writeSkillFile(
+            "global",
+            "agent-config",
+            "notes.md",
+            "内置技能的辅助文件",
+        ));
+        const note = unwrap(await skills.readSkillFile("global", "agent-config", "notes.md"));
+        assert.equal(note.content, "内置技能的辅助文件");
 
-    const edit = unwrap(await skills.editSkillFile(
-      "global",
-      "agent-config",
-      undefined,
-      { oldString: "agent 配置指南", newString: "用户改过的指南" },
-    ));
-    assert.equal(edit.replacements, 1, "内置本体编辑应放行");
+        const edit = unwrap(await skills.editSkillFile(
+            "global",
+            "agent-config",
+            undefined,
+            { oldString: "agent 配置指南", newString: "用户改过的指南" },
+        ));
+        assert.equal(edit.replacements, 1, "内置本体编辑应放行");
 
-    // project 域目录不存在 = 新建，拒绝（中文 message）
-    await rejectsErr(
-      () =>
-        skills.writeSkillFile(
-          "project",
-          "agent-config",
-          undefined,
-          VALID_SKILL_MD,
-          project.id,
-        ),
-      (error: unknown) =>
-        AppErrorOps.is(error, "SKILL_BUILTIN_NAME_RESERVED") &&
-        renderError(error).includes("「agent-config」为内置技能保留名，不能用于新建"),
-    );
+        // project 域目录不存在 = 新建，拒绝（中文 message）
+        await rejectsErr(
+            () =>
+                skills.writeSkillFile(
+                    "project",
+                    "agent-config",
+                    undefined,
+                    VALID_SKILL_MD,
+                    project.id,
+                ),
+            (error: unknown) =>
+                AppErrorOps.is(error, "SKILL_BUILTIN_NAME_RESERVED") &&
+                renderError(error).includes("「agent-config」为内置技能保留名，不能用于新建"),
+        );
 
-    // global 域模拟 seed 缺失：物理清掉内置目录后，新建同样拒绝
-    await ctx
-      .globalMetaVfs()
-      .hardDelete("/meta/skills/agent-config", { recursive: true });
-    await rejectsErr(
-      () =>
-        skills.writeSkillFile("global", "agent-config", undefined, VALID_SKILL_MD),
-      (error: unknown) =>
-        AppErrorOps.is(error, "SKILL_BUILTIN_NAME_RESERVED"),
-    );
+        // global 域模拟 seed 缺失：物理清掉内置目录后，新建同样拒绝
+        await ctx
+            .globalMetaVfs()
+            .hardDelete("/meta/skills/agent-config", { recursive: true });
+        await rejectsErr(
+            () =>
+                skills.writeSkillFile("global", "agent-config", undefined, VALID_SKILL_MD),
+            (error: unknown) =>
+                AppErrorOps.is(error, "SKILL_BUILTIN_NAME_RESERVED"),
+        );
 
-    // 恢复内置目录（builtinSeed 豁免重种）：同文件后续用例
-    //（updateSkillInfo ④⑤⑨ 等）依赖 agent-config 目录存在，
-    // 避免用例间顺序耦合。
-    unwrap(await skills.writeSkillFile(
-      "global",
-      "agent-config",
-      undefined,
-      entry("agent-config", "agent 定义配置指南（测试重种）"),
-      undefined,
-      { builtinSeed: true },
-    ));
-  });
+        // 恢复内置目录（builtinSeed 豁免重种）：同文件后续用例
+        //（updateSkillInfo ④⑤⑨ 等）依赖 agent-config 目录存在，
+        // 避免用例间顺序耦合。
+        unwrap(await skills.writeSkillFile(
+            "global",
+            "agent-config",
+            undefined,
+            entry("agent-config", "agent 定义配置指南（测试重种）"),
+            undefined,
+            { builtinSeed: true },
+        ));
+    });
 
-  it("assertSkillNameNotReservedForCreate：ZIP 新建通道的保留名门（D-1）", async () => {
-    const ctx = getNovelMasterTestContext();
-    const skills = SkillsServiceFactory.create(ctx.conn);
-    const suffix = testIsolationSuffix();
-    const project = unwrap(await ctx.projects.create(`P-D1-${suffix}`));
+    it("assertSkillNameNotReservedForCreate：ZIP 新建通道的保留名门（D-1）", async () => {
+        const ctx = getNovelMasterTestContext();
+        const skills = SkillsServiceFactory.create(ctx.conn);
+        const suffix = testIsolationSuffix();
+        const project = unwrap(await ctx.projects.create(`P-D1-${suffix}`));
 
-    // 非名单名：任意域直接放行（不抛）
-    unwrap(await skills.assertSkillNameNotReservedForCreate(
-      "project",
-      `plain-${suffix}`,
-      project.id,
-    ));
-    unwrap(await skills.assertSkillNameNotReservedForCreate("global", `plain-${suffix}`));
+        // 非名单名：任意域直接放行（不抛）
+        unwrap(await skills.assertSkillNameNotReservedForCreate(
+            "project",
+            `plain-${suffix}`,
+            project.id,
+        ));
+        unwrap(await skills.assertSkillNameNotReservedForCreate("global", `plain-${suffix}`));
 
-    // 名单内 + project 域目录不存在（= 新建，ZIP 导入场景）拒绝，中文 message
-    await rejectsErr(
-      () =>
-        skills.assertSkillNameNotReservedForCreate(
-          "project",
-          "agent-config",
-          project.id,
-        ),
-      (error: unknown) =>
-        AppErrorOps.is(error, "SKILL_BUILTIN_NAME_RESERVED") &&
-        renderError(error).includes("「agent-config」为内置技能保留名，不能用于新建"),
-    );
+        // 名单内 + project 域目录不存在（= 新建，ZIP 导入场景）拒绝，中文 message
+        await rejectsErr(
+            () =>
+                skills.assertSkillNameNotReservedForCreate(
+                    "project",
+                    "agent-config",
+                    project.id,
+                ),
+            (error: unknown) =>
+                AppErrorOps.is(error, "SKILL_BUILTIN_NAME_RESERVED") &&
+                renderError(error).includes("「agent-config」为内置技能保留名，不能用于新建"),
+        );
 
-    // project 域缺 projectId：与 writeSkillFile 的 vfsForDomain 校验同源拒绝
-    await rejectsErr(
-      () => skills.assertSkillNameNotReservedForCreate("project", "agent-config"),
-      (error: unknown) =>
-        AppErrorOps.is(error, "SKILL_MISSING_PROJECT_ID"),
-    );
+        // project 域缺 projectId：与 writeSkillFile 的 vfsForDomain 校验同源拒绝
+        await rejectsErr(
+            () => skills.assertSkillNameNotReservedForCreate("project", "agent-config"),
+            (error: unknown) =>
+                AppErrorOps.is(error, "SKILL_MISSING_PROJECT_ID"),
+        );
 
-    // builtinSeed 豁免仍仅 seed 通道有效：新入口无豁免参数（同一目录不存在
-    // 场景恒拒绝）；writeSkillFile 带 builtinSeed 写入后目录已存在，新入口
-    // 转为放行（编辑语义）。用例自建目录，不依赖其他用例的 global 域残留。
-    unwrap(await skills.writeSkillFile(
-      "project",
-      "agent-config",
-      undefined,
-      VALID_SKILL_MD,
-      project.id,
-      { builtinSeed: true },
-    ));
-    unwrap(await skills.assertSkillNameNotReservedForCreate(
-      "project",
-      "agent-config",
-      project.id,
-    ));
-  });
+        // builtinSeed 豁免仍仅 seed 通道有效：新入口无豁免参数（同一目录不存在
+        // 场景恒拒绝）；writeSkillFile 带 builtinSeed 写入后目录已存在，新入口
+        // 转为放行（编辑语义）。用例自建目录，不依赖其他用例的 global 域残留。
+        unwrap(await skills.writeSkillFile(
+            "project",
+            "agent-config",
+            undefined,
+            VALID_SKILL_MD,
+            project.id,
+            { builtinSeed: true },
+        ));
+        unwrap(await skills.assertSkillNameNotReservedForCreate(
+            "project",
+            "agent-config",
+            project.id,
+        ));
+    });
 
-  describe("updateSkillInfo（T-S2 / T-S3）", () => {
-    it("① 正常改名：目录迁移 + front matter name 同步 + $新名可解析（T-S3 revision 跟随）", async () => {
-      const ctx = getNovelMasterTestContext();
-      const skills = SkillsServiceFactory.create(ctx.conn);
-      const suffix = testIsolationSuffix();
-      const oldName = `ren-old-${suffix}`;
-      const newName = `ren-new-${suffix}`;
+    describe("updateSkillInfo（T-S2 / T-S3）", () => {
+        it("① 正常改名：目录迁移 + front matter name 同步 + $新名可解析（T-S3 revision 跟随）", async () => {
+            const ctx = getNovelMasterTestContext();
+            const skills = SkillsServiceFactory.create(ctx.conn);
+            const suffix = testIsolationSuffix();
+            const oldName = `ren-old-${suffix}`;
+            const newName = `ren-new-${suffix}`;
 
-      unwrap(await skills.writeSkillFile(
-        "global",
-        oldName,
-        undefined,
-        entry(oldName, "改名前描述"),
-      ));
-      const before = unwrap(await skills.readSkillFile("global", oldName));
+            unwrap(await skills.writeSkillFile(
+                "global",
+                oldName,
+                undefined,
+                entry(oldName, "改名前描述"),
+            ));
+            const before = unwrap(await skills.readSkillFile("global", oldName));
 
-      unwrap(await skills.updateSkillInfo(
-        { domain: "global", name: oldName },
-        { newName },
-      ));
+            unwrap(await skills.updateSkillInfo(
+                { domain: "global", name: oldName },
+                { newName },
+            ));
 
-      // 旧路径不可读，新路径可读且 front matter name 同步
-      await rejectsErr(
-        () => skills.readSkillFile("global", oldName),
-        (error: unknown) =>
-          AppErrorOps.is(error, "SKILL_NOT_FOUND"),
-      );
-      const after = unwrap(await skills.readSkillFile("global", newName));
-      assert.match(after.content, /name: "ren-new-[^"]*"/);
+            // 旧路径不可读，新路径可读且 front matter name 同步
+            await rejectsErr(
+                () => skills.readSkillFile("global", oldName),
+                (error: unknown) =>
+                    AppErrorOps.is(error, "SKILL_NOT_FOUND"),
+            );
+            const after = unwrap(await skills.readSkillFile("global", newName));
+            assert.match(after.content, /name: "ren-new-[^"]*"/);
       // T-S3：同 entry 的 version 连续（renamePrefix 不重置，front matter
       // 重写 bump 一次）
       assert.ok(

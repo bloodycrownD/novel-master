@@ -21,8 +21,8 @@ import {ViewSlot} from '@web/shared/view-slot';
 import {MermaidViewerOverlay} from './MermaidViewerOverlay';
 
 type MermaidViewerViewProps = {
-  /** 原图 SVG 的深克隆（cloneNode(true)），由覆盖层 effect 挂入视口容器。 */
-  svgClone: Element;
+    /** 原图 SVG 的深克隆（cloneNode(true)），由覆盖层 effect 挂入视口容器。 */
+    svgClone: Element;
 };
 
 /** null = 卸载（render(null, portal)）；非 null = 渲染全屏覆盖层。 */
@@ -35,104 +35,104 @@ const viewerSlot = ViewSlot.create<MermaidViewerViewProps | null>();
 
 /** Mermaid 全屏查看器运行时槽（模块内 holder，对象管理）。 */
 const viewerRuntime = {
-  /** 关闭按钮 aria-label 读取口（p27 R6 波 3-2d 两点接线）：各管线 set 注入，
+    /** 关闭按钮 aria-label 读取口（p27 R6 波 3-2d 两点接线）：各管线 set 注入，
    * 渲染时惰性取（晚到的 init.labels 也能生效）；未注入回退组件缺省中文。 */
-  closeLabelProvider: null as (() => string) | null,
-  /** 向宿主发消息的通道（attachDelegation 注入）。 */
-  post: null as MermaidViewerPost | null,
-  /** 查看器是否处于打开态。 */
-  isOpen: false,
-  /** 代码块点击委托是否已挂接（幂等）。 */
-  delegationAttached: false,
+    closeLabelProvider: null as (() => string) | null,
+    /** 向宿主发消息的通道（attachDelegation 注入）。 */
+    post: null as MermaidViewerPost | null,
+    /** 查看器是否处于打开态。 */
+    isOpen: false,
+    /** 代码块点击委托是否已挂接（幂等）。 */
+    delegationAttached: false,
 };
 
 export const MermaidFullscreen = {
-  /** 由各管线 main 注册 Preact 覆盖层渲染/卸载实现。 */
-  // nm-style: keep-public — 槽实例保持模块私有；两管线 main/factory 装配点按名引用
-  registerView: (fn: RenderMermaidViewerView): void => {
-    viewerSlot.register(fn);
-  },
+    /** 由各管线 main 注册 Preact 覆盖层渲染/卸载实现。 */
+    // nm-style: keep-public — 槽实例保持模块私有；两管线 main/factory 装配点按名引用
+    registerView: (fn: RenderMermaidViewerView): void => {
+        viewerSlot.register(fn);
+    },
 
-  /** 从图表容器打开全屏：克隆 SVG（原图零改动）→ 渲染覆盖层 → 通知 RN。 */
-  open: (chart: Element): void => {
-    if (viewerRuntime.isOpen) {
-      return;
-    }
-    // 开门前成对校验：渲染器缺失会白屏，post 缺失会无法通知 RN 拦截返回键
-    if (!viewerSlot.has() || !viewerRuntime.post) {
-      return;
-    }
-    const svg = chart.querySelector('svg');
-    if (!svg) {
-      return;
-    }
-    const svgClone = svg.cloneNode(true) as Element;
-    viewerRuntime.isOpen = true;
-    document.body.classList.add('mermaid-viewer-open');
-    viewerSlot.invoke({svgClone});
-    if (viewerRuntime.post) {
-      viewerRuntime.post('mermaidViewerOpened', {});
-    }
-  },
+    /** 从图表容器打开全屏：克隆 SVG（原图零改动）→ 渲染覆盖层 → 通知 RN。 */
+    open: (chart: Element): void => {
+        if (viewerRuntime.isOpen) {
+            return;
+        }
+        // 开门前成对校验：渲染器缺失会白屏，post 缺失会无法通知 RN 拦截返回键
+        if (!viewerSlot.has() || !viewerRuntime.post) {
+            return;
+        }
+        const svg = chart.querySelector('svg');
+        if (!svg) {
+            return;
+        }
+        const svgClone = svg.cloneNode(true) as Element;
+        viewerRuntime.isOpen = true;
+        document.body.classList.add('mermaid-viewer-open');
+        viewerSlot.invoke({svgClone});
+        if (viewerRuntime.post) {
+            viewerRuntime.post('mermaidViewerOpened', {});
+        }
+    },
 
-  /** 关闭全屏：卸载覆盖层 → 解除禁滚 → 通知 RN（notifyHost=false 供测试/内部路径）。 */
-  close: (notifyHost: boolean = true): void => {
-    if (!viewerRuntime.isOpen) {
-      return;
-    }
-    viewerRuntime.isOpen = false;
-    document.body.classList.remove('mermaid-viewer-open');
-    viewerSlot.invoke(null);
-    if (notifyHost && viewerRuntime.post) {
-      viewerRuntime.post('mermaidViewerClosed', {});
-    }
-  },
+    /** 关闭全屏：卸载覆盖层 → 解除禁滚 → 通知 RN（notifyHost=false 供测试/内部路径）。 */
+    close: (notifyHost: boolean = true): void => {
+        if (!viewerRuntime.isOpen) {
+            return;
+        }
+        viewerRuntime.isOpen = false;
+        document.body.classList.remove('mermaid-viewer-open');
+        viewerSlot.invoke(null);
+        if (notifyHost && viewerRuntime.post) {
+            viewerRuntime.post('mermaidViewerClosed', {});
+        }
+    },
 
-  /**
+    /**
    * 挂接 document 级 click 委托 + 注入本管线 post。
    * 每管线 main.ts 模块初始化处调用一次（不进 setDocument/renderRows 链路）。
    */
-  attachDelegation: (post: MermaidViewerPost): void => {
-    viewerRuntime.post = post;
-    // 幂等守卫：重复调用只更新 post，不叠加 document 监听器
-    if (viewerRuntime.delegationAttached) {
-      return;
-    }
-    viewerRuntime.delegationAttached = true;
-    document.addEventListener('click', event => {
-      if (viewerRuntime.isOpen) {
-        return; // 覆盖层内点击由覆盖层自身处理（backdrop 关闭/双击缩放）
-      }
-      const target = event.target as Element | null;
-      if (!target || typeof target.closest !== 'function') {
-        return;
-      }
-      const chart = target.closest('.mermaid-block__chart');
-      if (chart) {
-        MermaidFullscreen.open(chart);
-      }
-    });
-  },
+    attachDelegation: (post: MermaidViewerPost): void => {
+        viewerRuntime.post = post;
+        // 幂等守卫：重复调用只更新 post，不叠加 document 监听器
+        if (viewerRuntime.delegationAttached) {
+            return;
+        }
+        viewerRuntime.delegationAttached = true;
+        document.addEventListener('click', event => {
+            if (viewerRuntime.isOpen) {
+                return; // 覆盖层内点击由覆盖层自身处理（backdrop 关闭/双击缩放）
+            }
+            const target = event.target as Element | null;
+            if (!target || typeof target.closest !== 'function') {
+                return;
+            }
+            const chart = target.closest('.mermaid-block__chart');
+            if (chart) {
+                MermaidFullscreen.open(chart);
+            }
+        });
+    },
 
-  /** 注入关闭按钮 aria-label 读取口（p27 R6 波 3-2d 两点接线；每 bundle 单例，管线各自 set）。 */
-  setCloseLabelProvider: (fn: () => string): void => {
-    viewerRuntime.closeLabelProvider = fn;
-  },
+    /** 注入关闭按钮 aria-label 读取口（p27 R6 波 3-2d 两点接线；每 bundle 单例，管线各自 set）。 */
+    setCloseLabelProvider: (fn: () => string): void => {
+        viewerRuntime.closeLabelProvider = fn;
+    },
 
-  /**
+    /**
    * portal 挂接一行化（web/C-orch-5）：注册覆盖层渲染到指定 portal 容器。
    * 各管线 main.ts 模块初始化处调用一次，替代原先逐行重复的注册块。
    */
-  mountPortal: (portalId: string): void => {
-    const portal = document.getElementById(portalId);
-    MermaidFullscreen.registerView(props => {
-      if (!portal) return;
-      if (!props) {
-        render(null, portal);
-        return;
-      }
-      const overlay = h(MermaidViewerOverlay, {svgClone: props.svgClone, onClose: () => MermaidFullscreen.close(true), closeLabel: viewerRuntime.closeLabelProvider?.() ?? undefined});
-      render(overlay, portal);
-    });
-  },
+    mountPortal: (portalId: string): void => {
+        const portal = document.getElementById(portalId);
+        MermaidFullscreen.registerView(props => {
+            if (!portal) return;
+            if (!props) {
+                render(null, portal);
+                return;
+            }
+            const overlay = h(MermaidViewerOverlay, {svgClone: props.svgClone, onClose: () => MermaidFullscreen.close(true), closeLabel: viewerRuntime.closeLabelProvider?.() ?? undefined});
+            render(overlay, portal);
+        });
+    },
 } as const;

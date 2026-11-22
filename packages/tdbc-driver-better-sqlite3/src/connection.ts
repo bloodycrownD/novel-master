@@ -6,10 +6,10 @@
 
 import Database from "better-sqlite3";
 import type {
-  BatchResult,
-  ExecuteResult,
-  Row,
-  TdbcConnection,
+    BatchResult,
+    ExecuteResult,
+    Row,
+    TdbcConnection,
 } from "@novel-master/core";
 import { AsyncMutex, TdbcBindings, TdbcError } from "@novel-master/core/tdbc";
 import { RowMapper } from "./row-mapper.js";
@@ -21,127 +21,127 @@ type SqlParams = readonly unknown[];
 type BindingsList = readonly (readonly unknown[])[];
 
 export class BetterSqlite3Connection implements TdbcConnection {
-  private closed = false;
-  private inTransaction = false;
-  private readonly mutex = new AsyncMutex();
+    private closed = false;
+    private inTransaction = false;
+    private readonly mutex = new AsyncMutex();
 
-  constructor(private readonly db: Database.Database) {}
+    constructor(private readonly db: Database.Database) {}
 
-  execute(sql: string, params?: SqlParams): Promise<ExecuteResult> {
-    return this.mutex.run(() => this.executeSync(sql, params));
-  }
+    execute(sql: string, params?: SqlParams): Promise<ExecuteResult> {
+        return this.mutex.run(() => this.executeSync(sql, params));
+    }
 
-  query<T extends Row = Row>(sql: string, params?: SqlParams): Promise<T[]> {
-    return this.mutex.run(() => this.querySync<T>(sql, params));
-  }
+    query<T extends Row = Row>(sql: string, params?: SqlParams): Promise<T[]> {
+        return this.mutex.run(() => this.querySync<T>(sql, params));
+    }
 
-  batch(sql: string, paramsList: BindingsList): Promise<BatchResult> {
-    return this.mutex.run(() => this.batchSync(sql, paramsList));
-  }
+    batch(sql: string, paramsList: BindingsList): Promise<BatchResult> {
+        return this.mutex.run(() => this.batchSync(sql, paramsList));
+    }
 
-  transaction<T>(fn: (tx: TdbcConnection) => Promise<T>): Promise<T> {
-    return this.mutex.run(async () => {
-      this.assertOpen();
-      if (this.inTransaction) {
-        throw new TdbcError("NESTED_TRANSACTION", "Nested transactions are not supported", { driver: "better-sqlite3" },);
-      }
+    transaction<T>(fn: (tx: TdbcConnection) => Promise<T>): Promise<T> {
+        return this.mutex.run(async () => {
+            this.assertOpen();
+            if (this.inTransaction) {
+                throw new TdbcError("NESTED_TRANSACTION", "Nested transactions are not supported", { driver: "better-sqlite3" },);
+            }
 
-      this.inTransaction = true;
-      const txConn = new TransactionalConnection(this);
+            this.inTransaction = true;
+            const txConn = new TransactionalConnection(this);
 
-      // --- transaction boundary: explicit BEGIN / COMMIT / ROLLBACK ---
-      this.db.exec("BEGIN");
-      try {
-        const value = await fn(txConn);
-        this.db.exec("COMMIT");
-        return value;
-      } catch (cause) {
-        this.db.exec("ROLLBACK");
-        if (cause instanceof TdbcError) {
-          throw cause;
+            // --- transaction boundary: explicit BEGIN / COMMIT / ROLLBACK ---
+            this.db.exec("BEGIN");
+            try {
+                const value = await fn(txConn);
+                this.db.exec("COMMIT");
+                return value;
+            } catch (cause) {
+                this.db.exec("ROLLBACK");
+                if (cause instanceof TdbcError) {
+                    throw cause;
+                }
+                throw this.wrapSqlite(cause);
+            } finally {
+                this.inTransaction = false;
+            }
+        });
+    }
+
+    close(): Promise<void> {
+        return this.mutex.run(() => {
+            if (!this.closed) {
+                this.closed = true;
+                this.db.close();
+            }
+        });
+    }
+
+    /** Runs execute without mutex (caller holds the lock or is on tx surface). */
+    executeSync(sql: string, params?: SqlParams): ExecuteResult {
+        this.assertOpen();
+        try {
+            const stmt = this.db.prepare(sql);
+            const result = stmt.run(...(TdbcBindings.normalize(params) ?? []));
+            return {
+                changes: result.changes,
+                lastInsertRowid: result.lastInsertRowid,
+            };
+        } catch (cause) {
+            throw this.wrapSqlite(cause);
         }
-        throw this.wrapSqlite(cause);
-      } finally {
-        this.inTransaction = false;
-      }
-    });
-  }
-
-  close(): Promise<void> {
-    return this.mutex.run(() => {
-      if (!this.closed) {
-        this.closed = true;
-        this.db.close();
-      }
-    });
-  }
-
-  /** Runs execute without mutex (caller holds the lock or is on tx surface). */
-  executeSync(sql: string, params?: SqlParams): ExecuteResult {
-    this.assertOpen();
-    try {
-      const stmt = this.db.prepare(sql);
-      const result = stmt.run(...(TdbcBindings.normalize(params) ?? []));
-      return {
-        changes: result.changes,
-        lastInsertRowid: result.lastInsertRowid,
-      };
-    } catch (cause) {
-      throw this.wrapSqlite(cause);
-    }
-  }
-
-  querySync<T extends Row = Row>(sql: string, params?: SqlParams): T[] {
-    this.assertOpen();
-    try {
-      const stmt = this.db.prepare(sql);
-      const args = TdbcBindings.normalize(params) ?? [];
-      const rawRows = stmt.all(...args) as Record<string, unknown>[];
-      return rawRows.map((r) => RowMapper.map(r) as T);
-    } catch (cause) {
-      throw this.wrapSqlite(cause);
-    }
-  }
-
-  batchSync(sql: string, paramsList: BindingsList): BatchResult {
-    this.assertOpen();
-    if (paramsList.length === 0) {
-      return { totalChanges: 0, count: 0 };
     }
 
-    const stmt = this.db.prepare(sql);
-    let totalChanges = 0;
-
-    // --- batch boundary: single SQLite transaction, all-or-nothing ---
-    const runBatch = this.db.transaction(() => {
-      for (const params of paramsList) {
-        const result = stmt.run(...(TdbcBindings.normalize(params) ?? []));
-        totalChanges += result.changes;
-      }
-    });
-
-    try {
-      runBatch();
-      return { totalChanges, count: paramsList.length };
-    } catch (cause) {
-      throw new TdbcError("BATCH_FAILED", "Batch execution failed", {
-        driver: "better-sqlite3",
-        cause,
-      });
+    querySync<T extends Row = Row>(sql: string, params?: SqlParams): T[] {
+        this.assertOpen();
+        try {
+            const stmt = this.db.prepare(sql);
+            const args = TdbcBindings.normalize(params) ?? [];
+            const rawRows = stmt.all(...args) as Record<string, unknown>[];
+            return rawRows.map((r) => RowMapper.map(r) as T);
+        } catch (cause) {
+            throw this.wrapSqlite(cause);
+        }
     }
-  }
 
-  private assertOpen(): void {
-    if (this.closed) {
-      throw new TdbcError("CONNECTION_CLOSED", "Connection is closed", {
-        driver: "better-sqlite3",
-      });
+    batchSync(sql: string, paramsList: BindingsList): BatchResult {
+        this.assertOpen();
+        if (paramsList.length === 0) {
+            return { totalChanges: 0, count: 0 };
+        }
+
+        const stmt = this.db.prepare(sql);
+        let totalChanges = 0;
+
+        // --- batch boundary: single SQLite transaction, all-or-nothing ---
+        const runBatch = this.db.transaction(() => {
+            for (const params of paramsList) {
+                const result = stmt.run(...(TdbcBindings.normalize(params) ?? []));
+                totalChanges += result.changes;
+            }
+        });
+
+        try {
+            runBatch();
+            return { totalChanges, count: paramsList.length };
+        } catch (cause) {
+            throw new TdbcError("BATCH_FAILED", "Batch execution failed", {
+                driver: "better-sqlite3",
+                cause,
+            });
+        }
     }
-  }
 
-  private wrapSqlite(cause: unknown): TdbcError {
-    return new TdbcError("SQLITE_ERROR", cause instanceof Error ? cause.message : String(cause), { driver: "better-sqlite3", cause },);
-  }
+    private assertOpen(): void {
+        if (this.closed) {
+            throw new TdbcError("CONNECTION_CLOSED", "Connection is closed", {
+                driver: "better-sqlite3",
+            });
+        }
+    }
+
+    private wrapSqlite(cause: unknown): TdbcError {
+        return new TdbcError("SQLITE_ERROR", cause instanceof Error ? cause.message : String(cause), { driver: "better-sqlite3", cause },);
+    }
 }
 
 /**
@@ -155,25 +155,25 @@ export class BetterSqlite3Connection implements TdbcConnection {
  * 断言误判。套上 async 后，无论 sync 层怎么抛，对调用方来说都是 rejection。
  */
 class TransactionalConnection implements TdbcConnection {
-  constructor(private readonly parent: BetterSqlite3Connection) {}
+    constructor(private readonly parent: BetterSqlite3Connection) {}
 
-  async execute(sql: string, params?: SqlParams): Promise<ExecuteResult> {
-    return this.parent.executeSync(sql, params);
-  }
+    async execute(sql: string, params?: SqlParams): Promise<ExecuteResult> {
+        return this.parent.executeSync(sql, params);
+    }
 
-  async query<T extends Row = Row>(sql: string, params?: SqlParams,): Promise<T[]> {
-    return this.parent.querySync<T>(sql, params);
-  }
+    async query<T extends Row = Row>(sql: string, params?: SqlParams,): Promise<T[]> {
+        return this.parent.querySync<T>(sql, params);
+    }
 
-  async batch(sql: string, paramsList: BindingsList): Promise<BatchResult> {
-    return this.parent.batchSync(sql, paramsList);
-  }
+    async batch(sql: string, paramsList: BindingsList): Promise<BatchResult> {
+        return this.parent.batchSync(sql, paramsList);
+    }
 
-  transaction<T>(_fn: (tx: TdbcConnection) => Promise<T>): Promise<T> {
-    return Promise.reject(new TdbcError("NESTED_TRANSACTION", "Nested transactions are not supported", { driver: "better-sqlite3" },),);
-  }
+    transaction<T>(_fn: (tx: TdbcConnection) => Promise<T>): Promise<T> {
+        return Promise.reject(new TdbcError("NESTED_TRANSACTION", "Nested transactions are not supported", { driver: "better-sqlite3" },),);
+    }
 
-  close(): Promise<void> {
-    return this.parent.close();
-  }
+    close(): Promise<void> {
+        return this.parent.close();
+    }
 }

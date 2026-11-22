@@ -12,33 +12,33 @@ import {UpdateCheckHost} from './components/update/UpdateCheckHost';
 import {RootNavigator} from './navigation/RootNavigator';
 
 function AppContent() {
-  const {mode} = useTheme();
+    const {mode} = useTheme();
 
-  return (
-    <>
-      <StatusBar
-        barStyle={mode === 'dark' ? 'light-content' : 'dark-content'}
-      />
-      <ToastHost>
-        <RootNavigator />
-        <UpdateCheckHost />
-      </ToastHost>
-    </>
-  );
+    return (
+        <>
+            <StatusBar
+                barStyle={mode === 'dark' ? 'light-content' : 'dark-content'}
+            />
+            <ToastHost>
+                <RootNavigator />
+                <UpdateCheckHost />
+            </ToastHost>
+        </>
+    );
 }
 
 function App() {
-  return (
-    <SafeAreaProvider>
-      <KeyboardProvider preload={false}>
-        <NovelMasterProvider>
-          <ThemeProvider>
-            <AppContent />
-          </ThemeProvider>
-        </NovelMasterProvider>
-      </KeyboardProvider>
-    </SafeAreaProvider>
-  );
+    return (
+        <SafeAreaProvider>
+            <KeyboardProvider preload={false}>
+                <NovelMasterProvider>
+                    <ThemeProvider>
+                        <AppContent />
+                    </ThemeProvider>
+                </NovelMasterProvider>
+            </KeyboardProvider>
+        </SafeAreaProvider>
+    );
 }
 
 export default App;

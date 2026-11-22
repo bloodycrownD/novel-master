@@ -11,10 +11,10 @@
  */
 
 export {
-  DbMaintenance,
+    DbMaintenance,
 } from "./impl/db-maintenance.service.js";
 export type {
-  DatabaseMaintenanceResult,
-  DbMaintenanceService,
-  StorageStats,
+    DatabaseMaintenanceResult,
+    DbMaintenanceService,
+    StorageStats,
 } from "./db-maintenance.port.js";

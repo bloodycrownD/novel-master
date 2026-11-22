@@ -8,13 +8,13 @@
  * SQL 绑定参数归一化。
  */
 export const TdbcBindings = {
-  /**
+    /**
    * Returns a new array with each `undefined` or `null` replaced by `null`.
    */
-  normalize(parameters?: readonly unknown[]): unknown[] | undefined {
-    if (parameters === undefined) {
-      return undefined;
-    }
-    return parameters.map((value) => (value === undefined ? null : value));
-  },
+    normalize(parameters?: readonly unknown[]): unknown[] | undefined {
+        if (parameters === undefined) {
+            return undefined;
+        }
+        return parameters.map((value) => (value === undefined ? null : value));
+    },
 } as const;

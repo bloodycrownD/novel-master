@@ -41,10 +41,10 @@ export { DeferredFileCacheGc } from "./domain/session-kkv/logic/deferred-file-ca
  * 数据备份：导出时清除、导入时保留 provider 三表。
  */
 export {
-  DB_BACKUP_PROVIDER_TABLES,
-  ProviderTableSnapshotIo,
-  SqliteBackupHeader,
-  DatabaseBackupExport,
+    DB_BACKUP_PROVIDER_TABLES,
+    ProviderTableSnapshotIo,
+    SqliteBackupHeader,
+    DatabaseBackupExport,
 } from "./infra/db-backup/index.js";
 export type { ProviderBackupTableName, ProviderTableSnapshot } from "./infra/db-backup/index.js";
 
@@ -64,26 +64,26 @@ export type { DatabaseMaintenanceResult, DbMaintenanceService, StorageStats } fr
  * 跨端云同步：协调器、租约锁、status schema 与导入换代哨兵。
  */
 export {
-  CloudSyncCoordinator,
-  DefaultPushAgentMutex,
-  CloudSyncStatusParser,
-  EMPTY_CLOUD_SYNC_STATUS,
-  CloudSyncLease,
-  DEFAULT_LEASE_SECONDS,
-  CloudSyncPaths,
+    CloudSyncCoordinator,
+    DefaultPushAgentMutex,
+    CloudSyncStatusParser,
+    EMPTY_CLOUD_SYNC_STATUS,
+    CloudSyncLease,
+    DEFAULT_LEASE_SECONDS,
+    CloudSyncPaths,
 } from "./infra/cloud-sync/index.js";
 export type {
-  ObjectStorageHeadResult,
-  ObjectStoragePort,
-  DbSyncPort,
-  CloudSyncLock,
-  CloudSyncStatus,
-  CloudSyncConfigInput,
-  CloudSyncCoordinatorDeps,
-  PullOptions,
-  PullResult,
-  PushOptions,
-  PushResult,
+    ObjectStorageHeadResult,
+    ObjectStoragePort,
+    DbSyncPort,
+    CloudSyncLock,
+    CloudSyncStatus,
+    CloudSyncConfigInput,
+    CloudSyncCoordinatorDeps,
+    PullOptions,
+    PullResult,
+    PushOptions,
+    PushResult,
 } from "./infra/cloud-sync/index.js";
 
 /**
@@ -100,19 +100,19 @@ export type { PersistentState } from "./service/persistent-state/persistent-stat
 export { createPersistentPreferences } from "./service/persistent-preferences/create-persistent-preferences.js";
 export type { PersistentPreferences } from "./service/persistent-preferences/persistent-preferences.port.js";
 export {
-  PREFERENCES_MODULE,
-  PREF_KEY_CHAT_LLM_STREAM,
-  PREF_KEY_CHAT_SUBAGENT_STREAM,
-  PREF_KEY_CHAT_THINKING_CONTEXT,
-  PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN,
+    PREFERENCES_MODULE,
+    PREF_KEY_CHAT_LLM_STREAM,
+    PREF_KEY_CHAT_SUBAGENT_STREAM,
+    PREF_KEY_CHAT_THINKING_CONTEXT,
+    PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN,
 } from "./service/persistent-preferences/impl/preference-keys.js";
 export {
-  WORKSPACE_STATE_MODULE,
-  KEY_CURRENT_PROJECT_ID,
-  KEY_CURRENT_SESSION_ID,
-  KEY_CURRENT_PROVIDER_ID,
-  KEY_CURRENT_MODEL_ID,
-  KEY_CURRENT_AGENT_ID,
+    WORKSPACE_STATE_MODULE,
+    KEY_CURRENT_PROJECT_ID,
+    KEY_CURRENT_SESSION_ID,
+    KEY_CURRENT_PROVIDER_ID,
+    KEY_CURRENT_MODEL_ID,
+    KEY_CURRENT_AGENT_ID,
 } from "./service/persistent-state/impl/workspace-state-keys.js";
 /**
  * Tool 运行时：注册表、执行器与内置 `vfs.*` 工具。

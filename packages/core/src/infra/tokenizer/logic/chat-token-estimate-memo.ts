@@ -43,9 +43,9 @@ import { ContentHash } from "@/domain/vfs/content-store/logic/hash-content.js";
 
 /** 记忆条目：与 `ResolvedPromptTokens` 的 local 分支同构（source 恒 local）。 */
 interface ChatTokenEstimateMemoEntry {
-  readonly tokenCount: number;
-  readonly estimated: boolean;
-  readonly counterKind: string;
+    readonly tokenCount: number;
+    readonly estimated: boolean;
+    readonly counterKind: string;
 }
 
 /** 每会话一条（最新键覆盖旧键）：消息一变键就变，旧条目自然被挤掉。 */
@@ -71,34 +71,34 @@ const LAYOUT_DIGEST_HEX_LENGTH = 16;
 const workplaceEstimateByFp = new Map<string, number>();
 
 export const ChatTokenEstimateMemo = {
-  /** 指纹估读命中；miss 返回 null（调用方现算并回填）。 */
-  // nm-style: keep-local — workplaceEstimateByFp 的读口，与回填成对维护该表的不变量
-  lookupWorkplaceEstimateByFingerprint: (fingerprint: string): number | null =>
-    workplaceEstimateByFp.get(fingerprint) ?? null,
+    /** 指纹估读命中；miss 返回 null（调用方现算并回填）。 */
+    // nm-style: keep-local — workplaceEstimateByFp 的读口，与回填成对维护该表的不变量
+    lookupWorkplaceEstimateByFingerprint: (fingerprint: string): number | null =>
+        workplaceEstimateByFp.get(fingerprint) ?? null,
 
-  /** 回填指纹估读（覆盖式）。容量上界：指纹随文件 mtime 演进，旧条目不再被
+    /** 回填指纹估读（覆盖式）。容量上界：指纹随文件 mtime 演进，旧条目不再被
    * 查询——按 64 条 LRU 式截断（超限删最旧插入序），防长会话漂移累积。 */
-  // nm-style: keep-local — workplaceEstimateByFp 的写口，负责 64 条容量上界不变量
-  rememberWorkplaceEstimateByFingerprint: (fingerprint: string, estimate: number): void => {
-    if (!workplaceEstimateByFp.has(fingerprint) && workplaceEstimateByFp.size >= 64) {
-      const oldest = workplaceEstimateByFp.keys().next().value;
-      if (oldest != null) {
-        workplaceEstimateByFp.delete(oldest);
-      }
-    }
-    workplaceEstimateByFp.set(fingerprint, estimate);
-  },
+    // nm-style: keep-local — workplaceEstimateByFp 的写口，负责 64 条容量上界不变量
+    rememberWorkplaceEstimateByFingerprint: (fingerprint: string, estimate: number): void => {
+        if (!workplaceEstimateByFp.has(fingerprint) && workplaceEstimateByFp.size >= 64) {
+            const oldest = workplaceEstimateByFp.keys().next().value;
+            if (oldest != null) {
+                workplaceEstimateByFp.delete(oldest);
+            }
+        }
+        workplaceEstimateByFp.set(fingerprint, estimate);
+    },
 
-  /** 命中条件 = 会话在册且键逐字符相同；否则 null（调用方按 miss 走全价路径）。 */
-  lookup: (sessionId: string, key: string): ChatTokenEstimateMemoEntry | null => {
-    const hit = memo.get(sessionId);
-    if (hit != null && hit.key === key) {
-      return hit.entry;
-    }
-    return null;
-  },
+    /** 命中条件 = 会话在册且键逐字符相同；否则 null（调用方按 miss 走全价路径）。 */
+    lookup: (sessionId: string, key: string): ChatTokenEstimateMemoEntry | null => {
+        const hit = memo.get(sessionId);
+        if (hit != null && hit.key === key) {
+            return hit.entry;
+        }
+        return null;
+    },
 
-  /**
+    /**
    * 覆盖式记忆（估算与精确两分支共用同一键空间，见模块头「也存精确档」）。
    *
    * 两条边界：
@@ -110,36 +110,36 @@ export const ChatTokenEstimateMemo = {
    * - **容量（r4q-5）**：新会话使条目数超过 {@link MEMO_MAX_SESSIONS} 时逐出
    *   最旧插入序（已有会话的覆盖写不触发逐出）。
    */
-  remember: (sessionId: string, key: string, entry: ChatTokenEstimateMemoEntry): void => {
-    const existing = memo.get(sessionId);
-    if (
-      existing != null &&
-      existing.key === key &&
-      existing.entry.estimated === false &&
-      entry.estimated === true
-    ) {
-      return;
-    }
-    if (!memo.has(sessionId) && memo.size >= MEMO_MAX_SESSIONS) {
-      const oldest = memo.keys().next().value;
-      if (oldest != null) {
-        memo.delete(oldest);
-      }
-    }
-    memo.set(sessionId, {key, entry});
-  },
+    remember: (sessionId: string, key: string, entry: ChatTokenEstimateMemoEntry): void => {
+        const existing = memo.get(sessionId);
+        if (
+            existing != null &&
+            existing.key === key &&
+            existing.entry.estimated === false &&
+            entry.estimated === true
+        ) {
+            return;
+        }
+        if (!memo.has(sessionId) && memo.size >= MEMO_MAX_SESSIONS) {
+            const oldest = memo.keys().next().value;
+            if (oldest != null) {
+                memo.delete(oldest);
+            }
+        }
+        memo.set(sessionId, {key, entry});
+    },
 
-  /** 仅测试用：清全部或指定会话。 */
-  clear: (sessionId?: string): void => {
-    if (sessionId == null) {
-      memo.clear();
-      workplaceEstimateByFp.clear();
-    } else {
-      memo.delete(sessionId);
-    }
-  },
+    /** 仅测试用：清全部或指定会话。 */
+    clear: (sessionId?: string): void => {
+        if (sessionId == null) {
+            memo.clear();
+            workplaceEstimateByFp.clear();
+        } else {
+            memo.delete(sessionId);
+        }
+    },
 
-  /**
+    /**
    * 消息尾戳：数量 + 末条 seq + blocks 折算长度和。
    *
    * 长度和用 `JSON.stringify(blocks).length`（一次小序列化，消息体远小于
@@ -148,19 +148,19 @@ export const ChatTokenEstimateMemo = {
    *
    * nm-style: keep-local — 尾戳三段（数量/末 seq/长度和）是「同键 ⇒ 产物同值」的判定契约
    */
-  stampMessages: (messages: readonly ChatMessageData[]): string => {
-    let lenSum = 0;
-    let lastSeq = 0;
-    for (const m of messages) {
-      lenSum += JSON.stringify(m.content).length;
-      if (m.seq > lastSeq) {
-        lastSeq = m.seq;
-      }
-    }
-    return `${messages.length}:${lastSeq}:${lenSum}`;
-  },
+    stampMessages: (messages: readonly ChatMessageData[]): string => {
+        let lenSum = 0;
+        let lastSeq = 0;
+        for (const m of messages) {
+            lenSum += JSON.stringify(m.content).length;
+            if (m.seq > lastSeq) {
+                lastSeq = m.seq;
+            }
+        }
+        return `${messages.length}:${lastSeq}:${lenSum}`;
+    },
 
-  /**
+    /**
    * layout 摘要（r4-core-1）：键的第五段。
    *
    * 覆盖 agent 定义里**所有参与序列化的布局字段**——三区文本（system/persist/
@@ -172,22 +172,22 @@ export const ChatTokenEstimateMemo = {
    * 成本：layout 只有几千字符，一次 JSON.stringify + sha256 相对整串
    * serialize/hash/count 线性扫可忽略。
    */
-  digestLayout: (layout: AgentPromptLayout): string => {
-    const serialized = JSON.stringify({
-      system: layout.system,
-      persistEnabled: layout.persistEnabled,
-      persist: layout.persist,
-      dynamicEnabled: layout.dynamicEnabled,
-      dynamic: layout.dynamic,
-      workplace: layout.workplace,
-      customAttach: layout.customAttach,
-      skillsEnabled: layout.skillsEnabled,
-      skillsPrefix: layout.skillsPrefix,
-    });
-    return ContentHash.hash(serialized).slice(0, LAYOUT_DIGEST_HEX_LENGTH);
-  },
+    digestLayout: (layout: AgentPromptLayout): string => {
+        const serialized = JSON.stringify({
+            system: layout.system,
+            persistEnabled: layout.persistEnabled,
+            persist: layout.persist,
+            dynamicEnabled: layout.dynamicEnabled,
+            dynamic: layout.dynamic,
+            workplace: layout.workplace,
+            customAttach: layout.customAttach,
+            skillsEnabled: layout.skillsEnabled,
+            skillsPrefix: layout.skillsPrefix,
+        });
+        return ContentHash.hash(serialized).slice(0, LAYOUT_DIGEST_HEX_LENGTH);
+    },
 
-  /**
+    /**
    * 组装记忆键：`模型 id | workplace 指纹 | 消息尾戳 | tools 折算长度 | layout
    * 摘要`（段序固定，layout 段追加在尾部）。`workplaceFingerprint` 缺省（调用方
    * 没走 assemble / 旧路径）或 `layout` 缺省时返回 null——没有前缀指纹或布局
@@ -201,26 +201,26 @@ export const ChatTokenEstimateMemo = {
    *
    * nm-style: keep-local — 记忆键五段契约的单一组装点，与 memo 查找/回填同模块
    */
-  buildKey: (params: {
-    readonly savedModelId: string | undefined;
-    readonly workplaceFingerprint: string | undefined;
-    readonly messages: readonly ChatMessageData[] | undefined;
-    readonly tools: unknown;
-    readonly layout: AgentPromptLayout | undefined;
-  }): string | null => {
-    const fp = params.workplaceFingerprint;
-    if (fp == null || params.layout == null) {
-      return null;
-    }
-    const msgStamp = params.messages == null ? "0::0" : ChatTokenEstimateMemo.stampMessages(params.messages);
-    // tools 折算长度（tools 集随 agent 定义变，长度异即 miss；消息体同款取舍）。
-    let toolsStamp: string;
-    try {
-      toolsStamp = params.tools == null ? "0" : String(JSON.stringify(params.tools).length);
-    } catch {
-      toolsStamp = "unserializable";
-    }
-    const parts = [params.savedModelId ?? "none", fp, msgStamp, toolsStamp, ChatTokenEstimateMemo.digestLayout(params.layout)];
-    return parts.join("|");
-  },
+    buildKey: (params: {
+        readonly savedModelId: string | undefined;
+        readonly workplaceFingerprint: string | undefined;
+        readonly messages: readonly ChatMessageData[] | undefined;
+        readonly tools: unknown;
+        readonly layout: AgentPromptLayout | undefined;
+    }): string | null => {
+        const fp = params.workplaceFingerprint;
+        if (fp == null || params.layout == null) {
+            return null;
+        }
+        const msgStamp = params.messages == null ? "0::0" : ChatTokenEstimateMemo.stampMessages(params.messages);
+        // tools 折算长度（tools 集随 agent 定义变，长度异即 miss；消息体同款取舍）。
+        let toolsStamp: string;
+        try {
+            toolsStamp = params.tools == null ? "0" : String(JSON.stringify(params.tools).length);
+        } catch {
+            toolsStamp = "unserializable";
+        }
+        const parts = [params.savedModelId ?? "none", fp, msgStamp, toolsStamp, ChatTokenEstimateMemo.digestLayout(params.layout)];
+        return parts.join("|");
+    },
 } as const;

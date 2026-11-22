@@ -2,38 +2,38 @@ import type { WorkplaceListRowDto, WorkspacePanelScope } from "@shared/ipc-types
 import { coreT } from "@shared/logic/core-i18n";
 
 export type WorkspaceContextTarget =
-  | {
-      readonly kind: "blank";
-      readonly panelScope: WorkspacePanelScope;
-      readonly x: number;
-      readonly y: number;
-    }
-  | {
-      readonly kind: "row";
-      readonly panelScope: WorkspacePanelScope;
-      readonly row: WorkplaceListRowDto;
-      readonly x: number;
-      readonly y: number;
-    };
+    | {
+            readonly kind: "blank";
+            readonly panelScope: WorkspacePanelScope;
+            readonly x: number;
+            readonly y: number;
+        }
+    | {
+            readonly kind: "row";
+            readonly panelScope: WorkspacePanelScope;
+            readonly row: WorkplaceListRowDto;
+            readonly x: number;
+            readonly y: number;
+        };
 
 export function parentPathForTarget(target: WorkspaceContextTarget): string {
-  if (target.kind === "blank") {
-    return "/";
-  }
-  return target.row.kind === "dir" ? target.row.path : "/";
+    if (target.kind === "blank") {
+        return "/";
+    }
+    return target.row.kind === "dir" ? target.row.path : "/";
 }
 
 /**
  * ZIP 子树目标：blank ≡ `/`；目录行（含域根 `/`）为其 path；文件行无 ZIP。
  */
 export function zipDirectoryPathForTarget( target: WorkspaceContextTarget ): string | null {
-  if (target.kind === "blank") {
-    return "/";
-  }
-  if (target.row.kind === "dir") {
-    return target.row.path;
-  }
-  return null;
+    if (target.kind === "blank") {
+        return "/";
+    }
+    if (target.row.kind === "dir") {
+        return target.row.path;
+    }
+    return null;
 }
 
 /**
@@ -43,10 +43,10 @@ export function zipDirectoryPathForTarget( target: WorkspaceContextTarget ): str
  * 单文件另存，两者各管一半，测试对称断言。
  */
 export function exportFilePathForTarget( target: WorkspaceContextTarget ): string | null {
-  if (target.kind === "row" && target.row.kind === "file") {
-    return target.row.path;
-  }
-  return null;
+    if (target.kind === "row" && target.row.kind === "file") {
+        return target.row.path;
+    }
+    return null;
 }
 
 /**
@@ -55,43 +55,43 @@ export function exportFilePathForTarget( target: WorkspaceContextTarget ): strin
  * 导出类型直达——文件导单文件、目录导 ZIP 子树，无需确认。
  */
 export function workspaceMenuItems(target: WorkspaceContextTarget): Array<{
-  action: string;
-  label: string;
-  danger?: boolean;
+    action: string;
+    label: string;
+    danger?: boolean;
 }> {
-  if (target.kind === "blank") {
-    return [
-      { action: "create-file", label: coreT({key: "ui.vfs.create_file"}) },
-      { action: "create-folder", label: coreT({key: "ui.vfs.menu_create_folder"}) },
-      { action: "import", label: coreT({key: "ui.common.import"}) },
-      { action: "export", label: coreT({key: "ui.common.export"}) },
-    ];
-  }
+    if (target.kind === "blank") {
+        return [
+            { action: "create-file", label: coreT({key: "ui.vfs.create_file"}) },
+            { action: "create-folder", label: coreT({key: "ui.vfs.menu_create_folder"}) },
+            { action: "import", label: coreT({key: "ui.common.import"}) },
+            { action: "export", label: coreT({key: "ui.common.export"}) },
+        ];
+    }
 
-  const isDir = target.row.kind === "dir";
-  if (isDir) {
-    return [
-      { action: "create-file", label: coreT({key: "ui.vfs.create_file"}) },
-      { action: "create-folder", label: coreT({key: "ui.vfs.menu_create_folder"}) },
-      { action: "import", label: coreT({key: "ui.common.import"}) },
-      { action: "export", label: coreT({key: "ui.common.export"}) },
-      { action: "rule-config", label: coreT({key: "ui.vfs.menu_rules_config"}) },
-      { action: "rename", label: coreT({key: "ui.common.rename"}) },
-      { action: "delete", label: coreT({key: "ui.vfs.menu_delete_folder"}), danger: true },
-    ];
-  }
+    const isDir = target.row.kind === "dir";
+    if (isDir) {
+        return [
+            { action: "create-file", label: coreT({key: "ui.vfs.create_file"}) },
+            { action: "create-folder", label: coreT({key: "ui.vfs.menu_create_folder"}) },
+            { action: "import", label: coreT({key: "ui.common.import"}) },
+            { action: "export", label: coreT({key: "ui.common.export"}) },
+            { action: "rule-config", label: coreT({key: "ui.vfs.menu_rules_config"}) },
+            { action: "rename", label: coreT({key: "ui.common.rename"}) },
+            { action: "delete", label: coreT({key: "ui.vfs.menu_delete_folder"}), danger: true },
+        ];
+    }
 
-  return [
-    { action: "file-inclusion", label: coreT({key: "ui.vfs.menu_status_settings"}) },
-    { action: "export", label: coreT({key: "ui.common.export"}) },
-    { action: "rename", label: coreT({key: "ui.common.rename"}) },
-    { action: "delete", label: coreT({key: "ui.vfs.menu_delete_file"}), danger: true },
-  ];
+    return [
+        { action: "file-inclusion", label: coreT({key: "ui.vfs.menu_status_settings"}) },
+        { action: "export", label: coreT({key: "ui.common.export"}) },
+        { action: "rename", label: coreT({key: "ui.common.rename"}) },
+        { action: "delete", label: coreT({key: "ui.vfs.menu_delete_file"}), danger: true },
+    ];
 }
 
 /** 导入 ZIP 确认文案（子树覆盖语义：目标目录下全部内容）。 */
 export function zipImportConfirmMessage(directoryPath: string): string {
-  return coreT({key: "ui.vfs.import_overwrite_confirm_desktop", params: {path: directoryPath === "/" ? coreT({key: "ui.vfs.target_root"}) : directoryPath}});
+    return coreT({key: "ui.vfs.import_overwrite_confirm_desktop", params: {path: directoryPath === "/" ? coreT({key: "ui.vfs.target_root"}) : directoryPath}});
 }
 
 /**
@@ -102,7 +102,7 @@ export function zipImportConfirmMessage(directoryPath: string): string {
  * 按错误的预期点确认。
  */
 export function characterCardImportConfirmMessage( directoryPath: string ): string {
-  return coreT({key: "ui.vfs.import_card_confirm_desktop", params: {path: directoryPath === "/" ? coreT({key: "ui.vfs.target_root"}) : directoryPath}});
+    return coreT({key: "ui.vfs.import_card_confirm_desktop", params: {path: directoryPath === "/" ? coreT({key: "ui.vfs.target_root"}) : directoryPath}});
 }
 
 /**
@@ -112,5 +112,5 @@ export function characterCardImportConfirmMessage( directoryPath: string ): stri
  * 免得第四处消费点出现时又抄出第二句措辞。
  */
 export function batchIngestOverwriteMessage(conflictCount: number): string {
-  return coreT({key: "ui.vfs.conflict_confirm_desktop", params: {count: conflictCount}});
+    return coreT({key: "ui.vfs.conflict_confirm_desktop", params: {count: conflictCount}});
 }

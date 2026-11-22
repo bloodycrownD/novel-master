@@ -14,88 +14,88 @@ import type {AppUiPreferences} from '@/storage/app-ui-prefs';
 
 /** 内存 KKV 形状的 appUi（照 message-notification-pref.test.ts 的模式）。 */
 function appUiWith(raw: Record<string, string | undefined>): AppUiPreferences {
-  return {
-    get: jest.fn(async (key: string) => ({
-      ok: true as const,
-      value: raw[key],
-    })),
-    set: jest.fn(async () => undefined),
-    delete: jest.fn(async () => ({ok: true as const, value: undefined})),
-    listKeys: jest.fn(async () => []),
-  };
+    return {
+        get: jest.fn(async (key: string) => ({
+            ok: true as const,
+            value: raw[key],
+        })),
+        set: jest.fn(async () => undefined),
+        delete: jest.fn(async () => ({ok: true as const, value: undefined})),
+        listKeys: jest.fn(async () => []),
+    };
 }
 
 describe('keepalive-resident-boot', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    AgentFinishedNotification.resetKeepAliveStateForTests();
-  });
-
-  afterEach(() => {
-    // 退出前复位保活模块级状态，防 resident 态泄漏到其它测试文件。
-    AgentFinishedNotification.resetKeepAliveStateForTests();
-  });
-
-  describe('T-K8 ensureKeepAliveResidentBoot', () => {
-    const originalOS = Platform.OS;
-
     beforeEach(() => {
-      // jest 环境默认 iOS，而常驻链路带 Android 平台门禁（svc/B-1）——
-      // 本组用例验证的是开关语义，须显式切到 Android。
-      (Platform as {OS: string}).OS = 'android';
+        jest.clearAllMocks();
+        AgentFinishedNotification.resetKeepAliveStateForTests();
     });
 
     afterEach(() => {
-      (Platform as {OS: string}).OS = originalOS;
+        // 退出前复位保活模块级状态，防 resident 态泄漏到其它测试文件。
+        AgentFinishedNotification.resetKeepAliveStateForTests();
     });
 
-    it('开关开：拉起常驻空闲通知（asForegroundService + ongoing）', async () => {
-      const appUi = appUiWith({messageNotification: 'true'});
-      await NovelMasterContextHelpers.ensureKeepAliveResidentBoot(appUi);
-      expect(notifee.displayNotification).toHaveBeenCalledTimes(1);
-      expect(notifee.displayNotification).toHaveBeenCalledWith(
-        expect.objectContaining({
-          id: 'nm-agent-keepalive',
-          title: 'novel master · 空闲',
-          android: expect.objectContaining({
-            asForegroundService: true,
-            ongoing: true,
-          }),
-        }),
-      );
+    describe('T-K8 ensureKeepAliveResidentBoot', () => {
+        const originalOS = Platform.OS;
+
+        beforeEach(() => {
+            // jest 环境默认 iOS，而常驻链路带 Android 平台门禁（svc/B-1）——
+            // 本组用例验证的是开关语义，须显式切到 Android。
+            (Platform as {OS: string}).OS = 'android';
+        });
+
+        afterEach(() => {
+            (Platform as {OS: string}).OS = originalOS;
+        });
+
+        it('开关开：拉起常驻空闲通知（asForegroundService + ongoing）', async () => {
+            const appUi = appUiWith({messageNotification: 'true'});
+            await NovelMasterContextHelpers.ensureKeepAliveResidentBoot(appUi);
+            expect(notifee.displayNotification).toHaveBeenCalledTimes(1);
+            expect(notifee.displayNotification).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    id: 'nm-agent-keepalive',
+                    title: 'novel master · 空闲',
+                    android: expect.objectContaining({
+                        asForegroundService: true,
+                        ongoing: true,
+                    }),
+                }),
+            );
+        });
+
+        it('开关关：零拉起', async () => {
+            const appUi = appUiWith({messageNotification: 'false'});
+            await NovelMasterContextHelpers.ensureKeepAliveResidentBoot(appUi);
+            expect(notifee.displayNotification).not.toHaveBeenCalled();
+            expect(notifee.stopForegroundService).not.toHaveBeenCalled();
+        });
+
+        it('appUi 未就绪（undefined）：守卫分支直接返回，不抛错零拉起', async () => {
+            await expect(
+                NovelMasterContextHelpers.ensureKeepAliveResidentBoot(undefined),
+            ).resolves.toBeUndefined();
+            expect(notifee.displayNotification).not.toHaveBeenCalled();
+            expect(notifee.stopForegroundService).not.toHaveBeenCalled();
+        });
     });
 
-    it('开关关：零拉起', async () => {
-      const appUi = appUiWith({messageNotification: 'false'});
-      await NovelMasterContextHelpers.ensureKeepAliveResidentBoot(appUi);
-      expect(notifee.displayNotification).not.toHaveBeenCalled();
-      expect(notifee.stopForegroundService).not.toHaveBeenCalled();
-    });
+    describe('T-K9 createNotificationPrefBridge', () => {
+        it('getAppUi 未就绪：降级口径为 false', async () => {
+            const bridge = NovelMasterContextHelpers.createNotificationPrefBridge(() => undefined);
+            await expect(bridge.isNotificationEnabled()).resolves.toBe(false);
+        });
 
-    it('appUi 未就绪（undefined）：守卫分支直接返回，不抛错零拉起', async () => {
-      await expect(
-        NovelMasterContextHelpers.ensureKeepAliveResidentBoot(undefined),
-      ).resolves.toBeUndefined();
-      expect(notifee.displayNotification).not.toHaveBeenCalled();
-      expect(notifee.stopForegroundService).not.toHaveBeenCalled();
+        it('appUi 就绪：按存储值读取（开 → true，关 → false）', async () => {
+            const on = NovelMasterContextHelpers.createNotificationPrefBridge(() =>
+                appUiWith({messageNotification: 'true'}),
+            );
+            await expect(on.isNotificationEnabled()).resolves.toBe(true);
+            const off = NovelMasterContextHelpers.createNotificationPrefBridge(() =>
+                appUiWith({messageNotification: 'false'}),
+            );
+            await expect(off.isNotificationEnabled()).resolves.toBe(false);
+        });
     });
-  });
-
-  describe('T-K9 createNotificationPrefBridge', () => {
-    it('getAppUi 未就绪：降级口径为 false', async () => {
-      const bridge = NovelMasterContextHelpers.createNotificationPrefBridge(() => undefined);
-      await expect(bridge.isNotificationEnabled()).resolves.toBe(false);
-    });
-
-    it('appUi 就绪：按存储值读取（开 → true，关 → false）', async () => {
-      const on = NovelMasterContextHelpers.createNotificationPrefBridge(() =>
-        appUiWith({messageNotification: 'true'}),
-      );
-      await expect(on.isNotificationEnabled()).resolves.toBe(true);
-      const off = NovelMasterContextHelpers.createNotificationPrefBridge(() =>
-        appUiWith({messageNotification: 'false'}),
-      );
-      await expect(off.isNotificationEnabled()).resolves.toBe(false);
-    });
-  });
 });

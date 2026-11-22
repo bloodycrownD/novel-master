@@ -13,264 +13,264 @@ import {useTheme} from '../../theme/ThemeProvider';
 import {coreT} from '../../i18n/core';
 
 type Props = {
-  visible: boolean;
-  logicalPath: string;
-  initial?: Partial<SetDirRuleInput>;
-  /** When true, rule must stay enabled (scope root). */
-  rootRuleLocked?: boolean;
-  onClose: () => void;
-  onSave: (input: SetDirRuleInput) => Promise<void>;
+    visible: boolean;
+    logicalPath: string;
+    initial?: Partial<SetDirRuleInput>;
+    /** When true, rule must stay enabled (scope root). */
+    rootRuleLocked?: boolean;
+    onClose: () => void;
+    onSave: (input: SetDirRuleInput) => Promise<void>;
 };
 
 // 4 项横排 chip 会换行把面板顶出滚动区，排序方式改 PickerListModal 单选
 // （智能排序列表首项，照 ModelPickerModal 先例），表单内只留一行当前值。
 const SORT_FIELDS: {value: SortField; label: string}[] = [
-  {value: 'smart', label: coreT({key: "ui.nav.settings_smart_sort"})},
-  {value: 'name', label: coreT({key: "ui.vfs.sort_by_name"})},
-  {value: 'created', label: coreT({key: "ui.vfs.sort_by_created"})},
-  {value: 'updated', label: coreT({key: "ui.vfs.sort_by_updated"})},
+    {value: 'smart', label: coreT({key: "ui.nav.settings_smart_sort"})},
+    {value: 'name', label: coreT({key: "ui.vfs.sort_by_name"})},
+    {value: 'created', label: coreT({key: "ui.vfs.sort_by_created"})},
+    {value: 'updated', label: coreT({key: "ui.vfs.sort_by_updated"})},
 ];
 
 const SORT_ORDERS: {value: SortOrder; label: string}[] = [
-  {value: 'asc', label: coreT({key: "ui.vfs.sort_asc"})},
-  {value: 'desc', label: coreT({key: "ui.vfs.sort_desc"})},
+    {value: 'asc', label: coreT({key: "ui.vfs.sort_asc"})},
+    {value: 'desc', label: coreT({key: "ui.vfs.sort_desc"})},
 ];
 
 const FILL_POLICIES: {value: FillPolicy; label: string}[] = [
-  {value: 'filename', label: coreT({key: "label.workplace.display.filename"})},
-  {value: 'header', label: coreT({key: "ui.vfs.header_field_header"})},
-  {value: 'hidden', label: coreT({key: "ui.vfs.header_field_hidden"})},
+    {value: 'filename', label: coreT({key: "label.workplace.display.filename"})},
+    {value: 'header', label: coreT({key: "ui.vfs.header_field_header"})},
+    {value: 'hidden', label: coreT({key: "ui.vfs.header_field_hidden"})},
 ];
 
 export function DirectoryRuleSheet({visible, logicalPath, initial, rootRuleLocked = false, onClose, onSave}: Props) {
-  const {tokens} = useTheme();
-  const insets = useSafeAreaInsets();
-  // 85% 高面板 + 两个数字输入：键盘避让不能只做位移（translate fraction=1
-  // 会把标题顶出屏），由 ModalShell 的 adaptive 策略「上移 + maxHeight 收缩」
-  // 处理，面板不超过屏幕剩余空间。
-  const [sortField, setSortField] = useState<SortField>(DEFAULT_WORKPLACE_DIR_RULE.sortField);
-  const [sortOrder, setSortOrder] = useState<SortOrder>(DEFAULT_WORKPLACE_DIR_RULE.sortOrder);
-  const [headCount, setHeadCount] = useState(String(DEFAULT_WORKPLACE_DIR_RULE.headCount));
-  const [tailCount, setTailCount] = useState(String(DEFAULT_WORKPLACE_DIR_RULE.tailCount));
-  const [fillPolicy, setFillPolicy] = useState<FillPolicy>(DEFAULT_WORKPLACE_DIR_RULE.fillPolicy);
-  const [ruleEnabled, setRuleEnabled] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [sortFieldPickerVisible, setSortFieldPickerVisible] = useState(false);
+    const {tokens} = useTheme();
+    const insets = useSafeAreaInsets();
+    // 85% 高面板 + 两个数字输入：键盘避让不能只做位移（translate fraction=1
+    // 会把标题顶出屏），由 ModalShell 的 adaptive 策略「上移 + maxHeight 收缩」
+    // 处理，面板不超过屏幕剩余空间。
+    const [sortField, setSortField] = useState<SortField>(DEFAULT_WORKPLACE_DIR_RULE.sortField);
+    const [sortOrder, setSortOrder] = useState<SortOrder>(DEFAULT_WORKPLACE_DIR_RULE.sortOrder);
+    const [headCount, setHeadCount] = useState(String(DEFAULT_WORKPLACE_DIR_RULE.headCount));
+    const [tailCount, setTailCount] = useState(String(DEFAULT_WORKPLACE_DIR_RULE.tailCount));
+    const [fillPolicy, setFillPolicy] = useState<FillPolicy>(DEFAULT_WORKPLACE_DIR_RULE.fillPolicy);
+    const [ruleEnabled, setRuleEnabled] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [sortFieldPickerVisible, setSortFieldPickerVisible] = useState(false);
 
-  useEffect(() => {
-    if (!visible) {
-      return;
-    }
-    setSortField(initial?.sortField ?? DEFAULT_WORKPLACE_DIR_RULE.sortField);
-    setSortOrder(initial?.sortOrder ?? DEFAULT_WORKPLACE_DIR_RULE.sortOrder);
-    setHeadCount(String(initial?.headCount ?? DEFAULT_WORKPLACE_DIR_RULE.headCount));
-    setTailCount(String(initial?.tailCount ?? DEFAULT_WORKPLACE_DIR_RULE.tailCount));
-    setFillPolicy(FillPolicyMobile.normalize(initial?.fillPolicy ?? DEFAULT_WORKPLACE_DIR_RULE.fillPolicy));
-    setRuleEnabled(rootRuleLocked ? true : initial?.ruleEnabled ?? false);
-  }, [visible, initial, logicalPath, rootRuleLocked]);
+    useEffect(() => {
+        if (!visible) {
+            return;
+        }
+        setSortField(initial?.sortField ?? DEFAULT_WORKPLACE_DIR_RULE.sortField);
+        setSortOrder(initial?.sortOrder ?? DEFAULT_WORKPLACE_DIR_RULE.sortOrder);
+        setHeadCount(String(initial?.headCount ?? DEFAULT_WORKPLACE_DIR_RULE.headCount));
+        setTailCount(String(initial?.tailCount ?? DEFAULT_WORKPLACE_DIR_RULE.tailCount));
+        setFillPolicy(FillPolicyMobile.normalize(initial?.fillPolicy ?? DEFAULT_WORKPLACE_DIR_RULE.fillPolicy));
+        setRuleEnabled(rootRuleLocked ? true : initial?.ruleEnabled ?? false);
+    }, [visible, initial, logicalPath, rootRuleLocked]);
 
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      await onSave({
-        logicalPath,
-        sortField,
-        sortOrder,
-        headCount: clampCount(headCount),
-        tailCount: clampCount(tailCount),
-        fillPolicy: FillPolicyMobile.normalize(fillPolicy),
-        ruleEnabled: rootRuleLocked ? true : ruleEnabled,
-      });
-      onClose();
-    } finally {
-      setSaving(false);
-    }
-  };
+    const handleSave = async () => {
+        setSaving(true);
+        try {
+            await onSave({
+                logicalPath,
+                sortField,
+                sortOrder,
+                headCount: clampCount(headCount),
+                tailCount: clampCount(tailCount),
+                fillPolicy: FillPolicyMobile.normalize(fillPolicy),
+                ruleEnabled: rootRuleLocked ? true : ruleEnabled,
+            });
+            onClose();
+        } finally {
+            setSaving(false);
+        }
+    };
 
-  // PickerListModal 骨架要求 load 异步；静态选项每次打开以当前 sortField 高亮。
-  const loadSortFields = useCallback(
-    async (): Promise<Result<PickerListLoadResult<{value: SortField; label: string}>, AppError>> => Result.ok({rows: SORT_FIELDS, selectedId: sortField}),
-    [sortField],
-  );
+    // PickerListModal 骨架要求 load 异步；静态选项每次打开以当前 sortField 高亮。
+    const loadSortFields = useCallback(
+        async (): Promise<Result<PickerListLoadResult<{value: SortField; label: string}>, AppError>> => Result.ok({rows: SORT_FIELDS, selectedId: sortField}),
+        [sortField],
+    );
 
-  const sheetContent = (
-    <>
-      <Text style={[styles.heading, {color: tokens.text}]}>{coreT({key: "ui.vfs.menu_directory_rule"})}</Text>
-      <ScrollView style={styles.form} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-        {/* 规则启用/关闭由文件管理的快捷开关负责，表单内不再提供开关，仅编辑规则内容；
+    const sheetContent = (
+        <>
+            <Text style={[styles.heading, {color: tokens.text}]}>{coreT({key: "ui.vfs.menu_directory_rule"})}</Text>
+            <ScrollView style={styles.form} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                {/* 规则启用/关闭由文件管理的快捷开关负责，表单内不再提供开关，仅编辑规则内容；
               ruleEnabled 沿用打开时的既有状态原样保存。 */}
-        <FieldLabel tokens={tokens} text={coreT({key: "ui.vfs.sort_mode_label"})} />
-        <Pressable
-          testID="sort-field-value-row"
-          accessibilityLabel={coreT({key: "ui.vfs.sort_mode_picker"})}
-          onPress={() => setSortFieldPickerVisible(true)}
-          style={[styles.pickerRow, {borderColor: tokens.border, backgroundColor: tokens.bgSecondary}]}
-        >
-          <Text testID="sort-field-value" style={{color: tokens.text}} numberOfLines={1}>
-            {(SORT_FIELDS.find(opt => opt.value === sortField) ?? SORT_FIELDS[0]).label}
-          </Text>
-          <Text style={[styles.chevron, {color: tokens.textTertiary}]}>›</Text>
-        </Pressable>
-        <FieldLabel tokens={tokens} text={coreT({key: "ui.vfs.sort_dir_label"})} />
-        <OptionRow options={SORT_ORDERS} value={sortOrder} onChange={setSortOrder} tokens={tokens} />
-        <FieldLabel tokens={tokens} text={coreT({key: "ui.vfs.header_count_label"})} />
-        <TextInput
-          style={[styles.input, {borderColor: tokens.border, color: tokens.text}]}
-          keyboardType="number-pad"
-          value={headCount}
-          onChangeText={setHeadCount}
-          underlineColorAndroid="transparent"
-        />
-        <FieldLabel tokens={tokens} text={coreT({key: "ui.vfs.tail_count_label"})} />
-        <TextInput
-          style={[styles.input, {borderColor: tokens.border, color: tokens.text}]}
-          keyboardType="number-pad"
-          value={tailCount}
-          onChangeText={setTailCount}
-          underlineColorAndroid="transparent"
-        />
-        <FieldLabel tokens={tokens} text={coreT({key: "ui.vfs.rest_fill_label"})} />
-        <OptionRow options={FILL_POLICIES} value={fillPolicy} onChange={setFillPolicy} tokens={tokens} />
-      </ScrollView>
-      <View style={[styles.actions, {borderTopColor: tokens.border}]}>
-        <Pressable onPress={onClose} style={styles.actionBtn}>
-          <Text style={{color: tokens.textSecondary}}>{coreT({key: "ui.common.cancel"})}</Text>
-        </Pressable>
-        <Pressable onPress={() => handleSave().catch(() => undefined)} disabled={saving} style={styles.actionBtn}>
-          <Text style={{color: tokens.primary}}>{saving ? coreT({key: "ui.common.saving"}) : coreT({key: "ui.common.save"})}</Text>
-        </Pressable>
-      </View>
-    </>
-  );
+                <FieldLabel tokens={tokens} text={coreT({key: "ui.vfs.sort_mode_label"})} />
+                <Pressable
+                    testID="sort-field-value-row"
+                    accessibilityLabel={coreT({key: "ui.vfs.sort_mode_picker"})}
+                    onPress={() => setSortFieldPickerVisible(true)}
+                    style={[styles.pickerRow, {borderColor: tokens.border, backgroundColor: tokens.bgSecondary}]}
+                >
+                    <Text testID="sort-field-value" style={{color: tokens.text}} numberOfLines={1}>
+                        {(SORT_FIELDS.find(opt => opt.value === sortField) ?? SORT_FIELDS[0]).label}
+                    </Text>
+                    <Text style={[styles.chevron, {color: tokens.textTertiary}]}>›</Text>
+                </Pressable>
+                <FieldLabel tokens={tokens} text={coreT({key: "ui.vfs.sort_dir_label"})} />
+                <OptionRow options={SORT_ORDERS} value={sortOrder} onChange={setSortOrder} tokens={tokens} />
+                <FieldLabel tokens={tokens} text={coreT({key: "ui.vfs.header_count_label"})} />
+                <TextInput
+                    style={[styles.input, {borderColor: tokens.border, color: tokens.text}]}
+                    keyboardType="number-pad"
+                    value={headCount}
+                    onChangeText={setHeadCount}
+                    underlineColorAndroid="transparent"
+                />
+                <FieldLabel tokens={tokens} text={coreT({key: "ui.vfs.tail_count_label"})} />
+                <TextInput
+                    style={[styles.input, {borderColor: tokens.border, color: tokens.text}]}
+                    keyboardType="number-pad"
+                    value={tailCount}
+                    onChangeText={setTailCount}
+                    underlineColorAndroid="transparent"
+                />
+                <FieldLabel tokens={tokens} text={coreT({key: "ui.vfs.rest_fill_label"})} />
+                <OptionRow options={FILL_POLICIES} value={fillPolicy} onChange={setFillPolicy} tokens={tokens} />
+            </ScrollView>
+            <View style={[styles.actions, {borderTopColor: tokens.border}]}>
+                <Pressable onPress={onClose} style={styles.actionBtn}>
+                    <Text style={{color: tokens.textSecondary}}>{coreT({key: "ui.common.cancel"})}</Text>
+                </Pressable>
+                <Pressable onPress={() => handleSave().catch(() => undefined)} disabled={saving} style={styles.actionBtn}>
+                    <Text style={{color: tokens.primary}}>{saving ? coreT({key: "ui.common.saving"}) : coreT({key: "ui.common.save"})}</Text>
+                </Pressable>
+            </View>
+        </>
+    );
 
-  return (
-    <>
-      <ModalShell
-        visible={visible}
-        onClose={onClose}
-        variant="bottom"
-        animationType="slide"
-        keyboardAvoid={{kind: 'adaptive', maxHeightRatio: 0.85}}
-        panelStyle={[styles.sheet, {paddingBottom: Math.max(insets.bottom, 16)}]}
-      >
-        {sheetContent}
-      </ModalShell>
-      {/* 排序方式单选：独立底部弹层（RN Modal 叠 Modal），选中即关。 */}
-      <PickerListModal
-        visible={sortFieldPickerVisible}
-        title={coreT({key: "ui.vfs.sort_mode_label"})}
-        load={loadSortFields}
-        keyExtractor={item => item.value}
-        renderRow={(item, selected) => (
-          <>
-            <Text style={{color: tokens.text}}>{item.label}</Text>
-            {selected ? <Text style={{color: tokens.primary}}>{coreT({key: "ui.common.current"})}</Text> : null}
-          </>
-        )}
-        getRowProps={item => ({
-          testID: `sort-field-option-${item.value}`,
-          accessibilityLabel: coreT({key: "ui.vfs.sort_mode_aria", params: {label: item.label}}),
-        })}
-        onPick={item => {
-          setSortField(item.value);
-          setSortFieldPickerVisible(false);
-        }}
-        emptyText={coreT({key: "ui.vfs.sort_mode_empty"})}
-        onClose={() => setSortFieldPickerVisible(false)}
-      />
-    </>
-  );
+    return (
+        <>
+            <ModalShell
+                visible={visible}
+                onClose={onClose}
+                variant="bottom"
+                animationType="slide"
+                keyboardAvoid={{kind: 'adaptive', maxHeightRatio: 0.85}}
+                panelStyle={[styles.sheet, {paddingBottom: Math.max(insets.bottom, 16)}]}
+            >
+                {sheetContent}
+            </ModalShell>
+            {/* 排序方式单选：独立底部弹层（RN Modal 叠 Modal），选中即关。 */}
+            <PickerListModal
+                visible={sortFieldPickerVisible}
+                title={coreT({key: "ui.vfs.sort_mode_label"})}
+                load={loadSortFields}
+                keyExtractor={item => item.value}
+                renderRow={(item, selected) => (
+                    <>
+                        <Text style={{color: tokens.text}}>{item.label}</Text>
+                        {selected ? <Text style={{color: tokens.primary}}>{coreT({key: "ui.common.current"})}</Text> : null}
+                    </>
+                )}
+                getRowProps={item => ({
+                    testID: `sort-field-option-${item.value}`,
+                    accessibilityLabel: coreT({key: "ui.vfs.sort_mode_aria", params: {label: item.label}}),
+                })}
+                onPick={item => {
+                    setSortField(item.value);
+                    setSortFieldPickerVisible(false);
+                }}
+                emptyText={coreT({key: "ui.vfs.sort_mode_empty"})}
+                onClose={() => setSortFieldPickerVisible(false)}
+            />
+        </>
+    );
 }
 
 function clampCount(raw: string): number {
-  const n = Number.parseInt(raw, 10);
-  if (Number.isNaN(n)) {
-    return 0;
-  }
-  return Math.min(1000, Math.max(0, n));
+    const n = Number.parseInt(raw, 10);
+    if (Number.isNaN(n)) {
+        return 0;
+    }
+    return Math.min(1000, Math.max(0, n));
 }
 
 function FieldLabel({text, tokens}: {text: string; tokens: {textSecondary: string}}) {
-  return <Text style={[styles.label, {color: tokens.textSecondary}]}>{text}</Text>;
+    return <Text style={[styles.label, {color: tokens.textSecondary}]}>{text}</Text>;
 }
 
 function OptionRow<T extends string>({
-  options,
-  value,
-  onChange,
-  tokens,
+    options,
+    value,
+    onChange,
+    tokens,
 }: {
-  options: {value: T; label: string}[];
-  value: T;
-  onChange: (v: T) => void;
-  tokens: {border: string; primary: string; text: string};
+    options: {value: T; label: string}[];
+    value: T;
+    onChange: (v: T) => void;
+    tokens: {border: string; primary: string; text: string};
 }) {
-  return (
-    <View style={styles.optionRow}>
-      {options.map(opt => {
-        const active = opt.value === value;
-        return (
-          <Pressable
-            key={opt.value}
-            onPress={() => onChange(opt.value)}
-            style={[
-              styles.chip,
-              {
-                borderColor: active ? tokens.primary : tokens.border,
-                backgroundColor: active ? `${tokens.primary}22` : 'transparent',
-              },
-            ]}
-          >
-            <Text style={{color: active ? tokens.primary : tokens.text}}>{opt.label}</Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
+    return (
+        <View style={styles.optionRow}>
+            {options.map(opt => {
+                const active = opt.value === value;
+                return (
+                    <Pressable
+                        key={opt.value}
+                        onPress={() => onChange(opt.value)}
+                        style={[
+                            styles.chip,
+                            {
+                                borderColor: active ? tokens.primary : tokens.border,
+                                backgroundColor: active ? `${tokens.primary}22` : 'transparent',
+                            },
+                        ]}
+                    >
+                        <Text style={{color: active ? tokens.primary : tokens.text}}>{opt.label}</Text>
+                    </Pressable>
+                );
+            })}
+        </View>
+    );
 }
 
 const styles = StyleSheet.create({
-  sheet: {
-    // maxHeight（含键盘收缩）由 useAdaptiveKeyboardSheetStyle 管
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    overflow: 'hidden',
-  },
-  heading: {fontSize: 18, fontWeight: '600', marginBottom: 12},
-  // maxHeight 收缩时内容要向内收缩，否则底部按钮行被裁（对齐 ToolPolicyPicker list）
-  form: {maxHeight: 360, flexShrink: 1},
-  label: {fontSize: 12, marginTop: 12, marginBottom: 6},
-  input: {
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  optionRow: {flexDirection: 'row', flexWrap: 'wrap', gap: 8},
-  chip: {
-    borderWidth: 1,
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  pickerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  chevron: {fontSize: 18, lineHeight: 22},
-  actions: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginTop: 8,
-    paddingTop: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  actionBtn: {padding: 8},
+    sheet: {
+        // maxHeight（含键盘收缩）由 useAdaptiveKeyboardSheetStyle 管
+        borderTopLeftRadius: 12,
+        borderTopRightRadius: 12,
+        paddingHorizontal: 16,
+        paddingTop: 16,
+        overflow: 'hidden',
+    },
+    heading: {fontSize: 18, fontWeight: '600', marginBottom: 12},
+    // maxHeight 收缩时内容要向内收缩，否则底部按钮行被裁（对齐 ToolPolicyPicker list）
+    form: {maxHeight: 360, flexShrink: 1},
+    label: {fontSize: 12, marginTop: 12, marginBottom: 6},
+    input: {
+        borderWidth: 1,
+        borderRadius: 8,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+    },
+    optionRow: {flexDirection: 'row', flexWrap: 'wrap', gap: 8},
+    chip: {
+        borderWidth: 1,
+        borderRadius: 16,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+    },
+    pickerRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        borderWidth: 1,
+        borderRadius: 8,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+    },
+    chevron: {fontSize: 18, lineHeight: 22},
+    actions: {
+        flexDirection: 'row',
+        justifyContent: 'space-around',
+        marginTop: 8,
+        paddingTop: 12,
+        borderTopWidth: StyleSheet.hairlineWidth,
+    },
+    actionBtn: {padding: 8},
 });

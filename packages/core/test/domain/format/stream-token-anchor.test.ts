@@ -9,28 +9,28 @@ import {  StreamTokenAnchor  } from "../../../src/domain/format/stream-token-anc
  * 由下面两条恒等式锁死：谁再在本地内联一份算式、两边就会漂。
  */
 describe("StreamTokenAnchor（① 基线+增量口径单点）", () => {
-  it("composeTokens：负基线被夹到 0", () => {
-    assert.equal(StreamTokenAnchor.composeTokens(-5, 3), 0);
-    // 夹负前的和为负才夹——和为正 / 为 0 时原样透出。
-    assert.equal(StreamTokenAnchor.composeTokens(-3, 3), 0);
-    assert.equal(StreamTokenAnchor.composeTokens(0, 0), 0);
-    assert.equal(StreamTokenAnchor.composeTokens(10, 5), 15);
-    assert.equal(StreamTokenAnchor.composeTokens(-10, 25), 15);
-  });
+    it("composeTokens：负基线被夹到 0", () => {
+        assert.equal(StreamTokenAnchor.composeTokens(-5, 3), 0);
+        // 夹负前的和为负才夹——和为正 / 为 0 时原样透出。
+        assert.equal(StreamTokenAnchor.composeTokens(-3, 3), 0);
+        assert.equal(StreamTokenAnchor.composeTokens(0, 0), 0);
+        assert.equal(StreamTokenAnchor.composeTokens(10, 5), 15);
+        assert.equal(StreamTokenAnchor.composeTokens(-10, 25), 15);
+    });
 
-  it("reanchorBase：重锚恒等式 compose(reanchor(t, i), i) === max(0, t)", () => {
-    for (const [truth, increment] of [
-      [0, 0],
-      [120, 37],
-      [5, 5],
-      [3, 9], // 真值比已累计增量还小：重锚后基线为负，夹负兜住
-      [-10, 4], // 真值本身为负（防御性输入）：读值仍是 0
-    ] as const) {
-      assert.equal(
-        StreamTokenAnchor.composeTokens(StreamTokenAnchor.reanchorBase(truth, increment), increment),
-        Math.max(0, truth),
-        `truth=${truth} increment=${increment}`,
-      );
-    }
-  });
+    it("reanchorBase：重锚恒等式 compose(reanchor(t, i), i) === max(0, t)", () => {
+        for (const [truth, increment] of [
+            [0, 0],
+            [120, 37],
+            [5, 5],
+            [3, 9], // 真值比已累计增量还小：重锚后基线为负，夹负兜住
+            [-10, 4], // 真值本身为负（防御性输入）：读值仍是 0
+        ] as const) {
+            assert.equal(
+                StreamTokenAnchor.composeTokens(StreamTokenAnchor.reanchorBase(truth, increment), increment),
+                Math.max(0, truth),
+                `truth=${truth} increment=${increment}`,
+            );
+        }
+    });
 });

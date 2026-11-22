@@ -10,307 +10,307 @@ import { chatAnnotateDraftStore } from "../features/chat/chat-annotate-draft";
 import { randomUUID } from "../shims/node-crypto";
 
 type FloatingBarProps = {
-  readonly top: number;
-  readonly left: number;
-  readonly onAdd: () => void;
+    readonly top: number;
+    readonly left: number;
+    readonly onAdd: () => void;
 };
 
 export function PreviewAnnotateFloatingBar({
-  top,
-  left,
-  onAdd,
+    top,
+    left,
+    onAdd,
 }: FloatingBarProps) {
-  return (
-    <div
-      className="preview-annotate-floating"
-      style={{ top, left }}
-      role="toolbar"
-      aria-label={coreT({key: "ui.vfs.annotate_actions_aria"})}
-    >
-      <button
-        type="button"
-        className="preview-annotate-floating__btn"
-        onMouseDown={(e) => {
-          // 避免 mousedown 清掉选区
-          e.preventDefault();
-        }}
-        onClick={onAdd}
-      >
-        {coreT({key: "ui.vfs.annotate_add"})}
-      </button>
-    </div>
-  );
+    return (
+        <div
+            className="preview-annotate-floating"
+            style={{ top, left }}
+            role="toolbar"
+            aria-label={coreT({key: "ui.vfs.annotate_actions_aria"})}
+        >
+            <button
+                type="button"
+                className="preview-annotate-floating__btn"
+                onMouseDown={(e) => {
+                    // 避免 mousedown 清掉选区
+                    e.preventDefault();
+                }}
+                onClick={onAdd}
+            >
+                {coreT({key: "ui.vfs.annotate_add"})}
+            </button>
+        </div>
+    );
 }
 
 type AddModalProps = {
-  readonly open: boolean;
-  readonly selectedText: string;
-  readonly sessionId: string;
-  readonly filePath: string;
-  /**
+    readonly open: boolean;
+    readonly selectedText: string;
+    readonly sessionId: string;
+    readonly filePath: string;
+    /**
    * Recogito 渲染坐标半开起点（必写新稿；相对 MD 预览容器正文）。
    */
-  readonly renderStart?: number | null;
-  /** Recogito 渲染坐标半开终点（不含）。 */
-  readonly renderEnd?: number | null;
-  /** 可选：沿用 Recogito 注解 id，便于 setAnnotations 对齐。 */
-  readonly draftId?: string | null;
-  readonly onClose: () => void;
+    readonly renderStart?: number | null;
+    /** Recogito 渲染坐标半开终点（不含）。 */
+    readonly renderEnd?: number | null;
+    /** 可选：沿用 Recogito 注解 id，便于 setAnnotations 对齐。 */
+    readonly draftId?: string | null;
+    readonly onClose: () => void;
 };
 
 export function PreviewAnnotateAddModal({
-  open,
-  selectedText,
-  sessionId,
-  filePath,
-  renderStart = null,
-  renderEnd = null,
-  draftId = null,
-  onClose,
+    open,
+    selectedText,
+    sessionId,
+    filePath,
+    renderStart = null,
+    renderEnd = null,
+    draftId = null,
+    onClose,
 }: AddModalProps) {
-  const [value, setValue] = useState("");
-  const [saving, setSaving] = useState(false);
+    const [value, setValue] = useState("");
+    const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    if (open) {
-      setValue("");
+    useEffect(() => {
+        if (open) {
+            setValue("");
+        }
+    }, [open]);
+
+    if (!open) {
+        return null;
     }
-  }, [open]);
 
-  if (!open) {
-    return null;
-  }
+    const trimmed = value.trim();
+    const hasRenderRange = renderStart != null && renderEnd != null && Number.isFinite(renderStart) && Number.isFinite(renderEnd) && renderStart < renderEnd;
+    const canSubmit = trimmed.length > 0 && hasRenderRange && !saving;
+    const label = selectedText.length > 80 ? `${selectedText.slice(0, 80)}…` : selectedText;
 
-  const trimmed = value.trim();
-  const hasRenderRange = renderStart != null && renderEnd != null && Number.isFinite(renderStart) && Number.isFinite(renderEnd) && renderStart < renderEnd;
-  const canSubmit = trimmed.length > 0 && hasRenderRange && !saving;
-  const label = selectedText.length > 80 ? `${selectedText.slice(0, 80)}…` : selectedText;
+    const handleConfirm = () => {
+        if (!canSubmit || renderStart == null || renderEnd == null) {
+            return;
+        }
+        setSaving(true);
+        try {
+            chatAnnotateDraftStore.add(sessionId, {
+                id:
+                    typeof draftId === "string" && draftId.length > 0
+                        ? draftId
+                        : randomUUID(),
+                path: filePath,
+                originalText: selectedText,
+                userAnnotation: trimmed,
+                renderStart,
+                renderEnd,
+            });
+            onClose();
+        } finally {
+            setSaving(false);
+        }
+    };
 
-  const handleConfirm = () => {
-    if (!canSubmit || renderStart == null || renderEnd == null) {
-      return;
-    }
-    setSaving(true);
-    try {
-      chatAnnotateDraftStore.add(sessionId, {
-        id:
-          typeof draftId === "string" && draftId.length > 0
-            ? draftId
-            : randomUUID(),
-        path: filePath,
-        originalText: selectedText,
-        userAnnotation: trimmed,
-        renderStart,
-        renderEnd,
-      });
-      onClose();
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="text-prompt-overlay" onClick={onClose}>
-      <div
-        className="text-prompt-modal text-prompt-modal--wide"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="preview-annotate-add-title"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3
-          id="preview-annotate-add-title"
-          className="text-prompt-modal__title"
-        >
-          {coreT({key: "ui.vfs.annotate_add"})}
-        </h3>
-        {label ? (
-          <p className="text-prompt-modal__label preview-annotate-detail__quote">
-            {label}
-          </p>
-        ) : null}
-        <textarea
-          className="text-prompt-modal__textarea"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          placeholder={coreT({key: "ui.vfs.annotate_input_hint"})}
-          rows={4}
-          autoFocus
-        />
-        <div className="text-prompt-modal__actions">
-          <button
-            type="button"
-            className="text-prompt-modal__btn"
-            onClick={onClose}
-            disabled={saving}
-          >
-            {coreT({key: "ui.common.cancel"})}
-          </button>
-          <button
-            type="button"
-            className="text-prompt-modal__btn text-prompt-modal__btn--primary"
-            disabled={!canSubmit}
-            onClick={handleConfirm}
-          >
-            {saving ? coreT({key: "ui.common.adding"}) : coreT({key: "ui.common.add"})}
-          </button>
+    return (
+        <div className="text-prompt-overlay" onClick={onClose}>
+            <div
+                className="text-prompt-modal text-prompt-modal--wide"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="preview-annotate-add-title"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <h3
+                    id="preview-annotate-add-title"
+                    className="text-prompt-modal__title"
+                >
+                    {coreT({key: "ui.vfs.annotate_add"})}
+                </h3>
+                {label ? (
+                    <p className="text-prompt-modal__label preview-annotate-detail__quote">
+                        {label}
+                    </p>
+                ) : null}
+                <textarea
+                    className="text-prompt-modal__textarea"
+                    value={value}
+                    onChange={(e) => setValue(e.target.value)}
+                    placeholder={coreT({key: "ui.vfs.annotate_input_hint"})}
+                    rows={4}
+                    autoFocus
+                />
+                <div className="text-prompt-modal__actions">
+                    <button
+                        type="button"
+                        className="text-prompt-modal__btn"
+                        onClick={onClose}
+                        disabled={saving}
+                    >
+                        {coreT({key: "ui.common.cancel"})}
+                    </button>
+                    <button
+                        type="button"
+                        className="text-prompt-modal__btn text-prompt-modal__btn--primary"
+                        disabled={!canSubmit}
+                        onClick={handleConfirm}
+                    >
+                        {saving ? coreT({key: "ui.common.adding"}) : coreT({key: "ui.common.add"})}
+                    </button>
+                </div>
+            </div>
         </div>
-      </div>
-    </div>
-  );
+    );
 }
 
 type DetailModalProps = {
-  readonly open: boolean;
-  readonly draft: AnnotateDraft | null;
-  readonly sessionId: string;
-  readonly onClose: () => void;
+    readonly open: boolean;
+    readonly draft: AnnotateDraft | null;
+    readonly sessionId: string;
+    readonly onClose: () => void;
 };
 
 export function PreviewAnnotateDetailModal({
-  open,
-  draft,
-  sessionId,
-  onClose,
+    open,
+    draft,
+    sessionId,
+    onClose,
 }: DetailModalProps) {
-  const [value, setValue] = useState(draft?.userAnnotation ?? "");
-  const [saving, setSaving] = useState(false);
+    const [value, setValue] = useState(draft?.userAnnotation ?? "");
+    const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    if (open && draft != null) {
-      setValue(draft.userAnnotation);
+    useEffect(() => {
+        if (open && draft != null) {
+            setValue(draft.userAnnotation);
+        }
+    }, [open, draft]);
+
+    if (!open || draft == null) {
+        return null;
     }
-  }, [open, draft]);
 
-  if (!open || draft == null) {
-    return null;
-  }
+    const trimmed = value.trim();
+    const canSave = trimmed.length > 0 && !saving;
 
-  const trimmed = value.trim();
-  const canSave = trimmed.length > 0 && !saving;
+    const handleSave = () => {
+        if (!canSave) {
+            return;
+        }
+        setSaving(true);
+        try {
+            chatAnnotateDraftStore.update(sessionId, draft.id, {
+                userAnnotation: trimmed,
+            });
+            onClose();
+        } finally {
+            setSaving(false);
+        }
+    };
 
-  const handleSave = () => {
-    if (!canSave) {
-      return;
-    }
-    setSaving(true);
-    try {
-      chatAnnotateDraftStore.update(sessionId, draft.id, {
-        userAnnotation: trimmed,
-      });
-      onClose();
-    } finally {
-      setSaving(false);
-    }
-  };
+    const handleDelete = () => {
+        chatAnnotateDraftStore.remove(sessionId, draft.id);
+        onClose();
+    };
 
-  const handleDelete = () => {
-    chatAnnotateDraftStore.remove(sessionId, draft.id);
-    onClose();
-  };
-
-  return (
-    <div className="text-prompt-overlay" onClick={onClose}>
-      <div
-        className="text-prompt-modal text-prompt-modal--wide"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="preview-annotate-detail-title"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3
-          id="preview-annotate-detail-title"
-          className="text-prompt-modal__title"
-        >
-          {coreT({key: "ui.vfs.annotate_detail_title"})}
-        </h3>
-        <p className="text-prompt-modal__label preview-annotate-detail__quote">
-          {draft.originalText}
-        </p>
-        <textarea
-          className="text-prompt-modal__textarea"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          placeholder={coreT({key: "ui.vfs.annotate_desc_placeholder"})}
-          rows={4}
-          autoFocus
-        />
-        <div className="confirm-modal__actions">
-          <Button variant="danger" disabled={saving} onClick={handleDelete}>
-            {coreT({key: "ui.common.delete"})}
-          </Button>
-          <div className="preview-annotate-detail__spacer" />
-          <Button variant="secondary" disabled={saving} onClick={onClose}>
-            {coreT({key: "ui.common.cancel"})}
-          </Button>
-          <Button
-            variant="primary"
-            disabled={!canSave}
-            onClick={handleSave}
-          >
-            {saving ? coreT({key: "ui.common.saving"}) : coreT({key: "ui.common.save"})}
-          </Button>
+    return (
+        <div className="text-prompt-overlay" onClick={onClose}>
+            <div
+                className="text-prompt-modal text-prompt-modal--wide"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="preview-annotate-detail-title"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <h3
+                    id="preview-annotate-detail-title"
+                    className="text-prompt-modal__title"
+                >
+                    {coreT({key: "ui.vfs.annotate_detail_title"})}
+                </h3>
+                <p className="text-prompt-modal__label preview-annotate-detail__quote">
+                    {draft.originalText}
+                </p>
+                <textarea
+                    className="text-prompt-modal__textarea"
+                    value={value}
+                    onChange={(e) => setValue(e.target.value)}
+                    placeholder={coreT({key: "ui.vfs.annotate_desc_placeholder"})}
+                    rows={4}
+                    autoFocus
+                />
+                <div className="confirm-modal__actions">
+                    <Button variant="danger" disabled={saving} onClick={handleDelete}>
+                        {coreT({key: "ui.common.delete"})}
+                    </Button>
+                    <div className="preview-annotate-detail__spacer" />
+                    <Button variant="secondary" disabled={saving} onClick={onClose}>
+                        {coreT({key: "ui.common.cancel"})}
+                    </Button>
+                    <Button
+                        variant="primary"
+                        disabled={!canSave}
+                        onClick={handleSave}
+                    >
+                        {saving ? coreT({key: "ui.common.saving"}) : coreT({key: "ui.common.save"})}
+                    </Button>
+                </div>
+            </div>
         </div>
-      </div>
-    </div>
-  );
+    );
 }
 
 type PickModalProps = {
-  readonly open: boolean;
-  readonly drafts: readonly AnnotateDraft[];
-  readonly onPick: (draft: AnnotateDraft) => void;
-  readonly onClose: () => void;
+    readonly open: boolean;
+    readonly drafts: readonly AnnotateDraft[];
+    readonly onPick: (draft: AnnotateDraft) => void;
+    readonly onClose: () => void;
 };
 
 /** 同文多条批注时先选一条再打开详情。 */
 export function PreviewAnnotatePickModal({
-  open,
-  drafts,
-  onPick,
-  onClose,
+    open,
+    drafts,
+    onPick,
+    onClose,
 }: PickModalProps) {
-  if (!open) {
-    return null;
-  }
-  return (
-    <div className="text-prompt-overlay" onClick={onClose}>
-      <div
-        className="text-prompt-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="preview-annotate-pick-title"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3
-          id="preview-annotate-pick-title"
-          className="text-prompt-modal__title"
-        >
-          {coreT({key: "ui.vfs.annotate_pick_title"})}
-        </h3>
-        <ul className="preview-annotate-pick-list">
-          {drafts.map((d) => (
-            <li key={d.id}>
-              <button
-                type="button"
-                className="preview-annotate-pick-list__item"
-                onClick={() => onPick(d)}
-              >
-                {d.userAnnotation || coreT({key: "ui.common.empty_note"})}
-              </button>
-            </li>
-          ))}
-        </ul>
-        <div className="text-prompt-modal__actions">
-          <button
-            type="button"
-            className="text-prompt-modal__btn"
-            onClick={onClose}
-          >
-            {coreT({key: "ui.common.cancel"})}
-          </button>
+    if (!open) {
+        return null;
+    }
+    return (
+        <div className="text-prompt-overlay" onClick={onClose}>
+            <div
+                className="text-prompt-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="preview-annotate-pick-title"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <h3
+                    id="preview-annotate-pick-title"
+                    className="text-prompt-modal__title"
+                >
+                    {coreT({key: "ui.vfs.annotate_pick_title"})}
+                </h3>
+                <ul className="preview-annotate-pick-list">
+                    {drafts.map((d) => (
+                        <li key={d.id}>
+                            <button
+                                type="button"
+                                className="preview-annotate-pick-list__item"
+                                onClick={() => onPick(d)}
+                            >
+                                {d.userAnnotation || coreT({key: "ui.common.empty_note"})}
+                            </button>
+                        </li>
+                    ))}
+                </ul>
+                <div className="text-prompt-modal__actions">
+                    <button
+                        type="button"
+                        className="text-prompt-modal__btn"
+                        onClick={onClose}
+                    >
+                        {coreT({key: "ui.common.cancel"})}
+                    </button>
+                </div>
+            </div>
         </div>
-      </div>
-    </div>
-  );
+    );
 }

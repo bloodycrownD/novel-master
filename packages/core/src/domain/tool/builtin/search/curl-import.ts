@@ -21,21 +21,21 @@ import type { CoreMessageKey } from "@/i18n/keys.js";
 // nm-style: keep-public — parseCommand 的公开 DTO：desktop shared 层（apps/desktop/shared/logic/search-engines.ts）按此类型再导出给 renderer。
 /** curl 解析成功后的表单草稿（method/url/headers/defaultBody 预填；响应映射配置已废除，无需补填）。 */
 export interface CurlCommandDraft {
-  readonly method: "GET" | "POST";
-  /** 请求 URL（含 `-G` 时已并入 data 查询串）。 */
-  readonly url: string;
-  /** 请求头；疑似密钥值已替换为 `{{apiKey}}`。 */
-  readonly headers: Readonly<Record<string, string>>;
-  /** 请求体原文（`-d` / `--data-raw`；疑似密钥值已替换为 `{{apiKey}}`；预填模板 defaultBody）。 */
-  readonly defaultBody?: string;
-  /** 识别出的明文密钥值（保存时落 SKSP；模板里只有 `{{apiKey}}` 占位符）。 */
-  readonly apiKey?: string;
+    readonly method: "GET" | "POST";
+    /** 请求 URL（含 `-G` 时已并入 data 查询串）。 */
+    readonly url: string;
+    /** 请求头；疑似密钥值已替换为 `{{apiKey}}`。 */
+    readonly headers: Readonly<Record<string, string>>;
+    /** 请求体原文（`-d` / `--data-raw`；疑似密钥值已替换为 `{{apiKey}}`；预填模板 defaultBody）。 */
+    readonly defaultBody?: string;
+    /** 识别出的明文密钥值（保存时落 SKSP；模板里只有 `{{apiKey}}` 占位符）。 */
+    readonly apiKey?: string;
 }
 
 // nm-style: keep-public — parseCommand 返回值的错误侧 DTO：desktop shared 层按此类型再导出给 renderer。
 /** curl 解析失败载荷（key `error.tool.search_curl_parse_failed`，params 带原因）。 */
 export interface CurlParseError {
-  readonly message: MessageDescriptor<CoreMessageKey>;
+    readonly message: MessageDescriptor<CoreMessageKey>;
 }
 
 /** `sk-` 前缀 token（OpenAI 系密钥形态；短至 3 字符也按密钥识别）。 */

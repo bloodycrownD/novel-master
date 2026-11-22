@@ -14,8 +14,8 @@ import type { AgentRunResult } from "@/domain/agent/model/agent-run-result.js";
 import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import {  subagentTool  } from "@/domain/tool/builtin/subagent-tool.js";
 import type {
-  BuiltinToolContext,
-  BuiltinToolSubagentContext,
+    BuiltinToolContext,
+    BuiltinToolSubagentContext,
 } from "@/domain/tool/builtin/builtin-tool-context.js";
 import type { AgentRegistryService } from "@/service/agent/agent-registry.port.js";
 import type { MessageService } from "@/service/chat/message.port.js";
@@ -25,159 +25,159 @@ import {  Result  } from "@/errors/either.js";
 import {  unwrap  } from "../helpers/result-unwrap.js";
 
 const generalDef: AgentDefinition = {
-  name: "general",
-  prompts: { persist: [], dynamic: [] },
+    name: "general",
+    prompts: { persist: [], dynamic: [] },
 };
 
 function fakeVfs(): VfsService {
-  return {} as unknown as VfsService;
+    return {} as unknown as VfsService;
 }
 
 interface Counts {
-  listBySession: number;
-  listBySessionTailOfRole: number;
+    listBySession: number;
+    listBySessionTailOfRole: number;
 }
 
 function assistantText(text: string): ChatMessageData {
-  return {
-    role: "assistant",
-    content: { blocks: [{ type: "text", text }] },
-  } as unknown as ChatMessageData;
+    return {
+        role: "assistant",
+        content: { blocks: [{ type: "text", text }] },
+    } as unknown as ChatMessageData;
 }
 
 function assistantToolUseOnly(id: string): ChatMessageData {
-  return {
-    role: "assistant",
-    content: {
-      blocks: [{ type: "tool_use", id, name: "read", input: { path: "/a" } }],
-    },
-  } as unknown as ChatMessageData;
+    return {
+        role: "assistant",
+        content: {
+            blocks: [{ type: "tool_use", id, name: "read", input: { path: "/a" } }],
+        },
+    } as unknown as ChatMessageData;
 }
 
 function toolResult(id: string): ChatMessageData {
-  return {
-    role: "user",
-    content: {
-      blocks: [{ type: "tool_result", toolUseId: id, content: "..." }],
-    },
-  } as unknown as ChatMessageData;
+    return {
+        role: "user",
+        content: {
+            blocks: [{ type: "tool_result", toolUseId: id, content: "..." }],
+        },
+    } as unknown as ChatMessageData;
 }
 
 /** 复刻既有 mock subagent，但把 `messages` 的两个读口都装上计数器。 */
 function makeMock(childMessages: readonly ChatMessageData[], counts: Counts): {
-  readonly ctx: BuiltinToolSubagentContext;
+    readonly ctx: BuiltinToolSubagentContext;
 } {
-  const agentRegistry: AgentRegistryService = {
-    listAgentIds: async () => ["id-0"],
-    list: async () => Result.ok([generalDef]),
-    get: async () => generalDef,
-    getRawWire: async () => null,
-    upsert: async () => undefined,
-    delete: async () => undefined,
-  };
-  const messages: MessageService = {
-    listBySession: async () => {
-      counts.listBySession += 1;
-      return { kind: "completed", value: [...childMessages] };
-    },
-    listBySessionTailOfRole: async (_sid, options) => {
-      counts.listBySessionTailOfRole += 1;
-      // 与 SqliteMessageRepository.listBySessionTailOfRole 同款：先按 role 过滤
-      // 再取末 limit 条（夹在中间的其它 role 不占配额）。
-      return {
-        kind: "completed",
-        value: childMessages
-          .filter((m) => m.role === options.role)
-          .slice(-Math.max(1, Math.floor(options.limit))),
-      };
-    },
-  } as unknown as MessageService;
-  const sessions: SessionService = {
-    createSubSession: async () => ({ id: "child-1" }) as never,
-  } as unknown as SessionService;
-  const result: AgentRunResult = {
-    stepsExecuted: 1,
-    finished: true,
-    stopReason: "completed",
-    rounds: [],
-  };
-  return {
-    ctx: {
-      agentRegistry,
-      messages,
-      sessions,
-      depth: 0,
-      callableAgents: [{ name: "general" }],
-      parentSignal: new AbortController().signal,
-      createChildSession: async () => Result.ok("child-1"),
-      resolveChildModelId: () =>
-        Result.ok({
-          savedModelId: "m",
-          workspaceModelId: "m",
-        }),
-      runChildAgent: async () => Result.ok(result),
-    },
-  };
+    const agentRegistry: AgentRegistryService = {
+        listAgentIds: async () => ["id-0"],
+        list: async () => Result.ok([generalDef]),
+        get: async () => generalDef,
+        getRawWire: async () => null,
+        upsert: async () => undefined,
+        delete: async () => undefined,
+    };
+    const messages: MessageService = {
+        listBySession: async () => {
+            counts.listBySession += 1;
+            return { kind: "completed", value: [...childMessages] };
+        },
+        listBySessionTailOfRole: async (_sid, options) => {
+            counts.listBySessionTailOfRole += 1;
+            // 与 SqliteMessageRepository.listBySessionTailOfRole 同款：先按 role 过滤
+            // 再取末 limit 条（夹在中间的其它 role 不占配额）。
+            return {
+                kind: "completed",
+                value: childMessages
+                    .filter((m) => m.role === options.role)
+                    .slice(-Math.max(1, Math.floor(options.limit))),
+            };
+        },
+    } as unknown as MessageService;
+    const sessions: SessionService = {
+        createSubSession: async () => ({ id: "child-1" }) as never,
+    } as unknown as SessionService;
+    const result: AgentRunResult = {
+        stepsExecuted: 1,
+        finished: true,
+        stopReason: "completed",
+        rounds: [],
+    };
+    return {
+        ctx: {
+            agentRegistry,
+            messages,
+            sessions,
+            depth: 0,
+            callableAgents: [{ name: "general" }],
+            parentSignal: new AbortController().signal,
+            createChildSession: async () => Result.ok("child-1"),
+            resolveChildModelId: () =>
+                Result.ok({
+                    savedModelId: "m",
+                    workspaceModelId: "m",
+                }),
+            runChildAgent: async () => Result.ok(result),
+        },
+    };
 }
 
 function toolCtx(subagent: BuiltinToolSubagentContext): BuiltinToolContext {
-  return {
-    vfs: fakeVfs(),
-    projectId: "proj",
-    sessionId: "parent",
-    subagent,
-  };
+    return {
+        vfs: fakeVfs(),
+        projectId: "proj",
+        sessionId: "parent",
+        subagent,
+    };
 }
 
 async function runTask(
-  messages: readonly ChatMessageData[]
+    messages: readonly ChatMessageData[]
 ): Promise<{ text: string; counts: Counts }> {
-  const counts: Counts = { listBySession: 0, listBySessionTailOfRole: 0 };
-  const { ctx } = makeMock(messages, counts);
-  const output = unwrap(await subagentTool.run(
-    { description: "d", prompt: "p", subagentName: "general" },
-    toolCtx(ctx),
-  ));
-  return { text: output.text, counts };
+    const counts: Counts = { listBySession: 0, listBySessionTailOfRole: 0 };
+    const { ctx } = makeMock(messages, counts);
+    const output = unwrap(await subagentTool.run(
+        { description: "d", prompt: "p", subagentName: "general" },
+        toolCtx(ctx),
+    ));
+    return { text: output.text, counts };
 }
 
 describe("subagent 末条 assistant text：tail+role 读口", () => {
-  it("T-SUB-TAIL1 零次全量读、取 tail(assistant,8)", async () => {
-    const messages: ChatMessageData[] = [];
-    // 41 条子会话夹具：20 轮 × (assistant tool_use + tool_result) = 40，再加
-    // 末条 assistant text。（不是以前注释里写的 50 条——按循环实数就是 41。）
-    for (let i = 0; i < 20; i++) {
-      messages.push(assistantToolUseOnly(`tu-${i}`));
-      messages.push(toolResult(`tu-${i}`));
-    }
-    messages.push(assistantText("末条正文"));
+    it("T-SUB-TAIL1 零次全量读、取 tail(assistant,8)", async () => {
+        const messages: ChatMessageData[] = [];
+        // 41 条子会话夹具：20 轮 × (assistant tool_use + tool_result) = 40，再加
+        // 末条 assistant text。（不是以前注释里写的 50 条——按循环实数就是 41。）
+        for (let i = 0; i < 20; i++) {
+            messages.push(assistantToolUseOnly(`tu-${i}`));
+            messages.push(toolResult(`tu-${i}`));
+        }
+        messages.push(assistantText("末条正文"));
 
-    const { text, counts } = await runTask(messages);
-    assert.equal(text, "末条正文");
-    assert.equal(counts.listBySession, 0, "不得触发全量读口");
-    assert.equal(counts.listBySessionTailOfRole, 1);
-  });
+        const { text, counts } = await runTask(messages);
+        assert.equal(text, "末条正文");
+        assert.equal(counts.listBySession, 0, "不得触发全量读口");
+        assert.equal(counts.listBySessionTailOfRole, 1);
+    });
 
-  it("T-SUB-TAIL2 尾部夹 5 条 tool_result 仍取到末条 assistant 正文", async () => {
-    const messages: ChatMessageData[] = [assistantText("目标正文")];
-    for (let i = 0; i < 5; i++) {
-      messages.push(toolResult(`tu-${i}`));
-    }
-    const { text, counts } = await runTask(messages);
-    // limit=1 会被这 5 条 user/tool_result 吃掉 ⇒ role 过滤是必需的。
-    assert.equal(text, "目标正文");
-    assert.equal(counts.listBySession, 0);
-  });
+    it("T-SUB-TAIL2 尾部夹 5 条 tool_result 仍取到末条 assistant 正文", async () => {
+        const messages: ChatMessageData[] = [assistantText("目标正文")];
+        for (let i = 0; i < 5; i++) {
+            messages.push(toolResult(`tu-${i}`));
+        }
+        const { text, counts } = await runTask(messages);
+        // limit=1 会被这 5 条 user/tool_result 吃掉 ⇒ role 过滤是必需的。
+        assert.equal(text, "目标正文");
+        assert.equal(counts.listBySession, 0);
+    });
 
-  it("T-SUB-TAIL3 连续 9 条 tool_use-only assistant → 已知差异：undefined + 兜底文案", async () => {
-    const messages: ChatMessageData[] = [assistantText("更早的正文")];
-    for (let i = 0; i < 9; i++) {
-      messages.push(assistantToolUseOnly(`tu-x-${i}`));
-      messages.push(toolResult(`tu-x-${i}`));
-    }
-    const { text, counts } = await runTask(messages);
-    // limit=8 只覆盖不到更早那条 → 返回兜底文案（把已知差异钉成期望）。
-    assert.match(text, /^\[子代理未完成任务: stopReason=completed\]$/);
-    assert.equal(counts.listBySessionTailOfRole, 1);
-  });
+    it("T-SUB-TAIL3 连续 9 条 tool_use-only assistant → 已知差异：undefined + 兜底文案", async () => {
+        const messages: ChatMessageData[] = [assistantText("更早的正文")];
+        for (let i = 0; i < 9; i++) {
+            messages.push(assistantToolUseOnly(`tu-x-${i}`));
+            messages.push(toolResult(`tu-x-${i}`));
+        }
+        const { text, counts } = await runTask(messages);
+        // limit=8 只覆盖不到更早那条 → 返回兜底文案（把已知差异钉成期望）。
+        assert.match(text, /^\[子代理未完成任务: stopReason=completed\]$/);
+        assert.equal(counts.listBySessionTailOfRole, 1);
+    });
 });

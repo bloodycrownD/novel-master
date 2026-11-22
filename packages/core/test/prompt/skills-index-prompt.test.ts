@@ -9,146 +9,146 @@ import {  MessageBodyText  } from "@novel-master/core/prompt";
 const fixedNow = new Date(2026, 4, 24, 9, 0, 0);
 
 function message(role: string, content: string, seq: number): ChatMessageData {
-  return {
-    id: `m${seq}`,
-    sessionId: "s1",
-    seq,
-    role,
-    content: TextBlocks.of(content),
-    provider: null,
-    raw: null,
-    createdAtMs: seq,
-    hidden: false,
-  };
+    return {
+        id: `m${seq}`,
+        sessionId: "s1",
+        seq,
+        role,
+        content: TextBlocks.of(content),
+        provider: null,
+        raw: null,
+        createdAtMs: seq,
+        hidden: false,
+    };
 }
 
 const skillsIndex: readonly PromptSkillIndexEntry[] = [
-  { name: "writer", description: "擅长润色文稿", domain: "project" },
-  { name: "outliner", description: "", domain: "global" },
+    { name: "writer", description: "擅长润色文稿", domain: "project" },
+    { name: "outliner", description: "", domain: "global" },
 ];
 
 const fullLayout: AgentPromptLayout = {
-  system: "sys",
-  workplace: "【done】",
-  persistEnabled: true,
-  persist: [{ name: "persona", type: "text", role: "user", content: "人设" }],
-  dynamicEnabled: true,
-  dynamic: [
-    { name: "state", type: "text", role: "user", content: "dyn" },
-  ],
+    system: "sys",
+    workplace: "【done】",
+    persistEnabled: true,
+    persist: [{ name: "persona", type: "text", role: "user", content: "人设" }],
+    dynamicEnabled: true,
+    dynamic: [
+        { name: "state", type: "text", role: "user", content: "dyn" },
+    ],
 };
 
 describe("T-SK9: 技能索引段（两套遍历）", () => {
-  it("位置：system 后 workplace 前（assembly segments）", async () => {
-    const segments = unwrap(await PromptBuilder.assemble(fullLayout, {
-      workplaceDisplay: "WT",
-      messages: [message("user", "hi", 1)],
-      now: fixedNow,
-      skillsIndex,
-    }));
-    const ids = segments.map((s) => s.id);
-    const systemAt = ids.indexOf("system");
-    const skillsAt = ids.indexOf("prompt-skills");
-    const workplaceAt = ids.indexOf("prompt-workplace");
-    assert.ok(systemAt >= 0 && skillsAt > systemAt);
-    assert.ok(workplaceAt < 0 || skillsAt < workplaceAt);
-    const skillsSegment = segments[skillsAt]!;
-    assert.equal(skillsSegment.title, "skills");
-    assert.equal(skillsSegment.role, "user");
-    assert.equal(skillsSegment.source, "template");
-    assert.match(skillsSegment.body, /- writer：擅长润色文稿（project）/);
-    assert.match(skillsSegment.body, /- outliner（global）/);
-  });
-
-  it("位置：workplace 合成消息之前（llm input messages）", async () => {
-    const input = unwrap(await PromptBuilder.llmInput(fullLayout, {
-      workplaceDisplay: "WT",
-      messages: [message("user", "hi", 1)],
-      now: fixedNow,
-      skillsIndex,
-    }));
-    assert.deepEqual(input.messages.slice(0, 4).map((m) => m.id), [
-      "prompt:skills",
-      "prompt:workplace",
-      "prompt:workplace:done",
-      "prompt:persona",
-    ]);
-    assert.equal(input.messages[0]!.role, "user");
-  });
-
-  it("两套遍历同源：segment body 与合成消息正文一致", async () => {
-    const ctx = {
-      workplaceDisplay: "WT",
-      messages: [message("user", "hi", 1)],
-      now: fixedNow,
-      skillsIndex,
-    };
-    const [segments, input] = await Promise.all([
-      unwrap(await PromptBuilder.assemble(fullLayout, ctx)),
-      unwrap(await PromptBuilder.llmInput(fullLayout, ctx)),
-    ]);
-    const segment = segments.find((s) => s.id === "prompt-skills")!;
-    const synthetic = input.messages.find((m) => m.id === "prompt:skills")!;
-    assert.equal(MessageBodyText.fromBlocks(synthetic.content.blocks), segment.body);
-  });
-
-  it("空清单 / 缺省不产生技能索引段", async () => {
-    const base = {
-      workplaceDisplay: "WT",
-      messages: [message("user", "hi", 1)],
-      now: fixedNow,
-    };
-    for (const ctx of [base, { ...base, skillsIndex: [] }]) {
-      const segments = unwrap(await PromptBuilder.assemble(fullLayout, ctx));
-      assert.ok(segments.every((s) => s.id !== "prompt-skills"));
-      const input = unwrap(await PromptBuilder.llmInput(fullLayout, ctx));
-      assert.ok(input.messages.every((m) => m.id !== "prompt:skills"));
-    }
-  });
-
-  it("zones：persistCount 计入技能索引段（1 条合成消息）", () => {
-    const withoutSkills = PromptBuilder.zones(fullLayout, {
-      workplaceDisplay: "WT",
+    it("位置：system 后 workplace 前（assembly segments）", async () => {
+        const segments = unwrap(await PromptBuilder.assemble(fullLayout, {
+            workplaceDisplay: "WT",
+            messages: [message("user", "hi", 1)],
+            now: fixedNow,
+            skillsIndex,
+        }));
+        const ids = segments.map((s) => s.id);
+        const systemAt = ids.indexOf("system");
+        const skillsAt = ids.indexOf("prompt-skills");
+        const workplaceAt = ids.indexOf("prompt-workplace");
+        assert.ok(systemAt >= 0 && skillsAt > systemAt);
+        assert.ok(workplaceAt < 0 || skillsAt < workplaceAt);
+        const skillsSegment = segments[skillsAt]!;
+        assert.equal(skillsSegment.title, "skills");
+        assert.equal(skillsSegment.role, "user");
+        assert.equal(skillsSegment.source, "template");
+        assert.match(skillsSegment.body, /- writer：擅长润色文稿（project）/);
+        assert.match(skillsSegment.body, /- outliner（global）/);
     });
-    const withSkills = PromptBuilder.zones(fullLayout, {
-      workplaceDisplay: "WT",
-      skillsIndex,
-    });
-    // fullLayout：workplace 双段(2) + persist 文本(1) = 3；技能索引 +1。
-    assert.equal(withoutSkills.persistCount, 3);
-    assert.equal(withSkills.persistCount, 4);
-    // 空清单不计入。
-    const emptySkills = PromptBuilder.zones(fullLayout, {
-      workplaceDisplay: "WT",
-      skillsIndex: [],
-    });
-    assert.equal(emptySkills.persistCount, 3);
-  });
 
-  it("zones 边界与 llm input 实际 messages 对齐（persist 前缀切片）", async () => {
-    const ctx = {
-      workplaceDisplay: "WT",
-      messages: [message("user", "hi", 1)],
-      now: fixedNow,
-      skillsIndex,
-    };
-    const input = unwrap(await PromptBuilder.llmInput(fullLayout, ctx));
-    const zones = PromptBuilder.zones(fullLayout, {
-      workplaceDisplay: "WT",
-      skillsIndex,
+    it("位置：workplace 合成消息之前（llm input messages）", async () => {
+        const input = unwrap(await PromptBuilder.llmInput(fullLayout, {
+            workplaceDisplay: "WT",
+            messages: [message("user", "hi", 1)],
+            now: fixedNow,
+            skillsIndex,
+        }));
+        assert.deepEqual(input.messages.slice(0, 4).map((m) => m.id), [
+            "prompt:skills",
+            "prompt:workplace",
+            "prompt:workplace:done",
+            "prompt:persona",
+        ]);
+        assert.equal(input.messages[0]!.role, "user");
     });
-    const persistIds = input.messages
-      .slice(0, zones.persistCount)
-      .map((m) => m.id);
-    assert.deepEqual(persistIds, [
-      "prompt:skills",
-      "prompt:workplace",
-      "prompt:workplace:done",
-      "prompt:persona",
-    ]);
-    assert.equal(
-      input.messages[input.messages.length - 1]!.id,
-      "prompt:state",
-    );
-  });
+
+    it("两套遍历同源：segment body 与合成消息正文一致", async () => {
+        const ctx = {
+            workplaceDisplay: "WT",
+            messages: [message("user", "hi", 1)],
+            now: fixedNow,
+            skillsIndex,
+        };
+        const [segments, input] = await Promise.all([
+            unwrap(await PromptBuilder.assemble(fullLayout, ctx)),
+            unwrap(await PromptBuilder.llmInput(fullLayout, ctx)),
+        ]);
+        const segment = segments.find((s) => s.id === "prompt-skills")!;
+        const synthetic = input.messages.find((m) => m.id === "prompt:skills")!;
+        assert.equal(MessageBodyText.fromBlocks(synthetic.content.blocks), segment.body);
+    });
+
+    it("空清单 / 缺省不产生技能索引段", async () => {
+        const base = {
+            workplaceDisplay: "WT",
+            messages: [message("user", "hi", 1)],
+            now: fixedNow,
+        };
+        for (const ctx of [base, { ...base, skillsIndex: [] }]) {
+            const segments = unwrap(await PromptBuilder.assemble(fullLayout, ctx));
+            assert.ok(segments.every((s) => s.id !== "prompt-skills"));
+            const input = unwrap(await PromptBuilder.llmInput(fullLayout, ctx));
+            assert.ok(input.messages.every((m) => m.id !== "prompt:skills"));
+        }
+    });
+
+    it("zones：persistCount 计入技能索引段（1 条合成消息）", () => {
+        const withoutSkills = PromptBuilder.zones(fullLayout, {
+            workplaceDisplay: "WT",
+        });
+        const withSkills = PromptBuilder.zones(fullLayout, {
+            workplaceDisplay: "WT",
+            skillsIndex,
+        });
+        // fullLayout：workplace 双段(2) + persist 文本(1) = 3；技能索引 +1。
+        assert.equal(withoutSkills.persistCount, 3);
+        assert.equal(withSkills.persistCount, 4);
+        // 空清单不计入。
+        const emptySkills = PromptBuilder.zones(fullLayout, {
+            workplaceDisplay: "WT",
+            skillsIndex: [],
+        });
+        assert.equal(emptySkills.persistCount, 3);
+    });
+
+    it("zones 边界与 llm input 实际 messages 对齐（persist 前缀切片）", async () => {
+        const ctx = {
+            workplaceDisplay: "WT",
+            messages: [message("user", "hi", 1)],
+            now: fixedNow,
+            skillsIndex,
+        };
+        const input = unwrap(await PromptBuilder.llmInput(fullLayout, ctx));
+        const zones = PromptBuilder.zones(fullLayout, {
+            workplaceDisplay: "WT",
+            skillsIndex,
+        });
+        const persistIds = input.messages
+            .slice(0, zones.persistCount)
+            .map((m) => m.id);
+        assert.deepEqual(persistIds, [
+            "prompt:skills",
+            "prompt:workplace",
+            "prompt:workplace:done",
+            "prompt:persona",
+        ]);
+        assert.equal(
+            input.messages[input.messages.length - 1]!.id,
+            "prompt:state",
+        );
+    });
 });

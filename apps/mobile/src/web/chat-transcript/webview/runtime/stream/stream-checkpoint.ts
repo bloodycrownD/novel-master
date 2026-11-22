@@ -19,7 +19,7 @@ type Decision = 'apply' | 'ignore' | 'resync';
  * 与同名类型 re-export 会撞 TS2323，故本文件用 `namespace` 关键字形态。
  */
 export namespace StreamCheckpoint {
-  /**
+    /**
    * delta 判定表：
    * - 无检查点 → resync（还没有基线，等快照）；
    * - 跨流（id 不同）→ resync（跨流 seq 不可比，交普通快照对账）；
@@ -32,16 +32,16 @@ export namespace StreamCheckpoint {
    * 表驱动直测（判定表/merge 四象限）；生产各 1 个调用点（stream.ts /
    * snapshot.ts），撤导出会让一致性与测试双面失守。
    */
-  export const decide = (cp: Cp, id: string, seq: number): Decision => {
-    if (cp == null) return 'resync';
-    if (cp.id !== id) return 'resync';
-    if (cp.status === 'finished') return 'ignore';
-    if (seq <= cp.seq) return 'ignore';
-    if (seq === cp.seq + 1) return 'apply';
-    return 'resync';
-  };
+    export const decide = (cp: Cp, id: string, seq: number): Decision => {
+        if (cp == null) return 'resync';
+        if (cp.id !== id) return 'resync';
+        if (cp.status === 'finished') return 'ignore';
+        if (seq <= cp.seq) return 'ignore';
+        if (seq === cp.seq + 1) return 'apply';
+        return 'resync';
+    };
 
-  /**
+    /**
    * 检查点合并（只在未命中 rewind 时调用）：
    * - incoming 为空 → null（快照声明没有流式行）；
    * - local 为空 → incoming；
@@ -52,17 +52,17 @@ export namespace StreamCheckpoint {
    * 表驱动直测（判定表/merge 四象限）；生产各 1 个调用点（stream.ts /
    * snapshot.ts），撤导出会让一致性与测试双面失守。
    */
-  export const merge = (local: Cp, incoming: Cp): Cp => {
-    if (incoming == null) return null;
-    if (local == null) return incoming;
-    if (local.id !== incoming.id) return incoming;
-    return {
-      id: incoming.id,
-      seq: Math.max(local.seq, incoming.seq),
-      status:
-        local.status === 'finished' || incoming.status === 'finished'
-          ? 'finished'
-          : 'streaming',
+    export const merge = (local: Cp, incoming: Cp): Cp => {
+        if (incoming == null) return null;
+        if (local == null) return incoming;
+        if (local.id !== incoming.id) return incoming;
+        return {
+            id: incoming.id,
+            seq: Math.max(local.seq, incoming.seq),
+            status:
+                local.status === 'finished' || incoming.status === 'finished'
+                    ? 'finished'
+                    : 'streaming',
+        };
     };
-  };
 }

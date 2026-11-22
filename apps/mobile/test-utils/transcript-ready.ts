@@ -14,19 +14,19 @@ import {TRANSCRIPT_CAPABILITIES} from '@/web/chat-transcript/transcript-capabili
 import {TRANSCRIPT_READY_VERSION} from '@/web/chat-transcript/transcript-capabilities';
 
 type TranscriptReadyEnvelope = {
-  v: number;
-  type: 'ready';
-  payload: {
-    version: string;
-    capabilities: string[];
-    readyState: string;
-  };
+    v: number;
+    type: 'ready';
+    payload: {
+        version: string;
+        capabilities: string[];
+        readyState: string;
+    };
 };
 
 type TestInstance = TestRenderer.ReactTestInstance;
 
 type WebViewLike = ComponentType<{
-  onMessage?: (event: {nativeEvent: {data: string}}) => void;
+    onMessage?: (event: {nativeEvent: {data: string}}) => void;
 }>;
 
 const WebViewComponent = require('react-native-webview').default as WebViewLike;
@@ -38,15 +38,15 @@ const WebViewComponent = require('react-native-webview').default as WebViewLike;
  * __tests__ 直接 import，撤 public 会让 ready 载荷协议在各用例重新漂移。
  */
 export function makeTranscriptReadyPayload(): TranscriptReadyEnvelope {
-  return {
-    v: CONVERSATION_BRIDGE_V,
-    type: 'ready',
-    payload: {
-      version: TRANSCRIPT_READY_VERSION,
-      capabilities: [...TRANSCRIPT_CAPABILITIES],
-      readyState: 'complete',
-    },
-  };
+    return {
+        v: CONVERSATION_BRIDGE_V,
+        type: 'ready',
+        payload: {
+            version: TRANSCRIPT_READY_VERSION,
+            capabilities: [...TRANSCRIPT_CAPABILITIES],
+            readyState: 'complete',
+        },
+    };
 }
 
 /**
@@ -56,10 +56,10 @@ export function makeTranscriptReadyPayload(): TranscriptReadyEnvelope {
  * __tests__ 直接 import，撤 public 会让 ready 载荷协议在各用例重新漂移。
  */
 export function simulateTranscriptReady(root: TestInstance): void {
-  const webView = root.findByType(WebViewComponent);
-  act(() => {
-    webView.props.onMessage?.({
-      nativeEvent: {data: JSON.stringify(makeTranscriptReadyPayload())},
+    const webView = root.findByType(WebViewComponent);
+    act(() => {
+        webView.props.onMessage?.({
+            nativeEvent: {data: JSON.stringify(makeTranscriptReadyPayload())},
+        });
     });
-  });
 }

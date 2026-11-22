@@ -25,49 +25,49 @@
 
 /** 对话页合成包的文档判据：dock 容器 + 转录滚动态 + composer textarea。 */
 const CONVERSATION_DOM_PROBES = [
-  '#composer-dock',
-  '#scroller',
-  'textarea[data-testid="composer-input"]',
+    '#composer-dock',
+    '#scroller',
+    'textarea[data-testid="composer-input"]',
 ] as const;
 
 export async function switchToNative(): Promise<void> {
-  const contexts = await browser.getContexts();
-  const native = contexts.find(c => String(c).includes('NATIVE'));
-  if (native != null) {
-    await browser.switchContext(String(native));
-  }
+    const contexts = await browser.getContexts();
+    const native = contexts.find(c => String(c).includes('NATIVE'));
+    if (native != null) {
+        await browser.switchContext(String(native));
+    }
 }
 
 /** First WEBVIEW context — **不要**用它找对话页，见 {@link switchToConversationWebView}。 */
 export async function switchToWebView(): Promise<void> {
-  await browser.waitUntil(
-    async () => {
-      const contexts = await browser.getContexts();
-      return contexts.some(c => String(c).includes('WEBVIEW'));
-    },
-    {timeout: 20000, timeoutMsg: 'WebView context not available'},
-  );
-  const contexts = await browser.getContexts();
-  const webview = contexts.find(c => String(c).includes('WEBVIEW'));
-  if (webview == null) {
-    throw new Error('WEBVIEW context missing');
-  }
-  await browser.switchContext(String(webview));
+    await browser.waitUntil(
+        async () => {
+            const contexts = await browser.getContexts();
+            return contexts.some(c => String(c).includes('WEBVIEW'));
+        },
+        {timeout: 20000, timeoutMsg: 'WebView context not available'},
+    );
+    const contexts = await browser.getContexts();
+    const webview = contexts.find(c => String(c).includes('WEBVIEW'));
+    if (webview == null) {
+        throw new Error('WEBVIEW context missing');
+    }
+    await browser.switchContext(String(webview));
 }
 
 /** 当前 WEBVIEW context 里的文档是不是对话页合成包（按 DOM 判据，不靠 context 顺序）。 */
 export async function isConversationDocument(): Promise<boolean> {
-  try {
-    const probe = await browser.execute(
-      (selectors: string[]) =>
-        selectors.some(selector => document.querySelector(selector) != null),
-      CONVERSATION_DOM_PROBES as unknown as string[],
-    );
-    return probe === true;
-  } catch {
-    // 不是 web context / 该 context 尚未可执行 DOM 查询——一律当「不是对话页」。
-    return false;
-  }
+    try {
+        const probe = await browser.execute(
+            (selectors: string[]) =>
+                selectors.some(selector => document.querySelector(selector) != null),
+            CONVERSATION_DOM_PROBES as unknown as string[],
+        );
+        return probe === true;
+    } catch {
+        // 不是 web context / 该 context 尚未可执行 DOM 查询——一律当「不是对话页」。
+        return false;
+    }
 }
 
 /**
@@ -77,35 +77,35 @@ export async function isConversationDocument(): Promise<boolean> {
  * WebView 刚挂载/正在加载时 DOM 还没装配好，所以外层是重试循环而不是一次判定。
  */
 export async function switchToConversationWebView(timeoutMs = 20000): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  let seen: string[] = [];
-  while (Date.now() < deadline) {
-    const contexts = (await browser.getContexts())
-      .map(String)
-      .filter(context => context.includes('WEBVIEW'));
-    seen = contexts;
-    for (const context of contexts) {
-      try {
-        await browser.switchContext(context);
-      } catch {
-        // 该 context 刚被宿主销毁/重建，换下一个试。
-        continue;
-      }
-      if (await isConversationDocument()) {
-        return;
-      }
+    const deadline = Date.now() + timeoutMs;
+    let seen: string[] = [];
+    while (Date.now() < deadline) {
+        const contexts = (await browser.getContexts())
+            .map(String)
+            .filter(context => context.includes('WEBVIEW'));
+        seen = contexts;
+        for (const context of contexts) {
+            try {
+                await browser.switchContext(context);
+            } catch {
+                // 该 context 刚被宿主销毁/重建，换下一个试。
+                continue;
+            }
+            if (await isConversationDocument()) {
+                return;
+            }
+        }
+        await browser.pause(500);
     }
-    await browser.pause(500);
-  }
-  throw new Error(
-    '[e2e] 对话页 WebView 未就绪：所有 WEBVIEW context 都没命中判据 ' +
-      `${CONVERSATION_DOM_PROBES.join(' / ')}（当前 context 列表：${JSON.stringify(seen)}）。` +
-      ' 先确认已进入某个会话（合成包只在对话页挂载）。',
-  );
+    throw new Error(
+        '[e2e] 对话页 WebView 未就绪：所有 WEBVIEW context 都没命中判据 ' +
+            `${CONVERSATION_DOM_PROBES.join(' / ')}（当前 context 列表：${JSON.stringify(seen)}）。` +
+            ' 先确认已进入某个会话（合成包只在对话页挂载）。',
+    );
 }
 
 export async function logActiveContext(label: string): Promise<void> {
-  const contexts = await browser.getContexts();
-  const active = await browser.getContext();
-  console.log(`[e2e/context] ${label}`, {contexts, active});
+    const contexts = await browser.getContexts();
+    const active = await browser.getContext();
+    console.log(`[e2e/context] ${label}`, {contexts, active});
 }

@@ -16,276 +16,276 @@ const mockUnlink = jest.fn();
 const mockProjectsGet = jest.fn();
 
 jest.mock('@novel-master/core/vfs', () => ({
-  ...jest.requireActual('@novel-master/core/vfs'),
-  VfsServiceFactory: {
-    createZipIo: (...args: unknown[]) =>
-      mockCreateVfsZipIoService(...args),
-  },
+    ...jest.requireActual('@novel-master/core/vfs'),
+    VfsServiceFactory: {
+        createZipIo: (...args: unknown[]) =>
+            mockCreateVfsZipIoService(...args),
+    },
 }));
 
 jest.mock('@react-native-documents/picker', () => ({
-  pick: (...args: unknown[]) => mockPick(...args),
-  saveDocuments: (...args: unknown[]) => mockSaveDocuments(...args),
-  keepLocalCopy: (...args: unknown[]) => mockKeepLocalCopy(...args),
-  types: {zip: 'application/zip'},
-  errorCodes: {OPERATION_CANCELED: 'OPERATION_CANCELED'},
-  isErrorWithCode: (err: unknown) =>
-    typeof err === 'object' &&
-    err != null &&
-    'code' in err &&
-    (err as {code: string}).code === 'OPERATION_CANCELED',
+    pick: (...args: unknown[]) => mockPick(...args),
+    saveDocuments: (...args: unknown[]) => mockSaveDocuments(...args),
+    keepLocalCopy: (...args: unknown[]) => mockKeepLocalCopy(...args),
+    types: {zip: 'application/zip'},
+    errorCodes: {OPERATION_CANCELED: 'OPERATION_CANCELED'},
+    isErrorWithCode: (err: unknown) =>
+        typeof err === 'object' &&
+        err != null &&
+        'code' in err &&
+        (err as {code: string}).code === 'OPERATION_CANCELED',
 }));
 
 jest.mock('react-native', () => ({
-  Platform: {OS: 'android' as 'android' | 'ios'},
+    Platform: {OS: 'android' as 'android' | 'ios'},
 }));
 
 jest.mock('react-native-blob-util', () => ({
-  __esModule: true,
-  default: {
-    fs: {
-      dirs: {CacheDir: '/cache'},
-      writeFile: (...args: unknown[]) => mockWriteFile(...args),
-      readFile: (...args: unknown[]) => mockReadFile(...args),
-      exists: (...args: unknown[]) => mockExists(...args),
-      stat: (...args: unknown[]) => mockStat(...args),
-      unlink: (...args: unknown[]) => mockUnlink(...args),
+    __esModule: true,
+    default: {
+        fs: {
+            dirs: {CacheDir: '/cache'},
+            writeFile: (...args: unknown[]) => mockWriteFile(...args),
+            readFile: (...args: unknown[]) => mockReadFile(...args),
+            exists: (...args: unknown[]) => mockExists(...args),
+            stat: (...args: unknown[]) => mockStat(...args),
+            unlink: (...args: unknown[]) => mockUnlink(...args),
+        },
     },
-  },
 }));
 
 /** 含 EOCD 的最小有效 ZIP（fflate zipSync 单文件 a.md）。 */
 const VALID_ZIP_BYTES = new Uint8Array([
-  80, 75, 3, 4, 20, 0, 0, 0, 8, 0, 98, 80, 205, 92, 67, 190, 183, 232, 3, 0, 0,
-  0, 1, 0, 0, 0, 4, 0, 0, 0, 97, 46, 109, 100, 75, 4, 0, 80, 75, 1, 2, 20, 0,
-  20, 0, 0, 0, 8, 0, 98, 80, 205, 92, 67, 190, 183, 232, 3, 0, 0, 0, 1, 0, 0, 0,
-  4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 97, 46, 109, 100, 80,
-  75, 5, 6, 0, 0, 0, 0, 1, 0, 1, 0, 50, 0, 0, 0, 37, 0, 0, 0, 0, 0,
+    80, 75, 3, 4, 20, 0, 0, 0, 8, 0, 98, 80, 205, 92, 67, 190, 183, 232, 3, 0, 0,
+    0, 1, 0, 0, 0, 4, 0, 0, 0, 97, 46, 109, 100, 75, 4, 0, 80, 75, 1, 2, 20, 0,
+    20, 0, 0, 0, 8, 0, 98, 80, 205, 92, 67, 190, 183, 232, 3, 0, 0, 0, 1, 0, 0, 0,
+    4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 97, 46, 109, 100, 80,
+    75, 5, 6, 0, 0, 0, 0, 1, 0, 1, 0, 50, 0, 0, 0, 37, 0, 0, 0, 0, 0,
 ]);
 const VALID_ZIP_BASE64 =
-  'UEsDBBQAAAAIAGJQzVxDvrfoAwAAAAEAAAAEAAAAYS5tZEsEAFBLAQIUABQAAAAIAGJQzVxDvrfoAwAAAAEAAAAEAAAAAAAAAAAAAAAAAAAAAABhLm1kUEsFBgAAAAABAAEAMgAAACUAAAAAAA==';
+    'UEsDBBQAAAAIAGJQzVxDvrfoAwAAAAEAAAAEAAAAYS5tZEsEAFBLAQIUABQAAAAIAGJQzVxDvrfoAwAAAAEAAAAEAAAAAAAAAAAAAAAAAAAAAABhLm1kUEsFBgAAAAABAAEAMgAAACUAAAAAAA==';
 
 /** 仅有 local header、无 EOCD 的截断 ZIP。 */
 const TRUNCATED_ZIP_BASE64 = 'UEsDBBQAAAAIAAAAAAAAAAAAAAAAAAAAAAA=';
 
 describe('vfs-zip.service', () => {
-  const runtime = {
-    conn: {},
-    projects: {get: mockProjectsGet},
-  } as never;
-  const scope = {kind: 'session', projectId: 'p', sessionId: 's'} as const;
+    const runtime = {
+        conn: {},
+        projects: {get: mockProjectsGet},
+    } as never;
+    const scope = {kind: 'session', projectId: 'p', sessionId: 's'} as const;
 
-  beforeEach(() => {
-    Platform.OS = 'android';
-    mockExport.mockReset();
-    mockImport.mockReset();
-    mockCreateVfsZipIoService.mockReset();
-    mockPick.mockReset();
-    mockSaveDocuments.mockReset();
-    mockKeepLocalCopy.mockReset();
-    mockWriteFile.mockReset();
-    mockReadFile.mockReset();
-    mockExists.mockReset();
-    mockStat.mockReset();
-    mockUnlink.mockReset();
-    // 错误通道迁移二期后 projects.get 走 Result（服务侧 `!ok` 即 throw → 回退 workspace.zip）。
-    mockProjectsGet
-      .mockReset()
-      .mockResolvedValue({ok: true, value: {id: 'p', name: '我的项目'}});
-    mockCreateVfsZipIoService.mockReturnValue({
-      export: mockExport,
-      import: mockImport,
+    beforeEach(() => {
+        Platform.OS = 'android';
+        mockExport.mockReset();
+        mockImport.mockReset();
+        mockCreateVfsZipIoService.mockReset();
+        mockPick.mockReset();
+        mockSaveDocuments.mockReset();
+        mockKeepLocalCopy.mockReset();
+        mockWriteFile.mockReset();
+        mockReadFile.mockReset();
+        mockExists.mockReset();
+        mockStat.mockReset();
+        mockUnlink.mockReset();
+        // 错误通道迁移二期后 projects.get 走 Result（服务侧 `!ok` 即 throw → 回退 workspace.zip）。
+        mockProjectsGet
+            .mockReset()
+            .mockResolvedValue({ok: true, value: {id: 'p', name: '我的项目'}});
+        mockCreateVfsZipIoService.mockReturnValue({
+            export: mockExport,
+            import: mockImport,
+        });
+        mockExport.mockResolvedValue({ok: true, value: VALID_ZIP_BYTES});
+        mockSaveDocuments.mockResolvedValue([
+            {uri: 'content://saved', name: 'x.zip', error: null},
+        ]);
+        mockWriteFile.mockResolvedValue(undefined);
+        mockStat.mockResolvedValue({size: 5});
+        mockUnlink.mockResolvedValue(undefined);
+        mockKeepLocalCopy.mockResolvedValue([
+            {
+                status: 'success',
+                localUri: 'file:///cache/import.zip',
+                sourceUri: 'content://picked',
+            },
+        ]);
+        mockExists.mockResolvedValue(true);
+        mockReadFile.mockResolvedValue(VALID_ZIP_BASE64);
     });
-    mockExport.mockResolvedValue({ok: true, value: VALID_ZIP_BYTES});
-    mockSaveDocuments.mockResolvedValue([
-      {uri: 'content://saved', name: 'x.zip', error: null},
-    ]);
-    mockWriteFile.mockResolvedValue(undefined);
-    mockStat.mockResolvedValue({size: 5});
-    mockUnlink.mockResolvedValue(undefined);
-    mockKeepLocalCopy.mockResolvedValue([
-      {
-        status: 'success',
-        localUri: 'file:///cache/import.zip',
-        sourceUri: 'content://picked',
-      },
-    ]);
-    mockExists.mockResolvedValue(true);
-    mockReadFile.mockResolvedValue(VALID_ZIP_BASE64);
-  });
 
-  it('Android export uses Core default VfsServiceFactory.createZipIo(conn)', async () => {
-    await VfsZipService.exportZip(runtime, scope);
-    expect(mockCreateVfsZipIoService).toHaveBeenCalledTimes(1);
-    expect(mockCreateVfsZipIoService).toHaveBeenCalledWith(runtime.conn);
-    expect(mockCreateVfsZipIoService.mock.calls[0]?.[1]).toBeUndefined();
-  });
-
-  it('iOS export uses Core default VfsServiceFactory.createZipIo(conn)', async () => {
-    Platform.OS = 'ios';
-    await VfsZipService.exportZip(runtime, scope);
-    expect(mockCreateVfsZipIoService).toHaveBeenCalledTimes(1);
-    expect(mockCreateVfsZipIoService).toHaveBeenCalledWith(runtime.conn);
-    expect(mockCreateVfsZipIoService.mock.calls[0]?.[1]).toBeUndefined();
-  });
-
-  it('writes cache zip then opens save-as dialog', async () => {
-    const exported = await VfsZipService.exportZip(runtime, scope);
-    expect(exported).toEqual({ok: true, value: 'saved'});
-    expect(mockWriteFile).toHaveBeenCalledWith(
-      '/cache/我的项目.zip',
-      expect.any(String),
-      'base64',
-    );
-    expect(mockSaveDocuments).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sourceUris: ['file:///cache/我的项目.zip'],
-        mimeType: 'application/zip',
-        fileName: '我的项目.zip',
-        copy: true,
-      }),
-    );
-    expect(mockUnlink).toHaveBeenCalledWith('/cache/我的项目.zip');
-  });
-
-  it('surfaces VfsZipError from gather without retry', async () => {
-    // 类已退役：zip 服务抛的是 legacy mapper 手搓旧形态对象（name + 字符串短码）。
-    const vfsErr = Object.assign(new Error('external storage not supported'), {
-      name: 'VfsZipError',
-      code: 'EXTERNAL_NOT_SUPPORTED',
+    it('Android export uses Core default VfsServiceFactory.createZipIo(conn)', async () => {
+        await VfsZipService.exportZip(runtime, scope);
+        expect(mockCreateVfsZipIoService).toHaveBeenCalledTimes(1);
+        expect(mockCreateVfsZipIoService).toHaveBeenCalledWith(runtime.conn);
+        expect(mockCreateVfsZipIoService.mock.calls[0]?.[1]).toBeUndefined();
     });
-    mockExport.mockRejectedValue(vfsErr);
 
-    await expect(VfsZipService.exportZip(runtime, scope)).rejects.toThrow(
-      'external storage not supported',
-    );
-
-    expect(mockCreateVfsZipIoService).toHaveBeenCalledTimes(1);
-  });
-
-  it('returns cancelled when save-as dialog dismissed', async () => {
-    mockSaveDocuments.mockRejectedValue({code: 'OPERATION_CANCELED'});
-    const exported = await VfsZipService.exportZip(runtime, scope);
-    expect(exported).toEqual({ok: true, value: 'cancelled'});
-  });
-
-  it('import rejects truncated ZIP missing EOCD', async () => {
-    mockPick.mockResolvedValue([
-      {uri: 'content://downloads/bad.zip', name: 'bad.zip'},
-    ]);
-    mockReadFile.mockResolvedValue(TRUNCATED_ZIP_BASE64);
-
-    // 错误通道迁移后 import 沿 Result.err 回传（不再 reject）。
-    const imported = await VfsZipService.importZip(runtime, scope, {confirmed: true});
-    expect(imported).toMatchObject({
-      ok: false,
-      // VfsZipError 类退役：zip 解析失败统一 AppError（name 即 key，code 为数字码）。
-      error: {
-        name: 'VFS_ZIP_INVALID_ARCHIVE',
-        message: expect.stringContaining('missing EOCD'),
-      },
+    it('iOS export uses Core default VfsServiceFactory.createZipIo(conn)', async () => {
+        Platform.OS = 'ios';
+        await VfsZipService.exportZip(runtime, scope);
+        expect(mockCreateVfsZipIoService).toHaveBeenCalledTimes(1);
+        expect(mockCreateVfsZipIoService).toHaveBeenCalledWith(runtime.conn);
+        expect(mockCreateVfsZipIoService.mock.calls[0]?.[1]).toBeUndefined();
     });
-    expect(mockImport).not.toHaveBeenCalled();
-  });
 
-  it('imports via keepLocalCopy and blob read', async () => {
-    mockPick.mockResolvedValue([
-      {uri: 'content://downloads/x.zip', name: 'x.zip'},
-    ]);
-    await VfsZipService.importZip(runtime, scope, {confirmed: true});
-    expect(mockKeepLocalCopy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        files: [{uri: 'content://downloads/x.zip', fileName: 'import.zip'}],
-        destination: 'cachesDirectory',
-      }),
-    );
-    expect(mockReadFile).toHaveBeenCalledWith('/cache/import.zip', 'base64');
-    expect(mockImport).toHaveBeenCalledWith(scope, expect.any(Uint8Array), {
-      confirmed: true,
-      directoryPath: '/',
+    it('writes cache zip then opens save-as dialog', async () => {
+        const exported = await VfsZipService.exportZip(runtime, scope);
+        expect(exported).toEqual({ok: true, value: 'saved'});
+        expect(mockWriteFile).toHaveBeenCalledWith(
+            '/cache/我的项目.zip',
+            expect.any(String),
+            'base64',
+        );
+        expect(mockSaveDocuments).toHaveBeenCalledWith(
+            expect.objectContaining({
+                sourceUris: ['file:///cache/我的项目.zip'],
+                mimeType: 'application/zip',
+                fileName: '我的项目.zip',
+                copy: true,
+            }),
+        );
+        expect(mockUnlink).toHaveBeenCalledWith('/cache/我的项目.zip');
     });
-  });
 
-  it('passes directoryPath to Core export/import', async () => {
-    await VfsZipService.exportZip(runtime, scope, {directoryPath: '/a'});
-    expect(mockExport).toHaveBeenCalledWith(scope, {directoryPath: '/a'});
+    it('surfaces VfsZipError from gather without retry', async () => {
+        // 类已退役：zip 服务抛的是 legacy mapper 手搓旧形态对象（name + 字符串短码）。
+        const vfsErr = Object.assign(new Error('external storage not supported'), {
+            name: 'VfsZipError',
+            code: 'EXTERNAL_NOT_SUPPORTED',
+        });
+        mockExport.mockRejectedValue(vfsErr);
 
-    mockPick.mockResolvedValue([
-      {uri: 'content://downloads/x.zip', name: 'x.zip'},
-    ]);
-    await VfsZipService.importZip(runtime, scope, {
-      confirmed: true,
-      directoryPath: '/a',
+        await expect(VfsZipService.exportZip(runtime, scope)).rejects.toThrow(
+            'external storage not supported',
+        );
+
+        expect(mockCreateVfsZipIoService).toHaveBeenCalledTimes(1);
     });
-    expect(mockImport).toHaveBeenCalledWith(scope, expect.any(Uint8Array), {
-      confirmed: true,
-      directoryPath: '/a',
+
+    it('returns cancelled when save-as dialog dismissed', async () => {
+        mockSaveDocuments.mockRejectedValue({code: 'OPERATION_CANCELED'});
+        const exported = await VfsZipService.exportZip(runtime, scope);
+        expect(exported).toEqual({ok: true, value: 'cancelled'});
     });
-  });
 
-  it('export 默认名取子目录末段（与 Desktop 同规则）', async () => {
-    await VfsZipService.exportZip(runtime, scope, {directoryPath: '/a/b'});
-    expect(mockWriteFile).toHaveBeenCalledWith(
-      '/cache/b.zip',
-      expect.any(String),
-      'base64',
-    );
-    expect(mockSaveDocuments).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sourceUris: ['file:///cache/b.zip'],
-        fileName: 'b.zip',
-      }),
-    );
-    // 子目录命名不依赖项目解析
-    expect(mockProjectsGet).not.toHaveBeenCalled();
-  });
+    it('import rejects truncated ZIP missing EOCD', async () => {
+        mockPick.mockResolvedValue([
+            {uri: 'content://downloads/bad.zip', name: 'bad.zip'},
+        ]);
+        mockReadFile.mockResolvedValue(TRUNCATED_ZIP_BASE64);
 
-  it('fileName 覆盖优先于路径与项目名推导', async () => {
-    await VfsZipService.exportZip(runtime, scope, {
-      directoryPath: '/a/b',
-      fileName: '技能包.zip',
+        // 错误通道迁移后 import 沿 Result.err 回传（不再 reject）。
+        const imported = await VfsZipService.importZip(runtime, scope, {confirmed: true});
+        expect(imported).toMatchObject({
+            ok: false,
+            // VfsZipError 类退役：zip 解析失败统一 AppError（name 即 key，code 为数字码）。
+            error: {
+                name: 'VFS_ZIP_INVALID_ARCHIVE',
+                message: expect.stringContaining('missing EOCD'),
+            },
+        });
+        expect(mockImport).not.toHaveBeenCalled();
     });
-    expect(mockSaveDocuments).toHaveBeenCalledWith(
-      expect.objectContaining({fileName: '技能包.zip'}),
-    );
-    expect(mockWriteFile).toHaveBeenCalledWith(
-      '/cache/技能包.zip',
-      expect.any(String),
-      'base64',
-    );
-  });
 
-  it('根目录导出项目解析失败回退 workspace.zip', async () => {
-    mockProjectsGet.mockRejectedValue(new Error('project not found'));
-    await VfsZipService.exportZip(runtime, scope);
-    expect(mockSaveDocuments).toHaveBeenCalledWith(
-      expect.objectContaining({fileName: 'workspace.zip'}),
-    );
-  });
+    it('imports via keepLocalCopy and blob read', async () => {
+        mockPick.mockResolvedValue([
+            {uri: 'content://downloads/x.zip', name: 'x.zip'},
+        ]);
+        await VfsZipService.importZip(runtime, scope, {confirmed: true});
+        expect(mockKeepLocalCopy).toHaveBeenCalledWith(
+            expect.objectContaining({
+                files: [{uri: 'content://downloads/x.zip', fileName: 'import.zip'}],
+                destination: 'cachesDirectory',
+            }),
+        );
+        expect(mockReadFile).toHaveBeenCalledWith('/cache/import.zip', 'base64');
+        expect(mockImport).toHaveBeenCalledWith(scope, expect.any(Uint8Array), {
+            confirmed: true,
+            directoryPath: '/',
+        });
+    });
 
-  it('无 projectId 域的根目录导出回退 workspace.zip', async () => {
-    await VfsZipService.exportZip(runtime, {kind: 'global-meta'} as const);
-    expect(mockProjectsGet).not.toHaveBeenCalled();
-    expect(mockSaveDocuments).toHaveBeenCalledWith(
-      expect.objectContaining({fileName: 'workspace.zip'}),
-    );
-  });
+    it('passes directoryPath to Core export/import', async () => {
+        await VfsZipService.exportZip(runtime, scope, {directoryPath: '/a'});
+        expect(mockExport).toHaveBeenCalledWith(scope, {directoryPath: '/a'});
 
-  it('VfsZipPath.baseNameFromPath：根→null，子目录→末段，文件→文件名', () => {
-    expect(VfsZipPath.baseNameFromPath('/')).toBeNull();
-    expect(VfsZipPath.baseNameFromPath('')).toBeNull();
-    expect(VfsZipPath.baseNameFromPath('/设定集')).toBe('设定集');
-    expect(VfsZipPath.baseNameFromPath('/设定集/大纲')).toBe('大纲');
-    // 文件目标口径：末段即文件名，追加 .zip
-    expect(VfsZipPath.baseNameFromPath('/notes/资料.md')).toBe('资料.md');
-    // 尾斜杠归一化到目录名
-    expect(VfsZipPath.baseNameFromPath('/设定集/')).toBe('设定集');
-  });
+        mockPick.mockResolvedValue([
+            {uri: 'content://downloads/x.zip', name: 'x.zip'},
+        ]);
+        await VfsZipService.importZip(runtime, scope, {
+            confirmed: true,
+            directoryPath: '/a',
+        });
+        expect(mockImport).toHaveBeenCalledWith(scope, expect.any(Uint8Array), {
+            confirmed: true,
+            directoryPath: '/a',
+        });
+    });
 
-  it('skips import when picker cancelled', async () => {
-    mockPick.mockResolvedValue([]);
-    await VfsZipService.importZip(runtime, scope, {confirmed: true});
-    expect(mockKeepLocalCopy).not.toHaveBeenCalled();
-    expect(mockImport).not.toHaveBeenCalled();
-  });
+    it('export 默认名取子目录末段（与 Desktop 同规则）', async () => {
+        await VfsZipService.exportZip(runtime, scope, {directoryPath: '/a/b'});
+        expect(mockWriteFile).toHaveBeenCalledWith(
+            '/cache/b.zip',
+            expect.any(String),
+            'base64',
+        );
+        expect(mockSaveDocuments).toHaveBeenCalledWith(
+            expect.objectContaining({
+                sourceUris: ['file:///cache/b.zip'],
+                fileName: 'b.zip',
+            }),
+        );
+        // 子目录命名不依赖项目解析
+        expect(mockProjectsGet).not.toHaveBeenCalled();
+    });
+
+    it('fileName 覆盖优先于路径与项目名推导', async () => {
+        await VfsZipService.exportZip(runtime, scope, {
+            directoryPath: '/a/b',
+            fileName: '技能包.zip',
+        });
+        expect(mockSaveDocuments).toHaveBeenCalledWith(
+            expect.objectContaining({fileName: '技能包.zip'}),
+        );
+        expect(mockWriteFile).toHaveBeenCalledWith(
+            '/cache/技能包.zip',
+            expect.any(String),
+            'base64',
+        );
+    });
+
+    it('根目录导出项目解析失败回退 workspace.zip', async () => {
+        mockProjectsGet.mockRejectedValue(new Error('project not found'));
+        await VfsZipService.exportZip(runtime, scope);
+        expect(mockSaveDocuments).toHaveBeenCalledWith(
+            expect.objectContaining({fileName: 'workspace.zip'}),
+        );
+    });
+
+    it('无 projectId 域的根目录导出回退 workspace.zip', async () => {
+        await VfsZipService.exportZip(runtime, {kind: 'global-meta'} as const);
+        expect(mockProjectsGet).not.toHaveBeenCalled();
+        expect(mockSaveDocuments).toHaveBeenCalledWith(
+            expect.objectContaining({fileName: 'workspace.zip'}),
+        );
+    });
+
+    it('VfsZipPath.baseNameFromPath：根→null，子目录→末段，文件→文件名', () => {
+        expect(VfsZipPath.baseNameFromPath('/')).toBeNull();
+        expect(VfsZipPath.baseNameFromPath('')).toBeNull();
+        expect(VfsZipPath.baseNameFromPath('/设定集')).toBe('设定集');
+        expect(VfsZipPath.baseNameFromPath('/设定集/大纲')).toBe('大纲');
+        // 文件目标口径：末段即文件名，追加 .zip
+        expect(VfsZipPath.baseNameFromPath('/notes/资料.md')).toBe('资料.md');
+        // 尾斜杠归一化到目录名
+        expect(VfsZipPath.baseNameFromPath('/设定集/')).toBe('设定集');
+    });
+
+    it('skips import when picker cancelled', async () => {
+        mockPick.mockResolvedValue([]);
+        await VfsZipService.importZip(runtime, scope, {confirmed: true});
+        expect(mockKeepLocalCopy).not.toHaveBeenCalled();
+        expect(mockImport).not.toHaveBeenCalled();
+    });
 });

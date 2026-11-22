@@ -17,62 +17,62 @@ import {  NOVEL_MASTER_SCHEMA_STATEMENTS, SCHEMA_BOOT_VERSION  } from "../../src
 import {  BETTER_SQLITE3_DRIVER_NAME, BetterSqlite3Register  } from "@novel-master/tdbc-driver-better-sqlite3";
 
 async function openInMemoryConnection(): Promise<TdbcConnection> {
-  BetterSqlite3Register.register();
-  return await TdbcOpen.open("tdbc:sqlite:file::memory:", {
-    driver: BETTER_SQLITE3_DRIVER_NAME,
-    filename: ":memory:",
-  });
+    BetterSqlite3Register.register();
+    return await TdbcOpen.open("tdbc:sqlite:file::memory:", {
+        driver: BETTER_SQLITE3_DRIVER_NAME,
+        filename: ":memory:",
+    });
 }
 
 async function tableColumnNames(
-  conn: TdbcConnection,
-  table: string
+    conn: TdbcConnection,
+    table: string
 ): Promise<Set<string>> {
-  const rows = await conn.query<{ name: string }>(
-    `SELECT name FROM pragma_table_info('${table}')`
-  );
-  return new Set(rows.map((row) => row.name));
+    const rows = await conn.query<{ name: string }>(
+        `SELECT name FROM pragma_table_info('${table}')`
+    );
+    return new Set(rows.map((row) => row.name));
 }
 
 async function indexNames(
-  conn: TdbcConnection,
-  table: string
+    conn: TdbcConnection,
+    table: string
 ): Promise<Set<string>> {
-  const rows = await conn.query<{ name: string }>(
-    `SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = '${table}'`
-  );
-  return new Set(rows.map((row) => row.name));
+    const rows = await conn.query<{ name: string }>(
+        `SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = '${table}'`
+    );
+    return new Set(rows.map((row) => row.name));
 }
 
 describe("agent-subagent M1 schema（T-S1）", () => {
-  it("新建库 bootstrap 后 chat_session.parent_session_id 由 DDL 直接创建", async () => {
-    const conn = await openInMemoryConnection();
-    try {
-      await NovelMasterBootstrap.bootstrap(conn);
+    it("新建库 bootstrap 后 chat_session.parent_session_id 由 DDL 直接创建", async () => {
+        const conn = await openInMemoryConnection();
+        try {
+            await NovelMasterBootstrap.bootstrap(conn);
 
-      const columns = await tableColumnNames(conn, "chat_session");
-      assert.ok(
-        columns.has("parent_session_id"),
-        "新库 bootstrap 后 chat_session 应有 parent_session_id 列"
-      );
+            const columns = await tableColumnNames(conn, "chat_session");
+            assert.ok(
+                columns.has("parent_session_id"),
+                "新库 bootstrap 后 chat_session 应有 parent_session_id 列"
+            );
 
-      const indexes = await indexNames(conn, "chat_session");
-      assert.ok(
-        indexes.has("idx_chat_session_parent"),
-        "应有复合索引 idx_chat_session_parent"
-      );
-    } finally {
-      await conn.close();
-    }
-  });
+            const indexes = await indexNames(conn, "chat_session");
+            assert.ok(
+                indexes.has("idx_chat_session_parent"),
+                "应有复合索引 idx_chat_session_parent"
+            );
+        } finally {
+            await conn.close();
+        }
+    });
 
-  it("老库（v3，无 parent_session_id）bootstrap 后 ALIGN 补列并升到 v4", async () => {
-    const conn = await openInMemoryConnection();
-    try {
-      // 模拟「已升版到 v3」的老库：手建一份缺 parent_session_id 的 chat_session，
-      // 再跑全量 DDL（CREATE IF NOT EXISTS 不会改已有表），最后把 user_version 钉到 3，
-      // 这样下次 bootstrap 会走「版本落后 → 跑 DDL + ALIGN」的完整路径。
-      await conn.execute(`
+    it("老库（v3，无 parent_session_id）bootstrap 后 ALIGN 补列并升到 v4", async () => {
+        const conn = await openInMemoryConnection();
+        try {
+            // 模拟「已升版到 v3」的老库：手建一份缺 parent_session_id 的 chat_session，
+            // 再跑全量 DDL（CREATE IF NOT EXISTS 不会改已有表），最后把 user_version 钉到 3，
+            // 这样下次 bootstrap 会走「版本落后 → 跑 DDL + ALIGN」的完整路径。
+            await conn.execute(`
         CREATE TABLE chat_session (
           id TEXT PRIMARY KEY,
           project_id TEXT NOT NULL,
@@ -83,53 +83,53 @@ describe("agent-subagent M1 schema（T-S1）", () => {
           updated_at_ms INTEGER NOT NULL
         )
       `);
-      await conn.execute(`
+            await conn.execute(`
         CREATE INDEX idx_chat_session_project ON chat_session(project_id)
       `);
-      for (const sql of NOVEL_MASTER_SCHEMA_STATEMENTS) {
-        await conn.execute(sql);
-      }
-      await conn.execute(`PRAGMA user_version = 3`);
+            for (const sql of NOVEL_MASTER_SCHEMA_STATEMENTS) {
+                await conn.execute(sql);
+            }
+            await conn.execute(`PRAGMA user_version = 3`);
 
-      // 升级前确认列不存在。
-      assert.equal(
-        (await tableColumnNames(conn, "chat_session")).has("parent_session_id"),
-        false
-      );
+            // 升级前确认列不存在。
+            assert.equal(
+                (await tableColumnNames(conn, "chat_session")).has("parent_session_id"),
+                false
+            );
 
-      // 触发升级：bootstrap 检测到 user_version=3 < SCHEMA_BOOT_VERSION，跑 ALIGN。
-      await NovelMasterBootstrap.bootstrap(conn);
+            // 触发升级：bootstrap 检测到 user_version=3 < SCHEMA_BOOT_VERSION，跑 ALIGN。
+            await NovelMasterBootstrap.bootstrap(conn);
 
-      const columns = await tableColumnNames(conn, "chat_session");
-      assert.ok(
-        columns.has("parent_session_id"),
-        "老库升级后应通过 ALIGN 补上 parent_session_id"
-      );
+            const columns = await tableColumnNames(conn, "chat_session");
+            assert.ok(
+                columns.has("parent_session_id"),
+                "老库升级后应通过 ALIGN 补上 parent_session_id"
+            );
 
-      // user_version 应已升到当前 SCHEMA_BOOT_VERSION（快路径再次 bootstrap 不应报错也不重建）。
-      const versionRows = await conn.query<{ user_version: number }>(
-        "PRAGMA user_version"
-      );
-      assert.equal(versionRows[0]!.user_version, SCHEMA_BOOT_VERSION);
+            // user_version 应已升到当前 SCHEMA_BOOT_VERSION（快路径再次 bootstrap 不应报错也不重建）。
+            const versionRows = await conn.query<{ user_version: number }>(
+                "PRAGMA user_version"
+            );
+            assert.equal(versionRows[0]!.user_version, SCHEMA_BOOT_VERSION);
 
-      // 索引也应该存在（DDL 在升级路径里会跑 CREATE IF NOT EXISTS）。
-      const indexes = await indexNames(conn, "chat_session");
-      assert.ok(indexes.has("idx_chat_session_parent"));
-    } finally {
-      await conn.close();
-    }
-  });
+            // 索引也应该存在（DDL 在升级路径里会跑 CREATE IF NOT EXISTS）。
+            const indexes = await indexNames(conn, "chat_session");
+            assert.ok(indexes.has("idx_chat_session_parent"));
+        } finally {
+            await conn.close();
+        }
+    });
 
-  it("已升版到 v4 的库再 bootstrap 走快路径仍保留列", async () => {
-    const conn = await openInMemoryConnection();
-    try {
-      await NovelMasterBootstrap.bootstrap(conn); // 首次：建列 + 升到 v4
-      await NovelMasterBootstrap.bootstrap(conn); // 快路径：不应漏列
+    it("已升版到 v4 的库再 bootstrap 走快路径仍保留列", async () => {
+        const conn = await openInMemoryConnection();
+        try {
+            await NovelMasterBootstrap.bootstrap(conn); // 首次：建列 + 升到 v4
+            await NovelMasterBootstrap.bootstrap(conn); // 快路径：不应漏列
 
-      const columns = await tableColumnNames(conn, "chat_session");
-      assert.ok(columns.has("parent_session_id"));
-    } finally {
-      await conn.close();
-    }
-  });
+            const columns = await tableColumnNames(conn, "chat_session");
+            assert.ok(columns.has("parent_session_id"));
+        } finally {
+            await conn.close();
+        }
+    });
 });

@@ -7,54 +7,54 @@ import {  WorkplacePaths  } from "@/domain/workplace/logic/diff-workplace-paths.
 import {  RuleSnapshotCodec  } from "@/domain/workplace/logic/rule-snapshot-codec.js";
 
 describe("diffWorkplacePaths (T-RD1 / T-RD2)", () => {
-  it("T-RD1: live 有新 path、cache 无 → 返回该 path；全命中（含 attach 已写 key）→ []", () => {
-    const live = [
-      { path: "/new.md", status: "full" as const },
-      { path: "/cached.md", status: "full" as const },
-      { path: "/attach.md", status: "header" as const },
-    ];
-    const cacheKeys = new Set([
-      RuleSnapshotCodec.fileCacheKey("full", "/cached.md"),
-      // attach hydrate 写入的 filename: 也算已加载
-      RuleSnapshotCodec.fileCacheKey("filename", "/attach.md"),
-    ]);
+    it("T-RD1: live 有新 path、cache 无 → 返回该 path；全命中（含 attach 已写 key）→ []", () => {
+        const live = [
+            { path: "/new.md", status: "full" as const },
+            { path: "/cached.md", status: "full" as const },
+            { path: "/attach.md", status: "header" as const },
+        ];
+        const cacheKeys = new Set([
+            RuleSnapshotCodec.fileCacheKey("full", "/cached.md"),
+            // attach hydrate 写入的 filename: 也算已加载
+            RuleSnapshotCodec.fileCacheKey("filename", "/attach.md"),
+        ]);
 
-    assert.deepEqual(WorkplacePaths.diff(live, cacheKeys), ["/new.md"]);
-    assert.deepEqual(
-      WorkplacePaths.diff(
-        [
-          { path: "/cached.md", status: "full" },
-          { path: "/attach.md", status: "full" },
-        ],
-        cacheKeys,
-      ),
-      [],
-    );
-  });
+        assert.deepEqual(WorkplacePaths.diff(live, cacheKeys), ["/new.md"]);
+        assert.deepEqual(
+            WorkplacePaths.diff(
+                [
+                    { path: "/cached.md", status: "full" },
+                    { path: "/attach.md", status: "full" },
+                ],
+                cacheKeys,
+            ),
+            [],
+        );
+    });
 
-  it("T-RD2: live 要求 full、cache 仅有 filename: → 不进入 needed", () => {
-    const live = [{ path: "/a.md", status: "full" as const }];
-    const cacheKeys = [RuleSnapshotCodec.fileCacheKey("filename", "/a.md")];
+    it("T-RD2: live 要求 full、cache 仅有 filename: → 不进入 needed", () => {
+        const live = [{ path: "/a.md", status: "full" as const }];
+        const cacheKeys = [RuleSnapshotCodec.fileCacheKey("filename", "/a.md")];
 
-    assert.deepEqual(WorkplacePaths.diff(live, cacheKeys), []);
-  });
+        assert.deepEqual(WorkplacePaths.diff(live, cacheKeys), []);
+    });
 
-  it("header: 命中亦视为已加载", () => {
-    const live = [
-      { path: "/h.md", status: "full" as const },
-      { path: "/need.md", status: "full" as const },
-    ];
-    const cacheKeys = new Set([RuleSnapshotCodec.fileCacheKey("header", "/h.md")]);
+    it("header: 命中亦视为已加载", () => {
+        const live = [
+            { path: "/h.md", status: "full" as const },
+            { path: "/need.md", status: "full" as const },
+        ];
+        const cacheKeys = new Set([RuleSnapshotCodec.fileCacheKey("header", "/h.md")]);
 
-    assert.deepEqual(WorkplacePaths.diff(live, cacheKeys), ["/need.md"]);
-  });
+        assert.deepEqual(WorkplacePaths.diff(live, cacheKeys), ["/need.md"]);
+    });
 
-  it("live path 去重，保持首次出现顺序", () => {
-    const live = [
-      { path: "/a.md", status: "full" as const },
-      { path: "/b.md", status: "header" as const },
-      { path: "/a.md", status: "filename" as const },
-    ];
-    assert.deepEqual(WorkplacePaths.diff(live, []), ["/a.md", "/b.md"]);
-  });
+    it("live path 去重，保持首次出现顺序", () => {
+        const live = [
+            { path: "/a.md", status: "full" as const },
+            { path: "/b.md", status: "header" as const },
+            { path: "/a.md", status: "filename" as const },
+        ];
+        assert.deepEqual(WorkplacePaths.diff(live, []), ["/a.md", "/b.md"]);
+    });
 });

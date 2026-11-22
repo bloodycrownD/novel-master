@@ -11,17 +11,17 @@
  * `sortOrder` 全表统一重编号（1..N）。
  */
 export interface SmartSortRule {
-  readonly ruleId: string;
-  readonly name: string;
-  readonly pattern: string;
-  readonly flags: string;
-  /** 捕获数字档位（D13）：smart 捕获组提取 / fixed_min 哨兵排最前 / fixed_max 沉底。 */
-  readonly captureKind: SmartSortCaptureKind;
-  readonly description: string | null;
-  readonly enabled: boolean;
-  readonly sortOrder: number;
-  readonly createdAtMs: number;
-  readonly updatedAtMs: number;
+    readonly ruleId: string;
+    readonly name: string;
+    readonly pattern: string;
+    readonly flags: string;
+    /** 捕获数字档位（D13）：smart 捕获组提取 / fixed_min 哨兵排最前 / fixed_max 沉底。 */
+    readonly captureKind: SmartSortCaptureKind;
+    readonly description: string | null;
+    readonly enabled: boolean;
+    readonly sortOrder: number;
+    readonly createdAtMs: number;
+    readonly updatedAtMs: number;
 }
 
 /**
@@ -34,17 +34,17 @@ export type SmartSortCaptureKind = "smart" | "fixed_min" | "fixed_max";
 
 /** 全部合法 captureKind 值（DDL CHECK / CLI 校验 / GUI 选项共用单源）。 */
 export const SMART_SORT_CAPTURE_KINDS: readonly SmartSortCaptureKind[] = [
-  "smart",
-  "fixed_min",
-  "fixed_max",
+    "smart",
+    "fixed_min",
+    "fixed_max",
 ];
 
 /** 内置规则固定 rule_id 前缀：仅可禁用不可删除（spec D3）。 */
 export const BUILTIN_SMART_SORT_RULE_ID_PREFIX = "builtin-";
 
 export const SmartSortRule = {
-  /** True when the rule id belongs to the built-in (undeletable) set. */
-  isBuiltinId(ruleId: string): boolean {
-    return ruleId.startsWith(BUILTIN_SMART_SORT_RULE_ID_PREFIX);
-  },
+    /** True when the rule id belongs to the built-in (undeletable) set. */
+    isBuiltinId(ruleId: string): boolean {
+        return ruleId.startsWith(BUILTIN_SMART_SORT_RULE_ID_PREFIX);
+    },
 } as const;

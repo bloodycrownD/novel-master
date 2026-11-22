@@ -18,17 +18,17 @@
 
 /** 单次 SSE 响应的分发状态：首包标记需要跨 chunk 复用。 */
 interface SseDispatchState {
-  /** 是否已投递过至少一个非空 chunk（首包日志只打一次）。 */
-  firstChunkDelivered: boolean;
+    /** 是否已投递过至少一个非空 chunk（首包日志只打一次）。 */
+    firstChunkDelivered: boolean;
 }
 
 export const SseDispatch = {
-  /** 创建一份新的分发状态，供一次 SSE 响应全程复用。 */
-  createState(): SseDispatchState {
-    return { firstChunkDelivered: false };
-  },
+    /** 创建一份新的分发状态，供一次 SSE 响应全程复用。 */
+    createState(): SseDispatchState {
+        return { firstChunkDelivered: false };
+    },
 
-  /**
+    /**
    * 把解码后的 chunk 文本转发给 `emit`；首个非空 chunk 会触发一次 `onFirstChunk`。
    *
    * 注意：首参命名为 `chunk` 而非 spec 字面意义的 `rawBytes`。因为 XHR 路径拿到的
@@ -41,14 +41,14 @@ export const SseDispatch = {
    * @param emit 投递 sink：fetch 传 onChunk，XHR 传 emitter.append
    * @param onFirstChunk 首个非空 chunk 的回调，用来打日志
    */
-  dispatchChunk(chunk: string, state: SseDispatchState, emit: (text: string) => void, onFirstChunk?: (bytes: number) => void): void {
-    if (chunk.length === 0) {
-      return;
-    }
-    emit(chunk);
-    if (!state.firstChunkDelivered) {
-      state.firstChunkDelivered = true;
-      onFirstChunk?.(chunk.length);
-    }
-  },
+    dispatchChunk(chunk: string, state: SseDispatchState, emit: (text: string) => void, onFirstChunk?: (bytes: number) => void): void {
+        if (chunk.length === 0) {
+            return;
+        }
+        emit(chunk);
+        if (!state.firstChunkDelivered) {
+            state.firstChunkDelivered = true;
+            onFirstChunk?.(chunk.length);
+        }
+    },
 } as const;

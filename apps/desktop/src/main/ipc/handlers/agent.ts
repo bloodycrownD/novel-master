@@ -7,24 +7,24 @@
 import { SavedModelDisplayName, SavedModelUuid } from "@novel-master/core/provider";
 import { AgentRunShared } from "@novel-master/core/agent";
 import {
-  EVENT_AGENT_RUN_FAILED,
-  EVENT_AGENT_RUN_FINISHED,
-  EVENT_AGENT_RUN_STARTED,
-  type AgentRunFailedPayload,
-  type AgentRunFinishedPayload,
-  type AgentRunStartedPayload,
-  type SimpleEventBus,
+    EVENT_AGENT_RUN_FAILED,
+    EVENT_AGENT_RUN_FINISHED,
+    EVENT_AGENT_RUN_STARTED,
+    type AgentRunFailedPayload,
+    type AgentRunFinishedPayload,
+    type AgentRunStartedPayload,
+    type SimpleEventBus,
 } from "@novel-master/core/events";
 import type {
-  AgentAbortRequest,
-  AgentListPickerResponse,
-  AgentResolveCurrentResponse,
-  AgentRunIsActiveRequest,
-  AgentRunRequest,
-  AgentSetCurrentRequest,
-  IpcResult,
-  ModelListPickerResponse,
-  ModelSetCurrentRequest,
+    AgentAbortRequest,
+    AgentListPickerResponse,
+    AgentResolveCurrentResponse,
+    AgentRunIsActiveRequest,
+    AgentRunRequest,
+    AgentSetCurrentRequest,
+    IpcResult,
+    ModelListPickerResponse,
+    ModelSetCurrentRequest,
 } from "../../../../shared/ipc-types.js";
 import { coreT } from "../../../../shared/logic/core-i18n.js";
 import { DesktopRuntimeSingleton } from "../../runtime/desktop-runtime-singleton.js";
@@ -53,8 +53,8 @@ const sessionRunIds = new Map<string, string>();
 
 /** agent 运行时装配槽（模块内 holder，对象管理）：生命周期订阅与 token 补跑注入。 */
 const agentRuntime = {
-  /** 生命周期订阅（attach 时整体换新，teardown 时逐个 unsubscribe 后清空）。 */
-  lifecycleSubs: [] as Array<{ unsubscribe: () => void }>,
+    /** 生命周期订阅（attach 时整体换新，teardown 时逐个 unsubscribe 后清空）。 */
+    lifecycleSubs: [] as Array<{ unsubscribe: () => void }>,
 };
 
 /**
@@ -67,204 +67,204 @@ const agentRuntime = {
  * 的补跑实现注册进来，运行时序完全不变。
  */
 type RunFinishedTokenStatsRefresh = (payload: {
-  readonly sessionId: string;
-  readonly projectId: string;
+    readonly sessionId: string;
+    readonly projectId: string;
 }) => void;
 
 /** run 结束后补跑 token 读口的注入实现槽（模块内 holder，对象管理；null = 未注入）。 */
 const tokenStatsRefreshSlot = {
-  refresh: null as RunFinishedTokenStatsRefresh | null,
+    refresh: null as RunFinishedTokenStatsRefresh | null,
 };
 
 // namespace 要求单一连续块：模块级状态从函数区中段上移到文件头（仍为文件私有，语义不变）。
 export namespace Agent {
-  async function resolveModelLabel(rt: DesktopNovelMasterRuntime, savedModelId: string): Promise<Result<string, AppError>> {
-    const saved = await rt.providerModels.getSavedById(savedModelId);
-    if (!saved.ok) return Result.err(saved.error);
-    if (saved.value == null) {
-      return Result.ok(savedModelId);
-    }
-    const provider = await rt.providers.get(saved.value.providerId);
-    if (!provider.ok) return Result.err(provider.error);
-    return Result.ok(SavedModelDisplayName.format(provider.value.displayName, saved.value.modelName));
-  }
-
-  export function resolveCurrent(): Promise<IpcResult<AgentResolveCurrentResponse>> {
-    return IpcResults.from(async (): Promise<Result<AgentResolveCurrentResponse, AppError>> => {
-      const built = await DesktopRuntimeSingleton.get();
-      // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
-      if (!built.ok) return Result.err(built.error);
-      const rt = built.value;
-      const resolvedId = await AgentRunShared.resolveCurrentId(rt);
-      // 错误通道迁移：core 沿 Result 回传，已知失败就地并进本 handler 的 Result 通道。
-      if (!resolvedId.ok) return Result.err(resolvedId.error);
-      const agentId = resolvedId.value;
-      if (agentId == null) {
-        return Result.ok({ agentId: undefined, agentName: coreT({key: "ui.session.agent_unconfigured"}), modelLabel: "—", hasDedicatedModel: false });
-      }
-      // resolve key 走 `AgentTurnError` 抛出通道（`toIpcResult` 的 rejection 分支收口成
-      // AGENT_RUN_FAILED）；本 handler 自己的 Result 通道只承载 id 解析的已知失败。
-      const { definition } = await AgentRunService.resolveCurrentDefinitionOrThrow(rt);
-      const hasDedicatedModel = definition.model != null && definition.model !== "";
-      // workspace 层已移除：workspace 级 agent 显示只取 agent pin，不再回退 workspace 模型。
-      const savedModelId = definition.model;
-      let modelLabel = coreT({key: "ui.chat.no_model_selected"});
-      if (savedModelId) {
-        const label = await resolveModelLabel(rt, savedModelId);
-        if (!label.ok) return Result.err(label.error);
-        modelLabel = label.value;
-      }
-      return Result.ok({ agentId, agentName: definition.name, modelLabel, hasDedicatedModel });
-    });
-  }
-
-  export function listPicker(): Promise<IpcResult<AgentListPickerResponse>> {
-    return IpcResults.from(async () => {
-      const built = await DesktopRuntimeSingleton.get();
-      // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
-      if (!built.ok) return Result.err(built.error);
-      const rt = built.value;
-      const currentAgent = await rt.state.getCurrentAgentId();
-      if (!currentAgent.ok) return Result.err(currentAgent.error);
-      const currentId = currentAgent.value ?? undefined;
-      const ids = await rt.agentRegistry.listAgentIds();
-      const rows = [];
-      for (const agentId of ids) {
-        let label = agentId;
-        const def = await rt.agentRegistry.get(agentId);
-        if (def.ok) {
-          if (def.value.mode === "subagent") continue;
-          label = def.value.name?.trim() || agentId;
-        }
-        rows.push({ agentId, label });
-      }
-      return Result.ok({ rows, currentId });
-    });
-  }
-
-  export function setCurrent(req: AgentSetCurrentRequest): Promise<IpcResult<void>> {
-    return IpcResults.from(async () => {
-      const built = await DesktopRuntimeSingleton.get();
-      // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
-      if (!built.ok) return Result.err(built.error);
-      const rt = built.value;
-      return rt.state.setCurrentAgentId(req.agentId);
-    });
-  }
-
-  export function modelListPicker(): Promise<IpcResult<ModelListPickerResponse>> {
-    return IpcResults.from(async () => {
-      const built = await DesktopRuntimeSingleton.get();
-      // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
-      if (!built.ok) return Result.err(built.error);
-      const rt = built.value;
-      const currentModel = await rt.state.getCurrentModelId();
-      if (!currentModel.ok) return Result.err(currentModel.error);
-      const currentId = currentModel.value ?? undefined;
-      const listed = await rt.providers.list();
-      if (!listed.ok) return Result.err(listed.error);
-      const providers = listed.value;
-      const rows = [];
-      for (const provider of providers) {
-        const saved = await rt.providerModels.savedList(provider.id);
+    async function resolveModelLabel(rt: DesktopNovelMasterRuntime, savedModelId: string): Promise<Result<string, AppError>> {
+        const saved = await rt.providerModels.getSavedById(savedModelId);
         if (!saved.ok) return Result.err(saved.error);
-        for (const model of saved.value) {
-          const savedModelId = model.id;
-          let label = SavedModelDisplayName.format(provider.displayName, model.modelName);
-          const resolved = await resolveModelLabel(rt, savedModelId);
-          if (resolved.ok) {
-            label = resolved.value;
-          }
-          rows.push({ savedModelId, label });
+        if (saved.value == null) {
+            return Result.ok(savedModelId);
         }
-      }
-      rows.sort((a, b) => a.label.localeCompare(b.label, "zh-CN"));
-      return Result.ok({ rows, currentId });
-    });
-  }
+        const provider = await rt.providers.get(saved.value.providerId);
+        if (!provider.ok) return Result.err(provider.error);
+        return Result.ok(SavedModelDisplayName.format(provider.value.displayName, saved.value.modelName));
+    }
 
-  export function modelSetCurrent(req: ModelSetCurrentRequest): Promise<IpcResult<void>> {
-    return IpcResults.from(async () => {
-      const built = await DesktopRuntimeSingleton.get();
-      // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
-      if (!built.ok) return Result.err(built.error);
-      const rt = built.value;
-      const saved = await SavedModelUuid.assert(req.savedModelId, rt.savedModelRepo);
-      if (!saved.ok) return Result.err(saved.error);
-      return rt.state.setCurrentModelId(saved.value.id);
-    });
-  }
+    export function resolveCurrent(): Promise<IpcResult<AgentResolveCurrentResponse>> {
+        return IpcResults.from(async (): Promise<Result<AgentResolveCurrentResponse, AppError>> => {
+            const built = await DesktopRuntimeSingleton.get();
+            // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+            if (!built.ok) return Result.err(built.error);
+            const rt = built.value;
+            const resolvedId = await AgentRunShared.resolveCurrentId(rt);
+            // 错误通道迁移：core 沿 Result 回传，已知失败就地并进本 handler 的 Result 通道。
+            if (!resolvedId.ok) return Result.err(resolvedId.error);
+            const agentId = resolvedId.value;
+            if (agentId == null) {
+                return Result.ok({ agentId: undefined, agentName: coreT({key: "ui.session.agent_unconfigured"}), modelLabel: "—", hasDedicatedModel: false });
+            }
+            // resolve key 走 `AgentTurnError` 抛出通道（`toIpcResult` 的 rejection 分支收口成
+            // AGENT_RUN_FAILED）；本 handler 自己的 Result 通道只承载 id 解析的已知失败。
+            const { definition } = await AgentRunService.resolveCurrentDefinitionOrThrow(rt);
+            const hasDedicatedModel = definition.model != null && definition.model !== "";
+            // workspace 层已移除：workspace 级 agent 显示只取 agent pin，不再回退 workspace 模型。
+            const savedModelId = definition.model;
+            let modelLabel = coreT({key: "ui.chat.no_model_selected"});
+            if (savedModelId) {
+                const label = await resolveModelLabel(rt, savedModelId);
+                if (!label.ok) return Result.err(label.error);
+                modelLabel = label.value;
+            }
+            return Result.ok({ agentId, agentName: definition.name, modelLabel, hasDedicatedModel });
+        });
+    }
 
-  /**
+    export function listPicker(): Promise<IpcResult<AgentListPickerResponse>> {
+        return IpcResults.from(async () => {
+            const built = await DesktopRuntimeSingleton.get();
+            // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+            if (!built.ok) return Result.err(built.error);
+            const rt = built.value;
+            const currentAgent = await rt.state.getCurrentAgentId();
+            if (!currentAgent.ok) return Result.err(currentAgent.error);
+            const currentId = currentAgent.value ?? undefined;
+            const ids = await rt.agentRegistry.listAgentIds();
+            const rows = [];
+            for (const agentId of ids) {
+                let label = agentId;
+                const def = await rt.agentRegistry.get(agentId);
+                if (def.ok) {
+                    if (def.value.mode === "subagent") continue;
+                    label = def.value.name?.trim() || agentId;
+                }
+                rows.push({ agentId, label });
+            }
+            return Result.ok({ rows, currentId });
+        });
+    }
+
+    export function setCurrent(req: AgentSetCurrentRequest): Promise<IpcResult<void>> {
+        return IpcResults.from(async () => {
+            const built = await DesktopRuntimeSingleton.get();
+            // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+            if (!built.ok) return Result.err(built.error);
+            const rt = built.value;
+            return rt.state.setCurrentAgentId(req.agentId);
+        });
+    }
+
+    export function modelListPicker(): Promise<IpcResult<ModelListPickerResponse>> {
+        return IpcResults.from(async () => {
+            const built = await DesktopRuntimeSingleton.get();
+            // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+            if (!built.ok) return Result.err(built.error);
+            const rt = built.value;
+            const currentModel = await rt.state.getCurrentModelId();
+            if (!currentModel.ok) return Result.err(currentModel.error);
+            const currentId = currentModel.value ?? undefined;
+            const listed = await rt.providers.list();
+            if (!listed.ok) return Result.err(listed.error);
+            const providers = listed.value;
+            const rows = [];
+            for (const provider of providers) {
+                const saved = await rt.providerModels.savedList(provider.id);
+                if (!saved.ok) return Result.err(saved.error);
+                for (const model of saved.value) {
+                    const savedModelId = model.id;
+                    let label = SavedModelDisplayName.format(provider.displayName, model.modelName);
+                    const resolved = await resolveModelLabel(rt, savedModelId);
+                    if (resolved.ok) {
+                        label = resolved.value;
+                    }
+                    rows.push({ savedModelId, label });
+                }
+            }
+            rows.sort((a, b) => a.label.localeCompare(b.label, "zh-CN"));
+            return Result.ok({ rows, currentId });
+        });
+    }
+
+    export function modelSetCurrent(req: ModelSetCurrentRequest): Promise<IpcResult<void>> {
+        return IpcResults.from(async () => {
+            const built = await DesktopRuntimeSingleton.get();
+            // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+            if (!built.ok) return Result.err(built.error);
+            const rt = built.value;
+            const saved = await SavedModelUuid.assert(req.savedModelId, rt.savedModelRepo);
+            if (!saved.ok) return Result.err(saved.error);
+            return rt.state.setCurrentModelId(saved.value.id);
+        });
+    }
+
+    /**
    * RUN_STARTED 时登记 runId（main 进程 eventBus 订阅，非 renderer 侧）。
    */
-  export function onCoreRunStarted({
-    sessionId,
-    runId,
-  }: AgentRunStartedPayload): void {
-    const entry = activeRuns.get(sessionId);
-    if (entry != null) {
-      entry.runId = runId;
+    export function onCoreRunStarted({
+        sessionId,
+        runId,
+    }: AgentRunStartedPayload): void {
+        const entry = activeRuns.get(sessionId);
+        if (entry != null) {
+            entry.runId = runId;
+        }
+        sessionRunIds.set(sessionId, runId);
     }
-    sessionRunIds.set(sessionId, runId);
-  }
 
-  function finishTrackedRun(sessionId: string, runId: string): void {
-    const entry = activeRuns.get(sessionId);
-    const trackedRunId = entry?.runId ?? sessionRunIds.get(sessionId);
-    // r3-run-1 步骤 3：core 前奏期命中检查点 / 前奏抛错时发的终态事件 runId 是
-    // 空串（''）——此刻 RUN_STARTED 还没到，entry.runId 仍是 null，
-    // trackedRunId 落成 undefined（或上一轮遗留的真实 id），与 '' 不相等会被
-    // 静默丢弃 → refcount 永久泄漏、后续全部 AGENT_BUSY。这里显式放行
-    // 「runId 为空串且本 entry 尚无真实 runId」这一种前奏终态形态。
-    //
-    // 必须要求 entry != null：entry 已经不在表里说明 .finally（或外层 catch）
-    // 已经做过一次清理与递减，此时再减就是双递减。
-    const isPreludeTerminal = runId === "" && entry != null && entry.runId == null;
-    if (trackedRunId !== runId && !isPreludeTerminal) {
-      return;
+    function finishTrackedRun(sessionId: string, runId: string): void {
+        const entry = activeRuns.get(sessionId);
+        const trackedRunId = entry?.runId ?? sessionRunIds.get(sessionId);
+        // r3-run-1 步骤 3：core 前奏期命中检查点 / 前奏抛错时发的终态事件 runId 是
+        // 空串（''）——此刻 RUN_STARTED 还没到，entry.runId 仍是 null，
+        // trackedRunId 落成 undefined（或上一轮遗留的真实 id），与 '' 不相等会被
+        // 静默丢弃 → refcount 永久泄漏、后续全部 AGENT_BUSY。这里显式放行
+        // 「runId 为空串且本 entry 尚无真实 runId」这一种前奏终态形态。
+        //
+        // 必须要求 entry != null：entry 已经不在表里说明 .finally（或外层 catch）
+        // 已经做过一次清理与递减，此时再减就是双递减。
+        const isPreludeTerminal = runId === "" && entry != null && entry.runId == null;
+        if (trackedRunId !== runId && !isPreludeTerminal) {
+            return;
+        }
+        if (entry != null) {
+            entry.terminalSeen = true;
+        }
+        activeRuns.delete(sessionId);
+        sessionRunIds.delete(sessionId);
+        agentActivity.decrement();
     }
-    if (entry != null) {
-      entry.terminalSeen = true;
-    }
-    activeRuns.delete(sessionId);
-    sessionRunIds.delete(sessionId);
-    agentActivity.decrement();
-  }
 
-  /** RUN_FINISHED 时清理 run 登记。 */
-  export function onCoreRunFinished({
-    sessionId,
-    projectId,
-    runId,
-  }: AgentRunFinishedPayload): void {
-    // 子 run 终态过滤（cr-func-w23 观察①）：runChildAgent 的子 run 终态 payload
-    // 挂的是 childSessionId——desktop 从未在 activeRuns 登记过它，不过滤的话每个
-    // 子代理 run 结束都会给子会话排一拍完整读口（build 整串重活，task 密集的
-    // 会话平白多 N 趟）。采样必须在 finishTrackedRun **之前**：它一进来就把主
-    // run 的 entry 删了，之后再采就恒 false 了。
-    const wasTracked = activeRuns.has(sessionId);
-    finishTrackedRun(sessionId, runId);
-    if (wasTracked) {
-      refreshChatTokenStatsAfterRun({ sessionId, projectId });
+    /** RUN_FINISHED 时清理 run 登记。 */
+    export function onCoreRunFinished({
+        sessionId,
+        projectId,
+        runId,
+    }: AgentRunFinishedPayload): void {
+        // 子 run 终态过滤（cr-func-w23 观察①）：runChildAgent 的子 run 终态 payload
+        // 挂的是 childSessionId——desktop 从未在 activeRuns 登记过它，不过滤的话每个
+        // 子代理 run 结束都会给子会话排一拍完整读口（build 整串重活，task 密集的
+        // 会话平白多 N 趟）。采样必须在 finishTrackedRun **之前**：它一进来就把主
+        // run 的 entry 删了，之后再采就恒 false 了。
+        const wasTracked = activeRuns.has(sessionId);
+        finishTrackedRun(sessionId, runId);
+        if (wasTracked) {
+            refreshChatTokenStatsAfterRun({ sessionId, projectId });
+        }
     }
-  }
 
-  /** RUN_FAILED 时清理 run 登记。 */
-  // nm-style: keep-local — agent-prelude-terminal.test / chat-prompt-tokens-run-suppression.test 直引断言前奏终态清理；内联会破坏测试锁名。
-  export function onCoreRunFailed({
-    sessionId,
-    projectId,
-    runId,
-  }: AgentRunFailedPayload): void {
-    const wasTracked = activeRuns.has(sessionId);
-    finishTrackedRun(sessionId, runId);
-    if (wasTracked) {
-      refreshChatTokenStatsAfterRun({ sessionId, projectId });
+    /** RUN_FAILED 时清理 run 登记。 */
+    // nm-style: keep-local — agent-prelude-terminal.test / chat-prompt-tokens-run-suppression.test 直引断言前奏终态清理；内联会破坏测试锁名。
+    export function onCoreRunFailed({
+        sessionId,
+        projectId,
+        runId,
+    }: AgentRunFailedPayload): void {
+        const wasTracked = activeRuns.has(sessionId);
+        finishTrackedRun(sessionId, runId);
+        if (wasTracked) {
+            refreshChatTokenStatsAfterRun({ sessionId, projectId });
+        }
     }
-  }
 
-  /**
+    /**
    * 会话是否有在途 run（r3-dt-align 第 1 层的唯一判活源）。
    *
    * 判据写死 `rt.agentAbortRegistry.has(sessionId)`，不用上面的 `activeRuns`：
@@ -278,17 +278,17 @@ export namespace Agent {
    * 收 runtime 作参数而不是自己 `getDesktopRuntime()`：读口 service 手里已经有
    * 同一个 runtime（单测还会传 Proxy 探针），走参数才不会被绕开。
    */
-  export function isDesktopSessionRunInFlight(runtime: DesktopNovelMasterRuntime, sessionId: string): boolean {
-    return runtime.agentAbortRegistry.has(sessionId);
-  }
+    export function isDesktopSessionRunInFlight(runtime: DesktopNovelMasterRuntime, sessionId: string): boolean {
+        return runtime.agentAbortRegistry.has(sessionId);
+    }
 
-  /** 注册/注销 run 结束后的读口补跑（读口 service 在模块加载时注册自己）。 */
-  // nm-style: keep-local — 注入槽：写的是本模块私有状态 tokenStatsRefreshSlot.refresh，为避免 chat-prompt-tokens.service ↔ agent.ts 依赖环而设计（见上方注释）；内联需把模块状态外泄给读口 service。
-  export function setRunFinishedTokenStatsRefresh(refresh: RunFinishedTokenStatsRefresh | null): void {
-    tokenStatsRefreshSlot.refresh = refresh;
-  }
+    /** 注册/注销 run 结束后的读口补跑（读口 service 在模块加载时注册自己）。 */
+    // nm-style: keep-local — 注入槽：写的是本模块私有状态 tokenStatsRefreshSlot.refresh，为避免 chat-prompt-tokens.service ↔ agent.ts 依赖环而设计（见上方注释）；内联需把模块状态外泄给读口 service。
+    export function setRunFinishedTokenStatsRefresh(refresh: RunFinishedTokenStatsRefresh | null): void {
+        tokenStatsRefreshSlot.refresh = refresh;
+    }
 
-  /**
+    /**
    * 终态之后补跑一次读口（补跑槽的 desktop 等价物）。
    *
    * 放在 `finishTrackedRun(...)` **之后**、与终态处理同一条路径里，是 spec 的
@@ -304,185 +304,185 @@ export namespace Agent {
    * 一次读口而已，且走防抖合并）；② stale 终态（runId 与 entry 不匹配、
    * finishTrackedRun 早退）也会补一拍——被防抖合并吃掉，不影响正确性。
    */
-  function refreshChatTokenStatsAfterRun(payload: {
-    readonly sessionId: string;
-    readonly projectId: string;
-  }): void {
-    if (tokenStatsRefreshSlot.refresh == null) {
-      return;
+    function refreshChatTokenStatsAfterRun(payload: {
+        readonly sessionId: string;
+        readonly projectId: string;
+    }): void {
+        if (tokenStatsRefreshSlot.refresh == null) {
+            return;
+        }
+        try {
+            tokenStatsRefreshSlot.refresh(payload);
+        } catch (err) {
+            // 补拍失败绝不能影响终态收口（refcount / activeRuns 已在上游处理完）。
+            log.error("agent/run token stats refresh failed", { sessionId: payload.sessionId, error: err });
+        }
     }
-    try {
-      tokenStatsRefreshSlot.refresh(payload);
-    } catch (err) {
-      // 补拍失败绝不能影响终态收口（refcount / activeRuns 已在上游处理完）。
-      log.error("agent/run token stats refresh failed", { sessionId: payload.sessionId, error: err });
-    }
-  }
 
-  function detachRunLifecycleListeners(): void {
-    for (const sub of agentRuntime.lifecycleSubs) {
-      sub.unsubscribe();
+    function detachRunLifecycleListeners(): void {
+        for (const sub of agentRuntime.lifecycleSubs) {
+            sub.unsubscribe();
+        }
+        agentRuntime.lifecycleSubs = [];
     }
-    agentRuntime.lifecycleSubs = [];
-  }
 
-  /**
+    /**
    * 订阅 core run 生命周期事件，与 `Agent.run` 同模块维护 activeRuns / agentActive。
    * 返回 cleanup 供 rebootstrap / quit。
    */
-  // nm-style: keep-local — agent-run-lifecycle.test 直引断言订阅与 cleanup 契约；内联会破坏测试锁名。
-  export function attachRunLifecycleListeners(eventBus: SimpleEventBus): () => void {
-    detachRunLifecycleListeners();
+    // nm-style: keep-local — agent-run-lifecycle.test 直引断言订阅与 cleanup 契约；内联会破坏测试锁名。
+    export function attachRunLifecycleListeners(eventBus: SimpleEventBus): () => void {
+        detachRunLifecycleListeners();
 
-    agentRuntime.lifecycleSubs = [
-      eventBus.subscribe(EVENT_AGENT_RUN_STARTED, onCoreRunStarted),
-      eventBus.subscribe(EVENT_AGENT_RUN_FINISHED, onCoreRunFinished),
-      eventBus.subscribe(EVENT_AGENT_RUN_FAILED, (payload: unknown) => {
-        onCoreRunFailed(payload as AgentRunFailedPayload);
-      }),
-    ];
+        agentRuntime.lifecycleSubs = [
+            eventBus.subscribe(EVENT_AGENT_RUN_STARTED, onCoreRunStarted),
+            eventBus.subscribe(EVENT_AGENT_RUN_FINISHED, onCoreRunFinished),
+            eventBus.subscribe(EVENT_AGENT_RUN_FAILED, (payload: unknown) => {
+                onCoreRunFailed(payload as AgentRunFailedPayload);
+            }),
+        ];
 
-    return detachRunLifecycleListeners;
-  }
-
-  export async function abort(req: AgentAbortRequest): Promise<IpcResult<void>> {
-    // 原 abortAgentRun 内联（Phase 3 Step 24(a)）：改调 core registry
-    // （rt.agentAbortRegistry.abort），不再依赖 activeRuns 里的 controller。
-    // refcount 递减交给 RUN_FINISHED/FAILED 的 finishTrackedRun。
-    const built = await DesktopRuntimeSingleton.get();
-    // runtime 未就位时无在途 run 可中断（错误通道迁移七期：不抛，留痕后返回）。
-    if (!built.ok) {
-      log.warn("abort before runtime ready", { sessionId: req.sessionId, error: built.error });
-      return { ok: true, data: undefined };
+        return detachRunLifecycleListeners;
     }
-    built.value.agentAbortRegistry.abort(req.sessionId);
-    // activeRuns 的清理交给 finally / finishTrackedRun；这里只负责中断信号。
-    return { ok: true, data: undefined };
-  }
 
-  /**
+    export async function abort(req: AgentAbortRequest): Promise<IpcResult<void>> {
+        // 原 abortAgentRun 内联（Phase 3 Step 24(a)）：改调 core registry
+        // （rt.agentAbortRegistry.abort），不再依赖 activeRuns 里的 controller。
+        // refcount 递减交给 RUN_FINISHED/FAILED 的 finishTrackedRun。
+        const built = await DesktopRuntimeSingleton.get();
+        // runtime 未就位时无在途 run 可中断（错误通道迁移七期：不抛，留痕后返回）。
+        if (!built.ok) {
+            log.warn("abort before runtime ready", { sessionId: req.sessionId, error: built.error });
+            return { ok: true, data: undefined };
+        }
+        built.value.agentAbortRegistry.abort(req.sessionId);
+        // activeRuns 的清理交给 finally / finishTrackedRun；这里只负责中断信号。
+        return { ok: true, data: undefined };
+    }
+
+    /**
    * 查询某 session 是否有 in-flight run——转调 rt.agentAbortRegistry.has(sessionId)。
    * renderer 的 readOnly 子面板用它判断 stale，避免在 run 进行中渲染可交互 UI。
    */
-  export async function runIsActive(req: AgentRunIsActiveRequest): Promise<IpcResult<boolean>> {
-    const built = await DesktopRuntimeSingleton.get();
-    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
-    if (!built.ok) return { ok: false, error: FormatIpcError.format(built.error) };
-    const rt = built.value;
-    return { ok: true, data: rt.agentAbortRegistry.has(req.sessionId) };
-  }
+    export async function runIsActive(req: AgentRunIsActiveRequest): Promise<IpcResult<boolean>> {
+        const built = await DesktopRuntimeSingleton.get();
+        // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+        if (!built.ok) return { ok: false, error: FormatIpcError.format(built.error) };
+        const rt = built.value;
+        return { ok: true, data: rt.agentAbortRegistry.has(req.sessionId) };
+    }
 
-  /**
+    /**
    * 测试专用：按 `Agent.run` → RUN_STARTED 的真实登记形态放进一条 tracked
    * run（entry 带 runId + sessionRunIds + refcount），让终态事件能走完
    * finishTrackedRun 的完整 runId 比对与递减。子 run 终态过滤（onCoreRunFinished
    * 的 wasTracked 闸）之后，单测想触发补推就必须先把 run「登记」进来——直接调
    * onCoreRunFinished 而不登记，事件会被当子 run 终态过滤掉。生产代码不得调用。
    */
-  export function registerTrackedRunForTests(sessionId: string, runId: string): void {
-    activeRuns.set(sessionId, { runId, terminalSeen: false });
-    sessionRunIds.set(sessionId, runId);
-    agentActivity.increment();
-  }
-
-  export async function run(req: AgentRunRequest): Promise<IpcResult<{ started: boolean }>> {
-    if (agentActivity.isActive()) {
-      return { ok: false, error: { code: "AGENT_BUSY", message: "Agent 正在运行" } };
+    export function registerTrackedRunForTests(sessionId: string, runId: string): void {
+        activeRuns.set(sessionId, { runId, terminalSeen: false });
+        sessionRunIds.set(sessionId, runId);
+        agentActivity.increment();
     }
 
-    try {
-      const built = await DesktopRuntimeSingleton.get();
-      // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
-      if (!built.ok) return { ok: false, error: FormatIpcError.format(built.error) };
-      const rt = built.value;
-      // 起跑前置闸：两跳 resolve 的返回值都不接，唯一可观测行为是 resolve 失败时抛
-      // `AgentTurnError`（下面 catch → formatIpcError → AGENT_RUN_FAILED），把「本轮
-      // 必然起跑失败」在登记 activeRuns / increment 之前同步退回 renderer。
-      await AgentRunService.resolveSavedModelIdOrThrow(rt, (await AgentRunService.resolveCurrentDefinitionOrThrow(rt)).definition, req.sessionId);
-      const { sessionId } = req;
-      // Phase 3 Step 24：不再自建 AbortController / 不再传 signal。
-      // core AgentTurnRunner.run 内部自建 internalController 注册到 rt.agentAbortRegistry，
-      // 停止按钮经 ipcAgentAbort → rt.agentAbortRegistry.abort(sessionId) 中断。
-      // activeRuns 退化为 refcount 影子——只跟 RUN_STARTED/FINISHED/FAILED 与
-      // runId 比对 + finishTrackedRun 的 agentActivity.decrement()。
-      activeRuns.set(sessionId, { runId: null, terminalSeen: false });
-      agentActivity.increment();
+    export async function run(req: AgentRunRequest): Promise<IpcResult<{ started: boolean }>> {
+        if (agentActivity.isActive()) {
+            return { ok: false, error: { code: "AGENT_BUSY", message: "Agent 正在运行" } };
+        }
 
-      const runOptions = {
-        stream: req.stream !== false,
-        allowResumeWithoutInput: req.allowResumeWithoutInput,
-        attachments: req.attachments,
-        annotateDrafts: req.annotateDrafts,
-        onUserMessageAppended: () => {
-          UserMessageAppendedForwarder.notify({ sessionId });
-        },
-      };
-      void AgentRunService.run(rt, { projectId: req.projectId, sessionId }, req.userContent, runOptions)
-        .then((outcome) => {
-          // 已知失败沿 Result 到达（四期门⑦）：终态事件已由 core 补发，这里只记日志。
-          if (!outcome.ok) {
-            log.error("agent/run IPC background task failed", { sessionId, projectId: req.projectId, error: outcome.error });
-          }
-        })
-        .catch((err) => {
-          log.error("agent/run IPC background task failed", { sessionId, projectId: req.projectId, error: err });
-        })
-        .finally(() => {
-          // Phase 3 Step 24(d)：refcount 单一归属——只由 finishTrackedRun 递减。
-          // 这里仅做房子——清掉没收到任何匹配终态的早退 entry，避免 activeRuns 泄漏。
-          //
-          // 两条不变式（r3-run-2 步骤 2，注释写死别删）：
-          //
-          // ① **不双递减依赖事件总线同步分发。** core 的 eventBus.publish 是同步
-          //    调用订阅方（SimpleEventBus 无 microtask 合批），finishTrackedRun
-          //    在 bus 回调里同步 delete + decrement。因此 promise 走到 .finally
-          //    时，正常路径的 entry 必然已被删掉（get 返回 undefined）→ 直接
-          //    early return；下面的手工清理只覆盖「终态事件压根没来」的形态。
-          //    若哪天总线改异步分发，这里的 early return 会失效 → 双递减，
-          //    属架构变更，须同步改这两处（E3-C1 已判定不修）。
-          //
-          // ② **terminalSeen 不是废字段。** 它兜的是「entry 还在、但收到的那条
-          //    终态事件 runId 与 entry 不匹配」这一类 stale 终态：finishTrackedRun
-          //    匹配失败提前 return（不删 entry、不置位），此时 entry.runId 已被
-          //    RUN_STARTED 回填成非 null——原先的 `entry.runId != null → return`
-          //    判据会在这里放行并手工清理，但那条终态其实是上一轮 run 的迟到
-          //    事件，真正的终态还没到，删掉就把在途 run 的登记弄丢了。改成
-          //    terminalSeen 后，只有「确实已处理过本 entry 的终态」才早退。
-          const entry = activeRuns.get(sessionId);
-          if (entry == null || entry.terminalSeen) {
-            return;
-          }
-          // 无匹配终态事件的早退（T23 / r3-run-1 前奏收口）：finishTrackedRun
-          // 不会触发，手动清 map。
-          // C-orch-1：早退分支必须同步递减 refcount，否则 agentActivity.increment()
-          // 的增量永不回落，agentActivity.isActive() 永久 true，后续 run 全部 AGENT_BUSY。
-          // 不会双递减：正常路径 entry 已 deleted（见不变式①），或 terminalSeen 已置位。
-          activeRuns.delete(sessionId);
-          sessionRunIds.delete(sessionId);
-          agentActivity.decrement();
-        });
+        try {
+            const built = await DesktopRuntimeSingleton.get();
+            // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+            if (!built.ok) return { ok: false, error: FormatIpcError.format(built.error) };
+            const rt = built.value;
+            // 起跑前置闸：两跳 resolve 的返回值都不接，唯一可观测行为是 resolve 失败时抛
+            // `AgentTurnError`（下面 catch → formatIpcError → AGENT_RUN_FAILED），把「本轮
+            // 必然起跑失败」在登记 activeRuns / increment 之前同步退回 renderer。
+            await AgentRunService.resolveSavedModelIdOrThrow(rt, (await AgentRunService.resolveCurrentDefinitionOrThrow(rt)).definition, req.sessionId);
+            const { sessionId } = req;
+            // Phase 3 Step 24：不再自建 AbortController / 不再传 signal。
+            // core AgentTurnRunner.run 内部自建 internalController 注册到 rt.agentAbortRegistry，
+            // 停止按钮经 ipcAgentAbort → rt.agentAbortRegistry.abort(sessionId) 中断。
+            // activeRuns 退化为 refcount 影子——只跟 RUN_STARTED/FINISHED/FAILED 与
+            // runId 比对 + finishTrackedRun 的 agentActivity.decrement()。
+            activeRuns.set(sessionId, { runId: null, terminalSeen: false });
+            agentActivity.increment();
 
-      return { ok: true, data: { started: true } };
-    } catch (err) {
-      activeRuns.delete(req.sessionId);
-      sessionRunIds.delete(req.sessionId);
-      agentActivity.decrement();
-      return { ok: false, error: FormatIpcError.format(err) };
+            const runOptions = {
+                stream: req.stream !== false,
+                allowResumeWithoutInput: req.allowResumeWithoutInput,
+                attachments: req.attachments,
+                annotateDrafts: req.annotateDrafts,
+                onUserMessageAppended: () => {
+                    UserMessageAppendedForwarder.notify({ sessionId });
+                },
+            };
+            void AgentRunService.run(rt, { projectId: req.projectId, sessionId }, req.userContent, runOptions)
+                .then((outcome) => {
+                    // 已知失败沿 Result 到达（四期门⑦）：终态事件已由 core 补发，这里只记日志。
+                    if (!outcome.ok) {
+                        log.error("agent/run IPC background task failed", { sessionId, projectId: req.projectId, error: outcome.error });
+                    }
+                })
+                .catch((err) => {
+                    log.error("agent/run IPC background task failed", { sessionId, projectId: req.projectId, error: err });
+                })
+                .finally(() => {
+                    // Phase 3 Step 24(d)：refcount 单一归属——只由 finishTrackedRun 递减。
+                    // 这里仅做房子——清掉没收到任何匹配终态的早退 entry，避免 activeRuns 泄漏。
+                    //
+                    // 两条不变式（r3-run-2 步骤 2，注释写死别删）：
+                    //
+                    // ① **不双递减依赖事件总线同步分发。** core 的 eventBus.publish 是同步
+                    //    调用订阅方（SimpleEventBus 无 microtask 合批），finishTrackedRun
+                    //    在 bus 回调里同步 delete + decrement。因此 promise 走到 .finally
+                    //    时，正常路径的 entry 必然已被删掉（get 返回 undefined）→ 直接
+                    //    early return；下面的手工清理只覆盖「终态事件压根没来」的形态。
+                    //    若哪天总线改异步分发，这里的 early return 会失效 → 双递减，
+                    //    属架构变更，须同步改这两处（E3-C1 已判定不修）。
+                    //
+                    // ② **terminalSeen 不是废字段。** 它兜的是「entry 还在、但收到的那条
+                    //    终态事件 runId 与 entry 不匹配」这一类 stale 终态：finishTrackedRun
+                    //    匹配失败提前 return（不删 entry、不置位），此时 entry.runId 已被
+                    //    RUN_STARTED 回填成非 null——原先的 `entry.runId != null → return`
+                    //    判据会在这里放行并手工清理，但那条终态其实是上一轮 run 的迟到
+                    //    事件，真正的终态还没到，删掉就把在途 run 的登记弄丢了。改成
+                    //    terminalSeen 后，只有「确实已处理过本 entry 的终态」才早退。
+                    const entry = activeRuns.get(sessionId);
+                    if (entry == null || entry.terminalSeen) {
+                        return;
+                    }
+                    // 无匹配终态事件的早退（T23 / r3-run-1 前奏收口）：finishTrackedRun
+                    // 不会触发，手动清 map。
+                    // C-orch-1：早退分支必须同步递减 refcount，否则 agentActivity.increment()
+                    // 的增量永不回落，agentActivity.isActive() 永久 true，后续 run 全部 AGENT_BUSY。
+                    // 不会双递减：正常路径 entry 已 deleted（见不变式①），或 terminalSeen 已置位。
+                    activeRuns.delete(sessionId);
+                    sessionRunIds.delete(sessionId);
+                    agentActivity.decrement();
+                });
+
+            return { ok: true, data: { started: true } };
+        } catch (err) {
+            activeRuns.delete(req.sessionId);
+            sessionRunIds.delete(req.sessionId);
+            agentActivity.decrement();
+            return { ok: false, error: FormatIpcError.format(err) };
+        }
     }
-  }
 
-  /**
+    /**
    * 测试专用内省：暴露 run 追踪 map 的当前大小，用于断言早退兜底无泄漏。
    * 仅在单测中引用，生产代码不应依赖。
    */
-  // nm-style: keep-public — 测试契约：apps/desktop/test/agent-prelude-terminal.test.ts 与 agent-run-early-exit.test.ts 动态 import 解构直引
-  export function __testRunTrackingState(): {
-    activeRunsCount: number;
-    sessionRunIdsCount: number;
-  } {
-    return {
-      activeRunsCount: activeRuns.size,
-      sessionRunIdsCount: sessionRunIds.size,
-    };
-  }
+    // nm-style: keep-public — 测试契约：apps/desktop/test/agent-prelude-terminal.test.ts 与 agent-run-early-exit.test.ts 动态 import 解构直引
+    export function __testRunTrackingState(): {
+        activeRunsCount: number;
+        sessionRunIdsCount: number;
+    } {
+        return {
+            activeRunsCount: activeRuns.size,
+            sessionRunIdsCount: sessionRunIds.size,
+        };
+    }
 }

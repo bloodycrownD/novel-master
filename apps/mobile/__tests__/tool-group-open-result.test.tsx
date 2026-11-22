@@ -19,70 +19,70 @@ import {DEFAULT_LABELS} from '../src/web/chat-transcript/webview/ui/labels';
  * child 已是最终的 `div` vnode（`type` 为字符串），直接用。
  */
 function itemVNodes(tools: object[]): VNode[] {
-  const section = ToolGroup({
-    tools: tools as never[],
-    groupKey: 'g1',
-    expanded: true,
-    labels: DEFAULT_LABELS,
-  }) as VNode;
-  const children = section.props.children as VNode[];
-  if (!Array.isArray(children)) {
-    throw new Error('ToolGroup children 结构不符合预期');
-  }
-  return children.map((el) =>
-    typeof el.type === 'function'
-      ? (el.type as (props: unknown) => VNode)(el.props)
-      : el,
-  );
+    const section = ToolGroup({
+        tools: tools as never[],
+        groupKey: 'g1',
+        expanded: true,
+        labels: DEFAULT_LABELS,
+    }) as VNode;
+    const children = section.props.children as VNode[];
+    if (!Array.isArray(children)) {
+        throw new Error('ToolGroup children 结构不符合预期');
+    }
+    return children.map((el) =>
+        typeof el.type === 'function'
+            ? (el.type as (props: unknown) => VNode)(el.props)
+            : el,
+    );
 }
 
 describe('ToolGroup 结果阅读兜底渲染分支 (T-TGO)', () => {
-  it('T-TGO1: fs 卡（无专属跳转、有结果正文）→ data-action=open-tool-result + data-tool-use-id', () => {
-    const [item] = itemVNodes([
-      {toolUseId: 'tu-1', name: 'fs', input: {action: 'ls', path: '/tmp'}, resultContent: '目录列表'},
-    ]);
-    expect(item.props['data-action']).toBe('open-tool-result');
-    expect(item.props['data-tool-use-id']).toBe('tu-1');
-    expect(item.props['data-path']).toBeUndefined();
-  });
+    it('T-TGO1: fs 卡（无专属跳转、有结果正文）→ data-action=open-tool-result + data-tool-use-id', () => {
+        const [item] = itemVNodes([
+            {toolUseId: 'tu-1', name: 'fs', input: {action: 'ls', path: '/tmp'}, resultContent: '目录列表'},
+        ]);
+        expect(item.props['data-action']).toBe('open-tool-result');
+        expect(item.props['data-tool-use-id']).toBe('tu-1');
+        expect(item.props['data-path']).toBeUndefined();
+    });
 
-  it('T-TGO2: read 卡（有 filePath）→ open-tool-file，不进兜底', () => {
-    const [item] = itemVNodes([
-      {toolUseId: 'tu-2', name: 'read', input: {path: '/notes/a.md'}, resultContent: '正文…'},
-    ]);
-    expect(item.props['data-action']).toBe('open-tool-file');
-    expect(item.props['data-path']).toBe('/notes/a.md');
-    expect(item.props['data-tool-use-id']).toBeUndefined();
-  });
+    it('T-TGO2: read 卡（有 filePath）→ open-tool-file，不进兜底', () => {
+        const [item] = itemVNodes([
+            {toolUseId: 'tu-2', name: 'read', input: {path: '/notes/a.md'}, resultContent: '正文…'},
+        ]);
+        expect(item.props['data-action']).toBe('open-tool-file');
+        expect(item.props['data-path']).toBe('/notes/a.md');
+        expect(item.props['data-tool-use-id']).toBeUndefined();
+    });
 
-  it('T-TGO3: skill 卡（skillRef 可解析）→ open-skill，不进兜底', () => {
-    const [item] = itemVNodes([
-      {
-        toolUseId: 'tu-3',
-        name: 'skill',
-        input: {action: 'write', name: '节拍成章', domain: 'global'},
-        resultContent: 'ok',
-      },
-    ]);
-    expect(item.props['data-action']).toBe('open-skill');
-    expect(item.props['data-name']).toBe('节拍成章');
-  });
+    it('T-TGO3: skill 卡（skillRef 可解析）→ open-skill，不进兜底', () => {
+        const [item] = itemVNodes([
+            {
+                toolUseId: 'tu-3',
+                name: 'skill',
+                input: {action: 'write', name: '节拍成章', domain: 'global'},
+                resultContent: 'ok',
+            },
+        ]);
+        expect(item.props['data-action']).toBe('open-skill');
+        expect(item.props['data-name']).toBe('节拍成章');
+    });
 
-  it('T-TGO4: content 空串/纯空白 + summary 有信息 → 仍走兜底可点（CR-1 联动）', () => {
-    const [empty] = itemVNodes([
-      {toolUseId: 'tu-4', name: 'fs', input: {action: 'ls', path: '/tmp'}, resultContent: '', summary: '0 entries'},
-    ]);
-    expect(empty.props['data-action']).toBe('open-tool-result');
-    const [blank] = itemVNodes([
-      {toolUseId: 'tu-5', name: 'glob', input: {pattern: '**/*.md'}, resultContent: '   ', summary: '0 paths'},
-    ]);
-    expect(blank.props['data-action']).toBe('open-tool-result');
-  });
+    it('T-TGO4: content 空串/纯空白 + summary 有信息 → 仍走兜底可点（CR-1 联动）', () => {
+        const [empty] = itemVNodes([
+            {toolUseId: 'tu-4', name: 'fs', input: {action: 'ls', path: '/tmp'}, resultContent: '', summary: '0 entries'},
+        ]);
+        expect(empty.props['data-action']).toBe('open-tool-result');
+        const [blank] = itemVNodes([
+            {toolUseId: 'tu-5', name: 'glob', input: {pattern: '**/*.md'}, resultContent: '   ', summary: '0 paths'},
+        ]);
+        expect(blank.props['data-action']).toBe('open-tool-result');
+    });
 
-  it('T-TGO5: pending 卡（无 content 无 summary）→ 不可点（data-action 缺省）', () => {
-    const [item] = itemVNodes([
-      {toolUseId: 'tu-6', name: 'fs', input: {action: 'ls', path: '/tmp'}},
-    ]);
-    expect(item.props['data-action']).toBeUndefined();
-  });
+    it('T-TGO5: pending 卡（无 content 无 summary）→ 不可点（data-action 缺省）', () => {
+        const [item] = itemVNodes([
+            {toolUseId: 'tu-6', name: 'fs', input: {action: 'ls', path: '/tmp'}},
+        ]);
+        expect(item.props['data-action']).toBeUndefined();
+    });
 });

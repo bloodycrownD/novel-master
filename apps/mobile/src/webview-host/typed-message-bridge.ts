@@ -14,42 +14,42 @@ import {Guards} from '@novel-master/core/common';
 
 /** 四函数桥：ToClient = 宿主 → webview 的消息，ToHost = webview → 宿主的消息。 */
 export interface TypedMessageBridge<ToClient, ToHost> {
-  readonly encodeToClient: (message: ToClient) => string;
-  readonly encodeToHost: (message: ToHost) => string;
-  /** 解析 webview → 宿主的信封（校验 payload 为对象）。 */
-  readonly decodeToHost: (raw: string) => ToHost;
-  /** 解析宿主 → webview 的信封（不校验 payload，对齐三桥既有口径）。 */
-  readonly decodeToClient: (raw: string) => ToClient;
+    readonly encodeToClient: (message: ToClient) => string;
+    readonly encodeToHost: (message: ToHost) => string;
+    /** 解析 webview → 宿主的信封（校验 payload 为对象）。 */
+    readonly decodeToHost: (raw: string) => ToHost;
+    /** 解析宿主 → webview 的信封（不校验 payload，对齐三桥既有口径）。 */
+    readonly decodeToClient: (raw: string) => ToClient;
 }
 
 /** 解析并校验信封：v 不符 → versionError，type 缺失 / payload 非对象（requirePayload）→ shapeError。 */
 function decodeEnvelope(raw: string, requirePayload: boolean, version: number, versionError: string, shapeError: string): unknown {
-  const parsed: unknown = JSON.parse(raw);
-  if (!Guards.isRecord(parsed) || parsed.v !== version) {
-    // nm-throw: keep — webview bridge 边界：坏信封由宿主 onMessage catch 后静默丢弃
-    throw new Error(versionError);
-  }
-  if (typeof parsed.type !== 'string' || (requirePayload && !Guards.isRecord(parsed.payload))) {
-    // nm-throw: keep — webview bridge 边界：坏信封由宿主 onMessage catch 后静默丢弃
-    throw new Error(shapeError);
-  }
-  return parsed;
+    const parsed: unknown = JSON.parse(raw);
+    if (!Guards.isRecord(parsed) || parsed.v !== version) {
+        // nm-throw: keep — webview bridge 边界：坏信封由宿主 onMessage catch 后静默丢弃
+        throw new Error(versionError);
+    }
+    if (typeof parsed.type !== 'string' || (requirePayload && !Guards.isRecord(parsed.payload))) {
+        // nm-throw: keep — webview bridge 边界：坏信封由宿主 onMessage catch 后静默丢弃
+        throw new Error(shapeError);
+    }
+    return parsed;
 }
 
 export const TypedMessageBridge = {
-  /**
+    /**
    * @param version 信封版本（各桥自己的 BRIDGE_V，web 侧同值）
    * @param label   错误文案里的域名（composer-input / code-editor / rich-document）
    */
-  create: <ToClient, ToHost>(version: number, label: string): TypedMessageBridge<ToClient, ToHost> => {
-    const versionError = `Invalid ${label} bridge envelope version`;
-    const shapeError = `Invalid ${label} bridge envelope shape`;
+    create: <ToClient, ToHost>(version: number, label: string): TypedMessageBridge<ToClient, ToHost> => {
+        const versionError = `Invalid ${label} bridge envelope version`;
+        const shapeError = `Invalid ${label} bridge envelope shape`;
 
-    return {
-      encodeToClient: message => JSON.stringify(message),
-      encodeToHost: message => JSON.stringify(message),
-      decodeToHost: raw => decodeEnvelope(raw, true, version, versionError, shapeError) as ToHost,
-      decodeToClient: raw => decodeEnvelope(raw, false, version, versionError, shapeError) as ToClient,
-    };
-  },
+        return {
+            encodeToClient: message => JSON.stringify(message),
+            encodeToHost: message => JSON.stringify(message),
+            decodeToHost: raw => decodeEnvelope(raw, true, version, versionError, shapeError) as ToHost,
+            decodeToClient: raw => decodeEnvelope(raw, false, version, versionError, shapeError) as ToClient,
+        };
+    },
 } as const;

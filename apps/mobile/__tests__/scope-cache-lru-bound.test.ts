@@ -14,31 +14,31 @@ const transcriptKey = ChatTranscriptScrollCache.key;
 const CAP = 500;
 
 describe('scope 缓存 LRU 上限启用', () => {
-  beforeEach(() => {
-    ChatTranscriptScrollCache.clearAll();
-    SessionViewCache.clearAll();
-  });
+    beforeEach(() => {
+        ChatTranscriptScrollCache.clearAll();
+        SessionViewCache.clearAll();
+    });
 
-  it('chat-transcript-scroll-cache：插入超限后 size 封顶', () => {
-    for (let i = 0; i <= CAP; i++) {
-      ChatTranscriptScrollCache.set(transcriptKey('p', `s${i}`), {
-        schemaVersion: CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION,
-        offsetY: i,
-        nearBottom: false,
-      });
-    }
-    expect(ChatTranscriptScrollCache.size()).toBe(CAP);
-  });
+    it('chat-transcript-scroll-cache：插入超限后 size 封顶', () => {
+        for (let i = 0; i <= CAP; i++) {
+            ChatTranscriptScrollCache.set(transcriptKey('p', `s${i}`), {
+                schemaVersion: CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION,
+                offsetY: i,
+                nearBottom: false,
+            });
+        }
+        expect(ChatTranscriptScrollCache.size()).toBe(CAP);
+    });
 
-  it('chat-session-view-cache：插入超限后 size 封顶且最旧淘汰', () => {
-    const firstKey = SessionViewCache.key('p', 's0');
-    for (let i = 0; i <= CAP; i++) {
-      SessionViewCache.set(SessionViewCache.key('p', `s${i}`), {
-        messages: [],
-        hasMoreMessages: false,
-      });
-    }
-    expect(SessionViewCache.size()).toBe(CAP);
-    expect(SessionViewCache.get(firstKey)).toBeUndefined();
-  });
+    it('chat-session-view-cache：插入超限后 size 封顶且最旧淘汰', () => {
+        const firstKey = SessionViewCache.key('p', 's0');
+        for (let i = 0; i <= CAP; i++) {
+            SessionViewCache.set(SessionViewCache.key('p', `s${i}`), {
+                messages: [],
+                hasMoreMessages: false,
+            });
+        }
+        expect(SessionViewCache.size()).toBe(CAP);
+        expect(SessionViewCache.get(firstKey)).toBeUndefined();
+    });
 });

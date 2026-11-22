@@ -14,16 +14,16 @@ import {coreT} from '../../i18n/core';
 export {SkillFrontMatterValues} from '@novel-master/core/skills';
 
 export namespace SkillUi {
-  /** 域徽标三态：全局 / 项目 / 项目 · 覆盖全局。 */
-  export function domainBadgeLabel(domain: SkillDomain, overridden: boolean): string {
-    if (domain === 'global') {
-      return coreT({key: "ui.skills.domain_tag_global"});
+    /** 域徽标三态：全局 / 项目 / 项目 · 覆盖全局。 */
+    export function domainBadgeLabel(domain: SkillDomain, overridden: boolean): string {
+        if (domain === 'global') {
+            return coreT({key: "ui.skills.domain_tag_global"});
+        }
+        return overridden ? coreT({key: "ui.skills.domain_tag_overridden"}) : coreT({key: "ui.skills.domain_tag_project"});
     }
-    return overridden ? coreT({key: "ui.skills.domain_tag_overridden"}) : coreT({key: "ui.skills.domain_tag_project"});
-  }
 
-  /** 域徽标前景色（区分两域；覆盖态沿用项目色 + 文案区分）。 */
-  export function domainBadgeColor(domain: SkillDomain, tokens: {primary: string; textSecondary: string}): string {
-    return domain === 'global' ? tokens.textSecondary : tokens.primary;
-  }
+    /** 域徽标前景色（区分两域；覆盖态沿用项目色 + 文案区分）。 */
+    export function domainBadgeColor(domain: SkillDomain, tokens: {primary: string; textSecondary: string}): string {
+        return domain === 'global' ? tokens.textSecondary : tokens.primary;
+    }
 }

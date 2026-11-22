@@ -19,59 +19,59 @@ export {createVfsDirectory, createVfsFile, renameVfsDirectory, renameVfsFile};
 type MobileRuntime = MobileNovelMasterRuntime;
 
 type DeleteScopedOptions = {
-  recursive?: boolean;
-  useUserVfsTurn: boolean;
-  sessionId?: string;
+    recursive?: boolean;
+    useUserVfsTurn: boolean;
+    sessionId?: string;
 };
 
 export namespace VfsOperationsService {
-  /** 会话 scope：新建文件经 userVfsTurn。 */
-  // nm-style: keep-public — vfs-operations.service.test.ts 直接 import 断言；4 个 file-manager 集成测试以模块接缝 mock，测试锁名
-  export async function sessionCreateFile(runtime: MobileRuntime, sessionId: string, path: string, content = ''): Promise<Result<void, unknown>> {
-    return UserVfsTurnExecuteService.executeSessionOp(runtime, sessionId, UserVfsTurnOps.buildCreateFile(path, content));
-  }
-
-  /** 会话 scope：新建目录经 userVfsTurn。 */
-  // nm-style: keep-public — vfs-operations.service.test.ts 直接 import 断言（去尾斜杠口径）；file-manager 集成测试 mock，测试锁名
-  export async function sessionCreateDirectory(runtime: MobileRuntime, sessionId: string, dirPath: string): Promise<Result<void, unknown>> {
-    const normalized = dirPath.endsWith('/') ? dirPath.slice(0, -1) : dirPath;
-    return UserVfsTurnExecuteService.executeSessionOp(runtime, sessionId, UserVfsTurnOps.buildMkdir(normalized));
-  }
-
-  /** 工作区文件管理器删除：VFS 变更 + worktree 规则清理（与 Desktop handleVfsDelete 对齐）。 */
-  export async function deleteScopedEntry(runtime: MobileRuntime, scope: VfsScope, vfs: VfsService, path: string, options: DeleteScopedOptions): Promise<Result<void, unknown>> {
-    const recursive = options.recursive ?? true;
-    if (options.useUserVfsTurn && options.sessionId != null) {
-      const deleted = await UserVfsTurnExecuteService.executeSessionOp(runtime, options.sessionId, UserVfsTurnOps.buildDelete(path, recursive));
-      if (!deleted.ok) return deleted;
-    } else {
-      // 错误通道迁移四期：vfs.delete 失败沿 Result 接力，不再静默吞掉
-      // （core 的 deleteVfsEntry 是 void 包装不检查返回值，这里必须自判）。
-      const deleted = await vfs.delete(path, {recursive});
-      if (!deleted.ok) return Result.err(deleted.error);
+    /** 会话 scope：新建文件经 userVfsTurn。 */
+    // nm-style: keep-public — vfs-operations.service.test.ts 直接 import 断言；4 个 file-manager 集成测试以模块接缝 mock，测试锁名
+    export async function sessionCreateFile(runtime: MobileRuntime, sessionId: string, path: string, content = ''): Promise<Result<void, unknown>> {
+        return UserVfsTurnExecuteService.executeSessionOp(runtime, sessionId, UserVfsTurnOps.buildCreateFile(path, content));
     }
-    await runtime.workplace(scope).deleteRulesUnderLogicalPrefix(path);
-    return Result.ok(undefined);
-  }
 
-  /** 会话 scope：重命名文件经 userVfsTurn。 */
-  export async function sessionRenameFile(runtime: MobileRuntime, sessionId: string, oldPath: string, newPath: string, options?: ExecuteSessionUserVfsOpOptions): Promise<Result<void, unknown>> {
-    return UserVfsTurnExecuteService.executeSessionOp(runtime, sessionId, UserVfsTurnOps.buildRename(oldPath, newPath), options);
-  }
+    /** 会话 scope：新建目录经 userVfsTurn。 */
+    // nm-style: keep-public — vfs-operations.service.test.ts 直接 import 断言（去尾斜杠口径）；file-manager 集成测试 mock，测试锁名
+    export async function sessionCreateDirectory(runtime: MobileRuntime, sessionId: string, dirPath: string): Promise<Result<void, unknown>> {
+        const normalized = dirPath.endsWith('/') ? dirPath.slice(0, -1) : dirPath;
+        return UserVfsTurnExecuteService.executeSessionOp(runtime, sessionId, UserVfsTurnOps.buildMkdir(normalized));
+    }
 
-  /** 会话 scope：保存文件经 userVfsTurn（含锚点 diff）。 */
-  // nm-style: keep-public — vfs-operations.service.test.ts / file-editor-screen.test.tsx 直接 import 与断言，测试锁名
-  export async function sessionSaveFile(runtime: MobileRuntime, sessionId: string, vfs: VfsService, path: string, content: string, lastKnownContent?: string | null): Promise<Result<void, unknown>> {
-    const baselineResult = await UserVfsSaveBaseline.read(vfs, path);
-    if (!baselineResult.ok) return Result.err(baselineResult.error);
-    const baseline = baselineResult.value;
-    if (lastKnownContent != null && baseline != null && lastKnownContent !== baseline) {
-      console.info('[user-vfs-turn] external_drift_detected', {path});
+    /** 工作区文件管理器删除：VFS 变更 + worktree 规则清理（与 Desktop handleVfsDelete 对齐）。 */
+    export async function deleteScopedEntry(runtime: MobileRuntime, scope: VfsScope, vfs: VfsService, path: string, options: DeleteScopedOptions): Promise<Result<void, unknown>> {
+        const recursive = options.recursive ?? true;
+        if (options.useUserVfsTurn && options.sessionId != null) {
+            const deleted = await UserVfsTurnExecuteService.executeSessionOp(runtime, options.sessionId, UserVfsTurnOps.buildDelete(path, recursive));
+            if (!deleted.ok) return deleted;
+        } else {
+            // 错误通道迁移四期：vfs.delete 失败沿 Result 接力，不再静默吞掉
+            // （core 的 deleteVfsEntry 是 void 包装不检查返回值，这里必须自判）。
+            const deleted = await vfs.delete(path, {recursive});
+            if (!deleted.ok) return Result.err(deleted.error);
+        }
+        await runtime.workplace(scope).deleteRulesUnderLogicalPrefix(path);
+        return Result.ok(undefined);
     }
-    const op = UserVfsTurnOps.buildSave(baseline, content, path, content);
-    if (op == null) {
-      return Result.ok(undefined);
+
+    /** 会话 scope：重命名文件经 userVfsTurn。 */
+    export async function sessionRenameFile(runtime: MobileRuntime, sessionId: string, oldPath: string, newPath: string, options?: ExecuteSessionUserVfsOpOptions): Promise<Result<void, unknown>> {
+        return UserVfsTurnExecuteService.executeSessionOp(runtime, sessionId, UserVfsTurnOps.buildRename(oldPath, newPath), options);
     }
-    return UserVfsTurnExecuteService.executeSessionOp(runtime, sessionId, op);
-  }
+
+    /** 会话 scope：保存文件经 userVfsTurn（含锚点 diff）。 */
+    // nm-style: keep-public — vfs-operations.service.test.ts / file-editor-screen.test.tsx 直接 import 与断言，测试锁名
+    export async function sessionSaveFile(runtime: MobileRuntime, sessionId: string, vfs: VfsService, path: string, content: string, lastKnownContent?: string | null): Promise<Result<void, unknown>> {
+        const baselineResult = await UserVfsSaveBaseline.read(vfs, path);
+        if (!baselineResult.ok) return Result.err(baselineResult.error);
+        const baseline = baselineResult.value;
+        if (lastKnownContent != null && baseline != null && lastKnownContent !== baseline) {
+            console.info('[user-vfs-turn] external_drift_detected', {path});
+        }
+        const op = UserVfsTurnOps.buildSave(baseline, content, path, content);
+        if (op == null) {
+            return Result.ok(undefined);
+        }
+        return UserVfsTurnExecuteService.executeSessionOp(runtime, sessionId, op);
+    }
 }

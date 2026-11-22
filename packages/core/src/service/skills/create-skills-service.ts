@@ -11,7 +11,7 @@ import type { SkillService } from "./skills.port.js";
 
 /** Skills service 工厂集合。 */
 export const SkillsServiceFactory = {
-  /**
+    /**
    * Creates a {@link SkillService} over both skill domains.
    *
    * 内部持 globalMetaVfs / projectMetaVfs 惰性工厂闭包（对齐 runtime 装配风格），
@@ -20,12 +20,12 @@ export const SkillsServiceFactory = {
    *
    * @param conn - Open connection after {@link NovelMasterBootstrap.bootstrap}
    */
-  create(conn: TdbcConnection): SkillService {
-    return new SkillsService({
-      conn,
-      globalMetaVfs: () => VfsServiceFactory.createScoped(conn, { kind: "global-meta" }),
-      projectMetaVfs: (projectId) =>
-        VfsServiceFactory.createScoped(conn, { kind: "project-meta", projectId }),
-    });
-  },
+    create(conn: TdbcConnection): SkillService {
+        return new SkillsService({
+            conn,
+            globalMetaVfs: () => VfsServiceFactory.createScoped(conn, { kind: "global-meta" }),
+            projectMetaVfs: (projectId) =>
+                VfsServiceFactory.createScoped(conn, { kind: "project-meta", projectId }),
+        });
+    },
 } as const;

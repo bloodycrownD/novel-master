@@ -6,58 +6,58 @@ import {join} from 'node:path';
 import {readWebViewDistFile} from './helpers/read-webview-dist';
 
 function bootScript(): string {
-  return readWebViewDistFile('rich-document', 'app.js');
+    return readWebViewDistFile('rich-document', 'app.js');
 }
 
 function indexHtml(): string {
-  return readWebViewDistFile('rich-document', 'index.html');
+    return readWebViewDistFile('rich-document', 'index.html');
 }
 
 function appCss(): string {
-  return readWebViewDistFile('rich-document', 'app.css');
+    return readWebViewDistFile('rich-document', 'app.css');
 }
 
 describe('rich-document WebView boot (T-BB-07 / dist)', () => {
-  it('T-BR-ASM-02: script parses', () => {
-    const script = bootScript();
-    expect(() => {
-      // eslint-disable-next-line no-new-func -- 语法守护
-      new Function(script);
-    }).not.toThrow();
-  });
+    it('T-BR-ASM-02: script parses', () => {
+        const script = bootScript();
+        expect(() => {
+            // eslint-disable-next-line no-new-func -- 语法守护
+            new Function(script);
+        }).not.toThrow();
+    });
 
-  it('T-BR-ASM-03: shell has #doc; relative app.js/app.css（无 BASE_URL）', () => {
-    const html = indexHtml();
-    expect(html).toContain('id="doc"');
-    expect(html).toContain('./app.js');
-    expect(html).toContain('./app.css');
-    expect(html).toContain('<script src="./app.js"');
-    expect(html).not.toContain('type="module"');
-    expect(html).not.toContain('https://novel-master.local/');
-  });
+    it('T-BR-ASM-03: shell has #doc; relative app.js/app.css（无 BASE_URL）', () => {
+        const html = indexHtml();
+        expect(html).toContain('id="doc"');
+        expect(html).toContain('./app.js');
+        expect(html).toContain('./app.css');
+        expect(html).toContain('<script src="./app.js"');
+        expect(html).not.toContain('type="module"');
+        expect(html).not.toContain('https://novel-master.local/');
+    });
 
-  it('T-PF8(rich-document): head 内联 bootstrap 先于 stylesheet（C′ fix-D 契约）', () => {
-    // dist 面契约：bootstrap 必须物理先于 stylesheet（解析期同步执行、先于首绘），
-    // 参数取 search+hash 双形态（fix-D 后宿主发 `#bg=`），只预置 --bg。
-    const html = indexHtml();
-    const scriptAt = html.indexOf('decodeURIComponent');
-    const linkAt = html.indexOf('<link rel="stylesheet"');
-    expect(scriptAt).toBeGreaterThan(-1);
-    expect(linkAt).toBeGreaterThan(-1);
-    expect(scriptAt).toBeLessThan(linkAt);
-    expect(html).toContain('location.search + location.hash');
-    expect(html).toContain("setProperty('--bg'");
-    expect(html).not.toContain("setProperty('--editor-bg'");
-  });
+    it('T-PF8(rich-document): head 内联 bootstrap 先于 stylesheet（C′ fix-D 契约）', () => {
+        // dist 面契约：bootstrap 必须物理先于 stylesheet（解析期同步执行、先于首绘），
+        // 参数取 search+hash 双形态（fix-D 后宿主发 `#bg=`），只预置 --bg。
+        const html = indexHtml();
+        const scriptAt = html.indexOf('decodeURIComponent');
+        const linkAt = html.indexOf('<link rel="stylesheet"');
+        expect(scriptAt).toBeGreaterThan(-1);
+        expect(linkAt).toBeGreaterThan(-1);
+        expect(scriptAt).toBeLessThan(linkAt);
+        expect(html).toContain('location.search + location.hash');
+        expect(html).toContain("setProperty('--bg'");
+        expect(html).not.toContain("setProperty('--editor-bg'");
+    });
 
-  it('T-BR-RD-01: setDocument / themeUpdate / annotate; no chat menu handlers', () => {
-    const script = bootScript();
-    expect(script).toContain('setDocument');
-    // minify 重命名 dispatcher 的形参与 handler 函数本体（`msg.type === …`
-    // → `e.type === …`，`handleHostMessage` 直接消失）。断言换到稳定的协议面：
-    // `<局部>.type === "<type>"` 的路由形态 + 协议 type 字符串本身。
-    // 引号风格容忍（prettier singleQuote 后 dist 产物为单引号）。
-    expect(script).toMatch(/type\s*===\s*['"]setDocument['"]/);
+    it('T-BR-RD-01: setDocument / themeUpdate / annotate; no chat menu handlers', () => {
+        const script = bootScript();
+        expect(script).toContain('setDocument');
+        // minify 重命名 dispatcher 的形参与 handler 函数本体（`msg.type === …`
+        // → `e.type === …`，`handleHostMessage` 直接消失）。断言换到稳定的协议面：
+        // `<局部>.type === "<type>"` 的路由形态 + 协议 type 字符串本身。
+        // 引号风格容忍（prettier singleQuote 后 dist 产物为单引号）。
+        expect(script).toMatch(/type\s*===\s*['"]setDocument['"]/);
     expect(script).toContain('themeUpdate');
     expect(script).toMatch(/type\s*===\s*['"]themeUpdate['"]/);
     expect(script).toContain('setAnnotateEnabled');
@@ -101,24 +101,24 @@ describe('rich-document WebView boot (T-BB-07 / dist)', () => {
     expect(script).toContain('overLimit');
     // 允许删除：手拼 doc-body 整段（已迁 DocumentApp + TrustedHtml）
     expect(script).not.toContain('\'<div class="doc-body rich">\'+');
-  });
+    });
 
-  it('T-BR-CSS-02: rich list padding；旧 annotate CSS 标为非主路径遗留', () => {
-    const css = appCss();
-    expect(css).toContain('padding-left: 1.5em');
-    expect(css).toContain('list-style-position: outside');
-    expect(css).toContain('#doc .doc-body.rich');
-    // 非主路径遗留 class 仍可能出现在产物 CSS；主路径用 Recogito
-    expect(css).toContain('annotate-mark');
-    expect(css).not.toContain('annotate-bar');
-  });
+    it('T-BR-CSS-02: rich list padding；旧 annotate CSS 标为非主路径遗留', () => {
+        const css = appCss();
+        expect(css).toContain('padding-left: 1.5em');
+        expect(css).toContain('list-style-position: outside');
+        expect(css).toContain('#doc .doc-body.rich');
+        // 非主路径遗留 class 仍可能出现在产物 CSS；主路径用 Recogito
+        expect(css).toContain('annotate-mark');
+        expect(css).not.toContain('annotate-bar');
+    });
 
-  it('T-SA6: document.css 含非主路径遗留 nm-annotate-anchor 注释块', () => {
-    const src = readFileSync(
-      join(__dirname, '../src/web/rich-document/styles/document.css'),
-      'utf8',
-    );
-    expect(src).toContain('.nm-annotate-anchor');
-    expect(src).toMatch(/非主路径遗留/);
-  });
+    it('T-SA6: document.css 含非主路径遗留 nm-annotate-anchor 注释块', () => {
+        const src = readFileSync(
+            join(__dirname, '../src/web/rich-document/styles/document.css'),
+            'utf8',
+        );
+        expect(src).toContain('.nm-annotate-anchor');
+        expect(src).toMatch(/非主路径遗留/);
+    });
 });

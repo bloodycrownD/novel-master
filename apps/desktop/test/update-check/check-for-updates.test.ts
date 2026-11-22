@@ -7,39 +7,39 @@ import { UpdateCheck } from "@novel-master/core/common";
 const ENV_KEY = "NOVEL_MASTER_DISABLE_UPDATE_CHECK";
 
 afterEach(() => {
-  delete process.env[ENV_KEY];
+    delete process.env[ENV_KEY];
 });
 
 describe("checkForUpdates env 短路", () => {
-  it("NOVEL_MASTER_DISABLE_UPDATE_CHECK=1 时立即抛错且不发起 fetch", async () => {
-    process.env[ENV_KEY] = "1";
-    let fetchCalled = false;
-    const guardFetch = async () => {
-      fetchCalled = true;
-      throw new Error("短路路径不应触达 fetch");
-    };
-    await assert.rejects(
-      UpdateCheck.check("2.0.0", guardFetch),
-      /更新检查已禁用/,
-    );
-    assert.equal(fetchCalled, false, "短路后不得发起任何网络请求");
-  });
+    it("NOVEL_MASTER_DISABLE_UPDATE_CHECK=1 时立即抛错且不发起 fetch", async () => {
+        process.env[ENV_KEY] = "1";
+        let fetchCalled = false;
+        const guardFetch = async () => {
+            fetchCalled = true;
+            throw new Error("短路路径不应触达 fetch");
+        };
+        await assert.rejects(
+            UpdateCheck.check("2.0.0", guardFetch),
+            /更新检查已禁用/,
+        );
+        assert.equal(fetchCalled, false, "短路后不得发起任何网络请求");
+    });
 
-  it("env 未置位时走正常比较链路", async () => {
-    delete process.env[ENV_KEY];
-    const mockFetch = async () =>
-      ({
-        ok: true,
-        status: 200,
-        json: async () => ({
-          tag_name: "v2.1.0",
-          html_url: "https://github.com/bloodycrownD/novel-master/releases/tag/v2.1.0",
-          body: "Release notes",
-        }),
-      }) as Response;
-    const checked = await UpdateCheck.check("2.0.0", mockFetch);
-    assert.ok(checked.ok, "合法版本号比较不应失败");
-    assert.equal(checked.value.status, "update-available");
-    assert.equal(checked.value.remoteVersion, "2.1.0");
-  });
+    it("env 未置位时走正常比较链路", async () => {
+        delete process.env[ENV_KEY];
+        const mockFetch = async () =>
+            ({
+                ok: true,
+                status: 200,
+                json: async () => ({
+                    tag_name: "v2.1.0",
+                    html_url: "https://github.com/bloodycrownD/novel-master/releases/tag/v2.1.0",
+                    body: "Release notes",
+                }),
+            }) as Response;
+        const checked = await UpdateCheck.check("2.0.0", mockFetch);
+        assert.ok(checked.ok, "合法版本号比较不应失败");
+        assert.equal(checked.value.status, "update-available");
+        assert.equal(checked.value.remoteVersion, "2.1.0");
+    });
 });

@@ -18,427 +18,427 @@ import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix
 novelMasterTestFixture();
 
 function layoutWithWorkplace(): Pick<AgentPromptLayout, "workplace"> {
-  return { workplace: "【done】" };
+    return { workplace: "【done】" };
 }
 
 function layoutWithoutWorkplace(): Pick<AgentPromptLayout, "workplace"> {
-  return {};
+    return {};
 }
 
 
 /** Outcome 收窄：本文件用例只关心 completed 分支（中止语义在 abort-fingerprint 套件）。 */
 async function assembleDisplay(...args: Parameters<typeof WorkplaceDisplayAssembler.assemble>) {
-  return outcomeValue(await WorkplaceDisplayAssembler.assemble(...args));
+    return outcomeValue(await WorkplaceDisplayAssembler.assemble(...args));
 }
 
 describe("assembleWorkplaceDisplay", () => {
-  it("T-WP1: 无 worktree 块返回空且不写 kkv", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.write("/a.md", "hello");
-    const wt = WorkplaceServiceFactory.create(ctx.conn, {
-      kind: "session",
-      projectId: project.id,
-      sessionId: session.id,
+    it("T-WP1: 无 worktree 块返回空且不写 kkv", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        const vfs = ctx.sessionVfs(project.id, session.id);
+        await vfs.write("/a.md", "hello");
+        const wt = WorkplaceServiceFactory.create(ctx.conn, {
+            kind: "session",
+            projectId: project.id,
+            sessionId: session.id,
+        });
+
+        const out = await assembleDisplay(
+            { kind: "session", projectId: project.id, sessionId: session.id },
+            {
+                sessionKkv: sk,
+                workplace: wt,
+                vfs,
+                layout: layoutWithoutWorkplace(),
+            }
+        );
+        assert.equal(out.workplaceDisplay, "");
+        assert.deepEqual(out.prefixPaths, []);
+        assert.equal(unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY)), null);
     });
 
-    const out = await assembleDisplay(
-      { kind: "session", projectId: project.id, sessionId: session.id },
-      {
-        sessionKkv: sk,
-        workplace: wt,
-        vfs,
-        layout: layoutWithoutWorkplace(),
-      }
-    );
-    assert.equal(out.workplaceDisplay, "");
-    assert.deepEqual(out.prefixPaths, []);
-    assert.equal(unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY)), null);
-  });
+    it("T-WP2: 空 kkv + 有 worktree 块 → 写快照与 file_cache，display 含 file", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        const vfs = ctx.sessionVfs(project.id, session.id);
+        await vfs.write("/note.md", "hello-world");
+        await WorkplaceServiceFactory.create(ctx.conn, {
+            kind: "session",
+            projectId: project.id,
+            sessionId: session.id,
+        }).setFileRule({ logicalPath: "/note.md", inclusionMode: "show" });
 
-  it("T-WP2: 空 kkv + 有 worktree 块 → 写快照与 file_cache，display 含 file", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.write("/note.md", "hello-world");
-    await WorkplaceServiceFactory.create(ctx.conn, {
-      kind: "session",
-      projectId: project.id,
-      sessionId: session.id,
-    }).setFileRule({ logicalPath: "/note.md", inclusionMode: "show" });
-
-    const wt = WorkplaceServiceFactory.create(ctx.conn, {
-      kind: "session",
-      projectId: project.id,
-      sessionId: session.id,
-    });
-    const out = await assembleDisplay(
-      { kind: "session", projectId: project.id, sessionId: session.id },
-      {
-        sessionKkv: sk,
-        workplace: wt,
-        vfs,
-        layout: layoutWithWorkplace(),
-      }
-    );
-    assert.match(out.workplaceDisplay, /<file /);
-    assert.match(out.workplaceDisplay, /hello-world/);
-    assert.equal((out.workplaceDisplay.match(/<workplace>/g) ?? []).length, 1, "T-WP4: 恰好一层开标签");
-    assert.equal((out.workplaceDisplay.match(/<\/workplace>/g) ?? []).length, 1, "T-WP4: 恰好一层闭标签");
-    assert.equal(out.workplaceDisplay.includes("<<workplace>"), false);
-    assert.equal(out.workplaceDisplay.includes("<workplace>\n<workplace>"), false);
-    assert.deepEqual(out.prefixPaths, ["/note.md"]);
-    assert.ok((unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY))) != null);
-    // file_cache 回填是 fire-and-forget（2026-09-30 冷路径优化：压缩+落库
-    // 推迟到宏任务，不挡 assemble 返回），所以「最终被回填」要在 settle
-    // 闸门之后断言，而不是 assemble 返回那一刻。
-    await FileCache.settlePendingBackfills();
-    assert.ok((unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", "/note.md")))) != null);
-  });
-
-  // T-SR4：kkv canon=[] 后 assemble 仍能对有规则文件产出非空 display（空 [] 不粘住）
-  it("T-SR4: 空 rule_snapshot 数组不粘住：重新 evaluate 后能出工作区", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.write("/note.md", "revived");
-    await WorkplaceServiceFactory.create(ctx.conn, {
-      kind: "session",
-      projectId: project.id,
-      sessionId: session.id,
-    }).setFileRule({ logicalPath: "/note.md", inclusionMode: "show" });
-
-    await sk.set(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY, "[]");
-
-    const wt = WorkplaceServiceFactory.create(ctx.conn, {
-      kind: "session",
-      projectId: project.id,
-      sessionId: session.id,
-    });
-    const out = await assembleDisplay(
-      { kind: "session", projectId: project.id, sessionId: session.id },
-      {
-        sessionKkv: sk,
-        workplace: wt,
-        vfs,
-        layout: layoutWithWorkplace(),
-      }
-    );
-    assert.match(out.workplaceDisplay, /revived/);
-    assert.deepEqual(out.prefixPaths, ["/note.md"]);
-  });
-  it("T-WP3: 二次 assemble 不重复 vfs.read", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    const baseVfs = ctx.sessionVfs(project.id, session.id);
-    await baseVfs.write("/once.md", "body");
-    await WorkplaceServiceFactory.create(ctx.conn, {
-      kind: "session",
-      projectId: project.id,
-      sessionId: session.id,
-    }).setFileRule({ logicalPath: "/once.md", inclusionMode: "show" });
-
-    const read = mock.fn(async (path: string) => baseVfs.read(path));
-    const vfs = new Proxy(baseVfs, {
-      get(target, prop, receiver) {
-        if (prop === "read") {
-          return read;
-        }
-        return Reflect.get(target, prop, receiver);
-      },
+        const wt = WorkplaceServiceFactory.create(ctx.conn, {
+            kind: "session",
+            projectId: project.id,
+            sessionId: session.id,
+        });
+        const out = await assembleDisplay(
+            { kind: "session", projectId: project.id, sessionId: session.id },
+            {
+                sessionKkv: sk,
+                workplace: wt,
+                vfs,
+                layout: layoutWithWorkplace(),
+            }
+        );
+        assert.match(out.workplaceDisplay, /<file /);
+        assert.match(out.workplaceDisplay, /hello-world/);
+        assert.equal((out.workplaceDisplay.match(/<workplace>/g) ?? []).length, 1, "T-WP4: 恰好一层开标签");
+        assert.equal((out.workplaceDisplay.match(/<\/workplace>/g) ?? []).length, 1, "T-WP4: 恰好一层闭标签");
+        assert.equal(out.workplaceDisplay.includes("<<workplace>"), false);
+        assert.equal(out.workplaceDisplay.includes("<workplace>\n<workplace>"), false);
+        assert.deepEqual(out.prefixPaths, ["/note.md"]);
+        assert.ok((unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY))) != null);
+        // file_cache 回填是 fire-and-forget（2026-09-30 冷路径优化：压缩+落库
+        // 推迟到宏任务，不挡 assemble 返回），所以「最终被回填」要在 settle
+        // 闸门之后断言，而不是 assemble 返回那一刻。
+        await FileCache.settlePendingBackfills();
+        assert.ok((unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", "/note.md")))) != null);
     });
 
-    const wt = WorkplaceServiceFactory.create(ctx.conn, {
-      kind: "session",
-      projectId: project.id,
-      sessionId: session.id,
+    // T-SR4：kkv canon=[] 后 assemble 仍能对有规则文件产出非空 display（空 [] 不粘住）
+    it("T-SR4: 空 rule_snapshot 数组不粘住：重新 evaluate 后能出工作区", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        const vfs = ctx.sessionVfs(project.id, session.id);
+        await vfs.write("/note.md", "revived");
+        await WorkplaceServiceFactory.create(ctx.conn, {
+            kind: "session",
+            projectId: project.id,
+            sessionId: session.id,
+        }).setFileRule({ logicalPath: "/note.md", inclusionMode: "show" });
+
+        await sk.set(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY, "[]");
+
+        const wt = WorkplaceServiceFactory.create(ctx.conn, {
+            kind: "session",
+            projectId: project.id,
+            sessionId: session.id,
+        });
+        const out = await assembleDisplay(
+            { kind: "session", projectId: project.id, sessionId: session.id },
+            {
+                sessionKkv: sk,
+                workplace: wt,
+                vfs,
+                layout: layoutWithWorkplace(),
+            }
+        );
+        assert.match(out.workplaceDisplay, /revived/);
+        assert.deepEqual(out.prefixPaths, ["/note.md"]);
     });
-    const deps = {
-      sessionKkv: sk,
-      workplace: wt,
-      vfs: vfs as typeof baseVfs,
-      layout: layoutWithWorkplace(),
-    };
-    const scope = {
-      kind: "session" as const,
-      projectId: project.id,
-      sessionId: session.id,
-    };
-    // 第一次 assemble：冷 miss，读 VFS + 后台回填。
-    await assembleDisplay(scope, deps);
-    const firstReads = read.mock.callCount();
-    assert.ok(firstReads >= 1);
-    // 等回填落定再跑第二次：后台写是 fire-and-forget（推迟一个宏任务），
-    // 不等的话第二次仍会 miss 而多读一次 VFS——那是「后台写还在跑时又
-    // miss」的已知边界（与现状 miss 行为一致，非回归），不是本用例的考点。
-    // 本用例考点是：缓存落定后，命中路径不再读 VFS。
-    await FileCache.settlePendingBackfills();
-    await assembleDisplay(scope, deps);
-    assert.equal(read.mock.callCount(), firstReads);
-  });
+    it("T-WP3: 二次 assemble 不重复 vfs.read", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        const baseVfs = ctx.sessionVfs(project.id, session.id);
+        await baseVfs.write("/once.md", "body");
+        await WorkplaceServiceFactory.create(ctx.conn, {
+            kind: "session",
+            projectId: project.id,
+            sessionId: session.id,
+        }).setFileRule({ logicalPath: "/once.md", inclusionMode: "show" });
 
-  // 已知边界的显式记录（2026-09-30 冷路径优化引入）：后台写还没落定时，
-  // 紧接着的第二次 assemble 仍会 miss 并重读一次 VFS。这不是回归——
-  // 优化前是「先写回再返回」，优化后是「先返回再写回」，两者在「第二次
-  // 组装紧跟第一次」的窗口里读次数相同。钉在这里是为了让未来有人看到
-  // 读次数变化时知道该往哪看，而不是误判成缓存坏了。
-  it("T-WP3b 已知边界：后台回填未落定时的紧邻第二次 assemble 仍会重读 VFS", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    const baseVfs = ctx.sessionVfs(project.id, session.id);
-    await baseVfs.write("/race.md", "body");
-    await WorkplaceServiceFactory.create(ctx.conn, {
-      kind: "session",
-      projectId: project.id,
-      sessionId: session.id,
-    }).setFileRule({ logicalPath: "/race.md", inclusionMode: "show" });
+        const read = mock.fn(async (path: string) => baseVfs.read(path));
+        const vfs = new Proxy(baseVfs, {
+            get(target, prop, receiver) {
+                if (prop === "read") {
+                    return read;
+                }
+                return Reflect.get(target, prop, receiver);
+            },
+        });
 
-    const read = mock.fn(async (path: string) => baseVfs.read(path));
-    const vfs = new Proxy(baseVfs, {
-      get(target, prop, receiver) {
-        if (prop === "read") {
-          return read;
-        }
-        return Reflect.get(target, prop, receiver);
-      },
+        const wt = WorkplaceServiceFactory.create(ctx.conn, {
+            kind: "session",
+            projectId: project.id,
+            sessionId: session.id,
+        });
+        const deps = {
+            sessionKkv: sk,
+            workplace: wt,
+            vfs: vfs as typeof baseVfs,
+            layout: layoutWithWorkplace(),
+        };
+        const scope = {
+            kind: "session" as const,
+            projectId: project.id,
+            sessionId: session.id,
+        };
+        // 第一次 assemble：冷 miss，读 VFS + 后台回填。
+        await assembleDisplay(scope, deps);
+        const firstReads = read.mock.callCount();
+        assert.ok(firstReads >= 1);
+        // 等回填落定再跑第二次：后台写是 fire-and-forget（推迟一个宏任务），
+        // 不等的话第二次仍会 miss 而多读一次 VFS——那是「后台写还在跑时又
+        // miss」的已知边界（与现状 miss 行为一致，非回归），不是本用例的考点。
+        // 本用例考点是：缓存落定后，命中路径不再读 VFS。
+        await FileCache.settlePendingBackfills();
+        await assembleDisplay(scope, deps);
+        assert.equal(read.mock.callCount(), firstReads);
     });
-    const wt = WorkplaceServiceFactory.create(ctx.conn, {
-      kind: "session",
-      projectId: project.id,
-      sessionId: session.id,
+
+    // 已知边界的显式记录（2026-09-30 冷路径优化引入）：后台写还没落定时，
+    // 紧接着的第二次 assemble 仍会 miss 并重读一次 VFS。这不是回归——
+    // 优化前是「先写回再返回」，优化后是「先返回再写回」，两者在「第二次
+    // 组装紧跟第一次」的窗口里读次数相同。钉在这里是为了让未来有人看到
+    // 读次数变化时知道该往哪看，而不是误判成缓存坏了。
+    it("T-WP3b 已知边界：后台回填未落定时的紧邻第二次 assemble 仍会重读 VFS", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        const baseVfs = ctx.sessionVfs(project.id, session.id);
+        await baseVfs.write("/race.md", "body");
+        await WorkplaceServiceFactory.create(ctx.conn, {
+            kind: "session",
+            projectId: project.id,
+            sessionId: session.id,
+        }).setFileRule({ logicalPath: "/race.md", inclusionMode: "show" });
+
+        const read = mock.fn(async (path: string) => baseVfs.read(path));
+        const vfs = new Proxy(baseVfs, {
+            get(target, prop, receiver) {
+                if (prop === "read") {
+                    return read;
+                }
+                return Reflect.get(target, prop, receiver);
+            },
+        });
+        const wt = WorkplaceServiceFactory.create(ctx.conn, {
+            kind: "session",
+            projectId: project.id,
+            sessionId: session.id,
+        });
+        const scope = {
+            kind: "session" as const,
+            projectId: project.id,
+            sessionId: session.id,
+        };
+        const deps = { sessionKkv: sk, workplace: wt, vfs: vfs as typeof baseVfs, layout: layoutWithWorkplace() };
+
+        await assembleDisplay(scope, deps);
+        const firstReads = read.mock.callCount();
+        // 不 settle：后台写还在宏任务队列里，缓存必然 miss
+        const out = await assembleDisplay(scope, deps);
+        assert.match(out.workplaceDisplay, /body/, "重读也要出正文，不能空");
+        assert.equal(read.mock.callCount(), firstReads + 1, "miss 时重读一次 VFS");
+        await FileCache.settlePendingBackfills();
     });
-    const scope = {
-      kind: "session" as const,
-      projectId: project.id,
-      sessionId: session.id,
-    };
-    const deps = { sessionKkv: sk, workplace: wt, vfs: vfs as typeof baseVfs, layout: layoutWithWorkplace() };
 
-    await assembleDisplay(scope, deps);
-    const firstReads = read.mock.callCount();
-    // 不 settle：后台写还在宏任务队列里，缓存必然 miss
-    const out = await assembleDisplay(scope, deps);
-    assert.match(out.workplaceDisplay, /body/, "重读也要出正文，不能空");
-    assert.equal(read.mock.callCount(), firstReads + 1, "miss 时重读一次 VFS");
-    await FileCache.settlePendingBackfills();
-  });
-
-  it("T-FC1: write 工具成功 upsert full:{path}", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    const writeTool = FileTools.create().find((t) => t.name === "write");
-    assert.ok(writeTool != null);
-    await writeTool!.run(
-      { path: "/w.md", content: "full-content" },
-      {
-        vfs,
-        projectId: project.id,
-        sessionId: session.id,
-        sessionKkv: sk,
-      }
-    );
-    const raw = unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", "/w.md")));
-    assert.ok(raw != null);
-    const payload = RuleSnapshotCodec.parseFileCachePayload(raw!);
-    assert.ok(payload.ok);
-    assert.equal(payload.value.body, "full-content");
-  });
-
-  it("T-FC2: edit 成功不改 file_cache", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.write("/e.md", "alpha");
-    await sk.set(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", "/e.md"), JSON.stringify({ body: "cached-before-edit", mtimeMs: 1 }));
-    const editTool = FileTools.create().find((t) => t.name === "edit");
-    assert.ok(editTool != null);
-    await editTool!.run(
-      { path: "/e.md", oldString: "alpha", newString: "beta" },
-      {
-        vfs,
-        projectId: project.id,
-        sessionId: session.id,
-        sessionKkv: sk,
-      }
-    );
-    const raw = unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", "/e.md")));
-    assert.equal(raw, JSON.stringify({ body: "cached-before-edit", mtimeMs: 1 }));
-    assert.equal(unwrap(await vfs.read("/e.md")).content, "beta");
-  });
-
-  it("T-WP4: clearSession 后再度 assemble 重新跑规则引擎并写快照", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.write("/again.md", "v1");
-    await WorkplaceServiceFactory.create(ctx.conn, {
-      kind: "session",
-      projectId: project.id,
-      sessionId: session.id,
-    }).setFileRule({ logicalPath: "/again.md", inclusionMode: "show" });
-
-    const wt = WorkplaceServiceFactory.create(ctx.conn, {
-      kind: "session",
-      projectId: project.id,
-      sessionId: session.id,
+    it("T-FC1: write 工具成功 upsert full:{path}", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        const vfs = ctx.sessionVfs(project.id, session.id);
+        const writeTool = FileTools.create().find((t) => t.name === "write");
+        assert.ok(writeTool != null);
+        await writeTool!.run(
+            { path: "/w.md", content: "full-content" },
+            {
+                vfs,
+                projectId: project.id,
+                sessionId: session.id,
+                sessionKkv: sk,
+            }
+        );
+        const raw = unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", "/w.md")));
+        assert.ok(raw != null);
+        const payload = RuleSnapshotCodec.parseFileCachePayload(raw!);
+        assert.ok(payload.ok);
+        assert.equal(payload.value.body, "full-content");
     });
-    const scope = {
-      kind: "session" as const,
-      projectId: project.id,
-      sessionId: session.id,
-    };
-    const deps = {
-      sessionKkv: sk,
-      workplace: wt,
-      vfs,
-      layout: layoutWithWorkplace(),
-    };
-    await assembleDisplay(scope, deps);
-    assert.ok((unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY))) != null);
 
-    await sk.clearSession(session.id);
-    assert.equal(unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY)), null);
-
-    await vfs.replace("/again.md", "v1", "v2-after-clear");
-    const out = await assembleDisplay(scope, deps);
-    assert.match(out.workplaceDisplay, /v2-after-clear/);
-    assert.deepEqual(out.prefixPaths, ["/again.md"]);
-    assert.ok((unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY))) != null);
-  });
-
-  it("T-FC3: delete/rename/move 不碰 file_cache 原 key", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    const cachedBody = JSON.stringify({ body: "keep-me", mtimeMs: 42 });
-    const delKey = RuleSnapshotCodec.fileCacheKey("full", "/del.md");
-    const mvKey = RuleSnapshotCodec.fileCacheKey("full", "/old.md");
-    await vfs.write("/del.md", "will-delete");
-    await vfs.write("/old.md", "will-move");
-    await sk.set(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, delKey, cachedBody);
-    await sk.set(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, mvKey, cachedBody);
-
-    const fsTool = FileTools.create().find((t) => t.name === "fs");
-    assert.ok(fsTool != null);
-    const toolCtx = {
-      vfs,
-      projectId: project.id,
-      sessionId: session.id,
-      sessionKkv: sk,
-    };
-    await fsTool!.run({ action: "rm", path: "/del.md" }, toolCtx);
-    await fsTool!.run({ action: "mv", from: "/old.md", to: "/new.md" }, toolCtx);
-
-    assert.equal(unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, delKey)), cachedBody);
-    assert.equal(unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, mvKey)), cachedBody);
-    // 新 path 不自动拷贝 cache
-    assert.equal(unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", "/new.md"))), null);
-  });
-
-  // huge-card-import-crash：误导入巨型角色卡的存量用户重启后，workplace
-  // 前缀组装不得整读毒数据（原生 OOM 崩溃循环），超大文件降级为占位符
-  it("超大文件降级：display 含占位、不含正文、不写 file_cache，正常文件不受影响", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-oversize-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.write("/毒卡/巨型设定.md", "poison-body");
-    await vfs.write("/正常.md", "hello-world");
-    const wt = WorkplaceServiceFactory.create(ctx.conn, {
-      kind: "session",
-      projectId: project.id,
-      sessionId: session.id,
+    it("T-FC2: edit 成功不改 file_cache", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        const vfs = ctx.sessionVfs(project.id, session.id);
+        await vfs.write("/e.md", "alpha");
+        await sk.set(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", "/e.md"), JSON.stringify({ body: "cached-before-edit", mtimeMs: 1 }));
+        const editTool = FileTools.create().find((t) => t.name === "edit");
+        assert.ok(editTool != null);
+        await editTool!.run(
+            { path: "/e.md", oldString: "alpha", newString: "beta" },
+            {
+                vfs,
+                projectId: project.id,
+                sessionId: session.id,
+                sessionKkv: sk,
+            }
+        );
+        const raw = unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", "/e.md")));
+        assert.equal(raw, JSON.stringify({ body: "cached-before-edit", mtimeMs: 1 }));
+        assert.equal(unwrap(await vfs.read("/e.md")).content, "beta");
     });
-    await wt.setFileRule({ logicalPath: "/毒卡/巨型设定.md", inclusionMode: "show" });
-    await wt.setFileRule({ logicalPath: "/正常.md", inclusionMode: "show" });
 
-    // 伪造毒数据：把该文件 content blob 的 byte_len 改成超闸门大小
-    // （真实毒卡是压缩后仍巨大的 blob，这里直改长度列避免真的写入 MB 级正文）
-    await ctx.conn.execute(
-      `UPDATE vfs_content_blob
+    it("T-WP4: clearSession 后再度 assemble 重新跑规则引擎并写快照", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        const vfs = ctx.sessionVfs(project.id, session.id);
+        await vfs.write("/again.md", "v1");
+        await WorkplaceServiceFactory.create(ctx.conn, {
+            kind: "session",
+            projectId: project.id,
+            sessionId: session.id,
+        }).setFileRule({ logicalPath: "/again.md", inclusionMode: "show" });
+
+        const wt = WorkplaceServiceFactory.create(ctx.conn, {
+            kind: "session",
+            projectId: project.id,
+            sessionId: session.id,
+        });
+        const scope = {
+            kind: "session" as const,
+            projectId: project.id,
+            sessionId: session.id,
+        };
+        const deps = {
+            sessionKkv: sk,
+            workplace: wt,
+            vfs,
+            layout: layoutWithWorkplace(),
+        };
+        await assembleDisplay(scope, deps);
+        assert.ok((unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY))) != null);
+
+        await sk.clearSession(session.id);
+        assert.equal(unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY)), null);
+
+        await vfs.replace("/again.md", "v1", "v2-after-clear");
+        const out = await assembleDisplay(scope, deps);
+        assert.match(out.workplaceDisplay, /v2-after-clear/);
+        assert.deepEqual(out.prefixPaths, ["/again.md"]);
+        assert.ok((unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY))) != null);
+    });
+
+    it("T-FC3: delete/rename/move 不碰 file_cache 原 key", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        const vfs = ctx.sessionVfs(project.id, session.id);
+        const cachedBody = JSON.stringify({ body: "keep-me", mtimeMs: 42 });
+        const delKey = RuleSnapshotCodec.fileCacheKey("full", "/del.md");
+        const mvKey = RuleSnapshotCodec.fileCacheKey("full", "/old.md");
+        await vfs.write("/del.md", "will-delete");
+        await vfs.write("/old.md", "will-move");
+        await sk.set(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, delKey, cachedBody);
+        await sk.set(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, mvKey, cachedBody);
+
+        const fsTool = FileTools.create().find((t) => t.name === "fs");
+        assert.ok(fsTool != null);
+        const toolCtx = {
+            vfs,
+            projectId: project.id,
+            sessionId: session.id,
+            sessionKkv: sk,
+        };
+        await fsTool!.run({ action: "rm", path: "/del.md" }, toolCtx);
+        await fsTool!.run({ action: "mv", from: "/old.md", to: "/new.md" }, toolCtx);
+
+        assert.equal(unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, delKey)), cachedBody);
+        assert.equal(unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, mvKey)), cachedBody);
+        // 新 path 不自动拷贝 cache
+        assert.equal(unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", "/new.md"))), null);
+    });
+
+    // huge-card-import-crash：误导入巨型角色卡的存量用户重启后，workplace
+    // 前缀组装不得整读毒数据（原生 OOM 崩溃循环），超大文件降级为占位符
+    it("超大文件降级：display 含占位、不含正文、不写 file_cache，正常文件不受影响", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-oversize-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        const vfs = ctx.sessionVfs(project.id, session.id);
+        await vfs.write("/毒卡/巨型设定.md", "poison-body");
+        await vfs.write("/正常.md", "hello-world");
+        const wt = WorkplaceServiceFactory.create(ctx.conn, {
+            kind: "session",
+            projectId: project.id,
+            sessionId: session.id,
+        });
+        await wt.setFileRule({ logicalPath: "/毒卡/巨型设定.md", inclusionMode: "show" });
+        await wt.setFileRule({ logicalPath: "/正常.md", inclusionMode: "show" });
+
+        // 伪造毒数据：把该文件 content blob 的 byte_len 改成超闸门大小
+        // （真实毒卡是压缩后仍巨大的 blob，这里直改长度列避免真的写入 MB 级正文）
+        await ctx.conn.execute(
+            `UPDATE vfs_content_blob
     SET byte_len = ?
     WHERE content_hash = ( SELECT content_hash
     FROM vfs_entry
     WHERE scope_key LIKE ? AND path = ? )`,
-      [9 * 1024 * 1024, `%${session.id}%`, "/毒卡/巨型设定.md"]
-    );
+            [9 * 1024 * 1024, `%${session.id}%`, "/毒卡/巨型设定.md"]
+        );
 
-    const out = await assembleDisplay(
-      { kind: "session", projectId: project.id, sessionId: session.id },
-      {
-        sessionKkv: sk,
-        workplace: wt,
-        vfs,
-        layout: layoutWithWorkplace(),
-      }
-    );
+        const out = await assembleDisplay(
+            { kind: "session", projectId: project.id, sessionId: session.id },
+            {
+                sessionKkv: sk,
+                workplace: wt,
+                vfs,
+                layout: layoutWithWorkplace(),
+            }
+        );
 
-    // 超大文件：占位符进 display，正文不进，file_cache 不写；占位块时间属性
-    // 必须是行真实 mtime 而非 1970（CR-1：mtimeMs=0 会被渲染成 1970-01-01 假时间戳）
-    assert.match(out.workplaceDisplay, /（文件过大，已跳过，约 \d+ 字符）/);
-    const placeholderBlock = out.workplaceDisplay.match(/<file path="\/毒卡\/巨型设定\.md" createdAt="([^"]*)" updatedAt="[^"]*"/);
-    assert.ok(placeholderBlock, "占位块带 file 头属性");
-    assert.equal(placeholderBlock[1]!.startsWith("1970"), false, `占位块时间应为真实 mtime，实际：${placeholderBlock[1]}`);
-    assert.equal(out.workplaceDisplay.includes("poison-body"), false);
-    assert.equal(unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", "/毒卡/巨型设定.md"))), null);
-    // 正常文件不受降级影响：正文照常进 display 并写 cache
-    // （回填是 fire-and-forget，落定后再断言缓存）
-    assert.equal(out.workplaceDisplay.includes("hello-world"), true);
-    await FileCache.settlePendingBackfills();
-    assert.notEqual(unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", "/正常.md"))), null);
-  });
-
-  it("filename 档不得渲染 1970 假时间戳", async () => {
-    // filename 档此前直接返回 `{ body: "", mtimeMs: 0 }`，组装层 `DateTime.localDateTime(0)`
-    // ⇒ 提示词里出现 createdAt="1970-01-01 08:00:00"。断言写成「不含 1970」而不是
-    // 「等于某个具体时间」——后者会锁死夹具 mtime，脆且无额外价值。
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.write("/卷/第一章.md", "正文一");
-    await vfs.write("/卷/第二章.md", "正文二");
-    await vfs.write("/卷/第三章.md", "正文三");
-
-    const wt = WorkplaceServiceFactory.create(ctx.conn, {
-      kind: "session",
-      projectId: project.id,
-      sessionId: session.id,
-    });
-    // head/tail 归零 + fillPolicy=filename ⇒ 非优先文件一律走 filename 档
-    await wt.setDirRule({
-      logicalPath: "/卷",
-      ruleEnabled: true,
-      headCount: 0,
-      tailCount: 0,
-      fillPolicy: "filename",
+        // 超大文件：占位符进 display，正文不进，file_cache 不写；占位块时间属性
+        // 必须是行真实 mtime 而非 1970（CR-1：mtimeMs=0 会被渲染成 1970-01-01 假时间戳）
+        assert.match(out.workplaceDisplay, /（文件过大，已跳过，约 \d+ 字符）/);
+        const placeholderBlock = out.workplaceDisplay.match(/<file path="\/毒卡\/巨型设定\.md" createdAt="([^"]*)" updatedAt="[^"]*"/);
+        assert.ok(placeholderBlock, "占位块带 file 头属性");
+        assert.equal(placeholderBlock[1]!.startsWith("1970"), false, `占位块时间应为真实 mtime，实际：${placeholderBlock[1]}`);
+        assert.equal(out.workplaceDisplay.includes("poison-body"), false);
+        assert.equal(unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", "/毒卡/巨型设定.md"))), null);
+        // 正常文件不受降级影响：正文照常进 display 并写 cache
+        // （回填是 fire-and-forget，落定后再断言缓存）
+        assert.equal(out.workplaceDisplay.includes("hello-world"), true);
+        await FileCache.settlePendingBackfills();
+        assert.notEqual(unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, RuleSnapshotCodec.fileCacheKey("full", "/正常.md"))), null);
     });
 
-    const out = await assembleDisplay({ kind: "session", projectId: project.id, sessionId: session.id }, { sessionKkv: sk, workplace: wt, vfs, layout: layoutWithWorkplace() });
+    it("filename 档不得渲染 1970 假时间戳", async () => {
+        // filename 档此前直接返回 `{ body: "", mtimeMs: 0 }`，组装层 `DateTime.localDateTime(0)`
+        // ⇒ 提示词里出现 createdAt="1970-01-01 08:00:00"。断言写成「不含 1970」而不是
+        // 「等于某个具体时间」——后者会锁死夹具 mtime，脆且无额外价值。
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        const vfs = ctx.sessionVfs(project.id, session.id);
+        await vfs.write("/卷/第一章.md", "正文一");
+        await vfs.write("/卷/第二章.md", "正文二");
+        await vfs.write("/卷/第三章.md", "正文三");
 
-    assert.match(out.workplaceDisplay, /<file path="\/卷\//, "应有 filename 档文件块");
+        const wt = WorkplaceServiceFactory.create(ctx.conn, {
+            kind: "session",
+            projectId: project.id,
+            sessionId: session.id,
+        });
+        // head/tail 归零 + fillPolicy=filename ⇒ 非优先文件一律走 filename 档
+        await wt.setDirRule({
+            logicalPath: "/卷",
+            ruleEnabled: true,
+            headCount: 0,
+            tailCount: 0,
+            fillPolicy: "filename",
+        });
+
+        const out = await assembleDisplay({ kind: "session", projectId: project.id, sessionId: session.id }, { sessionKkv: sk, workplace: wt, vfs, layout: layoutWithWorkplace() });
+
+        assert.match(out.workplaceDisplay, /<file path="\/卷\//, "应有 filename 档文件块");
     assert.equal(out.workplaceDisplay.includes('createdAt="1970'), false, `filename 档不得渲染 1970 假时间戳：${out.workplaceDisplay}`);
     assert.equal(out.workplaceDisplay.includes("正文一"), false, "filename 档不渲正文");
   });

@@ -7,6 +7,6 @@ import { EventForwarder } from "./event-forwarder.js";
 
 /** 注册 renderer webContents 解析器（与 agent stream 转发共用同一窗口策略）。 */
 export const AgentActivityForwarder = EventForwarder.create<AgentActivityPayload>(IPC_CHANNELS.AGENT_ACTIVITY, {
-  /** 订阅 refcount 变化并转发至 renderer；cleanup 供 app quit / rebootstrap 使用。 */
-  subscribe: (emit) => agentActivity.subscribe((active: boolean) => emit({ active })),
+    /** 订阅 refcount 变化并转发至 renderer；cleanup 供 app quit / rebootstrap 使用。 */
+    subscribe: (emit) => agentActivity.subscribe((active: boolean) => emit({ active })),
 });

@@ -21,272 +21,272 @@ import { TOOL_OUTPUT_MAX_BYTES } from "../logic/tool-output-limits.js";
 
 // nm-style: keep-public — `packages/core/src/index.ts` 公开类型（barrel 在本片之外），且是 build 的入参契约。
 export interface BuildToolResultBlockMeta {
-  readonly toolName?: string;
-  readonly vfsScope?: VfsScope;
-  /**
+    readonly toolName?: string;
+    readonly vfsScope?: VfsScope;
+    /**
    * `task` 工具输出中的 `subagentSessionId`，透传到 `ToolResultBlock.meta.subagentSessionId`。
    *
    * 调用方可从 `outcome.output.subagentSessionId` 或独立源头传入；任一来源均为 string 时生效。
    */
-  readonly subagentSessionId?: string;
-  /**
+    readonly subagentSessionId?: string;
+    /**
    * `skill` project 域解析上下文（当前会话 projectId）。read 缺省域命中
    * 生效副本时输出只携带命中 domain/name，projectId 由这里补进 `meta.skillRef`。
    */
-  readonly skillProjectId?: string;
+    readonly skillProjectId?: string;
 }
 
 export const ToolResultBlock = {
-  /** UI / legacy: explicit `ok` wins; otherwise infer from `Error:` prefix only. */
-  resolveOk(block: ChatToolResultBlock): boolean {
-    if (block.ok === false) {
-      return false;
-    }
-    if (block.ok === true) {
-      return true;
-    }
-    return !block.content.trimStart().startsWith("Error:");
-  },
-
-  // nm-style: keep-local — summary 与 format-tool-output 抬头同词（响应文本 / 已落盘 / N 条结果），且整段必须整体先于泛化 matches/paths 兜底求值；这条跨工具一致口径是单点契约，拆进 assembler 会与持久化装配混层。
-  summarizeToolSuccess(toolName: string | undefined, output: unknown): string | undefined {
-    if (!Guards.isRecord(output)) {
-      return undefined;
-    }
-    const name = toolName ?? "";
-
-    if (name === "read") {
-      const returned = output.returnedLines;
-      const total = output.totalLines;
-      if (typeof returned === "number" && typeof total === "number") {
-        if (output.truncated === true) {
-          return `truncated · ${returned}/${total} lines`;
+    /** UI / legacy: explicit `ok` wins; otherwise infer from `Error:` prefix only. */
+    resolveOk(block: ChatToolResultBlock): boolean {
+        if (block.ok === false) {
+            return false;
         }
-        return `${returned} lines`;
-      }
-    }
-
-    if (name === "edit") {
-      const replacements = output.replacements;
-      if (typeof replacements === "number") {
-        return replacements === 1 ? "ok" : `${replacements} replacements`;
-      }
-    }
-
-    if (name === "write" || output.ok === true) {
-      if (typeof output.version === "number" || output.ok === true) {
-        return "ok";
-      }
-    }
-
-    if (name === "fs" && Array.isArray(output.entries)) {
-      const count = output.entries.length;
-      const total = typeof output.total === "number" ? output.total : count;
-      if (output.truncated === true) {
-        return `${count}/${total} entries`;
-      }
-      return `${count} entries`;
-    }
-
-    // skill：按输出携带的 action 分发（load 域+文件数 / read 行数 / write 域+路径 /
-    // edit 替换数 / list 条数）。必须在下方 generic matches/paths 分支之前——
-    // list 输出的 entries+total 会撞上。
-    if (name === "skill" && typeof output.action === "string") {
-      if (output.action === "load") {
-        const parts: string[] = [];
-        if (typeof output.domain === "string" && typeof output.name === "string") {
-          parts.push(`${output.domain}:${output.name}`);
+        if (block.ok === true) {
+            return true;
         }
-        if (output.alreadyReferenced === true) {
-          parts.push("已在提示词中");
-        } else if (Array.isArray(output.files)) {
-          parts.push(`${output.files.length} files`);
-        }
-        if (parts.length > 0) return parts.join(" · ");
-      }
-      if (output.action === "read") {
-        const returned = output.returnedLines;
-        const total = output.totalLines;
-        if (typeof returned === "number" && typeof total === "number") {
-          if (output.truncated === true) {
-            return `truncated · ${returned}/${total} lines`;
-          }
-          return `${returned} lines`;
-        }
-      }
-      if ((output.action === "write" || output.action === "edit") && typeof output.domain === "string" && typeof output.name === "string" && typeof output.path === "string") {
-        if (output.action === "edit" && typeof output.replacements === "number") {
-          return output.replacements === 1 ? `${output.domain}:${output.name}/${output.path}` : `${output.replacements} replacements · ${output.domain}:${output.name}/${output.path}`;
-        }
-        return `${output.domain}:${output.name}/${output.path}`;
-      }
-      if (output.action === "list" && Array.isArray(output.entries)) {
-        return `${output.entries.length} skills`;
-      }
-    }
+        return !block.content.trimStart().startsWith("Error:");
+    },
 
-    // agent：按输出 action 分发（list 条数 / get 定义名 / create+update 保存名）。
-    // 与 skill 同理必须在下方 generic matches/paths 分支之前——list 输出的
-    // entries+total 会撞上。
-    if (name === "agent" && typeof output.action === "string") {
-      if (output.action === "list" && Array.isArray(output.entries)) {
-        const count = output.entries.length;
-        const total = typeof output.total === "number" ? output.total : count;
-        if (output.truncated === true) {
-          return `${count}/${total} agents`;
+    // nm-style: keep-local — summary 与 format-tool-output 抬头同词（响应文本 / 已落盘 / N 条结果），且整段必须整体先于泛化 matches/paths 兜底求值；这条跨工具一致口径是单点契约，拆进 assembler 会与持久化装配混层。
+    summarizeToolSuccess(toolName: string | undefined, output: unknown): string | undefined {
+        if (!Guards.isRecord(output)) {
+            return undefined;
         }
-        return `${count} agents`;
-      }
-      if (output.action === "get") {
-        const def = output.definition;
-        if (Guards.isRecord(def) && typeof def.name === "string") {
-          return def.name;
+        const name = toolName ?? "";
+
+        if (name === "read") {
+            const returned = output.returnedLines;
+            const total = output.totalLines;
+            if (typeof returned === "number" && typeof total === "number") {
+                if (output.truncated === true) {
+                    return `truncated · ${returned}/${total} lines`;
+                }
+                return `${returned} lines`;
+            }
         }
-      }
-      if ((output.action === "create" || output.action === "update") && typeof output.name === "string") {
-        return `已保存 ${output.name}`;
-      }
-    }
 
-    // search：引擎 · N 条结果；模板引擎透传形态 results 为 JSON 文本 →
-    // 「引擎 · 响应文本」（与 format-tool-output 抬头同词，不解析条数）；
-    // 超预算落盘形态（Step 6 后出现）显示已落盘路径。
-    // 未配置提示是纯字符串输出（非 record），在上方 Guards.isRecord 门处已返回 undefined。
-    if (name === "search") {
-      if (typeof output.engine === "string" && Array.isArray(output.results)) {
-        return `${output.engine} · ${output.results.length} 条结果`;
-      }
-      if (typeof output.engine === "string" && typeof output.results === "string") {
-        return `${output.engine} · 响应文本`;
-      }
-      if (typeof output.savedPath === "string") {
-        return `已落盘 ${output.savedPath}`;
-      }
-    }
-
-    // curl：状态 · 原始体积（如 `200 · 12.3KB`）；截断时保留量/原始量
-    // （如 `truncated · 50KB/1.2MB`）。超预算落盘形态优先：显示已落盘路径
-    // （正文已存 /tmp/，体积档位无意义）；降级截断路径 body 含标注行会
-    // 略超预算，展示上按预算值口径（TOOL_OUTPUT_MAX_BYTES）。非文本占位
-    // 与预检占位很小，照 body 现算。
-    if (name === "curl") {
-      if (typeof output.savedPath === "string") {
-        return `已落盘 ${output.savedPath}`;
-      }
-      const status = output.status;
-      const originalBytes = output.originalBytes;
-      if (typeof status === "number" && typeof originalBytes === "number") {
-        if (output.truncated === true) {
-          const bodyBytes = typeof output.body === "string" ? Encoding.utf8ByteLength(output.body) : undefined;
-          // 正常截断路径 body 含标注行会略超预算，展示上按预算值口径。
-          const kept = bodyBytes != null && bodyBytes < TOOL_OUTPUT_MAX_BYTES ? bodyBytes : TOOL_OUTPUT_MAX_BYTES;
-          return `truncated · ${Number.formatBytes(kept)}/${Number.formatBytes(originalBytes)}`;
+        if (name === "edit") {
+            const replacements = output.replacements;
+            if (typeof replacements === "number") {
+                return replacements === 1 ? "ok" : `${replacements} replacements`;
+            }
         }
-        return `${status} · ${Number.formatBytes(originalBytes)}`;
-      }
-    }
 
-    const matchItems = output.matches ?? output.paths;
-    if (Array.isArray(matchItems) && typeof output.total === "number") {
-      const n = matchItems.length;
-      const label = name === "glob" ? "paths" : "matches";
-      if (output.truncated === true) {
-        return `${n}/${output.total} ${label}`;
-      }
-      return `${n} ${label}`;
-    }
+        if (name === "write" || output.ok === true) {
+            if (typeof output.version === "number" || output.ok === true) {
+                return "ok";
+            }
+        }
 
-    return undefined;
-  },
+        if (name === "fs" && Array.isArray(output.entries)) {
+            const count = output.entries.length;
+            const total = typeof output.total === "number" ? output.total : count;
+            if (output.truncated === true) {
+                return `${count}/${total} entries`;
+            }
+            return `${count} entries`;
+        }
 
-  /**
+        // skill：按输出携带的 action 分发（load 域+文件数 / read 行数 / write 域+路径 /
+        // edit 替换数 / list 条数）。必须在下方 generic matches/paths 分支之前——
+        // list 输出的 entries+total 会撞上。
+        if (name === "skill" && typeof output.action === "string") {
+            if (output.action === "load") {
+                const parts: string[] = [];
+                if (typeof output.domain === "string" && typeof output.name === "string") {
+                    parts.push(`${output.domain}:${output.name}`);
+                }
+                if (output.alreadyReferenced === true) {
+                    parts.push("已在提示词中");
+                } else if (Array.isArray(output.files)) {
+                    parts.push(`${output.files.length} files`);
+                }
+                if (parts.length > 0) return parts.join(" · ");
+            }
+            if (output.action === "read") {
+                const returned = output.returnedLines;
+                const total = output.totalLines;
+                if (typeof returned === "number" && typeof total === "number") {
+                    if (output.truncated === true) {
+                        return `truncated · ${returned}/${total} lines`;
+                    }
+                    return `${returned} lines`;
+                }
+            }
+            if ((output.action === "write" || output.action === "edit") && typeof output.domain === "string" && typeof output.name === "string" && typeof output.path === "string") {
+                if (output.action === "edit" && typeof output.replacements === "number") {
+                    return output.replacements === 1 ? `${output.domain}:${output.name}/${output.path}` : `${output.replacements} replacements · ${output.domain}:${output.name}/${output.path}`;
+                }
+                return `${output.domain}:${output.name}/${output.path}`;
+            }
+            if (output.action === "list" && Array.isArray(output.entries)) {
+                return `${output.entries.length} skills`;
+            }
+        }
+
+        // agent：按输出 action 分发（list 条数 / get 定义名 / create+update 保存名）。
+        // 与 skill 同理必须在下方 generic matches/paths 分支之前——list 输出的
+        // entries+total 会撞上。
+        if (name === "agent" && typeof output.action === "string") {
+            if (output.action === "list" && Array.isArray(output.entries)) {
+                const count = output.entries.length;
+                const total = typeof output.total === "number" ? output.total : count;
+                if (output.truncated === true) {
+                    return `${count}/${total} agents`;
+                }
+                return `${count} agents`;
+            }
+            if (output.action === "get") {
+                const def = output.definition;
+                if (Guards.isRecord(def) && typeof def.name === "string") {
+                    return def.name;
+                }
+            }
+            if ((output.action === "create" || output.action === "update") && typeof output.name === "string") {
+                return `已保存 ${output.name}`;
+            }
+        }
+
+        // search：引擎 · N 条结果；模板引擎透传形态 results 为 JSON 文本 →
+        // 「引擎 · 响应文本」（与 format-tool-output 抬头同词，不解析条数）；
+        // 超预算落盘形态（Step 6 后出现）显示已落盘路径。
+        // 未配置提示是纯字符串输出（非 record），在上方 Guards.isRecord 门处已返回 undefined。
+        if (name === "search") {
+            if (typeof output.engine === "string" && Array.isArray(output.results)) {
+                return `${output.engine} · ${output.results.length} 条结果`;
+            }
+            if (typeof output.engine === "string" && typeof output.results === "string") {
+                return `${output.engine} · 响应文本`;
+            }
+            if (typeof output.savedPath === "string") {
+                return `已落盘 ${output.savedPath}`;
+            }
+        }
+
+        // curl：状态 · 原始体积（如 `200 · 12.3KB`）；截断时保留量/原始量
+        // （如 `truncated · 50KB/1.2MB`）。超预算落盘形态优先：显示已落盘路径
+        // （正文已存 /tmp/，体积档位无意义）；降级截断路径 body 含标注行会
+        // 略超预算，展示上按预算值口径（TOOL_OUTPUT_MAX_BYTES）。非文本占位
+        // 与预检占位很小，照 body 现算。
+        if (name === "curl") {
+            if (typeof output.savedPath === "string") {
+                return `已落盘 ${output.savedPath}`;
+            }
+            const status = output.status;
+            const originalBytes = output.originalBytes;
+            if (typeof status === "number" && typeof originalBytes === "number") {
+                if (output.truncated === true) {
+                    const bodyBytes = typeof output.body === "string" ? Encoding.utf8ByteLength(output.body) : undefined;
+                    // 正常截断路径 body 含标注行会略超预算，展示上按预算值口径。
+                    const kept = bodyBytes != null && bodyBytes < TOOL_OUTPUT_MAX_BYTES ? bodyBytes : TOOL_OUTPUT_MAX_BYTES;
+                    return `truncated · ${Number.formatBytes(kept)}/${Number.formatBytes(originalBytes)}`;
+                }
+                return `${status} · ${Number.formatBytes(originalBytes)}`;
+            }
+        }
+
+        const matchItems = output.matches ?? output.paths;
+        if (Array.isArray(matchItems) && typeof output.total === "number") {
+            const n = matchItems.length;
+            const label = name === "glob" ? "paths" : "matches";
+            if (output.truncated === true) {
+                return `${n}/${output.total} ${label}`;
+            }
+            return `${n} ${label}`;
+        }
+
+        return undefined;
+    },
+
+    /**
    * Maps one parallel tool outcome to a block ready for session persistence.
    */
-  // nm-style: keep-public — `index.ts` 公开导出（barrel 与 29 处测试在本片之外），生产侧唯一装配点 agent-runner 依赖其持久化契约。
-  build(toolUseId: string, outcome: ParallelToolOutcome, meta?: BuildToolResultBlockMeta): ChatToolResultBlock {
-    if (outcome.ok) {
-      const content = ToolOutput.formatForLlm(outcome.output);
-      const summary = ToolResultBlock.summarizeToolSuccess(meta?.toolName, outcome.output);
-      // task 工具输出对象形如 { text, subagentSessionId }：透传 subagentSessionId 到 meta。
-      const subagentOutput = outcome.output;
-      const outputSubagentSessionId = Guards.isRecord(subagentOutput) && typeof subagentOutput.subagentSessionId === "string" ? subagentOutput.subagentSessionId : undefined;
-      const subagentSessionId = outputSubagentSessionId ?? (typeof meta?.subagentSessionId === "string" && meta.subagentSessionId.length > 0 ? meta.subagentSessionId : undefined);
-      // skill 成功输出携带实际 domain/name（read 缺省域命中生效副本的解析结果
-      // 也在这里）：照 subagentSessionId 自动检测透传到 meta.skillRef。
-      const skillToolName = meta?.toolName;
-      const skillRef = skillToolName == null ? undefined : SkillToolRefResolver.fromOutput(skillToolName, outcome.output, meta?.skillProjectId);
+    // nm-style: keep-public — `index.ts` 公开导出（barrel 与 29 处测试在本片之外），生产侧唯一装配点 agent-runner 依赖其持久化契约。
+    build(toolUseId: string, outcome: ParallelToolOutcome, meta?: BuildToolResultBlockMeta): ChatToolResultBlock {
+        if (outcome.ok) {
+            const content = ToolOutput.formatForLlm(outcome.output);
+            const summary = ToolResultBlock.summarizeToolSuccess(meta?.toolName, outcome.output);
+            // task 工具输出对象形如 { text, subagentSessionId }：透传 subagentSessionId 到 meta。
+            const subagentOutput = outcome.output;
+            const outputSubagentSessionId = Guards.isRecord(subagentOutput) && typeof subagentOutput.subagentSessionId === "string" ? subagentOutput.subagentSessionId : undefined;
+            const subagentSessionId = outputSubagentSessionId ?? (typeof meta?.subagentSessionId === "string" && meta.subagentSessionId.length > 0 ? meta.subagentSessionId : undefined);
+            // skill 成功输出携带实际 domain/name（read 缺省域命中生效副本的解析结果
+            // 也在这里）：照 subagentSessionId 自动检测透传到 meta.skillRef。
+            const skillToolName = meta?.toolName;
+            const skillRef = skillToolName == null ? undefined : SkillToolRefResolver.fromOutput(skillToolName, outcome.output, meta?.skillProjectId);
 
-      // 引用块（contentRef）已随 v1.5.30 的 unref 回迁整体退役：成功分支恒走
-      // 全文形态（`formatForLlm` 直出），read / skill load / skill
-      // read 都不再产 contentRef，也不再触发 revision +1（先保活、后引用是
-      // v1.5.29 的引用化约束，本版整体摘除）。
-      //
-      // E1 清理版（v1.5.40 同批）进一步删除了读侧兜底：存量引用行已由回迁任务
-      // 全部改写回全文（真实库 contentRef 谓词归零 + KKV unrefDone 已置），
-      // 类型与 parse 白名单随 hydrate 一并退役。
+            // 引用块（contentRef）已随 v1.5.30 的 unref 回迁整体退役：成功分支恒走
+            // 全文形态（`formatForLlm` 直出），read / skill load / skill
+            // read 都不再产 contentRef，也不再触发 revision +1（先保活、后引用是
+            // v1.5.29 的引用化约束，本版整体摘除）。
+            //
+            // E1 清理版（v1.5.40 同批）进一步删除了读侧兜底：存量引用行已由回迁任务
+            // 全部改写回全文（真实库 contentRef 谓词归零 + KKV unrefDone 已置），
+            // 类型与 parse 白名单随 hydrate 一并退役。
 
-      // 中断回流（phase-1-abort-reflow）：outcome.ok=true 但 output.stopped=true 表示
-      // 子 agent 被用户中断。tool-result 要标 ok=false（主 agent 区分「用户停止」与「崩溃」），
-      // content 是 task 输出的 JSON 壳（含 text + stopped + failureReason + subagentSessionId），
-      // meta 额外带 failureReason（UI 卡片用）。
-      if (Guards.isRecord(subagentOutput) && subagentOutput.stopped === true) {
-        const rawReason = (outcome.output as { failureReason?: unknown }).failureReason;
-        const failureReason = typeof rawReason === "string" ? rawReason : undefined;
-        return {
-          type: "tool_result",
-          toolUseId,
-          ok: false,
-          content,
-          ...(subagentSessionId != null
-            ? {
-                meta: {
-                  ...(failureReason != null ? { failureReason } : {}),
-                  subagentSessionId,
-                },
-              }
-            : failureReason != null
-            ? { meta: { failureReason } }
-            : {}),
-        };
-      }
-
-      return {
-        type: "tool_result",
-        toolUseId,
-        ok: true,
-        // 成功分支恒全文直出（不再有引用态的 `content: ""` 分支）。
-        content,
-        ...(summary != null ? { summary } : {}),
-        ...(subagentSessionId != null || skillRef != null
-          ? {
-              meta: {
-                ...(subagentSessionId != null ? { subagentSessionId } : {}),
-                ...(skillRef != null ? { skillRef } : {}),
-              },
+            // 中断回流（phase-1-abort-reflow）：outcome.ok=true 但 output.stopped=true 表示
+            // 子 agent 被用户中断。tool-result 要标 ok=false（主 agent 区分「用户停止」与「崩溃」），
+            // content 是 task 输出的 JSON 壳（含 text + stopped + failureReason + subagentSessionId），
+            // meta 额外带 failureReason（UI 卡片用）。
+            if (Guards.isRecord(subagentOutput) && subagentOutput.stopped === true) {
+                const rawReason = (outcome.output as { failureReason?: unknown }).failureReason;
+                const failureReason = typeof rawReason === "string" ? rawReason : undefined;
+                return {
+                    type: "tool_result",
+                    toolUseId,
+                    ok: false,
+                    content,
+                    ...(subagentSessionId != null
+                        ? {
+                                meta: {
+                                    ...(failureReason != null ? { failureReason } : {}),
+                                    subagentSessionId,
+                                },
+                            }
+                        : failureReason != null
+                        ? { meta: { failureReason } }
+                        : {}),
+                };
             }
-          : {}),
-      };
-    }
 
-    // 取消（TOOL_CANCELLED）是控制流信号不是错误：块仍标 ok=false（LLM 知道调用
-    // 未执行），但不产出 summary——UI 卡片 status=error 且无 summary 时回退入参
-    // 摘要、不弹错误文案，呈现为 cancelled。
-    const cancelled = AppErrorOps.is(outcome.error, "TOOL_CANCELLED");
-    const content = ToolOutput.formatErrorForLlm(outcome.error, {
-      vfsScope: meta?.vfsScope,
-    });
-    const trimmed = content.trimStart();
-    let summary: string | undefined;
-    if (!cancelled && trimmed.startsWith("Error:")) {
-      const msg = trimmed.slice("Error:".length).trimStart();
-      summary = msg.length > 120 ? `${msg.slice(0, 117)}…` : msg;
-    }
-    return {
-      type: "tool_result",
-      toolUseId,
-      ok: false,
-      content,
-      ...(summary != null ? { summary } : {}),
-    };
-  },
+            return {
+                type: "tool_result",
+                toolUseId,
+                ok: true,
+                // 成功分支恒全文直出（不再有引用态的 `content: ""` 分支）。
+                content,
+                ...(summary != null ? { summary } : {}),
+                ...(subagentSessionId != null || skillRef != null
+                    ? {
+                            meta: {
+                                ...(subagentSessionId != null ? { subagentSessionId } : {}),
+                                ...(skillRef != null ? { skillRef } : {}),
+                            },
+                        }
+                    : {}),
+            };
+        }
+
+        // 取消（TOOL_CANCELLED）是控制流信号不是错误：块仍标 ok=false（LLM 知道调用
+        // 未执行），但不产出 summary——UI 卡片 status=error 且无 summary 时回退入参
+        // 摘要、不弹错误文案，呈现为 cancelled。
+        const cancelled = AppErrorOps.is(outcome.error, "TOOL_CANCELLED");
+        const content = ToolOutput.formatErrorForLlm(outcome.error, {
+            vfsScope: meta?.vfsScope,
+        });
+        const trimmed = content.trimStart();
+        let summary: string | undefined;
+        if (!cancelled && trimmed.startsWith("Error:")) {
+            const msg = trimmed.slice("Error:".length).trimStart();
+            summary = msg.length > 120 ? `${msg.slice(0, 117)}…` : msg;
+        }
+        return {
+            type: "tool_result",
+            toolUseId,
+            ok: false,
+            content,
+            ...(summary != null ? { summary } : {}),
+        };
+    },
 } as const;

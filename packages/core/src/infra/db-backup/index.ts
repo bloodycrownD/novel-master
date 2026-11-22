@@ -5,9 +5,9 @@
  */
 
 export {
-  DB_BACKUP_PROVIDER_TABLES,
-  type ProviderBackupTableName,
-  type ProviderTableSnapshot,
+    DB_BACKUP_PROVIDER_TABLES,
+    type ProviderBackupTableName,
+    type ProviderTableSnapshot,
 } from "./provider-tables.js";
 export { ProviderTableSnapshotIo } from "./provider-table-snapshot.js";
 export { SqliteBackupHeader } from "./sqlite-backup-header.js";

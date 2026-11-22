@@ -38,98 +38,98 @@ const ROUNDS = 3;
 
 /** 生成一段可区分的等长 delta（序号嵌入正文，避免重复同引用字符串）。 */
 function makeSegment(index: number): string {
-  const head = `s${index % 10_000}-`;
-  return head + "x".repeat(SEGMENT_CHARS - head.length);
+    const head = `s${index % 10_000}-`;
+    return head + "x".repeat(SEGMENT_CHARS - head.length);
 }
 
 describe("AgentStreamRegistry 累积数组化性能护栏（T-N5）", () => {
-  it("T-N5-REG-LINEAR：10 万字符模拟流的 append+物化耗时曲线线性（末桶均摊 ≤ 首桶 × 3）", () => {
-    const registry = AgentServiceFactory.createStreamRegistry();
-    registry.register(SESSION_ID);
+    it("T-N5-REG-LINEAR：10 万字符模拟流的 append+物化耗时曲线线性（末桶均摊 ≤ 首桶 × 3）", () => {
+        const registry = AgentServiceFactory.createStreamRegistry();
+        registry.register(SESSION_ID);
 
-    // 预生成全部段，生成成本不得混入计时。
-    const segments: string[] = new Array(TOTAL_SEGMENTS);
-    for (let i = 0; i < TOTAL_SEGMENTS; i++) {
-      segments[i] = makeSegment(i);
-    }
-
-    // 多轮计时：每桶取各轮最小值（首轮含 JIT 预热偏慢只会让最小值更干净，
-    // 抖动尖峰被剔除；线性实现的桶间比值应稳定在 1 附近）。
-    const bucketMinMs: number[] = new Array(BUCKETS).fill(Infinity);
-    for (let round = 0; round < ROUNDS; round++) {
-      registry.reset(SESSION_ID);
-      for (let bucket = 0; bucket < BUCKETS; bucket++) {
-        const start = performance.now();
-        for (let s = 0; s < SEGMENTS_PER_BUCKET; s++) {
-          registry.append(SESSION_ID, {
-            text: segments[bucket * SEGMENTS_PER_BUCKET + s],
-          });
+        // 预生成全部段，生成成本不得混入计时。
+        const segments: string[] = new Array(TOTAL_SEGMENTS);
+        for (let i = 0; i < TOTAL_SEGMENTS; i++) {
+            segments[i] = makeSegment(i);
         }
-        // 桶末一次物化读取（真实消费点：UI 进入 / 快照），计入桶耗时。
-        // 长度读取同时防止 append 被优化掉。
-        const snap = registry.get(SESSION_ID);
-        assert.ok(snap != null && snap.text.length > 0);
-        const elapsed = performance.now() - start;
-        if (elapsed < bucketMinMs[bucket]) {
-          bucketMinMs[bucket] = elapsed;
-        }
-      }
-    }
 
-    const charsPerBucket = SEGMENTS_PER_BUCKET * SEGMENT_CHARS;
-    const amortized = bucketMinMs.map(ms => ms / charsPerBucket);
-    console.log(
-      `T-N5-REG 分桶均摊耗时(ns/char)：${amortized
+        // 多轮计时：每桶取各轮最小值（首轮含 JIT 预热偏慢只会让最小值更干净，
+        // 抖动尖峰被剔除；线性实现的桶间比值应稳定在 1 附近）。
+        const bucketMinMs: number[] = new Array(BUCKETS).fill(Infinity);
+        for (let round = 0; round < ROUNDS; round++) {
+            registry.reset(SESSION_ID);
+            for (let bucket = 0; bucket < BUCKETS; bucket++) {
+                const start = performance.now();
+                for (let s = 0; s < SEGMENTS_PER_BUCKET; s++) {
+                    registry.append(SESSION_ID, {
+                        text: segments[bucket * SEGMENTS_PER_BUCKET + s],
+                    });
+                }
+                // 桶末一次物化读取（真实消费点：UI 进入 / 快照），计入桶耗时。
+                // 长度读取同时防止 append 被优化掉。
+                const snap = registry.get(SESSION_ID);
+                assert.ok(snap != null && snap.text.length > 0);
+                const elapsed = performance.now() - start;
+                if (elapsed < bucketMinMs[bucket]) {
+                    bucketMinMs[bucket] = elapsed;
+                }
+            }
+        }
+
+        const charsPerBucket = SEGMENTS_PER_BUCKET * SEGMENT_CHARS;
+        const amortized = bucketMinMs.map(ms => ms / charsPerBucket);
+        console.log(
+            `T-N5-REG 分桶均摊耗时(ns/char)：${amortized
         .map(v => (v * 1e6).toFixed(2))
         .join(" / ")}`,
-    );
+        );
 
-    const first = amortized[0];
-    const last = amortized[BUCKETS - 1];
-    assert.ok(
-      last <= first * AMORTIZED_RATIO_LIMIT,
-      `累积耗时曲线疑似超线性：首桶均摊 ${(first * 1e6).toFixed(2)}ns/char，` +
-        `末桶均摊 ${(last * 1e6).toFixed(2)}ns/char，比值 ${(last / first).toFixed(2)} 超过 ${AMORTIZED_RATIO_LIMIT}×`,
-    );
-  });
+        const first = amortized[0];
+        const last = amortized[BUCKETS - 1];
+        assert.ok(
+            last <= first * AMORTIZED_RATIO_LIMIT,
+            `累积耗时曲线疑似超线性：首桶均摊 ${(first * 1e6).toFixed(2)}ns/char，` +
+                `末桶均摊 ${(last * 1e6).toFixed(2)}ns/char，比值 ${(last / first).toFixed(2)} 超过 ${AMORTIZED_RATIO_LIMIT}×`,
+        );
+    });
 
-  it("T-N5-REG-CORRECT：物化结果与逐段 += 参照一致（text 与 thinking 两路）", () => {
-    const registry = AgentServiceFactory.createStreamRegistry();
-    registry.register(SESSION_ID);
+    it("T-N5-REG-CORRECT：物化结果与逐段 += 参照一致（text 与 thinking 两路）", () => {
+        const registry = AgentServiceFactory.createStreamRegistry();
+        registry.register(SESSION_ID);
 
-    const segments: string[] = new Array(TOTAL_SEGMENTS);
-    for (let i = 0; i < TOTAL_SEGMENTS; i++) {
-      segments[i] = makeSegment(i);
-    }
+        const segments: string[] = new Array(TOTAL_SEGMENTS);
+        for (let i = 0; i < TOTAL_SEGMENTS; i++) {
+            segments[i] = makeSegment(i);
+        }
 
-    // 逐段 += 参照（独立于 registry 的朴素实现）。
-    let expectedText = "";
-    let expectedThinking = "";
-    for (let i = 0; i < TOTAL_SEGMENTS; i++) {
-      registry.append(SESSION_ID, { text: segments[i] });
-      expectedText += segments[i];
-      // thinking 每 3 段混入一路，覆盖两路交替追加。
-      if (i % 3 === 0) {
-        const thinkSeg = `t${i}-` + "y".repeat(SEGMENT_CHARS - `t${i}-`.length);
-        registry.append(SESSION_ID, { thinking: thinkSeg });
-        expectedThinking += thinkSeg;
-      }
-    }
+        // 逐段 += 参照（独立于 registry 的朴素实现）。
+        let expectedText = "";
+        let expectedThinking = "";
+        for (let i = 0; i < TOTAL_SEGMENTS; i++) {
+            registry.append(SESSION_ID, { text: segments[i] });
+            expectedText += segments[i];
+            // thinking 每 3 段混入一路，覆盖两路交替追加。
+            if (i % 3 === 0) {
+                const thinkSeg = `t${i}-` + "y".repeat(SEGMENT_CHARS - `t${i}-`.length);
+                registry.append(SESSION_ID, { thinking: thinkSeg });
+                expectedThinking += thinkSeg;
+            }
+        }
 
-    const snap = registry.get(SESSION_ID);
-    assert.ok(snap != null);
-    assert.equal(snap.text.length, TOTAL_CHARS, "text 总长应为 10 万字符");
-    assert.equal(snap.text, expectedText, "text 物化结果应与逐段 += 参照一致");
-    assert.equal(
-      snap.thinking,
-      expectedThinking,
-      "thinking 物化结果应与逐段 += 参照一致",
-    );
+        const snap = registry.get(SESSION_ID);
+        assert.ok(snap != null);
+        assert.equal(snap.text.length, TOTAL_CHARS, "text 总长应为 10 万字符");
+        assert.equal(snap.text, expectedText, "text 物化结果应与逐段 += 参照一致");
+        assert.equal(
+            snap.thinking,
+            expectedThinking,
+            "thinking 物化结果应与逐段 += 参照一致",
+        );
 
-    // reset 后从空开始（数组清空语义回归）。
-    registry.reset(SESSION_ID);
-    assert.deepEqual(registry.get(SESSION_ID), { text: "", thinking: "" });
-    registry.append(SESSION_ID, { text: "next-step" });
-    assert.equal(registry.get(SESSION_ID)?.text, "next-step");
-  });
+        // reset 后从空开始（数组清空语义回归）。
+        registry.reset(SESSION_ID);
+        assert.deepEqual(registry.get(SESSION_ID), { text: "", thinking: "" });
+        registry.append(SESSION_ID, { text: "next-step" });
+        assert.equal(registry.get(SESSION_ID)?.text, "next-step");
+    });
 });

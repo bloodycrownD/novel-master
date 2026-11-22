@@ -10,7 +10,7 @@ import {type AppError, Result} from '@novel-master/core/errors';
 import {APP_VERSION} from './app-meta';
 
 export namespace CheckForUpdates {
-  export function check(localVersion: string = APP_VERSION, fetchFn?: FetchFn): Promise<Result<UpdateCheckData, AppError>> {
-    return UpdateCheck.check(localVersion, fetchFn, 'mobile');
-  }
+    export function check(localVersion: string = APP_VERSION, fetchFn?: FetchFn): Promise<Result<UpdateCheckData, AppError>> {
+        return UpdateCheck.check(localVersion, fetchFn, 'mobile');
+    }
 }

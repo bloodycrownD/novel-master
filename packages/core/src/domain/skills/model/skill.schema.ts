@@ -25,9 +25,9 @@ export const skillFrontMatterSchema = z.object({ name: z.string().min(1), descri
  * `invalidReason` 给出可展示的原因（descriptor，UI 翻译后展示）。
  */
 export interface SkillSummary {
-  readonly name: string;
-  readonly description: string | null;
-  readonly domain: SkillDomain;
-  readonly valid: boolean;
-  readonly invalidReason?: MessageLike;
+    readonly name: string;
+    readonly description: string | null;
+    readonly domain: SkillDomain;
+    readonly valid: boolean;
+    readonly invalidReason?: MessageLike;
 }

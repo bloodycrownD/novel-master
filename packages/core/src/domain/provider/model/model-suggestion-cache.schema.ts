@@ -12,8 +12,8 @@ const modelSuggestionEntrySchema = z.object({ vendorModelId: z.string().min(1), 
 export const modelSuggestionCacheDocumentSchema = z.object({ schemaVersion: z.literal(1), models: z.array(modelSuggestionEntrySchema) }).strict();
 
 export const modelSuggestionCacheSchema = modelSuggestionCacheDocumentSchema.transform(
-  (doc): ModelSuggestionCache => ({
-    schemaVersion: 1,
-    models: doc.models,
-  })
+    (doc): ModelSuggestionCache => ({
+        schemaVersion: 1,
+        models: doc.models,
+    })
 );

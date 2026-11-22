@@ -36,519 +36,519 @@ const MOCK_PROJECT_ID = "test-project";
 const MOCK_SESSION_ID = "test-session";
 
 function minimalDefinition(): AgentDefinition {
-  return { name: "test", prompts: { persist: [], dynamic: [] } };
+    return { name: "test", prompts: { persist: [], dynamic: [] } };
 }
 
 function runnerDeps(
-  deps: Omit<CreateAgentRunnerDeps, "eventBus" | "sessionKkv" | "workplace" | "savedModels"> &
-    Partial<Pick<CreateAgentRunnerDeps, "eventBus">>,
+    deps: Omit<CreateAgentRunnerDeps, "eventBus" | "sessionKkv" | "workplace" | "savedModels"> &
+        Partial<Pick<CreateAgentRunnerDeps, "eventBus">>,
 ): CreateAgentRunnerDeps {
-  return {
-    savedModels: noopSavedModelRepository(),
-    ...deps,
-    eventBus: deps.eventBus ?? new SimpleEventBus(),
-    sessionKkv: createMemorySessionKkv(),
-    workplace: () =>
-      ({
-        scope: { kind: "session", projectId: MOCK_PROJECT_ID, sessionId: MOCK_SESSION_ID },
-        renderDisplay: async () => "WT",
-        buildListRows: async () => [],
-        materializePersistBlock: async () => ({ workplaceDisplay: "WT" }),
-      }) as never,
-  };
+    return {
+        savedModels: noopSavedModelRepository(),
+        ...deps,
+        eventBus: deps.eventBus ?? new SimpleEventBus(),
+        sessionKkv: createMemorySessionKkv(),
+        workplace: () =>
+            ({
+                scope: { kind: "session", projectId: MOCK_PROJECT_ID, sessionId: MOCK_SESSION_ID },
+                renderDisplay: async () => "WT",
+                buildListRows: async () => [],
+                materializePersistBlock: async () => ({ workplaceDisplay: "WT" }),
+            }) as never,
+    };
 }
 
 const defaultRunScope = {
-  sessionId: MOCK_SESSION_ID,
-  projectId: MOCK_PROJECT_ID,
-  savedModelId: RUN_MODEL_ID,
-  workspaceModelId: RUN_MODEL_ID,
+    sessionId: MOCK_SESSION_ID,
+    projectId: MOCK_PROJECT_ID,
+    savedModelId: RUN_MODEL_ID,
+    workspaceModelId: RUN_MODEL_ID,
 };
 
 function mockVfs(): VfsService {
-  const files = new Map<string, string>();
-  return {
-    async read(path: string) {
-      return { path, content: files.get(path) ?? "", version: 1, mtimeMs: 0 };
-    },
-    async write(path: string, content: string) {
-      files.set(path, content);
-      return { version: 1 };
-    },
-    async replace(path: string, oldString: string, content: string) {
-      const c = files.get(path) ?? "";
-      files.set(path, c.replace(oldString, content));
-      return { version: 1, replacements: 1 };
-    },
-    async list() {
-      return [...files.keys()];
-    },
-    async glob() {
-      return [];
-    },
-    async grep() {
-      return [];
-    },
-    async delete() {
-      return { deleted: true };
-    },
-  } as unknown as VfsService;
+    const files = new Map<string, string>();
+    return {
+        async read(path: string) {
+            return { path, content: files.get(path) ?? "", version: 1, mtimeMs: 0 };
+        },
+        async write(path: string, content: string) {
+            files.set(path, content);
+            return { version: 1 };
+        },
+        async replace(path: string, oldString: string, content: string) {
+            const c = files.get(path) ?? "";
+            files.set(path, c.replace(oldString, content));
+            return { version: 1, replacements: 1 };
+        },
+        async list() {
+            return [...files.keys()];
+        },
+        async glob() {
+            return [];
+        },
+        async grep() {
+            return [];
+        },
+        async delete() {
+            return { deleted: true };
+        },
+    } as unknown as VfsService;
 }
 
 function mockToolCtx(): BuiltinToolContext {
-  return {
-    vfs: mockVfs(),
-    projectId: MOCK_PROJECT_ID,
-    sessionId: MOCK_SESSION_ID,
-  };
+    return {
+        vfs: mockVfs(),
+        projectId: MOCK_PROJECT_ID,
+        sessionId: MOCK_SESSION_ID,
+    };
 }
 
 /** 首个 text 块文本；无 text 块返回 undefined。 */
 function firstText(message: { content: { blocks: ReadonlyArray<{ type: string; text?: string }> } }): string | undefined {
-  for (const b of message.content.blocks) {
-    if (b.type === "text") {
-      return b.text;
+    for (const b of message.content.blocks) {
+        if (b.type === "text") {
+            return b.text;
+        }
     }
-  }
-  return undefined;
+    return undefined;
 }
 
 describe("AgentRunner 失败收尾落 assistant 错误消息", () => {
-  it("请求抛错：落 assistant 错误消息（含原始错误信息）、FAILED 事件仍发、落库先于事件、原错误仍抛出", async () => {
-    const session = new InMemoryAgentSession();
-    await session.append("user", TextBlocks.of("go"));
+    it("请求抛错：落 assistant 错误消息（含原始错误信息）、FAILED 事件仍发、落库先于事件、原错误仍抛出", async () => {
+        const session = new InMemoryAgentSession();
+        await session.append("user", TextBlocks.of("go"));
 
-    const model: ModelRequestService = {
-      request: async () => {
-        throw new Error("网络连接失败");
-      },
-    };
-    const registry = new ToolRegistry();
-    BuiltinTools.register(registry);
-    const bus = new SimpleEventBus();
-    const runner = AgentServiceFactory.createRunner(
-      runnerDeps({ session, modelRequests: model, registry, toolCtx: mockToolCtx(), eventBus: bus }),
-    );
+        const model: ModelRequestService = {
+            request: async () => {
+                throw new Error("网络连接失败");
+            },
+        };
+        const registry = new ToolRegistry();
+        BuiltinTools.register(registry);
+        const bus = new SimpleEventBus();
+        const runner = AgentServiceFactory.createRunner(
+            runnerDeps({ session, modelRequests: model, registry, toolCtx: mockToolCtx(), eventBus: bus }),
+        );
 
-    const failedPayloads: AgentRunFailedPayload[] = [];
-    // FAILED 事件是同步分发的：handler 里立刻发起 session.list()，拿到的是
-    // 事件发出时刻的会话快照——据此断言「错误消息落库先于事件」。
-    const listAtFailed: Promise<readonly { role: string; content: { blocks: ReadonlyArray<{ type: string; text?: string }> } }>[] = [];
-    bus.subscribe<AgentRunFailedPayload>(EVENT_AGENT_RUN_FAILED, (p) => {
-      failedPayloads.push(p);
-      listAtFailed.push(
-        session.list() as Promise<never>,
-      );
+        const failedPayloads: AgentRunFailedPayload[] = [];
+        // FAILED 事件是同步分发的：handler 里立刻发起 session.list()，拿到的是
+        // 事件发出时刻的会话快照——据此断言「错误消息落库先于事件」。
+        const listAtFailed: Promise<readonly { role: string; content: { blocks: ReadonlyArray<{ type: string; text?: string }> } }>[] = [];
+        bus.subscribe<AgentRunFailedPayload>(EVENT_AGENT_RUN_FAILED, (p) => {
+            failedPayloads.push(p);
+            listAtFailed.push(
+                session.list() as Promise<never>,
+            );
+        });
+
+        await assert.rejects(
+            () =>
+                runner.run({
+                    maxSteps: 3,
+                    definition: minimalDefinition(),
+                    ...defaultRunScope,
+                }),
+            (e: unknown) => e instanceof Error && e.message === "网络连接失败",
+        );
+
+        // FAILED 事件仍发，error 为原始错误信息
+        assert.equal(failedPayloads.length, 1);
+        assert.equal(failedPayloads[0]!.error, "网络连接失败");
+        assert.equal(failedPayloads[0]!.sessionId, MOCK_SESSION_ID);
+
+        // 事件发出时刻，错误 assistant 已可读（落库先于事件，下游 tail reload 能读到）
+        const messagesAtFailed = await listAtFailed[0]!;
+        const tailAtFailed = messagesAtFailed[messagesAtFailed.length - 1]!;
+        assert.equal(tailAtFailed.role, "assistant");
+
+        // run 结束后会话尾部：user 原文 + assistant 错误消息
+        const msgs = await session.list();
+        assert.equal(msgs.length, 2);
+        assert.equal(msgs[0]!.role, "user");
+        const tail = msgs[1]!;
+        assert.equal(tail.role, "assistant");
+        assert.equal(tail.content.blocks.length, 1);
+        assert.equal(tail.content.blocks[0]!.type, "text");
+        assert.match(firstText(tail as never) ?? "", /^\[生成失败\] 网络连接失败$/);
     });
 
-    await assert.rejects(
-      () =>
-        runner.run({
-          maxSteps: 3,
-          definition: minimalDefinition(),
-          ...defaultRunScope,
-        }),
-      (e: unknown) => e instanceof Error && e.message === "网络连接失败",
-    );
+    it("abort 路径（catch 命中 AbortError）：不落错误消息，保持 partial 语义", async () => {
+        const session = new InMemoryAgentSession();
+        await session.append("user", TextBlocks.of("go"));
 
-    // FAILED 事件仍发，error 为原始错误信息
-    assert.equal(failedPayloads.length, 1);
-    assert.equal(failedPayloads[0]!.error, "网络连接失败");
-    assert.equal(failedPayloads[0]!.sessionId, MOCK_SESSION_ID);
+        const controller = new AbortController();
+        const model: ModelRequestService = {
+            request: async () => {
+                controller.abort();
+                const err = new Error("aborted");
+                err.name = "AbortError";
+                throw err;
+            },
+        };
+        const registry = new ToolRegistry();
+        BuiltinTools.register(registry);
+        const runner = AgentServiceFactory.createRunner(
+            runnerDeps({ session, modelRequests: model, registry, toolCtx: mockToolCtx() }),
+        );
 
-    // 事件发出时刻，错误 assistant 已可读（落库先于事件，下游 tail reload 能读到）
-    const messagesAtFailed = await listAtFailed[0]!;
-    const tailAtFailed = messagesAtFailed[messagesAtFailed.length - 1]!;
-    assert.equal(tailAtFailed.role, "assistant");
+        const result = unwrap(await runner.run({
+            maxSteps: 3,
+            definition: minimalDefinition(),
+            ...defaultRunScope,
+            scope: AbortScopeFactory.create({ controller }),
+        }));
 
-    // run 结束后会话尾部：user 原文 + assistant 错误消息
-    const msgs = await session.list();
-    assert.equal(msgs.length, 2);
-    assert.equal(msgs[0]!.role, "user");
-    const tail = msgs[1]!;
-    assert.equal(tail.role, "assistant");
-    assert.equal(tail.content.blocks.length, 1);
-    assert.equal(tail.content.blocks[0]!.type, "text");
-    assert.match(firstText(tail as never) ?? "", /^\[生成失败\] 网络连接失败$/);
-  });
-
-  it("abort 路径（catch 命中 AbortError）：不落错误消息，保持 partial 语义", async () => {
-    const session = new InMemoryAgentSession();
-    await session.append("user", TextBlocks.of("go"));
-
-    const controller = new AbortController();
-    const model: ModelRequestService = {
-      request: async () => {
-        controller.abort();
-        const err = new Error("aborted");
-        err.name = "AbortError";
-        throw err;
-      },
-    };
-    const registry = new ToolRegistry();
-    BuiltinTools.register(registry);
-    const runner = AgentServiceFactory.createRunner(
-      runnerDeps({ session, modelRequests: model, registry, toolCtx: mockToolCtx() }),
-    );
-
-    const result = unwrap(await runner.run({
-      maxSteps: 3,
-      definition: minimalDefinition(),
-      ...defaultRunScope,
-      scope: AbortScopeFactory.create({ controller }),
-    }));
-
-    assert.equal(result.stopReason, "cancelled");
-    const msgs = await session.list();
-    // 仅 turn 起点 user；abort 无 partial 内容可写，也无「生成失败」
-    assert.equal(msgs.length, 1);
-    assert.equal(msgs[0]!.role, "user");
-  });
-
-  it("persistMessages=false（EphemeralOverlay）：失败不落库", async () => {
-    const session = new InMemoryAgentSession();
-    await session.append("user", TextBlocks.of("go"));
-
-    const model: ModelRequestService = {
-      request: async () => {
-        throw new Error("网络连接失败");
-      },
-    };
-    const registry = new ToolRegistry();
-    BuiltinTools.register(registry);
-    const runner = AgentServiceFactory.createRunner(
-      runnerDeps({ session, modelRequests: model, registry, toolCtx: mockToolCtx() }),
-    );
-
-    await assert.rejects(
-      () =>
-        runner.run({
-          maxSteps: 3,
-          definition: minimalDefinition(),
-          ...defaultRunScope,
-          persistMessages: false,
-        }),
-      (e: unknown) => e instanceof Error && e.message === "网络连接失败",
-    );
-
-    // base session 不增消息（overlay 只进内存，失败也不落库）
-    const msgs = await session.list();
-    assert.equal(msgs.length, 1);
-    assert.equal(msgs[0]!.role, "user");
-  });
-
-  it("T-T5: 流中断超时（idle）不重试——落 [生成失败] assistant 占位、发 FAILED 事件、原错误上抛", async () => {
-    const session = new InMemoryAgentSession();
-    await session.append("user", TextBlocks.of("go"));
-
-    let calls = 0;
-    const model: ModelRequestService = {
-      request: async () => {
-        calls += 1;
-        // 模拟传输层 watchdog 空闲超时收敛上抛（流中断，已有部分输出）
-        throw new AppError("PROVIDER_STREAM_TIMEOUT", {phase: "idle", timeoutMs: 90_000, detail: "LLM stream idle for 90000ms after the last chunk"});
-      },
-    };
-    const registry = new ToolRegistry();
-    BuiltinTools.register(registry);
-    const bus = new SimpleEventBus();
-    const runner = AgentServiceFactory.createRunner(
-      runnerDeps({ session, modelRequests: model, registry, toolCtx: mockToolCtx(), eventBus: bus }),
-    );
-
-    const failedPayloads: AgentRunFailedPayload[] = [];
-    bus.subscribe<AgentRunFailedPayload>(EVENT_AGENT_RUN_FAILED, (p) => {
-      failedPayloads.push(p);
+        assert.equal(result.stopReason, "cancelled");
+        const msgs = await session.list();
+        // 仅 turn 起点 user；abort 无 partial 内容可写，也无「生成失败」
+        assert.equal(msgs.length, 1);
+        assert.equal(msgs[0]!.role, "user");
     });
 
-    // 超时错误非 AbortError：走主 catch else 分支（失败收尾）；五期起 AppError 沿 Result.err 到达，不再 throw
-    await rejectsErr(
-      runner.run({
-          maxSteps: 3,
-          definition: minimalDefinition(),
-          ...defaultRunScope,
-        }),
-      (e: unknown) => assert.ok(AppErrorOps.is(e, "PROVIDER_STREAM_TIMEOUT") && e.details?.phase === "idle"),
-    );
+    it("persistMessages=false（EphemeralOverlay）：失败不落库", async () => {
+        const session = new InMemoryAgentSession();
+        await session.append("user", TextBlocks.of("go"));
 
-    // 不重试：model 仅调用一次（重试分级由 model-request.service 承接，runner 侧单次上抛）
-    assert.equal(calls, 1);
+        const model: ModelRequestService = {
+            request: async () => {
+                throw new Error("网络连接失败");
+            },
+        };
+        const registry = new ToolRegistry();
+        BuiltinTools.register(registry);
+        const runner = AgentServiceFactory.createRunner(
+            runnerDeps({ session, modelRequests: model, registry, toolCtx: mockToolCtx() }),
+        );
 
-    // FAILED 事件照发
-    assert.equal(failedPayloads.length, 1);
-    assert.match(failedPayloads[0]!.error, /idle for 90000ms/);
+        await assert.rejects(
+            () =>
+                runner.run({
+                    maxSteps: 3,
+                    definition: minimalDefinition(),
+                    ...defaultRunScope,
+                    persistMessages: false,
+                }),
+            (e: unknown) => e instanceof Error && e.message === "网络连接失败",
+        );
 
-    // [生成失败] assistant 占位落库（复用 run-fail 机制），尾部解锁 composer
-    const msgs = await session.list();
-    assert.equal(msgs.length, 2);
-    assert.equal(msgs[0]!.role, "user");
-    const tail = msgs[1]!;
-    assert.equal(tail.role, "assistant");
-    assert.match(
-      firstText(tail as never) ?? "",
-      /^\[生成失败\] LLM stream idle for 90000ms after the last chunk$/,
-    );
-  });
+        // base session 不增消息（overlay 只进内存，失败也不落库）
+        const msgs = await session.list();
+        assert.equal(msgs.length, 1);
+        assert.equal(msgs[0]!.role, "user");
+    });
 
-  it("幂等防御：多步 run 已有 assistant 落库后再失败，不追加错误消息", async () => {
-    const session = new InMemoryAgentSession();
-    await session.append("user", TextBlocks.of("go"));
+    it("T-T5: 流中断超时（idle）不重试——落 [生成失败] assistant 占位、发 FAILED 事件、原错误上抛", async () => {
+        const session = new InMemoryAgentSession();
+        await session.append("user", TextBlocks.of("go"));
 
-    // step1 成功返回 tool_use（assistant 落库 + tool_results 回传），step2 抛错
-    const responses: LlmChatResult[] = [
-      {
-        assistantText: "",
-        blocks: [
-          { type: "tool_use", id: "t1", name: "read", input: { path: "/x" } },
-        ],
-        raw: {},
-      },
-    ];
-    let calls = 0;
-    const model: ModelRequestService = {
-      request: async () => {
-        const r = responses[calls];
-        calls += 1;
-        if (r == null) {
-          throw new Error("第二轮网络失败");
+        let calls = 0;
+        const model: ModelRequestService = {
+            request: async () => {
+                calls += 1;
+                // 模拟传输层 watchdog 空闲超时收敛上抛（流中断，已有部分输出）
+                throw new AppError("PROVIDER_STREAM_TIMEOUT", {phase: "idle", timeoutMs: 90_000, detail: "LLM stream idle for 90000ms after the last chunk"});
+            },
+        };
+        const registry = new ToolRegistry();
+        BuiltinTools.register(registry);
+        const bus = new SimpleEventBus();
+        const runner = AgentServiceFactory.createRunner(
+            runnerDeps({ session, modelRequests: model, registry, toolCtx: mockToolCtx(), eventBus: bus }),
+        );
+
+        const failedPayloads: AgentRunFailedPayload[] = [];
+        bus.subscribe<AgentRunFailedPayload>(EVENT_AGENT_RUN_FAILED, (p) => {
+            failedPayloads.push(p);
+        });
+
+        // 超时错误非 AbortError：走主 catch else 分支（失败收尾）；五期起 AppError 沿 Result.err 到达，不再 throw
+        await rejectsErr(
+            runner.run({
+                    maxSteps: 3,
+                    definition: minimalDefinition(),
+                    ...defaultRunScope,
+                }),
+            (e: unknown) => assert.ok(AppErrorOps.is(e, "PROVIDER_STREAM_TIMEOUT") && e.details?.phase === "idle"),
+        );
+
+        // 不重试：model 仅调用一次（重试分级由 model-request.service 承接，runner 侧单次上抛）
+        assert.equal(calls, 1);
+
+        // FAILED 事件照发
+        assert.equal(failedPayloads.length, 1);
+        assert.match(failedPayloads[0]!.error, /idle for 90000ms/);
+
+        // [生成失败] assistant 占位落库（复用 run-fail 机制），尾部解锁 composer
+        const msgs = await session.list();
+        assert.equal(msgs.length, 2);
+        assert.equal(msgs[0]!.role, "user");
+        const tail = msgs[1]!;
+        assert.equal(tail.role, "assistant");
+        assert.match(
+            firstText(tail as never) ?? "",
+            /^\[生成失败\] LLM stream idle for 90000ms after the last chunk$/,
+        );
+    });
+
+    it("幂等防御：多步 run 已有 assistant 落库后再失败，不追加错误消息", async () => {
+        const session = new InMemoryAgentSession();
+        await session.append("user", TextBlocks.of("go"));
+
+        // step1 成功返回 tool_use（assistant 落库 + tool_results 回传），step2 抛错
+        const responses: LlmChatResult[] = [
+            {
+                assistantText: "",
+                blocks: [
+                    { type: "tool_use", id: "t1", name: "read", input: { path: "/x" } },
+                ],
+                raw: {},
+            },
+        ];
+        let calls = 0;
+        const model: ModelRequestService = {
+            request: async () => {
+                const r = responses[calls];
+                calls += 1;
+                if (r == null) {
+                    throw new Error("第二轮网络失败");
+                }
+
+                return Result.ok(r);
+            },
+        };
+        const registry = new ToolRegistry();
+        BuiltinTools.register(registry);
+        const runner = AgentServiceFactory.createRunner(
+            runnerDeps({ session, modelRequests: model, registry, toolCtx: mockToolCtx() }),
+        );
+
+        await assert.rejects(
+            () =>
+                runner.run({
+                    maxSteps: 3,
+                    definition: minimalDefinition(),
+                    ...defaultRunScope,
+                }),
+            (e: unknown) => e instanceof Error && e.message === "第二轮网络失败",
+        );
+
+        // 会话里不应出现「生成失败」——前序 step 的 assistant 已落库，
+        // 尾部为 tool_results user，isPlainUserText 已为 false、composer 本就解锁。
+        const msgs = await session.list();
+        assert.equal(msgs.length, 3); // user + assistant(tool_use) + user(tool_results)
+        for (const m of msgs) {
+            assert.equal(firstText(m as never)?.includes("生成失败") ?? false, false);
         }
-
-        return Result.ok(r);
-      },
-    };
-    const registry = new ToolRegistry();
-    BuiltinTools.register(registry);
-    const runner = AgentServiceFactory.createRunner(
-      runnerDeps({ session, modelRequests: model, registry, toolCtx: mockToolCtx() }),
-    );
-
-    await assert.rejects(
-      () =>
-        runner.run({
-          maxSteps: 3,
-          definition: minimalDefinition(),
-          ...defaultRunScope,
-        }),
-      (e: unknown) => e instanceof Error && e.message === "第二轮网络失败",
-    );
-
-    // 会话里不应出现「生成失败」——前序 step 的 assistant 已落库，
-    // 尾部为 tool_results user，isPlainUserText 已为 false、composer 本就解锁。
-    const msgs = await session.list();
-    assert.equal(msgs.length, 3); // user + assistant(tool_use) + user(tool_results)
-    for (const m of msgs) {
-      assert.equal(firstText(m as never)?.includes("生成失败") ?? false, false);
-    }
-  });
+    });
 });
 
 describe("AgentRunner 成功但空回复落 assistant 占位消息（core/B-2）", () => {
-  it("成功但 blocks 为空：占位消息落库（不带 usage/raw）、FINISHED 照发（completed）、尾部解锁", async () => {
-    const session = new InMemoryAgentSession();
-    await session.append("user", TextBlocks.of("go"));
+    it("成功但 blocks 为空：占位消息落库（不带 usage/raw）、FINISHED 照发（completed）、尾部解锁", async () => {
+        const session = new InMemoryAgentSession();
+        await session.append("user", TextBlocks.of("go"));
 
-    const model: ModelRequestService = {
-      request: async () => (Result.ok({ assistantText: "", blocks: [], raw: {} })),
-    };
-    const registry = new ToolRegistry();
-    BuiltinTools.register(registry);
-    const bus = new SimpleEventBus();
-    const runner = AgentServiceFactory.createRunner(
-      runnerDeps({ session, modelRequests: model, registry, toolCtx: mockToolCtx(), eventBus: bus }),
-    );
+        const model: ModelRequestService = {
+            request: async () => (Result.ok({ assistantText: "", blocks: [], raw: {} })),
+        };
+        const registry = new ToolRegistry();
+        BuiltinTools.register(registry);
+        const bus = new SimpleEventBus();
+        const runner = AgentServiceFactory.createRunner(
+            runnerDeps({ session, modelRequests: model, registry, toolCtx: mockToolCtx(), eventBus: bus }),
+        );
 
-    const finishedPayloads: AgentRunFinishedPayload[] = [];
-    bus.subscribe<AgentRunFinishedPayload>(EVENT_AGENT_RUN_FINISHED, (p) => {
-      finishedPayloads.push(p);
+        const finishedPayloads: AgentRunFinishedPayload[] = [];
+        bus.subscribe<AgentRunFinishedPayload>(EVENT_AGENT_RUN_FINISHED, (p) => {
+            finishedPayloads.push(p);
+        });
+
+        const result = unwrap(await runner.run({
+            maxSteps: 3,
+            definition: minimalDefinition(),
+            ...defaultRunScope,
+        }));
+
+        // run 本身照常成功收尾
+        assert.equal(result.finished, true);
+        assert.equal(result.stopReason, "completed");
+        assert.equal(finishedPayloads.length, 1);
+        assert.equal(finishedPayloads[0]!.stopReason, "completed");
+
+        // 尾部解锁推导：末条为 assistant（lastMessageIsPlainUserText 随之 false）
+        const msgs = await session.list();
+        assert.equal(msgs.length, 2);
+        const tail = msgs[1]!;
+        assert.equal(tail.role, "assistant");
+        assert.equal(tail.content.blocks.length, 1);
+        assert.equal(tail.content.blocks[0]!.type, "text");
+        assert.equal(firstText(tail as never), "（本次生成无内容输出）");
+        // 占位不带 usage/raw：模型没有产出可统计的内容，避免脏统计行
+        assert.equal(tail.raw, null);
+        assert.equal(tail.usage, undefined);
     });
 
-    const result = unwrap(await runner.run({
-      maxSteps: 3,
-      definition: minimalDefinition(),
-      ...defaultRunScope,
-    }));
+    it("成功但 blocks 仅空白文本：同样落占位（hasMeaningfulAssistantBlocks 判空口径）", async () => {
+        const session = new InMemoryAgentSession();
+        await session.append("user", TextBlocks.of("go"));
 
-    // run 本身照常成功收尾
-    assert.equal(result.finished, true);
-    assert.equal(result.stopReason, "completed");
-    assert.equal(finishedPayloads.length, 1);
-    assert.equal(finishedPayloads[0]!.stopReason, "completed");
+        const model: ModelRequestService = {
+            request: async () => (Result.ok({
+                assistantText: "  \n\t",
+                blocks: [{ type: "text", text: "  \n\t" }],
+                raw: {},
+            })),
+        };
+        const registry = new ToolRegistry();
+        BuiltinTools.register(registry);
+        const runner = AgentServiceFactory.createRunner(
+            runnerDeps({ session, modelRequests: model, registry, toolCtx: mockToolCtx() }),
+        );
 
-    // 尾部解锁推导：末条为 assistant（lastMessageIsPlainUserText 随之 false）
-    const msgs = await session.list();
-    assert.equal(msgs.length, 2);
-    const tail = msgs[1]!;
-    assert.equal(tail.role, "assistant");
-    assert.equal(tail.content.blocks.length, 1);
-    assert.equal(tail.content.blocks[0]!.type, "text");
-    assert.equal(firstText(tail as never), "（本次生成无内容输出）");
-    // 占位不带 usage/raw：模型没有产出可统计的内容，避免脏统计行
-    assert.equal(tail.raw, null);
-    assert.equal(tail.usage, undefined);
-  });
+        const result = unwrap(await runner.run({
+            maxSteps: 3,
+            definition: minimalDefinition(),
+            ...defaultRunScope,
+        }));
 
-  it("成功但 blocks 仅空白文本：同样落占位（hasMeaningfulAssistantBlocks 判空口径）", async () => {
-    const session = new InMemoryAgentSession();
-    await session.append("user", TextBlocks.of("go"));
+        assert.equal(result.stopReason, "completed");
+        const msgs = await session.list();
+        assert.equal(msgs.length, 2);
+        assert.equal(msgs[1]!.role, "assistant");
+        assert.equal(firstText(msgs[1]! as never), "（本次生成无内容输出）");
+    });
 
-    const model: ModelRequestService = {
-      request: async () => (Result.ok({
-        assistantText: "  \n\t",
-        blocks: [{ type: "text", text: "  \n\t" }],
-        raw: {},
-      })),
-    };
-    const registry = new ToolRegistry();
-    BuiltinTools.register(registry);
-    const runner = AgentServiceFactory.createRunner(
-      runnerDeps({ session, modelRequests: model, registry, toolCtx: mockToolCtx() }),
-    );
+    it("幂等防御：多步 run 已有 assistant 落库后再遇空回复，不追加占位", async () => {
+        const session = new InMemoryAgentSession();
+        await session.append("user", TextBlocks.of("go"));
 
-    const result = unwrap(await runner.run({
-      maxSteps: 3,
-      definition: minimalDefinition(),
-      ...defaultRunScope,
-    }));
+        // step1 返回 tool_use（assistant 落库 + tool_results 回传），step2 空回复
+        const responses: LlmChatResult[] = [
+            {
+                assistantText: "",
+                blocks: [{ type: "tool_use", id: "t1", name: "read", input: { path: "/x" } }],
+                raw: {},
+            },
+            { assistantText: "", blocks: [], raw: {} },
+        ];
+        let calls = 0;
+        const model: ModelRequestService = {
+            request: async () => {
+                const r = responses[calls];
+                calls += 1;
+                return Result.ok(r ?? { assistantText: "", blocks: [], raw: {} });
+            },
+        };
+        const registry = new ToolRegistry();
+        BuiltinTools.register(registry);
+        const runner = AgentServiceFactory.createRunner(
+            runnerDeps({ session, modelRequests: model, registry, toolCtx: mockToolCtx() }),
+        );
 
-    assert.equal(result.stopReason, "completed");
-    const msgs = await session.list();
-    assert.equal(msgs.length, 2);
-    assert.equal(msgs[1]!.role, "assistant");
-    assert.equal(firstText(msgs[1]! as never), "（本次生成无内容输出）");
-  });
+        const result = unwrap(await runner.run({
+            maxSteps: 3,
+            definition: minimalDefinition(),
+            ...defaultRunScope,
+        }));
 
-  it("幂等防御：多步 run 已有 assistant 落库后再遇空回复，不追加占位", async () => {
-    const session = new InMemoryAgentSession();
-    await session.append("user", TextBlocks.of("go"));
+        // step2 空回复照常 completed 收尾
+        assert.equal(result.stopReason, "completed");
+        // 会话长度不因占位多一条：尾部是 tool_results user，本就不锁 composer
+        const msgs = await session.list();
+        assert.equal(msgs.length, 3); // user + assistant(tool_use) + user(tool_results)
+        for (const m of msgs) {
+            assert.equal(firstText(m as never)?.includes("本次生成无内容输出") ?? false, false);
+        }
+    });
 
-    // step1 返回 tool_use（assistant 落库 + tool_results 回传），step2 空回复
-    const responses: LlmChatResult[] = [
-      {
-        assistantText: "",
-        blocks: [{ type: "tool_use", id: "t1", name: "read", input: { path: "/x" } }],
-        raw: {},
-      },
-      { assistantText: "", blocks: [], raw: {} },
-    ];
-    let calls = 0;
-    const model: ModelRequestService = {
-      request: async () => {
-        const r = responses[calls];
-        calls += 1;
-        return Result.ok(r ?? { assistantText: "", blocks: [], raw: {} });
-      },
-    };
-    const registry = new ToolRegistry();
-    BuiltinTools.register(registry);
-    const runner = AgentServiceFactory.createRunner(
-      runnerDeps({ session, modelRequests: model, registry, toolCtx: mockToolCtx() }),
-    );
+    it("persistMessages=false（EphemeralOverlay）：成功空回复不落占位", async () => {
+        const session = new InMemoryAgentSession();
+        await session.append("user", TextBlocks.of("go"));
 
-    const result = unwrap(await runner.run({
-      maxSteps: 3,
-      definition: minimalDefinition(),
-      ...defaultRunScope,
-    }));
+        const model: ModelRequestService = {
+            request: async () => (Result.ok({ assistantText: "", blocks: [], raw: {} })),
+        };
+        const registry = new ToolRegistry();
+        BuiltinTools.register(registry);
+        const runner = AgentServiceFactory.createRunner(
+            runnerDeps({ session, modelRequests: model, registry, toolCtx: mockToolCtx() }),
+        );
 
-    // step2 空回复照常 completed 收尾
-    assert.equal(result.stopReason, "completed");
-    // 会话长度不因占位多一条：尾部是 tool_results user，本就不锁 composer
-    const msgs = await session.list();
-    assert.equal(msgs.length, 3); // user + assistant(tool_use) + user(tool_results)
-    for (const m of msgs) {
-      assert.equal(firstText(m as never)?.includes("本次生成无内容输出") ?? false, false);
-    }
-  });
+        const result = unwrap(await runner.run({
+            maxSteps: 3,
+            definition: minimalDefinition(),
+            ...defaultRunScope,
+            persistMessages: false,
+        }));
 
-  it("persistMessages=false（EphemeralOverlay）：成功空回复不落占位", async () => {
-    const session = new InMemoryAgentSession();
-    await session.append("user", TextBlocks.of("go"));
+        assert.equal(result.stopReason, "completed");
+        // base session 不增消息（overlay 只进内存，占位落了也不可见）
+        const msgs = await session.list();
+        assert.equal(msgs.length, 1);
+        assert.equal(msgs[0]!.role, "user");
+    });
 
-    const model: ModelRequestService = {
-      request: async () => (Result.ok({ assistantText: "", blocks: [], raw: {} })),
-    };
-    const registry = new ToolRegistry();
-    BuiltinTools.register(registry);
-    const runner = AgentServiceFactory.createRunner(
-      runnerDeps({ session, modelRequests: model, registry, toolCtx: mockToolCtx() }),
-    );
+    it("不回归：正常成功（meaningful text）照常落原样 assistant，不出现占位文案", async () => {
+        const session = new InMemoryAgentSession();
+        await session.append("user", TextBlocks.of("go"));
 
-    const result = unwrap(await runner.run({
-      maxSteps: 3,
-      definition: minimalDefinition(),
-      ...defaultRunScope,
-      persistMessages: false,
-    }));
+        const model: ModelRequestService = {
+            request: async () => (Result.ok({
+                assistantText: "hello",
+                blocks: [{ type: "text", text: "hello" }],
+                raw: {},
+            })),
+        };
+        const registry = new ToolRegistry();
+        BuiltinTools.register(registry);
+        const runner = AgentServiceFactory.createRunner(
+            runnerDeps({ session, modelRequests: model, registry, toolCtx: mockToolCtx() }),
+        );
 
-    assert.equal(result.stopReason, "completed");
-    // base session 不增消息（overlay 只进内存，占位落了也不可见）
-    const msgs = await session.list();
-    assert.equal(msgs.length, 1);
-    assert.equal(msgs[0]!.role, "user");
-  });
+        const result = unwrap(await runner.run({
+            maxSteps: 3,
+            definition: minimalDefinition(),
+            ...defaultRunScope,
+        }));
 
-  it("不回归：正常成功（meaningful text）照常落原样 assistant，不出现占位文案", async () => {
-    const session = new InMemoryAgentSession();
-    await session.append("user", TextBlocks.of("go"));
+        assert.equal(result.stopReason, "completed");
+        const msgs = await session.list();
+        assert.equal(msgs.length, 2);
+        const tail = msgs[1]!;
+        assert.equal(tail.role, "assistant");
+        assert.equal(firstText(tail as never), "hello");
+        // 正常路径 usage 照带（含耗时字段），未被占位分支误伤
+        assert.notEqual(tail.usage, undefined);
+    });
 
-    const model: ModelRequestService = {
-      request: async () => (Result.ok({
-        assistantText: "hello",
-        blocks: [{ type: "text", text: "hello" }],
-        raw: {},
-      })),
-    };
-    const registry = new ToolRegistry();
-    BuiltinTools.register(registry);
-    const runner = AgentServiceFactory.createRunner(
-      runnerDeps({ session, modelRequests: model, registry, toolCtx: mockToolCtx() }),
-    );
+    it("不回归：post-model abort 且空 blocks：cancelled 收尾、不落占位（保留 abort 语义）", async () => {
+        const session = new InMemoryAgentSession();
+        await session.append("user", TextBlocks.of("go"));
 
-    const result = unwrap(await runner.run({
-      maxSteps: 3,
-      definition: minimalDefinition(),
-      ...defaultRunScope,
-    }));
+        const controller = new AbortController();
+        const model: ModelRequestService = {
+            request: async () => {
+                // 请求正常返回空 blocks，但 signal 已置 abort（provider 未透传中断）
+                controller.abort();
+                return Result.ok({ assistantText: "", blocks: [], raw: {} });
+            },
+        };
+        const registry = new ToolRegistry();
+        BuiltinTools.register(registry);
+        const runner = AgentServiceFactory.createRunner(
+            runnerDeps({ session, modelRequests: model, registry, toolCtx: mockToolCtx() }),
+        );
 
-    assert.equal(result.stopReason, "completed");
-    const msgs = await session.list();
-    assert.equal(msgs.length, 2);
-    const tail = msgs[1]!;
-    assert.equal(tail.role, "assistant");
-    assert.equal(firstText(tail as never), "hello");
-    // 正常路径 usage 照带（含耗时字段），未被占位分支误伤
-    assert.notEqual(tail.usage, undefined);
-  });
+        const result = unwrap(await runner.run({
+            maxSteps: 3,
+            definition: minimalDefinition(),
+            ...defaultRunScope,
+            scope: AbortScopeFactory.create({ controller }),
+        }));
 
-  it("不回归：post-model abort 且空 blocks：cancelled 收尾、不落占位（保留 abort 语义）", async () => {
-    const session = new InMemoryAgentSession();
-    await session.append("user", TextBlocks.of("go"));
-
-    const controller = new AbortController();
-    const model: ModelRequestService = {
-      request: async () => {
-        // 请求正常返回空 blocks，但 signal 已置 abort（provider 未透传中断）
-        controller.abort();
-        return Result.ok({ assistantText: "", blocks: [], raw: {} });
-      },
-    };
-    const registry = new ToolRegistry();
-    BuiltinTools.register(registry);
-    const runner = AgentServiceFactory.createRunner(
-      runnerDeps({ session, modelRequests: model, registry, toolCtx: mockToolCtx() }),
-    );
-
-    const result = unwrap(await runner.run({
-      maxSteps: 3,
-      definition: minimalDefinition(),
-      ...defaultRunScope,
-      scope: AbortScopeFactory.create({ controller }),
-    }));
-
-    assert.equal(result.stopReason, "cancelled");
-    // abort 分支不落占位：保持「用户主动停止、无 partial 不写」的原语义
-    const msgs = await session.list();
-    assert.equal(msgs.length, 1);
-    assert.equal(msgs[0]!.role, "user");
-  });
+        assert.equal(result.stopReason, "cancelled");
+        // abort 分支不落占位：保持「用户主动停止、无 partial 不写」的原语义
+        const msgs = await session.list();
+        assert.equal(msgs.length, 1);
+        assert.equal(msgs[0]!.role, "user");
+    });
 });

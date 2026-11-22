@@ -14,93 +14,93 @@ import { Button } from "@/components/ui/Button";
 import { CodeEditor } from "@/components/ui/CodeEditor";
 
 type PromptCollapsibleFieldProps = {
-  /** 当前值（受控）。 */
-  value: string;
-  /** 全屏编辑保存时回填（内联编辑由 children 自行接 state，不走这里）。 */
-  onChange: (next: string) => void;
-  /** 内联编辑器 JSX（原样渲染，能力不变）。 */
-  children: ReactNode;
-  /** 透传给全屏按钮与全屏编辑器的无障碍标签。 */
-  ariaLabel?: string;
-  /** 禁用全屏编辑按钮（如内置 general 只读态；内联控件由 children 自行禁用）。 */
-  disabled?: boolean;
+    /** 当前值（受控）。 */
+    value: string;
+    /** 全屏编辑保存时回填（内联编辑由 children 自行接 state，不走这里）。 */
+    onChange: (next: string) => void;
+    /** 内联编辑器 JSX（原样渲染，能力不变）。 */
+    children: ReactNode;
+    /** 透传给全屏按钮与全屏编辑器的无障碍标签。 */
+    ariaLabel?: string;
+    /** 禁用全屏编辑按钮（如内置 general 只读态；内联控件由 children 自行禁用）。 */
+    disabled?: boolean;
 };
 
 export function PromptCollapsibleField({
-  value,
-  onChange,
-  children,
-  ariaLabel,
-  disabled,
+    value,
+    onChange,
+    children,
+    ariaLabel,
+    disabled,
 }: PromptCollapsibleFieldProps) {
-  const [editorOpen, setEditorOpen] = useState(false);
-  // Modal 内草稿副本，保存才回填。
-  const [draft, setDraft] = useState(value);
+    const [editorOpen, setEditorOpen] = useState(false);
+    // Modal 内草稿副本，保存才回填。
+    const [draft, setDraft] = useState(value);
 
-  const closeEditor = () => setEditorOpen(false);
+    const closeEditor = () => setEditorOpen(false);
 
-  const saveEditor = () => {
-    onChange(draft);
-    closeEditor();
-  };
-
-  // Esc 关闭 Modal。编辑器内部扩展（如自动补全）已消费的 Esc 不拦截。
-  useEffect(() => {
-    if (!editorOpen) {
-      return;
-    }
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !e.defaultPrevented) {
-        setEditorOpen(false);
-      }
+    const saveEditor = () => {
+        onChange(draft);
+        closeEditor();
     };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [editorOpen]);
 
-  return (
-    <div className="prompt-field-inline">
-      {children}
-      <button
-        type="button"
-        className="icon-btn prompt-field-inline__expand"
-        disabled={disabled}
-        aria-label={ariaLabel ? coreT({key: "ui.common.fullscreen_edit_aria", params: {label: ariaLabel}}) : coreT({key: "ui.common.open_fullscreen"})}
-        title={coreT({key: "ui.common.open_fullscreen"})}
-        onClick={() => {
-          setDraft(value);
-          setEditorOpen(true);
-        }}
-      >
-        ⛶
-      </button>
-      {editorOpen ? (
-        <div className="text-prompt-overlay" onClick={closeEditor}>
-          <div
-            className="prompt-editor-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label={ariaLabel}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <CodeEditor
-              value={draft}
-              languagePath="prompt.md"
-              onChange={setDraft}
-              onSave={saveEditor}
-              aria-label={ariaLabel}
-            />
-            <div className="prompt-editor-modal__footer">
-              <Button variant="secondary" onClick={closeEditor}>
-                {coreT({key: "ui.common.cancel"})}
-              </Button>
-              <Button variant="primary" onClick={saveEditor}>
-                {coreT({key: "ui.common.save"})}
-              </Button>
-            </div>
-          </div>
+    // Esc 关闭 Modal。编辑器内部扩展（如自动补全）已消费的 Esc 不拦截。
+    useEffect(() => {
+        if (!editorOpen) {
+            return;
+        }
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "Escape" && !e.defaultPrevented) {
+                setEditorOpen(false);
+            }
+        };
+        document.addEventListener("keydown", handleKeyDown);
+        return () => document.removeEventListener("keydown", handleKeyDown);
+    }, [editorOpen]);
+
+    return (
+        <div className="prompt-field-inline">
+            {children}
+            <button
+                type="button"
+                className="icon-btn prompt-field-inline__expand"
+                disabled={disabled}
+                aria-label={ariaLabel ? coreT({key: "ui.common.fullscreen_edit_aria", params: {label: ariaLabel}}) : coreT({key: "ui.common.open_fullscreen"})}
+                title={coreT({key: "ui.common.open_fullscreen"})}
+                onClick={() => {
+                    setDraft(value);
+                    setEditorOpen(true);
+                }}
+            >
+                ⛶
+            </button>
+            {editorOpen ? (
+                <div className="text-prompt-overlay" onClick={closeEditor}>
+                    <div
+                        className="prompt-editor-modal"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label={ariaLabel}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <CodeEditor
+                            value={draft}
+                            languagePath="prompt.md"
+                            onChange={setDraft}
+                            onSave={saveEditor}
+                            aria-label={ariaLabel}
+                        />
+                        <div className="prompt-editor-modal__footer">
+                            <Button variant="secondary" onClick={closeEditor}>
+                                {coreT({key: "ui.common.cancel"})}
+                            </Button>
+                            <Button variant="primary" onClick={saveEditor}>
+                                {coreT({key: "ui.common.save"})}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            ) : null}
         </div>
-      ) : null}
-    </div>
-  );
+    );
 }

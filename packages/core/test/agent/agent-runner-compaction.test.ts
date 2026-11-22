@@ -17,8 +17,8 @@ import {  unwrap  } from "../helpers/result-unwrap.js";
 import {  Result  } from "../../src/errors/either.js";
 import type { MessageService } from "../../src/service/chat/message.port.js";
 import type {
-  AgentDefinition,
-  CreateAgentRunnerDeps,
+    AgentDefinition,
+    CreateAgentRunnerDeps,
 } from "@novel-master/core/agent";
 import type { BuiltinToolContext } from "@novel-master/core";
 import type { ModelRequestService } from "@novel-master/core/provider";
@@ -27,55 +27,55 @@ import type { VfsService } from "@novel-master/core/vfs";
 
 /** 捕获 runCompaction 调用参数，供断言。 */
 const runCompactionCalls: Array<{
-  deps: unknown;
-  params: {
-    sessionId: unknown;
-    hideStartDepth?: unknown;
-    trigger?: unknown;
-  };
+    deps: unknown;
+    params: {
+        sessionId: unknown;
+        hideStartDepth?: unknown;
+        trigger?: unknown;
+    };
 }> = [];
 
 const runCompactionMock = mock.fn(
-  async (
-    _deps: unknown,
-    params: {
-      sessionId: unknown;
-      hideStartDepth?: unknown;
-      trigger?: unknown;
+    async (
+        _deps: unknown,
+        params: {
+            sessionId: unknown;
+            hideStartDepth?: unknown;
+            trigger?: unknown;
+        },
+    ) => {
+        runCompactionCalls.push({ deps: _deps, params });
+        return { ok: true };
     },
-  ) => {
-    runCompactionCalls.push({ deps: _deps, params });
-    return { ok: true };
-  },
 );
 
 // 必须在 import 任何会间接触发 run-compaction 模块加载的代码之前注册 mock。
 mock.module("../../src/service/compaction-conditions/run-compaction.js", {
-  namedExports: {
-    Compaction: {
-      run: runCompactionMock,
+    namedExports: {
+        Compaction: {
+            run: runCompactionMock,
+        },
     },
-  },
 });
 
 const { AgentServiceFactory } = await import("@novel-master/core/agent");
 // InMemoryAgentSession 只服务测试，已不在 core/agent 公开面；直接从源模块取（与其余 agent-runner 用例同款）。
 const { InMemoryAgentSession } = await import(
-  "../../src/domain/agent/session/impl/in-memory-agent-session.js"
+    "../../src/domain/agent/session/impl/in-memory-agent-session.js"
 );
 const { TextBlocks } = await import("@novel-master/core/chat");
 const { SimpleEventBus } = await import("@novel-master/core/events");
 const { BuiltinTools, ToolRegistry } = await import("@novel-master/core");
 const { createMemorySessionKkv } = await import(
-  "../helpers/prompt-layout-test-helpers.js"
+    "../helpers/prompt-layout-test-helpers.js"
 );
 const { noopSavedModelRepository } = await import(
-  "../helpers/noop-saved-model-repo.js"
+    "../helpers/noop-saved-model-repo.js"
 );
 // RT-02 牙齿用例必须装**真实** VisibleFloorTrigger（纯 stub 的 evaluator 从不
 // list()，第二次读根本不存在 ⇒ listCalls 恒等于 stepCount，断言无牙）。
 const { CompactionFactory } = await import(
-  "../../src/service/compaction-conditions/compaction-factory.js"
+    "../../src/service/compaction-conditions/compaction-factory.js"
 );
 
 const RUN_MODEL_ID = "anthropic/claude";
@@ -83,66 +83,66 @@ const MOCK_PROJECT_ID = "test-project";
 const MOCK_SESSION_ID = "test-session";
 
 function minimalDefinition(): AgentDefinition {
-  return {
-    name: "test",
-    prompts: { persist: [], dynamic: [] },
-  };
+    return {
+        name: "test",
+        prompts: { persist: [], dynamic: [] },
+    };
 }
 
 function mockVfs(): VfsService {
-  const files = new Map<string, string>();
-  return {
-    async read(path: string) {
-      const content = files.get(path) ?? "";
-      return { path, content, version: 1, mtimeMs: 0 };
-    },
-    async write(path: string, content: string) {
-      files.set(path, content);
-      return { version: 1 };
-    },
-    async replace(path: string, oldString: string, newString: string) {
-      const c = files.get(path) ?? "";
-      files.set(path, c.replace(oldString, newString));
-      return { version: 1, replacements: 1 };
-    },
-    async list() {
-      return [...files.keys()];
-    },
-    async glob() {
-      return [];
-    },
-    async grep() {
-      return [];
-    },
-    async delete() {
-      return { deleted: true };
-    },
-  } as unknown as VfsService;
+    const files = new Map<string, string>();
+    return {
+        async read(path: string) {
+            const content = files.get(path) ?? "";
+            return { path, content, version: 1, mtimeMs: 0 };
+        },
+        async write(path: string, content: string) {
+            files.set(path, content);
+            return { version: 1 };
+        },
+        async replace(path: string, oldString: string, newString: string) {
+            const c = files.get(path) ?? "";
+            files.set(path, c.replace(oldString, newString));
+            return { version: 1, replacements: 1 };
+        },
+        async list() {
+            return [...files.keys()];
+        },
+        async glob() {
+            return [];
+        },
+        async grep() {
+            return [];
+        },
+        async delete() {
+            return { deleted: true };
+        },
+    } as unknown as VfsService;
 }
 
 function mockToolCtx(vfs: VfsService): BuiltinToolContext {
-  return {
-    vfs,
-    projectId: MOCK_PROJECT_ID,
-    sessionId: MOCK_SESSION_ID,
-  };
+    return {
+        vfs,
+        projectId: MOCK_PROJECT_ID,
+        sessionId: MOCK_SESSION_ID,
+    };
 }
 
 function createMockModel(
-  responses: LlmChatResult[],
+    responses: LlmChatResult[],
 ): ModelRequestService & { callCount: () => number } {
-  let calls = 0;
-  return {
-    callCount: () => calls,
-    request: mock.fn(async () => {
-      const r = responses[calls];
-      calls += 1;
-      if (r == null) {
-        throw new Error("Unexpected extra model request");
-      }
+    let calls = 0;
+    return {
+        callCount: () => calls,
+        request: mock.fn(async () => {
+            const r = responses[calls];
+            calls += 1;
+            if (r == null) {
+                throw new Error("Unexpected extra model request");
+            }
       return Result.ok(r);
-    }),
-  };
+        }),
+    };
 }
 
 /**
@@ -150,111 +150,111 @@ function createMockModel(
  * 之后返回 false（避免后续 step 反复触发，与 stepCompactionEmitted 单次门控语义一致）。
  */
 function createCompactionConditionsStub(hideStartDepth: number) {
-  let firstCall = true;
-  return {
-    shouldRequestCompaction: mock.fn(async () => {
-      const hit = firstCall;
-      firstCall = false;
-      return Result.ok(hit);
-    }),
-    getHideStartDepth: mock.fn(async () => Result.ok(hideStartDepth)),
-  };
+    let firstCall = true;
+    return {
+        shouldRequestCompaction: mock.fn(async () => {
+            const hit = firstCall;
+            firstCall = false;
+            return Result.ok(hit);
+        }),
+        getHideStartDepth: mock.fn(async () => Result.ok(hideStartDepth)),
+    };
 }
 
 after(() => {
-  mock.restoreAll();
+    mock.restoreAll();
 });
 
 describe("AgentRunner compaction (T-AR1)", () => {
-  it("条件压缩命中时直调 runCompaction，传入 evaluator 的 hideStartDepth，不经事件编排器", async () => {
-    const session = new InMemoryAgentSession();
-    await session.append("user", TextBlocks.of("go"));
+    it("条件压缩命中时直调 runCompaction，传入 evaluator 的 hideStartDepth，不经事件编排器", async () => {
+        const session = new InMemoryAgentSession();
+        await session.append("user", TextBlocks.of("go"));
 
-    const model = createMockModel([
-      {
-        assistantText: "done",
-        blocks: [{ type: "text", text: "done" }],
-        raw: {},
-      },
-    ]);
+        const model = createMockModel([
+            {
+                assistantText: "done",
+                blocks: [{ type: "text", text: "done" }],
+                raw: {},
+            },
+        ]);
 
-    const registry = new ToolRegistry();
-    BuiltinTools.register(registry);
+        const registry = new ToolRegistry();
+        BuiltinTools.register(registry);
 
-    const HIDE_START_DEPTH = 7;
-    const compactionConditions = createCompactionConditionsStub(
-      HIDE_START_DEPTH,
-    );
+        const HIDE_START_DEPTH = 7;
+        const compactionConditions = createCompactionConditionsStub(
+            HIDE_START_DEPTH,
+        );
 
-    // messages 只需满足 runCompaction 被 mock 后不会真用到；用最小桩即可。
-    // 非 null 即可让 agent-runner 走直调分支。
-    const messagesStub = {
-      listBySession: async () => [],
-    } as unknown as MessageService;
+        // messages 只需满足 runCompaction 被 mock 后不会真用到；用最小桩即可。
+        // 非 null 即可让 agent-runner 走直调分支。
+        const messagesStub = {
+            listBySession: async () => [],
+        } as unknown as MessageService;
 
-    const deps: CreateAgentRunnerDeps = {
-      session,
-      modelRequests: model,
-      savedModels: noopSavedModelRepository(),
-      registry,
-      toolCtx: mockToolCtx(mockVfs()),
-      eventBus: new SimpleEventBus(),
-      sessionKkv: createMemorySessionKkv(),
-      workplace: () =>
-        ({
-          scope: {
-            kind: "session",
-            projectId: MOCK_PROJECT_ID,
+        const deps: CreateAgentRunnerDeps = {
+            session,
+            modelRequests: model,
+            savedModels: noopSavedModelRepository(),
+            registry,
+            toolCtx: mockToolCtx(mockVfs()),
+            eventBus: new SimpleEventBus(),
+            sessionKkv: createMemorySessionKkv(),
+            workplace: () =>
+                ({
+                    scope: {
+                        kind: "session",
+                        projectId: MOCK_PROJECT_ID,
+                        sessionId: MOCK_SESSION_ID,
+                    },
+                    renderDisplay: async () => "WT",
+                    buildListRows: async () => [],
+                    materializePersistBlock: async () => ({ workplaceDisplay: "WT" }),
+                }) as never,
+            compactionConditions,
+            messages: messagesStub,
+        };
+        const runner = AgentServiceFactory.createRunner(deps);
+
+        const result = unwrap(await runner.run({
+            maxSteps: 1,
+            definition: minimalDefinition(),
             sessionId: MOCK_SESSION_ID,
-          },
-          renderDisplay: async () => "WT",
-          buildListRows: async () => [],
-          materializePersistBlock: async () => ({ workplaceDisplay: "WT" }),
-        }) as never,
-      compactionConditions,
-      messages: messagesStub,
-    };
-    const runner = AgentServiceFactory.createRunner(deps);
+            projectId: MOCK_PROJECT_ID,
+            savedModelId: RUN_MODEL_ID,
+            workspaceModelId: RUN_MODEL_ID,
+        }));
 
-    const result = unwrap(await runner.run({
-      maxSteps: 1,
-      definition: minimalDefinition(),
-      sessionId: MOCK_SESSION_ID,
-      projectId: MOCK_PROJECT_ID,
-      savedModelId: RUN_MODEL_ID,
-      workspaceModelId: RUN_MODEL_ID,
-    }));
+        // run 正常完成（说明没有触发 "compaction requires messages" 的硬错误，
+        // 也没有任何 eventOrchestrator 相关的依赖报错——CreateAgentRunnerDeps 根本没这个字段）。
+        assert.equal(result.finished, true);
 
-    // run 正常完成（说明没有触发 "compaction requires messages" 的硬错误，
-    // 也没有任何 eventOrchestrator 相关的依赖报错——CreateAgentRunnerDeps 根本没这个字段）。
-    assert.equal(result.finished, true);
+        // runCompaction 被调一次。
+        assert.equal(runCompactionMock.mock.callCount(), 1);
+        assert.equal(runCompactionCalls.length, 1);
 
-    // runCompaction 被调一次。
-    assert.equal(runCompactionMock.mock.callCount(), 1);
-    assert.equal(runCompactionCalls.length, 1);
+        // 收到正确的 sessionId / hideStartDepth（projectId 不再是 runCompaction 参数）。
+        const call = runCompactionCalls[0];
+        assert.equal(call.params.sessionId, MOCK_SESSION_ID);
+        assert.equal(call.params.hideStartDepth, HIDE_START_DEPTH);
 
-    // 收到正确的 sessionId / hideStartDepth（projectId 不再是 runCompaction 参数）。
-    const call = runCompactionCalls[0];
-    assert.equal(call.params.sessionId, MOCK_SESSION_ID);
-    assert.equal(call.params.hideStartDepth, HIDE_START_DEPTH);
+        // T-CR8：自动压缩路径**不传 trigger**（缺省即 "auto"）——回合中段压缩
+        // 不能清 rule_snapshot / file_cache，要保住前缀回合内冻结（2026-09-29 拍板）。
+        // 断言用 own-property 而非 `=== undefined`：显式塞 `trigger: undefined` 也会
+        // 让后者通过，但把语义钉在「根本没有这个键」上更严。
+        assert.equal(
+            Object.prototype.hasOwnProperty.call(call.params, "trigger"),
+            false,
+            "自动压缩不应传 trigger（缺省 auto 即两域保留）",
+        );
 
-    // T-CR8：自动压缩路径**不传 trigger**（缺省即 "auto"）——回合中段压缩
-    // 不能清 rule_snapshot / file_cache，要保住前缀回合内冻结（2026-09-29 拍板）。
-    // 断言用 own-property 而非 `=== undefined`：显式塞 `trigger: undefined` 也会
-    // 让后者通过，但把语义钉在「根本没有这个键」上更严。
-    assert.equal(
-      Object.prototype.hasOwnProperty.call(call.params, "trigger"),
-      false,
-      "自动压缩不应传 trigger（缺省 auto 即两域保留）",
-    );
-
-    // evaluator.getHideStartDepth 在压缩分支被调一次（取 hideStartDepth 用）。
-    assert.equal(compactionConditions.getHideStartDepth.mock.callCount(), 1);
-    // shouldRequestCompaction 至少被调一次（每个 persist step 前都会评估）。
-    assert.ok(
-      compactionConditions.shouldRequestCompaction.mock.callCount() >= 1,
-    );
-  });
+        // evaluator.getHideStartDepth 在压缩分支被调一次（取 hideStartDepth 用）。
+        assert.equal(compactionConditions.getHideStartDepth.mock.callCount(), 1);
+        // shouldRequestCompaction 至少被调一次（每个 persist step 前都会评估）。
+        assert.ok(
+            compactionConditions.shouldRequestCompaction.mock.callCount() >= 1,
+        );
+    });
 });
 
 /**
@@ -264,11 +264,11 @@ describe("AgentRunner compaction (T-AR1)", () => {
  * 计数器（persistMessages=true 时 runner 实测用的就是 deps.session 本身）。
  */
 class CountingAgentSession extends InMemoryAgentSession {
-  listCalls = 0;
-  override async list() {
-    this.listCalls += 1;
-    return super.list();
-  }
+    listCalls = 0;
+    override async list() {
+        this.listCalls += 1;
+        return super.list();
+    }
 }
 
 /**
@@ -277,172 +277,172 @@ class CountingAgentSession extends InMemoryAgentSession {
  * tokenRatio != null 时才 new TokenRatioConditionTrigger）。
  */
 function realVisibleFloorEvaluator(visibleFloor: number) {
-  return CompactionFactory.createEvaluator({
-    conditionsStore: {
-      getConditions: async () =>
-        Result.ok({
-          schemaVersion: 4,
-          enabled: true,
-          visibleFloor,
-          hideStartDepth: 6,
-        }),
-    },
-    // 只配 visibleFloor 时这两个依赖永不被调用，给空壳即可。
-    tokenCounters: {} as never,
-    providerModels: {} as never,
-  });
+    return CompactionFactory.createEvaluator({
+        conditionsStore: {
+            getConditions: async () =>
+                Result.ok({
+                    schemaVersion: 4,
+                    enabled: true,
+                    visibleFloor,
+                    hideStartDepth: 6,
+                }),
+        },
+        // 只配 visibleFloor 时这两个依赖永不被调用，给空壳即可。
+        tokenCounters: {} as never,
+        providerModels: {} as never,
+    });
 }
 
 /** 三步 run 的响应序列：step1/step2 各发一次 ls 工具，step3 收尾文本。 */
 function threeStepResponses() {
-  return [
-    {
-      assistantText: "",
-      blocks: [
-        { type: "tool_use" as const, id: "tu1", name: "ls", input: { path: "/" } },
-      ],
-      raw: {},
-    },
-    {
-      assistantText: "",
-      blocks: [
+    return [
         {
-          type: "tool_use" as const,
-          id: "tu2",
-          name: "ls",
-          input: { path: "/sub" },
+            assistantText: "",
+            blocks: [
+                { type: "tool_use" as const, id: "tu1", name: "ls", input: { path: "/" } },
+            ],
+            raw: {},
         },
-      ],
-      raw: {},
-    },
-    {
-      assistantText: "done",
-      blocks: [{ type: "text" as const, text: "done" }],
-      raw: {},
-    },
-  ];
+        {
+            assistantText: "",
+            blocks: [
+                {
+                    type: "tool_use" as const,
+                    id: "tu2",
+                    name: "ls",
+                    input: { path: "/sub" },
+                },
+            ],
+            raw: {},
+        },
+        {
+            assistantText: "done",
+            blocks: [{ type: "text" as const, text: "done" }],
+            raw: {},
+        },
+    ];
 }
 
 describe("AgentRunner RT-02 visibleMessageCount 透传", () => {
-  const messagesStub = {
-    listBySession: async () => [],
-  } as unknown as MessageService;
+    const messagesStub = {
+        listBySession: async () => [],
+    } as unknown as MessageService;
 
-  it("T-RT02-a（计数）：visibleFloor 配置下每个 step 只发一次全会话读", async () => {
-    const session = new CountingAgentSession(MOCK_SESSION_ID);
-    await session.append("user", TextBlocks.of("go"));
+    it("T-RT02-a（计数）：visibleFloor 配置下每个 step 只发一次全会话读", async () => {
+        const session = new CountingAgentSession(MOCK_SESSION_ID);
+        await session.append("user", TextBlocks.of("go"));
 
-    // visibleFloor: 999 —— 刻意不触发压缩：runCompaction 桩若真跑会改变步数、
-    // 干扰 stepCompactionEmitted 的门控语义，把「读次数」这口锅搅浑。
-    const compactionConditions = realVisibleFloorEvaluator(999);
+        // visibleFloor: 999 —— 刻意不触发压缩：runCompaction 桩若真跑会改变步数、
+        // 干扰 stepCompactionEmitted 的门控语义，把「读次数」这口锅搅浑。
+        const compactionConditions = realVisibleFloorEvaluator(999);
 
-    const registry = new ToolRegistry();
-    BuiltinTools.register(registry);
+        const registry = new ToolRegistry();
+        BuiltinTools.register(registry);
 
-    const runner = AgentServiceFactory.createRunner({
-      session,
-      modelRequests: createMockModel(threeStepResponses()),
-      savedModels: noopSavedModelRepository(),
-      registry,
-      toolCtx: mockToolCtx(mockVfs()),
-      eventBus: new SimpleEventBus(),
-      sessionKkv: createMemorySessionKkv(),
-      workplace: () =>
-        ({
-          scope: {
-            kind: "session",
-            projectId: MOCK_PROJECT_ID,
+        const runner = AgentServiceFactory.createRunner({
+            session,
+            modelRequests: createMockModel(threeStepResponses()),
+            savedModels: noopSavedModelRepository(),
+            registry,
+            toolCtx: mockToolCtx(mockVfs()),
+            eventBus: new SimpleEventBus(),
+            sessionKkv: createMemorySessionKkv(),
+            workplace: () =>
+                ({
+                    scope: {
+                        kind: "session",
+                        projectId: MOCK_PROJECT_ID,
+                        sessionId: MOCK_SESSION_ID,
+                    },
+                    renderDisplay: async () => "WT",
+                    buildListRows: async () => [],
+                    materializePersistBlock: async () => ({ workplaceDisplay: "WT" }),
+                }) as never,
+            compactionConditions,
+            messages: messagesStub,
+        });
+
+        const result = unwrap(await runner.run({
+            maxSteps: 5,
+            definition: minimalDefinition(),
             sessionId: MOCK_SESSION_ID,
-          },
-          renderDisplay: async () => "WT",
-          buildListRows: async () => [],
-          materializePersistBlock: async () => ({ workplaceDisplay: "WT" }),
-        }) as never,
-      compactionConditions,
-      messages: messagesStub,
+            projectId: MOCK_PROJECT_ID,
+            savedModelId: RUN_MODEL_ID,
+            workspaceModelId: RUN_MODEL_ID,
+        }));
+
+        assert.equal(result.stopReason, "completed");
+        assert.equal(result.stepsExecuted, 3);
+
+        // 牙齿：把 agent-runner 的 visibleMessageCount 透传删掉（触发器回落自己
+        // list()），此处的 3 立刻变 6 并红。
+        assert.equal(
+            session.listCalls,
+            3,
+            `每 step 应只发一次全会话读，实测 ${session.listCalls} 次`,
+        );
     });
 
-    const result = unwrap(await runner.run({
-      maxSteps: 5,
-      definition: minimalDefinition(),
-      sessionId: MOCK_SESSION_ID,
-      projectId: MOCK_PROJECT_ID,
-      savedModelId: RUN_MODEL_ID,
-      workspaceModelId: RUN_MODEL_ID,
-    }));
+    it("T-RT02-b（语义）：visibleMessageCount 透传后压缩仍按 visibleFloor 命中", async () => {
+        const session = new CountingAgentSession(MOCK_SESSION_ID);
+        await session.append("user", TextBlocks.of("go"));
 
-    assert.equal(result.stopReason, "completed");
-    assert.equal(result.stepsExecuted, 3);
+        // visibleFloor: 0 —— 任一可见消息即命中，防止「少读一次」被误实现成「不读」。
+        const compactionConditions = realVisibleFloorEvaluator(0);
 
-    // 牙齿：把 agent-runner 的 visibleMessageCount 透传删掉（触发器回落自己
-    // list()），此处的 3 立刻变 6 并红。
-    assert.equal(
-      session.listCalls,
-      3,
-      `每 step 应只发一次全会话读，实测 ${session.listCalls} 次`,
-    );
-  });
+        const registry = new ToolRegistry();
+        BuiltinTools.register(registry);
 
-  it("T-RT02-b（语义）：visibleMessageCount 透传后压缩仍按 visibleFloor 命中", async () => {
-    const session = new CountingAgentSession(MOCK_SESSION_ID);
-    await session.append("user", TextBlocks.of("go"));
+        const callsBefore = runCompactionCalls.length;
 
-    // visibleFloor: 0 —— 任一可见消息即命中，防止「少读一次」被误实现成「不读」。
-    const compactionConditions = realVisibleFloorEvaluator(0);
+        const runner = AgentServiceFactory.createRunner({
+            session,
+            modelRequests: createMockModel(threeStepResponses()),
+            savedModels: noopSavedModelRepository(),
+            registry,
+            toolCtx: mockToolCtx(mockVfs()),
+            eventBus: new SimpleEventBus(),
+            sessionKkv: createMemorySessionKkv(),
+            workplace: () =>
+                ({
+                    scope: {
+                        kind: "session",
+                        projectId: MOCK_PROJECT_ID,
+                        sessionId: MOCK_SESSION_ID,
+                    },
+                    renderDisplay: async () => "WT",
+                    buildListRows: async () => [],
+                    materializePersistBlock: async () => ({ workplaceDisplay: "WT" }),
+                }) as never,
+            compactionConditions,
+            messages: messagesStub,
+        });
 
-    const registry = new ToolRegistry();
-    BuiltinTools.register(registry);
-
-    const callsBefore = runCompactionCalls.length;
-
-    const runner = AgentServiceFactory.createRunner({
-      session,
-      modelRequests: createMockModel(threeStepResponses()),
-      savedModels: noopSavedModelRepository(),
-      registry,
-      toolCtx: mockToolCtx(mockVfs()),
-      eventBus: new SimpleEventBus(),
-      sessionKkv: createMemorySessionKkv(),
-      workplace: () =>
-        ({
-          scope: {
-            kind: "session",
-            projectId: MOCK_PROJECT_ID,
+        const result = unwrap(await runner.run({
+            maxSteps: 5,
+            definition: minimalDefinition(),
             sessionId: MOCK_SESSION_ID,
-          },
-          renderDisplay: async () => "WT",
-          buildListRows: async () => [],
-          materializePersistBlock: async () => ({ workplaceDisplay: "WT" }),
-        }) as never,
-      compactionConditions,
-      messages: messagesStub,
+            projectId: MOCK_PROJECT_ID,
+            savedModelId: RUN_MODEL_ID,
+            workspaceModelId: RUN_MODEL_ID,
+        }));
+
+        // 步数与 stopReason 口径不变。
+        assert.equal(result.stopReason, "completed");
+        assert.equal(result.stepsExecuted, 3);
+
+        // 压缩确实按 visibleFloor 命中：stepCompactionEmitted 是**每 step 重置**的门控
+        // （runner 循环内声明），所以 visibleFloor=0 时每 step 各命中一次 =
+        // stepsExecuted 次。透传删掉后触发器回落 list() 得到同样的条数，这里不变——
+        // 即「少读一次」没有变成「不读」。
+        assert.equal(
+            runCompactionCalls.length - callsBefore,
+            result.stepsExecuted,
+            "visibleFloor=0 时压缩应每 step 命中一次",
+        );
     });
 
-    const result = unwrap(await runner.run({
-      maxSteps: 5,
-      definition: minimalDefinition(),
-      sessionId: MOCK_SESSION_ID,
-      projectId: MOCK_PROJECT_ID,
-      savedModelId: RUN_MODEL_ID,
-      workspaceModelId: RUN_MODEL_ID,
-    }));
-
-    // 步数与 stopReason 口径不变。
-    assert.equal(result.stopReason, "completed");
-    assert.equal(result.stepsExecuted, 3);
-
-    // 压缩确实按 visibleFloor 命中：stepCompactionEmitted 是**每 step 重置**的门控
-    // （runner 循环内声明），所以 visibleFloor=0 时每 step 各命中一次 =
-    // stepsExecuted 次。透传删掉后触发器回落 list() 得到同样的条数，这里不变——
-    // 即「少读一次」没有变成「不读」。
-    assert.equal(
-      runCompactionCalls.length - callsBefore,
-      result.stepsExecuted,
-      "visibleFloor=0 时压缩应每 step 命中一次",
-    );
-  });
-
-  /**
+    /**
    * T-RT02-c（口径，CR WA-P2-01）：把 visibleFloor 钉在**条数本身**的边界上。
    *
    * T-RT02-a/b 的 visibleFloor 分别是 999 与 0，都落在阈值的极端外侧 ⇒
@@ -455,96 +455,96 @@ describe("AgentRunner RT-02 visibleMessageCount 透传", () => {
    * 夹具再刻意让 promptInput.messages.length = N + 1 ≠ N（一个 persist 合成块），
    * 这样「取渲染后条数」的改法也会被 floor=N 那条当场打红。
    */
-  it("T-RT02-c（口径）：visibleMessageCount 等于可见条数本身（floor=N 不触发 / floor=N-1 触发）", async () => {
-    // 单步 run：一条纯文本响应，可见条数在整轮里恒定，条数口径可被精确钉住。
-    const singleStepResponses = [
-      {
-        assistantText: "done",
-        blocks: [{ type: "text" as const, text: "done" }],
-        raw: {},
-      },
-    ];
-    // 一个 persist 合成块 ⇒ promptInput.messages 比可见条数多一条。
-    const definition: AgentDefinition = {
-      name: "test",
-      prompts: {
-        persistEnabled: true,
-        persist: [
-          { name: "prefix", type: "text", role: "user", content: "常驻前缀" },
-        ],
-        dynamic: [],
-      },
-    };
-
-    async function runOnce(visibleFloor: number, visibleCount: number) {
-      const session = new CountingAgentSession(MOCK_SESSION_ID);
-      for (let i = 0; i < visibleCount; i++) {
-        await session.append("user", TextBlocks.of(`go-${i}`));
-      }
-      // N = 装配后 session 里的可见条数本身（与 runner 取值点同口径）
-      const n = (await session.list()).length;
-
-      const registry = new ToolRegistry();
-      BuiltinTools.register(registry);
-
-      const callsBefore = runCompactionCalls.length;
-      const runner = AgentServiceFactory.createRunner({
-        session,
-        modelRequests: createMockModel(singleStepResponses),
-        savedModels: noopSavedModelRepository(),
-        registry,
-        toolCtx: mockToolCtx(mockVfs()),
-        eventBus: new SimpleEventBus(),
-        sessionKkv: createMemorySessionKkv(),
-        workplace: () =>
-          ({
-            scope: {
-              kind: "session",
-              projectId: MOCK_PROJECT_ID,
-              sessionId: MOCK_SESSION_ID,
+    it("T-RT02-c（口径）：visibleMessageCount 等于可见条数本身（floor=N 不触发 / floor=N-1 触发）", async () => {
+        // 单步 run：一条纯文本响应，可见条数在整轮里恒定，条数口径可被精确钉住。
+        const singleStepResponses = [
+            {
+                assistantText: "done",
+                blocks: [{ type: "text" as const, text: "done" }],
+                raw: {},
             },
-            renderDisplay: async () => "WT",
-            buildListRows: async () => [],
-            materializePersistBlock: async () => ({ workplaceDisplay: "WT" }),
-          }) as never,
-        compactionConditions: realVisibleFloorEvaluator(visibleFloor),
-        messages: messagesStub,
-      });
+        ];
+        // 一个 persist 合成块 ⇒ promptInput.messages 比可见条数多一条。
+        const definition: AgentDefinition = {
+            name: "test",
+            prompts: {
+                persistEnabled: true,
+                persist: [
+                    { name: "prefix", type: "text", role: "user", content: "常驻前缀" },
+                ],
+                dynamic: [],
+            },
+        };
 
-      const result = unwrap(await runner.run({
-        maxSteps: 1,
-        definition,
-        sessionId: MOCK_SESSION_ID,
-        projectId: MOCK_PROJECT_ID,
-        savedModelId: RUN_MODEL_ID,
-        workspaceModelId: RUN_MODEL_ID,
-      }));
-      return {
-        n,
-        result,
-        compactionCalls: runCompactionCalls.length - callsBefore,
-      };
-    }
+        async function runOnce(visibleFloor: number, visibleCount: number) {
+            const session = new CountingAgentSession(MOCK_SESSION_ID);
+            for (let i = 0; i < visibleCount; i++) {
+                await session.append("user", TextBlocks.of(`go-${i}`));
+            }
+            // N = 装配后 session 里的可见条数本身（与 runner 取值点同口径）
+            const n = (await session.list()).length;
 
-    const VISIBLE = 3;
+            const registry = new ToolRegistry();
+            BuiltinTools.register(registry);
 
-    // 边界上沿：count === floor ⇒ `count > floor` 为假 ⇒ 不该触发。
-    // 条数被多算一条（取了渲染后条数 N+1）时这里立刻红。
-    const atFloor = await runOnce(VISIBLE, VISIBLE);
-    assert.equal(atFloor.n, VISIBLE, "夹具 N 应等于预置的可见条数");
-    assert.equal(atFloor.result.stepsExecuted, 1);
-    assert.equal(
-      atFloor.compactionCalls,
-      0,
-      `visibleFloor=N(${atFloor.n}) 时不应触发（count > floor 为假）`,
-    );
+            const callsBefore = runCompactionCalls.length;
+            const runner = AgentServiceFactory.createRunner({
+                session,
+                modelRequests: createMockModel(singleStepResponses),
+                savedModels: noopSavedModelRepository(),
+                registry,
+                toolCtx: mockToolCtx(mockVfs()),
+                eventBus: new SimpleEventBus(),
+                sessionKkv: createMemorySessionKkv(),
+                workplace: () =>
+                    ({
+                        scope: {
+                            kind: "session",
+                            projectId: MOCK_PROJECT_ID,
+                            sessionId: MOCK_SESSION_ID,
+                        },
+                        renderDisplay: async () => "WT",
+                        buildListRows: async () => [],
+                        materializePersistBlock: async () => ({ workplaceDisplay: "WT" }),
+                    }) as never,
+                compactionConditions: realVisibleFloorEvaluator(visibleFloor),
+                messages: messagesStub,
+            });
 
-    // 边界下沿：count === floor + 1 ⇒ 触发。条数被少算一条时这里立刻红。
-    const belowFloor = await runOnce(VISIBLE - 1, VISIBLE);
-    assert.equal(
-      belowFloor.compactionCalls,
-      1,
-      `visibleFloor=N-1(${belowFloor.n - 1}) 时应触发一次`,
-    );
-  });
+            const result = unwrap(await runner.run({
+                maxSteps: 1,
+                definition,
+                sessionId: MOCK_SESSION_ID,
+                projectId: MOCK_PROJECT_ID,
+                savedModelId: RUN_MODEL_ID,
+                workspaceModelId: RUN_MODEL_ID,
+            }));
+            return {
+                n,
+                result,
+                compactionCalls: runCompactionCalls.length - callsBefore,
+            };
+        }
+
+        const VISIBLE = 3;
+
+        // 边界上沿：count === floor ⇒ `count > floor` 为假 ⇒ 不该触发。
+        // 条数被多算一条（取了渲染后条数 N+1）时这里立刻红。
+        const atFloor = await runOnce(VISIBLE, VISIBLE);
+        assert.equal(atFloor.n, VISIBLE, "夹具 N 应等于预置的可见条数");
+        assert.equal(atFloor.result.stepsExecuted, 1);
+        assert.equal(
+            atFloor.compactionCalls,
+            0,
+            `visibleFloor=N(${atFloor.n}) 时不应触发（count > floor 为假）`,
+        );
+
+        // 边界下沿：count === floor + 1 ⇒ 触发。条数被少算一条时这里立刻红。
+        const belowFloor = await runOnce(VISIBLE - 1, VISIBLE);
+        assert.equal(
+            belowFloor.compactionCalls,
+            1,
+            `visibleFloor=N-1(${belowFloor.n - 1}) 时应触发一次`,
+        );
+    });
 });

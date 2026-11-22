@@ -42,396 +42,396 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 /** 行定位（⋮ 菜单 / 删除 / 跳详情共用）。 */
 type SkillRow = {
-  domain: SkillDomain;
-  name: string;
-  projectId?: string;
-  projectName?: string;
-  item: SkillListItem;
+    domain: SkillDomain;
+    name: string;
+    projectId?: string;
+    projectName?: string;
+    item: SkillListItem;
 };
 
 type MenuTarget = SkillRow | undefined;
 
 /** useFocusListReload 的行集：一个屏要同时维护三份列表，打包成一个 payload。 */
 interface SkillsPayload {
-  projects: ChatProject[];
-  globalSkills: SkillListItem[];
-  projectSkills: SkillRow[];
+    projects: ChatProject[];
+    globalSkills: SkillListItem[];
+    projectSkills: SkillRow[];
 }
 
 const EMPTY_PAYLOAD: SkillsPayload = {
-  projects: [],
-  globalSkills: [],
-  projectSkills: [],
+    projects: [],
+    globalSkills: [],
+    projectSkills: [],
 };
 
 const GLOBAL_TAB_HINT = coreT({key: "ui.skills.global_tab_hint_mobile"});
 const PROJECT_TAB_HINT = coreT({key: "ui.skills.project_tab_hint_mobile"});
 
 export function SkillsSettingsScreen() {
-  const {tokens} = useTheme();
-  const {showToast} = useToast();
-  const runtime = useRuntime();
-  const navigation = useNavigation<Nav>();
+    const {tokens} = useTheme();
+    const {showToast} = useToast();
+    const runtime = useRuntime();
+    const navigation = useNavigation<Nav>();
 
-  const [tab, setTab] = useState<'global' | 'project'>('global');
-  const batch = useBatchSelection();
-  const [menuTarget, setMenuTarget] = useState<MenuTarget>(undefined);
-  const [createOpen, setCreateOpen] = useState(false);
-  const [zipBusy, setZipBusy] = useState(false);
-  const [infoEdit, setInfoEdit] = useState<SkillInfoTarget | undefined>(undefined);
-  const [infoEditDescription, setInfoEditDescription] = useState<string | null>(null);
+    const [tab, setTab] = useState<'global' | 'project'>('global');
+    const batch = useBatchSelection();
+    const [menuTarget, setMenuTarget] = useState<MenuTarget>(undefined);
+    const [createOpen, setCreateOpen] = useState(false);
+    const [zipBusy, setZipBusy] = useState(false);
+    const [infoEdit, setInfoEdit] = useState<SkillInfoTarget | undefined>(undefined);
+    const [infoEditDescription, setInfoEditDescription] = useState<string | null>(null);
 
-  // loading/reload + 聚焦重载走共用 hook；本屏要同时维护三份列表，
-  // fetcher 返回打包后的 payload；加载失败 toast（保持原语义，rows 不动）。
-  const {
-    rows: payload,
-    loading,
-    reload,
-  } = useFocusListReload<SkillsPayload>({
-    fetcher: useCallback(async () => {
-      const [projectList, globalList] = await Promise.all([runtime.projects.list(), runtime.skills().listSkills('global')]);
-      // nm-throw: keep — fetcher 槽位契约：业务失败抛错由 useFocusListReload 收进 error 态
-      if (globalList.kind === 'failed') throw globalList.error;
-      // 未注入 hooks：中断分支不可达；真出现时按空清单收尾，业务失败仍走 throw 通道。
-      if (globalList.kind !== 'completed') return EMPTY_PAYLOAD;
-      const projectSkillRows = projectList.map(async p => {
-        const list = await runtime.skills().listSkills({projectId: p.id});
-        // nm-throw: keep — fetcher 槽位契约：同上，业务失败抛错收进 hook error 态
-        if (list.kind === 'failed') throw list.error;
-        // 同一口径：单项目清单被中断时跳过该项目，不返回半份行。
-        if (list.kind !== 'completed') return [];
-        return list.value.map(
-          (item): SkillRow => ({
-            domain: 'project',
-            name: item.name,
-            projectId: p.id,
-            projectName: p.name,
-            item,
-          }),
-        );
-      });
-      const perProject = await Promise.all(projectSkillRows);
-      return {
-        projects: projectList,
-        globalSkills: globalList.value,
-        projectSkills: perProject.flat(),
-      };
-    }, [runtime]),
-    fallbackValue: EMPTY_PAYLOAD,
-    onError: useCallback(
-      (cause: unknown) => {
-        showToast(ToastMessage.toast(coreT({key: "ui.skills.load_failed"}), cause));
-      },
-      [showToast],
-    ),
-  });
-  const {projects, globalSkills, projectSkills} = payload;
-
-  /** 任意项目存在同名副本（D5：不按「当前项目」判定）。 */
-  const overriddenGlobalNames = useMemo(() => {
-    const names = new Set(projectSkills.map(s => s.name));
-    return names;
-  }, [projectSkills]);
-
-  const globalRows = useMemo<SkillRow[]>(
-    () =>
-      globalSkills.map(item => ({
-        domain: 'global' as const,
-        name: item.name,
-        item,
-      })),
-    [globalSkills],
-  );
-
-  const rows = tab === 'global' ? globalRows : projectSkills;
-
-  const switchTab = (next: 'global' | 'project') => {
-    setTab(next);
-    batch.exit();
-  };
-
-  const rowKey = (row: SkillRow) => (row.domain === 'global' ? `global:${row.name}` : `${row.projectId}:${row.name}`);
-
-  const openDetail = (row: SkillRow) => {
-    navigation.navigate('SkillDetail', {
-      domain: row.domain,
-      name: row.name,
-      ...(row.domain === 'project' && row.projectId != null ? {projectId: row.projectId} : {}),
+    // loading/reload + 聚焦重载走共用 hook；本屏要同时维护三份列表，
+    // fetcher 返回打包后的 payload；加载失败 toast（保持原语义，rows 不动）。
+    const {
+        rows: payload,
+        loading,
+        reload,
+    } = useFocusListReload<SkillsPayload>({
+        fetcher: useCallback(async () => {
+            const [projectList, globalList] = await Promise.all([runtime.projects.list(), runtime.skills().listSkills('global')]);
+            // nm-throw: keep — fetcher 槽位契约：业务失败抛错由 useFocusListReload 收进 error 态
+            if (globalList.kind === 'failed') throw globalList.error;
+            // 未注入 hooks：中断分支不可达；真出现时按空清单收尾，业务失败仍走 throw 通道。
+            if (globalList.kind !== 'completed') return EMPTY_PAYLOAD;
+            const projectSkillRows = projectList.map(async p => {
+                const list = await runtime.skills().listSkills({projectId: p.id});
+                // nm-throw: keep — fetcher 槽位契约：同上，业务失败抛错收进 hook error 态
+                if (list.kind === 'failed') throw list.error;
+                // 同一口径：单项目清单被中断时跳过该项目，不返回半份行。
+                if (list.kind !== 'completed') return [];
+                return list.value.map(
+                    (item): SkillRow => ({
+                        domain: 'project',
+                        name: item.name,
+                        projectId: p.id,
+                        projectName: p.name,
+                        item,
+                    }),
+                );
+            });
+            const perProject = await Promise.all(projectSkillRows);
+            return {
+                projects: projectList,
+                globalSkills: globalList.value,
+                projectSkills: perProject.flat(),
+            };
+        }, [runtime]),
+        fallbackValue: EMPTY_PAYLOAD,
+        onError: useCallback(
+            (cause: unknown) => {
+                showToast(ToastMessage.toast(coreT({key: "ui.skills.load_failed"}), cause));
+            },
+            [showToast],
+        ),
     });
-  };
+    const {projects, globalSkills, projectSkills} = payload;
 
-  const confirmDeleteRows = useBatchDeleteConfirm<SkillRow>({
-    title: coreT({key: "ui.skills.delete_title"}),
-    message: targets => {
-      const anyGlobal = targets.some(t => t.domain === 'global');
-      const scopeHint = anyGlobal ? coreT({key: "ui.skills.scope_hint_global"}) : targets.length === 1 && targets[0]!.projectName ? coreT({key: "ui.skills.scope_hint_project_single", params: {project: targets[0]!.projectName}}) : coreT({key: "ui.skills.scope_hint_project"});
-      const names = targets.map(t => t.name).join('、');
-      return `${scopeHint}${coreT({key: "ui.skills.delete_confirm_frame", params: {names: targets.length > 1 ? coreT({key: "ui.skills.selected_skills_label", params: {count: targets.length}}) : `「${names}」`}})}`;
-    },
-    deleteOne: useCallback(
-      async (t: SkillRow) => {
-        return runtime.skills().deleteSkill({
-          domain: t.domain,
-          name: t.name,
-          ...(t.domain === 'project' && t.projectId != null ? {projectId: t.projectId} : {}),
-        });
-      },
-      [runtime],
-    ),
-    onDone: async () => {
-      batch.exit();
-      showToast(coreT({key: "ui.common.deleted"}));
-      await reload();
-    },
-  });
+    /** 任意项目存在同名副本（D5：不按「当前项目」判定）。 */
+    const overriddenGlobalNames = useMemo(() => {
+        const names = new Set(projectSkills.map(s => s.name));
+        return names;
+    }, [projectSkills]);
 
-  const zipScopeFor = (skill: SkillRow): VfsScope => (skill.domain === 'global' ? {kind: 'global-meta'} : {kind: 'project-meta', projectId: skill.projectId!});
-
-  const runSkillZipExport = async (skill: SkillRow) => {
-    if (zipBusy) {
-      return;
-    }
-    setZipBusy(true);
-    try {
-      const exportOptions = {directoryPath: `/meta/skills/${skill.name}`, fileName: `${skill.name}.zip`};
-      const exported = await VfsZipService.exportZip(runtime, zipScopeFor(skill), exportOptions);
-      if (!exported.ok) {
-        showToast(ToastMessage.toast(coreT({key: "ui.common.export_failed"}), exported.error));
-        return;
-      }
-      if (exported.value === 'saved') {
-        showToast(coreT({key: "ui.common.zip_saved"}));
-      }
-    } catch (error) {
-      showToast(ToastMessage.toast(coreT({key: "ui.common.export_failed"}), error));
-    } finally {
-      setZipBusy(false);
-    }
-  };
-
-  const menuItems: SheetMenuItem[] = useMemo(() => {
-    if (menuTarget == null) {
-      return [];
-    }
-    const items: SheetMenuItem[] = [
-      {
-        label: coreT({key: "ui.skills.edit_info"}),
-        action: 'edit-info',
-        // invalid（front matter 不可解析）时置灰：改名链路会跳过
-        // front matter 重写，先修复 SKILL.md 再改信息
-        disabled: !menuTarget.item.valid,
-      },
-      {label: coreT({key: "ui.skills.export_zip"}), action: 'export-zip'},
-      {label: coreT({key: "ui.common.delete"}), action: 'delete', danger: true},
-    ];
-    return items;
-  }, [menuTarget]);
-
-  const handleMenuSelect = (action: string) => {
-    const target = menuTarget;
-    setMenuTarget(undefined);
-    if (target == null) {
-      return;
-    }
-    switch (action) {
-      case 'edit-info':
-        setInfoEditDescription(target.item.description);
-        setInfoEdit({
-          domain: target.domain,
-          name: target.name,
-          ...(target.domain === 'project' && target.projectId != null ? {projectId: target.projectId} : {}),
-        });
-        break;
-      case 'export-zip':
-        runSkillZipExport(target).catch(() => undefined);
-        break;
-      case 'delete':
-        confirmDeleteRows([target]);
-        break;
-      default:
-        break;
-    }
-  };
-
-  const renderRow = (row: SkillRow) => {
-    const selected = batch.isSelected(rowKey(row));
-    const overridden = row.domain === 'global' && overriddenGlobalNames.has(row.name);
-    return (
-      <Pressable
-        testID={`skills-settings-row-${row.name}`}
-        style={[styles.row, {backgroundColor: tokens.surface, borderColor: tokens.borderLight}]}
-        onPress={() => {
-          if (batch.active) {
-            batch.toggle(rowKey(row));
-          } else {
-            openDetail(row);
-          }
-        }}
-      >
-        {batch.active ? <BatchCheckbox checked={selected} onToggle={() => batch.toggle(rowKey(row))} /> : null}
-        <View style={styles.rowBody}>
-          <View style={styles.titleRow}>
-            <Text style={[styles.name, {color: tokens.text}]} numberOfLines={1}>
-              {row.name}
-            </Text>
-            {overridden ? (
-              <Text style={[styles.overrideTag, {color: tokens.textTertiary}]} numberOfLines={1}>
-                {coreT({key: "ui.skills.overridden_tag"})}
-              </Text>
-            ) : null}
-            {!row.item.valid ? (
-              <Text style={[styles.invalidTag, {color: tokens.danger}]} numberOfLines={1}>
-                {coreT({key: "ui.skills.invalid_tag", params: {reason: row.item.invalidReason != null ? coreT(row.item.invalidReason) : coreT({key: "ui.skills.invalid_default_reason"})}})}
-              </Text>
-            ) : null}
-          </View>
-          {row.item.description ? (
-            <Text style={[styles.description, {color: tokens.textSecondary}]} numberOfLines={1}>
-              {row.item.description}
-            </Text>
-          ) : null}
-        </View>
-        {batch.active ? null : (
-          <Pressable testID={`skills-settings-menu-${row.name}`} hitSlop={8} onPress={() => setMenuTarget(row)} accessibilityLabel={coreT({key: "ui.skills.menu_aria", params: {name: row.name}})}>
-            <Text style={[styles.moreGlyph, {color: tokens.textSecondary}]}>⋮</Text>
-          </Pressable>
-        )}
-      </Pressable>
+    const globalRows = useMemo<SkillRow[]>(
+        () =>
+            globalSkills.map(item => ({
+                domain: 'global' as const,
+                name: item.name,
+                item,
+            })),
+        [globalSkills],
     );
-  };
 
-  // 项目 tab 的分组展示：项目名分组头 + 该项目技能行
-  const groupedData = useMemo(() => {
-    if (tab !== 'project') {
-      return rows.map(row => ({kind: 'row' as const, row}));
-    }
-    const out: Array<{kind: 'header'; project: ChatProject} | {kind: 'row'; row: SkillRow}> = [];
-    for (const project of projects) {
-      const projectRows = rows.filter(r => r.projectId === project.id);
-      if (projectRows.length === 0) {
-        continue;
-      }
-      out.push({kind: 'header', project});
-      out.push(...projectRows.map(row => ({kind: 'row' as const, row})));
-    }
-    return out;
-  }, [tab, rows, projects]);
+    const rows = tab === 'global' ? globalRows : projectSkills;
 
-  return (
-    <View style={[listScreenStyles.root, {backgroundColor: tokens.background}]}>
-      <ManageHeader
-        title={coreT({key: "ui.nav.skills_manage"})}
-        batchMode={batch.active}
-        selectedCount={batch.selectedCount}
-        onEnterBatch={batch.enter}
-        onCancelBatch={batch.exit}
-        onDelete={() => confirmDeleteRows(rows.filter(r => batch.isSelected(rowKey(r))))}
-        hint={coreT({key: "ui.skills.select_delete_title"})}
-        normalActions={<PrimaryButton label={coreT({key: "ui.common.new"})} tokens={tokens} onPress={() => setCreateOpen(true)} />}
-      />
-      <SegmentedControl
-        options={[
-          {
-            value: 'global',
-            label: coreT({key: "ui.skills.global_tab"}),
-            testID: 'skills-settings-tab-global',
-          },
-          {
-            value: 'project',
-            label: coreT({key: "ui.skills.project_tab"}),
-            testID: 'skills-settings-tab-project',
-          },
-        ]}
-        value={tab}
-        onChange={switchTab}
-        tokens={tokens}
-      />
-      <Text style={[styles.tabHint, {color: tokens.textSecondary}]}>{tab === 'global' ? GLOBAL_TAB_HINT : PROJECT_TAB_HINT}</Text>
-      <FlatList
-        data={groupedData}
-        keyExtractor={(entry, index) => (entry.kind === 'header' ? `header:${entry.project.id}` : rowKey(entry.row) + `:${index}`)}
-        contentContainerStyle={styles.listContent}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={reload} />}
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <Text style={[styles.emptyText, {color: tokens.textSecondary}]}>
-              {tab === 'global' ? coreT({key: "ui.skills.empty_global_mobile"}) : coreT({key: "ui.skills.empty_project_mobile"})}
-            </Text>
-            <SecondaryButton label={coreT({key: "ui.skills.new_title"})} tokens={tokens} onPress={() => setCreateOpen(true)} />
-          </View>
+    const switchTab = (next: 'global' | 'project') => {
+        setTab(next);
+        batch.exit();
+    };
+
+    const rowKey = (row: SkillRow) => (row.domain === 'global' ? `global:${row.name}` : `${row.projectId}:${row.name}`);
+
+    const openDetail = (row: SkillRow) => {
+        navigation.navigate('SkillDetail', {
+            domain: row.domain,
+            name: row.name,
+            ...(row.domain === 'project' && row.projectId != null ? {projectId: row.projectId} : {}),
+        });
+    };
+
+    const confirmDeleteRows = useBatchDeleteConfirm<SkillRow>({
+        title: coreT({key: "ui.skills.delete_title"}),
+        message: targets => {
+            const anyGlobal = targets.some(t => t.domain === 'global');
+            const scopeHint = anyGlobal ? coreT({key: "ui.skills.scope_hint_global"}) : targets.length === 1 && targets[0]!.projectName ? coreT({key: "ui.skills.scope_hint_project_single", params: {project: targets[0]!.projectName}}) : coreT({key: "ui.skills.scope_hint_project"});
+            const names = targets.map(t => t.name).join('、');
+            return `${scopeHint}${coreT({key: "ui.skills.delete_confirm_frame", params: {names: targets.length > 1 ? coreT({key: "ui.skills.selected_skills_label", params: {count: targets.length}}) : `「${names}」`}})}`;
+        },
+        deleteOne: useCallback(
+            async (t: SkillRow) => {
+                return runtime.skills().deleteSkill({
+                    domain: t.domain,
+                    name: t.name,
+                    ...(t.domain === 'project' && t.projectId != null ? {projectId: t.projectId} : {}),
+                });
+            },
+            [runtime],
+        ),
+        onDone: async () => {
+            batch.exit();
+            showToast(coreT({key: "ui.common.deleted"}));
+            await reload();
+        },
+    });
+
+    const zipScopeFor = (skill: SkillRow): VfsScope => (skill.domain === 'global' ? {kind: 'global-meta'} : {kind: 'project-meta', projectId: skill.projectId!});
+
+    const runSkillZipExport = async (skill: SkillRow) => {
+        if (zipBusy) {
+            return;
         }
-        renderItem={({item}) =>
-          item.kind === 'header' ? (
-            <Text style={[styles.groupHeader, {color: tokens.textSecondary}]} testID={`skills-settings-group-${item.project.name}`}>
-              {item.project.name}
-            </Text>
-          ) : (
-            renderRow(item.row)
-          )
+        setZipBusy(true);
+        try {
+            const exportOptions = {directoryPath: `/meta/skills/${skill.name}`, fileName: `${skill.name}.zip`};
+            const exported = await VfsZipService.exportZip(runtime, zipScopeFor(skill), exportOptions);
+            if (!exported.ok) {
+                showToast(ToastMessage.toast(coreT({key: "ui.common.export_failed"}), exported.error));
+                return;
+            }
+            if (exported.value === 'saved') {
+                showToast(coreT({key: "ui.common.zip_saved"}));
+            }
+        } catch (error) {
+            showToast(ToastMessage.toast(coreT({key: "ui.common.export_failed"}), error));
+        } finally {
+            setZipBusy(false);
         }
-      />
-      <BottomSheetMenu visible={menuTarget != null} title={menuTarget ? coreT({key: "ui.skills.skill_aria", params: {name: menuTarget.name}}) : undefined} items={menuItems} onSelect={handleMenuSelect} onClose={() => setMenuTarget(undefined)} />
-      <NewSkillModal
-        visible={createOpen}
-        domain={tab === 'global' ? 'global' : 'project'}
-        onClose={() => setCreateOpen(false)}
-        onCreated={target => {
-          showToast(coreT({key: "ui.common.created"}));
-          navigation.navigate('SkillDetail', {
-            domain: target.domain,
-            name: target.name,
-            ...(target.projectId != null ? {projectId: target.projectId} : {}),
-          });
-        }}
-      />
-      <SkillInfoEditModal
-        visible={infoEdit != null}
-        target={infoEdit ?? {domain: 'global', name: ''}}
-        currentDescription={infoEditDescription}
-        onClose={() => setInfoEdit(undefined)}
-        onSaved={() => {
-          showToast(coreT({key: "ui.skills.info_saved"}));
-          reload().catch(() => undefined);
-        }}
-      />
-    </View>
-  );
+    };
+
+    const menuItems: SheetMenuItem[] = useMemo(() => {
+        if (menuTarget == null) {
+            return [];
+        }
+        const items: SheetMenuItem[] = [
+            {
+                label: coreT({key: "ui.skills.edit_info"}),
+                action: 'edit-info',
+                // invalid（front matter 不可解析）时置灰：改名链路会跳过
+                // front matter 重写，先修复 SKILL.md 再改信息
+                disabled: !menuTarget.item.valid,
+            },
+            {label: coreT({key: "ui.skills.export_zip"}), action: 'export-zip'},
+            {label: coreT({key: "ui.common.delete"}), action: 'delete', danger: true},
+        ];
+        return items;
+    }, [menuTarget]);
+
+    const handleMenuSelect = (action: string) => {
+        const target = menuTarget;
+        setMenuTarget(undefined);
+        if (target == null) {
+            return;
+        }
+        switch (action) {
+            case 'edit-info':
+                setInfoEditDescription(target.item.description);
+                setInfoEdit({
+                    domain: target.domain,
+                    name: target.name,
+                    ...(target.domain === 'project' && target.projectId != null ? {projectId: target.projectId} : {}),
+                });
+                break;
+            case 'export-zip':
+                runSkillZipExport(target).catch(() => undefined);
+                break;
+            case 'delete':
+                confirmDeleteRows([target]);
+                break;
+            default:
+                break;
+        }
+    };
+
+    const renderRow = (row: SkillRow) => {
+        const selected = batch.isSelected(rowKey(row));
+        const overridden = row.domain === 'global' && overriddenGlobalNames.has(row.name);
+        return (
+            <Pressable
+                testID={`skills-settings-row-${row.name}`}
+                style={[styles.row, {backgroundColor: tokens.surface, borderColor: tokens.borderLight}]}
+                onPress={() => {
+                    if (batch.active) {
+                        batch.toggle(rowKey(row));
+                    } else {
+                        openDetail(row);
+                    }
+                }}
+            >
+                {batch.active ? <BatchCheckbox checked={selected} onToggle={() => batch.toggle(rowKey(row))} /> : null}
+                <View style={styles.rowBody}>
+                    <View style={styles.titleRow}>
+                        <Text style={[styles.name, {color: tokens.text}]} numberOfLines={1}>
+                            {row.name}
+                        </Text>
+                        {overridden ? (
+                            <Text style={[styles.overrideTag, {color: tokens.textTertiary}]} numberOfLines={1}>
+                                {coreT({key: "ui.skills.overridden_tag"})}
+                            </Text>
+                        ) : null}
+                        {!row.item.valid ? (
+                            <Text style={[styles.invalidTag, {color: tokens.danger}]} numberOfLines={1}>
+                                {coreT({key: "ui.skills.invalid_tag", params: {reason: row.item.invalidReason != null ? coreT(row.item.invalidReason) : coreT({key: "ui.skills.invalid_default_reason"})}})}
+                            </Text>
+                        ) : null}
+                    </View>
+                    {row.item.description ? (
+                        <Text style={[styles.description, {color: tokens.textSecondary}]} numberOfLines={1}>
+                            {row.item.description}
+                        </Text>
+                    ) : null}
+                </View>
+                {batch.active ? null : (
+                    <Pressable testID={`skills-settings-menu-${row.name}`} hitSlop={8} onPress={() => setMenuTarget(row)} accessibilityLabel={coreT({key: "ui.skills.menu_aria", params: {name: row.name}})}>
+                        <Text style={[styles.moreGlyph, {color: tokens.textSecondary}]}>⋮</Text>
+                    </Pressable>
+                )}
+            </Pressable>
+        );
+    };
+
+    // 项目 tab 的分组展示：项目名分组头 + 该项目技能行
+    const groupedData = useMemo(() => {
+        if (tab !== 'project') {
+            return rows.map(row => ({kind: 'row' as const, row}));
+        }
+        const out: Array<{kind: 'header'; project: ChatProject} | {kind: 'row'; row: SkillRow}> = [];
+        for (const project of projects) {
+            const projectRows = rows.filter(r => r.projectId === project.id);
+            if (projectRows.length === 0) {
+                continue;
+            }
+            out.push({kind: 'header', project});
+            out.push(...projectRows.map(row => ({kind: 'row' as const, row})));
+        }
+        return out;
+    }, [tab, rows, projects]);
+
+    return (
+        <View style={[listScreenStyles.root, {backgroundColor: tokens.background}]}>
+            <ManageHeader
+                title={coreT({key: "ui.nav.skills_manage"})}
+                batchMode={batch.active}
+                selectedCount={batch.selectedCount}
+                onEnterBatch={batch.enter}
+                onCancelBatch={batch.exit}
+                onDelete={() => confirmDeleteRows(rows.filter(r => batch.isSelected(rowKey(r))))}
+                hint={coreT({key: "ui.skills.select_delete_title"})}
+                normalActions={<PrimaryButton label={coreT({key: "ui.common.new"})} tokens={tokens} onPress={() => setCreateOpen(true)} />}
+            />
+            <SegmentedControl
+                options={[
+                    {
+                        value: 'global',
+                        label: coreT({key: "ui.skills.global_tab"}),
+                        testID: 'skills-settings-tab-global',
+                    },
+                    {
+                        value: 'project',
+                        label: coreT({key: "ui.skills.project_tab"}),
+                        testID: 'skills-settings-tab-project',
+                    },
+                ]}
+                value={tab}
+                onChange={switchTab}
+                tokens={tokens}
+            />
+            <Text style={[styles.tabHint, {color: tokens.textSecondary}]}>{tab === 'global' ? GLOBAL_TAB_HINT : PROJECT_TAB_HINT}</Text>
+            <FlatList
+                data={groupedData}
+                keyExtractor={(entry, index) => (entry.kind === 'header' ? `header:${entry.project.id}` : rowKey(entry.row) + `:${index}`)}
+                contentContainerStyle={styles.listContent}
+                refreshControl={<RefreshControl refreshing={loading} onRefresh={reload} />}
+                ListEmptyComponent={
+                    <View style={styles.empty}>
+                        <Text style={[styles.emptyText, {color: tokens.textSecondary}]}>
+                            {tab === 'global' ? coreT({key: "ui.skills.empty_global_mobile"}) : coreT({key: "ui.skills.empty_project_mobile"})}
+                        </Text>
+                        <SecondaryButton label={coreT({key: "ui.skills.new_title"})} tokens={tokens} onPress={() => setCreateOpen(true)} />
+                    </View>
+                }
+                renderItem={({item}) =>
+                    item.kind === 'header' ? (
+                        <Text style={[styles.groupHeader, {color: tokens.textSecondary}]} testID={`skills-settings-group-${item.project.name}`}>
+                            {item.project.name}
+                        </Text>
+                    ) : (
+                        renderRow(item.row)
+                    )
+                }
+            />
+            <BottomSheetMenu visible={menuTarget != null} title={menuTarget ? coreT({key: "ui.skills.skill_aria", params: {name: menuTarget.name}}) : undefined} items={menuItems} onSelect={handleMenuSelect} onClose={() => setMenuTarget(undefined)} />
+            <NewSkillModal
+                visible={createOpen}
+                domain={tab === 'global' ? 'global' : 'project'}
+                onClose={() => setCreateOpen(false)}
+                onCreated={target => {
+                    showToast(coreT({key: "ui.common.created"}));
+                    navigation.navigate('SkillDetail', {
+                        domain: target.domain,
+                        name: target.name,
+                        ...(target.projectId != null ? {projectId: target.projectId} : {}),
+                    });
+                }}
+            />
+            <SkillInfoEditModal
+                visible={infoEdit != null}
+                target={infoEdit ?? {domain: 'global', name: ''}}
+                currentDescription={infoEditDescription}
+                onClose={() => setInfoEdit(undefined)}
+                onSaved={() => {
+                    showToast(coreT({key: "ui.skills.info_saved"}));
+                    reload().catch(() => undefined);
+                }}
+            />
+        </View>
+    );
 }
 
 const styles = StyleSheet.create({
-  tabHint: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  listContent: {paddingHorizontal: 12, paddingBottom: 24, gap: 8},
-  groupHeader: {
-    fontSize: 13,
-    fontWeight: '600',
-    marginTop: 8,
-    paddingHorizontal: 2,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    padding: 12,
-    borderRadius: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  rowBody: {flex: 1, gap: 4},
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flexWrap: 'wrap',
-  },
-  name: {fontSize: 15, fontWeight: '600'},
-  overrideTag: {fontSize: 11},
-  invalidTag: {fontSize: 11, flexShrink: 1},
-  description: {fontSize: 13, lineHeight: 18},
-  moreGlyph: {fontSize: 18, paddingHorizontal: 6},
-  empty: {padding: 32, gap: 16, alignItems: 'center'},
-  emptyText: {fontSize: 13, lineHeight: 20, textAlign: 'center'},
+    tabHint: {
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        fontSize: 12,
+        lineHeight: 16,
+    },
+    listContent: {paddingHorizontal: 12, paddingBottom: 24, gap: 8},
+    groupHeader: {
+        fontSize: 13,
+        fontWeight: '600',
+        marginTop: 8,
+        paddingHorizontal: 2,
+    },
+    row: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        padding: 12,
+        borderRadius: 10,
+        borderWidth: StyleSheet.hairlineWidth,
+    },
+    rowBody: {flex: 1, gap: 4},
+    titleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        flexWrap: 'wrap',
+    },
+    name: {fontSize: 15, fontWeight: '600'},
+    overrideTag: {fontSize: 11},
+    invalidTag: {fontSize: 11, flexShrink: 1},
+    description: {fontSize: 13, lineHeight: 18},
+    moreGlyph: {fontSize: 18, paddingHorizontal: 6},
+    empty: {padding: 32, gap: 16, alignItems: 'center'},
+    emptyText: {fontSize: 13, lineHeight: 20, textAlign: 'center'},
 });

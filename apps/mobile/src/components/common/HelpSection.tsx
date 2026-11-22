@@ -10,22 +10,22 @@ import {StyleSheet, Text, View} from 'react-native';
 import type {ThemeTokens} from '@/theme/tokens';
 
 type Props = {
-  title: string;
-  body: string;
-  tokens: ThemeTokens;
+    title: string;
+    body: string;
+    tokens: ThemeTokens;
 };
 
 export function HelpSection({title, body, tokens}: Props) {
-  return (
-    <View style={styles.section}>
-      <Text style={[styles.title, {color: tokens.text}]}>{title}</Text>
-      <Text style={[styles.body, {color: tokens.textSecondary}]}>{body}</Text>
-    </View>
-  );
+    return (
+        <View style={styles.section}>
+            <Text style={[styles.title, {color: tokens.text}]}>{title}</Text>
+            <Text style={[styles.body, {color: tokens.textSecondary}]}>{body}</Text>
+        </View>
+    );
 }
 
 const styles = StyleSheet.create({
-  section: {marginBottom: 12},
-  title: {fontSize: 14, fontWeight: '600', marginBottom: 2},
-  body: {fontSize: 13, lineHeight: 19},
+    section: {marginBottom: 12},
+    title: {fontSize: 14, fontWeight: '600', marginBottom: 2},
+    body: {fontSize: 13, lineHeight: 19},
 });

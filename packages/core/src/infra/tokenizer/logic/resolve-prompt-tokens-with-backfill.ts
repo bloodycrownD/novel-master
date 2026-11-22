@@ -17,7 +17,7 @@ type PromptTokensOptions = ResolveCurrentPromptTokensOptions;
 type PromptTokensResult = Outcome<ResolvedPromptTokens>;
 
 export const PromptTokens = {
-  /**
+    /**
    * resolve 一次 prompt token 计数。
    *
    * `rawMessages` 参数已无实际用途，仅为兼容既有调用方签名保留；下个清理
@@ -32,7 +32,7 @@ export const PromptTokens = {
    * 沿 `Outcome.cancelled` / `Outcome.replaced` 透传（错误通道迁移二期：哨兵
    * throw 改返回值，读口按 kind 判定收口）。
    */
-  async resolve(sessionId: string, _raw: readonly ChatMessageData[], params: CountPromptLlmInputParams, opts?: PromptTokensOptions): Promise<PromptTokensResult> {
-    return CurrentPromptTokens.resolve(sessionId, params, opts);
-  },
+    async resolve(sessionId: string, _raw: readonly ChatMessageData[], params: CountPromptLlmInputParams, opts?: PromptTokensOptions): Promise<PromptTokensResult> {
+        return CurrentPromptTokens.resolve(sessionId, params, opts);
+    },
 } as const;

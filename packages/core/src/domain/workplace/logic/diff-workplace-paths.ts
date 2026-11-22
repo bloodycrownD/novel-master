@@ -11,43 +11,43 @@ import { RuleSnapshotCodec, type WorkplaceDisplayStatus } from "./rule-snapshot-
 
 /** live 条目：至少含 path；status 不参与「已加载」判定。 */
 type WorkplaceLivePath = {
-  readonly path: string;
-  readonly status?: WorkplaceDisplayStatus | string;
+    readonly path: string;
+    readonly status?: WorkplaceDisplayStatus | string;
 };
 
 const LOADED_STATUSES: readonly WorkplaceDisplayStatus[] = ["full", "header", "filename"];
 
 export const WorkplacePaths = {
-  /**
+    /**
    * 同 path 任一 status key 命中即视为已加载。
    */
-  isLoadedInCache(path: string, cacheKeys: ReadonlySet<string>): boolean {
-    for (const status of LOADED_STATUSES) {
-      if (cacheKeys.has(RuleSnapshotCodec.fileCacheKey(status, path))) {
-        return true;
-      }
-    }
-    return false;
-  },
+    isLoadedInCache(path: string, cacheKeys: ReadonlySet<string>): boolean {
+        for (const status of LOADED_STATUSES) {
+            if (cacheKeys.has(RuleSnapshotCodec.fileCacheKey(status, path))) {
+                return true;
+            }
+        }
+        return false;
+    },
 
-  /**
+    /**
    * 计算尚需加载的 workplace path 列表（去重，保持 live 顺序）。
    */
-  diff(live: readonly WorkplaceLivePath[], cacheKeys: ReadonlySet<string> | readonly string[]): string[] {
-    const keySet = cacheKeys instanceof Set ? cacheKeys : new Set(cacheKeys);
-    const needed: string[] = [];
-    const seen = new Set<string>();
-    for (const entry of live) {
-      const path = entry.path;
-      if (path.length === 0 || seen.has(path)) {
-        continue;
-      }
-      seen.add(path);
-      if (WorkplacePaths.isLoadedInCache(path, keySet)) {
-        continue;
-      }
-      needed.push(path);
-    }
-    return needed;
-  },
+    diff(live: readonly WorkplaceLivePath[], cacheKeys: ReadonlySet<string> | readonly string[]): string[] {
+        const keySet = cacheKeys instanceof Set ? cacheKeys : new Set(cacheKeys);
+        const needed: string[] = [];
+        const seen = new Set<string>();
+        for (const entry of live) {
+            const path = entry.path;
+            if (path.length === 0 || seen.has(path)) {
+                continue;
+            }
+            seen.add(path);
+            if (WorkplacePaths.isLoadedInCache(path, keySet)) {
+                continue;
+            }
+            needed.push(path);
+        }
+        return needed;
+    },
 } as const;

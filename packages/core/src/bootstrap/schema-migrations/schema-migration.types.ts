@@ -8,6 +8,6 @@ import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 
 /** 单条已登记 schema migration。 */
 export interface SchemaMigration {
-  readonly id: string;
-  up(tx: TdbcConnection): Promise<void>;
+    readonly id: string;
+    up(tx: TdbcConnection): Promise<void>;
 }

@@ -6,19 +6,19 @@
 
 /** Token usage reported by the LLM for one assistant response. */
 export interface MessageUsage {
-  readonly promptTokens?: number;
-  readonly completionTokens?: number;
-  readonly totalTokens?: number;
-  /** 命中 prompt cache 的输入 token 数（供应商原始值，不改 promptTokens 语义）。 */
-  readonly cacheReadTokens?: number;
-  /** 本次请求新写入 prompt cache 的输入 token 数（OpenAI/Gemini 无此概念，仅 Anthropic）。 */
-  readonly cacheCreationTokens?: number;
-  /**
+    readonly promptTokens?: number;
+    readonly completionTokens?: number;
+    readonly totalTokens?: number;
+    /** 命中 prompt cache 的输入 token 数（供应商原始值，不改 promptTokens 语义）。 */
+    readonly cacheReadTokens?: number;
+    /** 本次请求新写入 prompt cache 的输入 token 数（OpenAI/Gemini 无此概念，仅 Anthropic）。 */
+    readonly cacheCreationTokens?: number;
+    /**
    * 首字延迟（TTFT，ms）：首个内容事件（text-delta / thinking-delta）到达
    * 时刻 − 请求发起时刻；非流式请求（无 onStream 或未收到内容事件）取请求
    * 完成时刻，即 firstTokenMs === durationMs。
    */
-  readonly firstTokenMs?: number;
-  /** 请求发起 → 完成的总耗时（ms），与 token 字段独立（可仅有耗时无 token）。 */
-  readonly durationMs?: number;
+    readonly firstTokenMs?: number;
+    /** 请求发起 → 完成的总耗时（ms），与 token 字段独立（可仅有耗时无 token）。 */
+    readonly durationMs?: number;
 }

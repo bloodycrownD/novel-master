@@ -5,9 +5,9 @@
  */
 
 export interface ModelSuggestion {
-  readonly providerId: string;
-  readonly vendorModelId: string;
-  readonly displayName: string | null;
-  readonly stale: boolean;
-  readonly lastSeenAtMs: number;
+    readonly providerId: string;
+    readonly vendorModelId: string;
+    readonly displayName: string | null;
+    readonly stale: boolean;
+    readonly lastSeenAtMs: number;
 }

@@ -17,77 +17,77 @@
 import type {ComponentChildren} from 'preact';
 import {state} from '../../runtime/state/state';
 import {
-  RowWindow,
-  ROW_WINDOW_TOP_SPACER_ID,
-  ROW_WINDOW_BOTTOM_SPACER_ID,
+    RowWindow,
+    ROW_WINDOW_TOP_SPACER_ID,
+    ROW_WINDOW_BOTTOM_SPACER_ID,
 } from '../../runtime/render/row-windowing';
 import {MessageRow} from './MessageRow';
 
 export function RowList() {
-  // 流式行是 rows 的最后一条（I1）：total 天然含它，空态只看 rows。
-  const total = state.rows.length;
-  const showEmpty = total === 0;
-  const lastRow = total > 0 ? state.rows[total - 1] : null;
-  // 只有当前 streaming 行需要钉住（finished 行内容静态，窗口外可卸载重挂）。
-  const pinTail = lastRow != null && lastRow.status === 'streaming';
-  const win = RowWindow.getRange(total);
-  const tailPinned = pinTail && win.end < total;
-  const spacers = RowWindow.getSpacerHeights(total, tailPinned);
-  const children: ComponentChildren[] = [];
+    // 流式行是 rows 的最后一条（I1）：total 天然含它，空态只看 rows。
+    const total = state.rows.length;
+    const showEmpty = total === 0;
+    const lastRow = total > 0 ? state.rows[total - 1] : null;
+    // 只有当前 streaming 行需要钉住（finished 行内容静态，窗口外可卸载重挂）。
+    const pinTail = lastRow != null && lastRow.status === 'streaming';
+    const win = RowWindow.getRange(total);
+    const tailPinned = pinTail && win.end < total;
+    const spacers = RowWindow.getSpacerHeights(total, tailPinned);
+    const children: ComponentChildren[] = [];
 
-  if (state.hasMore) {
-    const loadOlderButton = (
-      <button
-        type="button"
-        key="load-older"
-        className="load-older"
-        data-action="load-older"
-      >
-        {state.labels.loadOlder}
-      </button>
-    );
-    children.push(loadOlderButton);
-  }
-  if (win.start > 0) {
-    const topSpacer = (
-      <div
-        key="row-win-top"
-        id={ROW_WINDOW_TOP_SPACER_ID}
-        className="row-window-spacer"
-        style={{height: `${spacers.top}px`}}
-      />
-    );
-    children.push(topSpacer);
-  }
-  for (let i = win.start; i < win.end; i++) {
-    const row = state.rows[i];
-    if (row.kind === 'message') {
-      children.push(<MessageRow key={row.id} row={row} />);
+    if (state.hasMore) {
+        const loadOlderButton = (
+            <button
+                type="button"
+                key="load-older"
+                className="load-older"
+                data-action="load-older"
+            >
+                {state.labels.loadOlder}
+            </button>
+        );
+        children.push(loadOlderButton);
     }
-  }
-  if (win.end < total) {
-    const bottomSpacer = (
-      <div
-        key="row-win-bottom"
-        id={ROW_WINDOW_BOTTOM_SPACER_ID}
-        className="row-window-spacer"
-        style={{height: `${spacers.bottom}px`}}
-      />
-    );
-    children.push(bottomSpacer);
-  }
-  // 流式行被用户滚出窗口：钉在下占位之后（真实高度由 DOM 自己贡献，下占位
-  // 已少算 1 行，估算不重复计入）。同一组件类型 → 窗口跨过它时不 remount。
-  if (tailPinned && lastRow) {
-    children.push(<MessageRow key={lastRow.id} row={lastRow} />);
-  }
-  if (showEmpty) {
-    const emptyState = (
-      <div key="empty-state" className="empty-state">
-        {state.labels.empty}
-      </div>
-    );
-    children.push(emptyState);
-  }
-  return children;
+    if (win.start > 0) {
+        const topSpacer = (
+            <div
+                key="row-win-top"
+                id={ROW_WINDOW_TOP_SPACER_ID}
+                className="row-window-spacer"
+                style={{height: `${spacers.top}px`}}
+            />
+        );
+        children.push(topSpacer);
+    }
+    for (let i = win.start; i < win.end; i++) {
+        const row = state.rows[i];
+        if (row.kind === 'message') {
+            children.push(<MessageRow key={row.id} row={row} />);
+        }
+    }
+    if (win.end < total) {
+        const bottomSpacer = (
+            <div
+                key="row-win-bottom"
+                id={ROW_WINDOW_BOTTOM_SPACER_ID}
+                className="row-window-spacer"
+                style={{height: `${spacers.bottom}px`}}
+            />
+        );
+        children.push(bottomSpacer);
+    }
+    // 流式行被用户滚出窗口：钉在下占位之后（真实高度由 DOM 自己贡献，下占位
+    // 已少算 1 行，估算不重复计入）。同一组件类型 → 窗口跨过它时不 remount。
+    if (tailPinned && lastRow) {
+        children.push(<MessageRow key={lastRow.id} row={lastRow} />);
+    }
+    if (showEmpty) {
+        const emptyState = (
+            <div key="empty-state" className="empty-state">
+                {state.labels.empty}
+            </div>
+        );
+        children.push(emptyState);
+    }
+    return children;
 }

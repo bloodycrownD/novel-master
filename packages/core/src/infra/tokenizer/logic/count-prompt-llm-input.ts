@@ -19,22 +19,22 @@ import { serializePromptLlmInput } from "./serialize-prompt-input.js";
 import { TokenCountTools } from "./serialize-tools-for-token-count.js";
 
 export interface CountPromptLlmInputParams {
-  readonly layout: AgentPromptLayout;
-  readonly ctx: PromptRenderContext;
-  readonly savedModelId: string;
-  readonly registry: TokenCounterRegistry;
-  readonly tokenizerOverride?: TokenizerOverride;
-  /** When set, resolves vendor model id via {@link findById}. */
-  readonly savedModels?: Pick<SavedModelRepository, "findById">;
-  /**
+    readonly layout: AgentPromptLayout;
+    readonly ctx: PromptRenderContext;
+    readonly savedModelId: string;
+    readonly registry: TokenCounterRegistry;
+    readonly tokenizerOverride?: TokenizerOverride;
+    /** When set, resolves vendor model id via {@link findById}. */
+    readonly savedModels?: Pick<SavedModelRepository, "findById">;
+    /**
    * 本次请求随提示词一起发出的 tools 定义（可选）。
    *
    * 本地计数把它折算进序列化串（{@link TokenCountTools.serialize}），与 API
    * 的 `promptTokens`（含 tools）口径可比。**压缩评估路径必须传**
    * （agent-runner 有现成 tools）；UI 读口路径拿不到 tools，缺省即不数。
    */
-  readonly tools?: readonly LlmToolDefinition[];
-  /**
+    readonly tools?: readonly LlmToolDefinition[];
+    /**
    * 会话标识（可选，仅驱动取消链路消费）。
    *
    * 读口 `CurrentPromptTokens.resolve` 从自己的 `sessionId` 实参透传进来；
@@ -45,60 +45,60 @@ export interface CountPromptLlmInputParams {
    * 传空 sessionId），本字段只为取消归属存在。缺省即「不可取消轮」——
    * node 驱动忽略它，其余读口不传时行为与既有逐字节一致。
    */
-  readonly sessionId?: string;
+    readonly sessionId?: string;
 }
 
 export interface PromptTokenCountResult {
-  readonly tokenCount: number;
-  readonly counterKind: TokenCounterKind;
-  readonly estimated: boolean;
-  readonly savedModelId: string;
-  readonly vendorModelId: string;
-  readonly tokenizerFamily: TokenizerFamily;
+    readonly tokenCount: number;
+    readonly counterKind: TokenCounterKind;
+    readonly estimated: boolean;
+    readonly savedModelId: string;
+    readonly vendorModelId: string;
+    readonly tokenizerFamily: TokenizerFamily;
 }
 
 export const PromptLlmInputCount = {
-  /**
+    /**
    * Counts tokens for a full prompt via registered NMTP driver (assembly serialize).
    */
-  // nm-style: keep-local — 单行转手但负责解析驱动注册表单例（隔离不稳定依赖），调用点不应各自查 registry。
-  async count(params: CountPromptLlmInputParams): Promise<Result<PromptTokenCountResult, AppError>> {
-    return TokenizerRegistry.resolve().countPromptLlmInput(params);
-  },
+    // nm-style: keep-local — 单行转手但负责解析驱动注册表单例（隔离不稳定依赖），调用点不应各自查 registry。
+    async count(params: CountPromptLlmInputParams): Promise<Result<PromptTokenCountResult, AppError>> {
+        return TokenizerRegistry.resolve().countPromptLlmInput(params);
+    },
 
-  async resolveVendorModelIdFromSaved(savedModelId: string, savedModels?: Pick<SavedModelRepository, "findById">): Promise<string> {
-    if (savedModels == null) {
-      return savedModelId;
-    }
-    const saved = await savedModels.findById(savedModelId.trim());
-    if (!saved.ok || saved.value == null) {
-      return savedModelId;
-    }
-    return saved.value.vendorModelId;
-  },
+    async resolveVendorModelIdFromSaved(savedModelId: string, savedModels?: Pick<SavedModelRepository, "findById">): Promise<string> {
+        if (savedModels == null) {
+            return savedModelId;
+        }
+        const saved = await savedModels.findById(savedModelId.trim());
+        if (!saved.ok || saved.value == null) {
+            return savedModelId;
+        }
+        return saved.value.vendorModelId;
+    },
 
-  /**
+    /**
    * Minimal fallback without a registered driver (tests / documentation).
    *
    * nm-style: keep-public — desktop 跨包消费，依赖 core 序列化 + 家族解析 + registry
    */
-  async countHeuristicOnly(params: CountPromptLlmInputParams): Promise<Result<PromptTokenCountResult, AppError>> {
-    const { savedModelId, registry, layout, ctx } = params;
-    const vendorModelId = await PromptLlmInputCount.resolveVendorModelIdFromSaved(savedModelId, params.savedModels);
-    const family = TokenizerFamilyResolver.resolve(vendorModelId, "auto");
-    // tools 段与提示词同串计数（空 tools 时拼接为恒等；口径见 helper 头注释）。
-    const serialized = await serializePromptLlmInput(layout, ctx);
-    if (!serialized.ok) return Result.err(serialized.error);
-    const tokenCount = registry.heuristic.countText(serialized.value + TokenCountTools.serialize(params.tools));
-    return Result.ok({
-      tokenCount,
-      counterKind: "heuristic",
-      estimated: true,
-      savedModelId,
-      vendorModelId,
-      tokenizerFamily: family,
-    });
-  },
+    async countHeuristicOnly(params: CountPromptLlmInputParams): Promise<Result<PromptTokenCountResult, AppError>> {
+        const { savedModelId, registry, layout, ctx } = params;
+        const vendorModelId = await PromptLlmInputCount.resolveVendorModelIdFromSaved(savedModelId, params.savedModels);
+        const family = TokenizerFamilyResolver.resolve(vendorModelId, "auto");
+        // tools 段与提示词同串计数（空 tools 时拼接为恒等；口径见 helper 头注释）。
+        const serialized = await serializePromptLlmInput(layout, ctx);
+        if (!serialized.ok) return Result.err(serialized.error);
+        const tokenCount = registry.heuristic.countText(serialized.value + TokenCountTools.serialize(params.tools));
+        return Result.ok({
+            tokenCount,
+            counterKind: "heuristic",
+            estimated: true,
+            savedModelId,
+            vendorModelId,
+            tokenizerFamily: family,
+        });
+    },
 } as const;
 
 // usage label 拼装已随 token-source-label 收敛进 common/token-format.ts

@@ -51,31 +51,31 @@ export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [];
  * schema migration runner 操作族。
  */
 export const SchemaMigrations = {
-  /**
+    /**
    * 执行 pending schema migration。
    *
    * 须在 bootstrap 事务内、DDL 之后、SchemaColumnAlign.align 之前调用。
    */
-  async runPending(tx: TdbcConnection): Promise<void> {
-    await SchemaMigrationsTable.ensure(tx);
-    const applied = await SchemaMigrationsTable.listAppliedIds(tx);
+    async runPending(tx: TdbcConnection): Promise<void> {
+        await SchemaMigrationsTable.ensure(tx);
+        const applied = await SchemaMigrationsTable.listAppliedIds(tx);
 
-    const seen = new Set<string>();
-    for (const migration of SCHEMA_MIGRATIONS) {
-      assert(!seen.has(migration.id), `重复的 schema migration id: ${migration.id}`);
-      seen.add(migration.id);
+        const seen = new Set<string>();
+        for (const migration of SCHEMA_MIGRATIONS) {
+            assert(!seen.has(migration.id), `重复的 schema migration id: ${migration.id}`);
+            seen.add(migration.id);
 
-      if (applied.has(migration.id)) {
-        continue;
-      }
+            if (applied.has(migration.id)) {
+                continue;
+            }
 
-      log.error(`migration run: ${migration.id}`);
-      await migration.up(tx);
-      await SchemaMigrationsTable.markApplied(tx, migration.id, Date.now());
-      applied.add(migration.id);
-      log.error(`migration applied: ${migration.id}`);
-    }
-  },
+            log.error(`migration run: ${migration.id}`);
+            await migration.up(tx);
+            await SchemaMigrationsTable.markApplied(tx, migration.id, Date.now());
+            applied.add(migration.id);
+            log.error(`migration applied: ${migration.id}`);
+        }
+    },
 } as const;
 
 export type { SchemaMigration } from "./schema-migration.types.js";

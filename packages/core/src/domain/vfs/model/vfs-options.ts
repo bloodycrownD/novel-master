@@ -6,11 +6,11 @@
 
 /** Options for listing paths under a directory. */
 export interface VfsListOptions {
-  readonly recursive?: boolean;
-  readonly maxDepth?: number;
+    readonly recursive?: boolean;
+    readonly maxDepth?: number;
 }
 
 /** Options for repository delete. */
 export interface VfsDeleteOptions {
-  readonly recursive: boolean;
+    readonly recursive: boolean;
 }

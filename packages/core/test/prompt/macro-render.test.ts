@@ -8,68 +8,68 @@ import {  unwrap  } from "../helpers/result-unwrap.js";
 const fixedNow = new Date(2026, 4, 24, 15, 30, 45);
 
 describe("renderMacro", () => {
-  it("substitutes $filetree via root context", () => {
-    const out = unwrap(MacroRender.render("tree:\n{{ $filetree }}", {
-      dot: {},
-      root: { time: "t", week_cn: "w", filetree: "/\n└── a.md" },
-    }));
-    assert.equal(out, "tree:\n/\n└── a.md");
-  });
-
-  it("substitutes $.time with fixed now", () => {
-    const out = unwrap(MacroRender.render("at {{ $.time }}", {
-      dot: {},
-      root: {
-        time: DateTime.localDateTime(fixedNow),
-        week_cn: fixedNow.toLocaleDateString("zh-CN", { weekday: "long" }),
-      },
-    }));
-    assert.equal(out, "at 2026-05-24 15:30:45");
-  });
-
-  it("substitutes $.week_cn", () => {
-    const week = fixedNow.toLocaleDateString("zh-CN", { weekday: "long" });
-    const out = unwrap(MacroRender.render("{{ $.week_cn }}", {
-      dot: {},
-      root: { time: "t", week_cn: week },
-    }));
-    assert.equal(out, week);
-    assert.match(week, /星期/);
-  });
-
-  it("removes comments", () => {
-    const out = unwrap(MacroRender.render("a{{/* hidden */}}b", {
-      dot: {},
-      root: { time: "t", week_cn: "w" },
-    }));
-    assert.equal(out, "ab");
-  });
-
-  it("throws UNSUPPORTED_SYNTAX for if", () => {
-    // 四期签名：renderMacro 失败沿 Result.err 回传，不再 throw。
-    const r = MacroRender.render("{{ if .x }}", {
-      dot: {},
-      root: { time: "t", week_cn: "w" },
+    it("substitutes $filetree via root context", () => {
+        const out = unwrap(MacroRender.render("tree:\n{{ $filetree }}", {
+            dot: {},
+            root: { time: "t", week_cn: "w", filetree: "/\n└── a.md" },
+        }));
+        assert.equal(out, "tree:\n/\n└── a.md");
     });
-    assert.ok(!r.ok);
-    if (!r.ok) assert.ok(AppErrorOps.is(r.error, "PROMPT_UNSUPPORTED_SYNTAX"));
-  });
 
-  it("throws UNKNOWN_FIELD for unknown root key", () => {
-    const r = MacroRender.render("{{ $.foo }}", {
-      dot: {},
-      root: { time: "t", week_cn: "w" },
+    it("substitutes $.time with fixed now", () => {
+        const out = unwrap(MacroRender.render("at {{ $.time }}", {
+            dot: {},
+            root: {
+                time: DateTime.localDateTime(fixedNow),
+                week_cn: fixedNow.toLocaleDateString("zh-CN", { weekday: "long" }),
+            },
+        }));
+        assert.equal(out, "at 2026-05-24 15:30:45");
     });
-    assert.ok(!r.ok);
-    if (!r.ok) assert.ok(AppErrorOps.is(r.error, "PROMPT_UNKNOWN_FIELD"));
-  });
 
-  it("throws UNKNOWN_FIELD for missing dot path when dot is empty", () => {
-    const r = MacroRender.render("{{ .missing }}", {
-      dot: {},
-      root: { time: "t", week_cn: "w" },
+    it("substitutes $.week_cn", () => {
+        const week = fixedNow.toLocaleDateString("zh-CN", { weekday: "long" });
+        const out = unwrap(MacroRender.render("{{ $.week_cn }}", {
+            dot: {},
+            root: { time: "t", week_cn: week },
+        }));
+        assert.equal(out, week);
+        assert.match(week, /星期/);
     });
-    assert.ok(!r.ok);
-    if (!r.ok) assert.ok(AppErrorOps.is(r.error, "PROMPT_UNKNOWN_FIELD"));
-  });
+
+    it("removes comments", () => {
+        const out = unwrap(MacroRender.render("a{{/* hidden */}}b", {
+            dot: {},
+            root: { time: "t", week_cn: "w" },
+        }));
+        assert.equal(out, "ab");
+    });
+
+    it("throws UNSUPPORTED_SYNTAX for if", () => {
+        // 四期签名：renderMacro 失败沿 Result.err 回传，不再 throw。
+        const r = MacroRender.render("{{ if .x }}", {
+            dot: {},
+            root: { time: "t", week_cn: "w" },
+        });
+        assert.ok(!r.ok);
+        if (!r.ok) assert.ok(AppErrorOps.is(r.error, "PROMPT_UNSUPPORTED_SYNTAX"));
+    });
+
+    it("throws UNKNOWN_FIELD for unknown root key", () => {
+        const r = MacroRender.render("{{ $.foo }}", {
+            dot: {},
+            root: { time: "t", week_cn: "w" },
+        });
+        assert.ok(!r.ok);
+        if (!r.ok) assert.ok(AppErrorOps.is(r.error, "PROMPT_UNKNOWN_FIELD"));
+    });
+
+    it("throws UNKNOWN_FIELD for missing dot path when dot is empty", () => {
+        const r = MacroRender.render("{{ .missing }}", {
+            dot: {},
+            root: { time: "t", week_cn: "w" },
+        });
+        assert.ok(!r.ok);
+        if (!r.ok) assert.ok(AppErrorOps.is(r.error, "PROMPT_UNKNOWN_FIELD"));
+    });
 });

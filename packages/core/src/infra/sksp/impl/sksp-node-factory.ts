@@ -24,15 +24,15 @@ const MASTER_KEY_BYTES = 32;
 type MasterKeySource = (ref: string, operation: "encrypt" | "decrypt") => Promise<Uint8Array>;
 
 interface AesGcmStrategyOptions {
-  /** 对应 `sksp_secrets.algo` 列（各平台自有的版本标识）。 */
-  readonly algo: string;
-  readonly masterKey: MasterKeySource;
+    /** 对应 `sksp_secrets.algo` 列（各平台自有的版本标识）。 */
+    readonly algo: string;
+    readonly masterKey: MasterKeySource;
 }
 
 /** 平台钥匙串条目：只暴露主密钥流程用到的读写两件事。 */
 interface KeyringEntry {
-  getPassword(): string | null;
-  setPassword(password: string): void;
+    getPassword(): string | null;
+    setPassword(password: string): void;
 }
 
 /** 打开（或创建）指定 service/user 的钥匙串条目。 */
@@ -40,84 +40,84 @@ type KeyringEntryOpener = (service: string, user: string) => Promise<KeyringEntr
 
 /** 平台差异注入。 */
 interface KeyringMasterKeyOptions {
-  /** 钥匙串 service 名（Linux `novel-master-linux` / macOS `novel-master`）。 */
-  readonly service: string;
-  /** 文案里的钥匙串名（`Secret Service` / `Keychain`）。 */
-  readonly label: string;
-  /** 平台不可用错误里的完整称谓。 */
-  readonly displayName: string;
-  /** `process.platform` 取值（`linux` / `darwin`）。 */
-  readonly platform: string;
-  readonly open: KeyringEntryOpener;
+    /** 钥匙串 service 名（Linux `novel-master-linux` / macOS `novel-master`）。 */
+    readonly service: string;
+    /** 文案里的钥匙串名（`Secret Service` / `Keychain`）。 */
+    readonly label: string;
+    /** 平台不可用错误里的完整称谓。 */
+    readonly displayName: string;
+    /** `process.platform` 取值（`linux` / `darwin`）。 */
+    readonly platform: string;
+    readonly open: KeyringEntryOpener;
 }
 
 /** 主密钥读写句柄。 */
 interface KeyringMasterKey {
-  /** Returns the 32-byte application master key from the keychain, creating it on first use. @throws SkspError ENCRYPT_FAILED / DECRYPT_FAILED on failure */
-  getOrCreate(ref: string, operation: "encrypt" | "decrypt"): Promise<Uint8Array>;
-  /** Test hook: bypass the keychain with a fixed in-memory master key. @internal */
-  setTestPassthrough(enabled: boolean): void;
+    /** Returns the 32-byte application master key from the keychain, creating it on first use. @throws SkspError ENCRYPT_FAILED / DECRYPT_FAILED on failure */
+    getOrCreate(ref: string, operation: "encrypt" | "decrypt"): Promise<Uint8Array>;
+    /** Test hook: bypass the keychain with a fixed in-memory master key. @internal */
+    setTestPassthrough(enabled: boolean): void;
 }
 
 export const SkspNodeFactory = {
-  /** 拼装 AES-GCM 策略：取主密钥 → 加解密；ciphertext/iv 以 Uint8Array 存库。 */
-  createAesGcmStrategy({ algo, masterKey }: AesGcmStrategyOptions): SkspCryptoStrategy {
-    return {
-      algo,
-      async encrypt(ref, plain) {
-        const key = await masterKey(ref, "encrypt");
-        return AesGcm.encrypt(plain, key, ref);
-      },
-      async decrypt(ref, row: Row) {
-        const key = await masterKey(ref, "decrypt");
-        return AesGcm.decrypt(SkspRowBinary.ciphertext(row), SkspRowBinary.iv(row, ref), key, ref);
-      },
-    };
-  },
+    /** 拼装 AES-GCM 策略：取主密钥 → 加解密；ciphertext/iv 以 Uint8Array 存库。 */
+    createAesGcmStrategy({ algo, masterKey }: AesGcmStrategyOptions): SkspCryptoStrategy {
+        return {
+            algo,
+            async encrypt(ref, plain) {
+                const key = await masterKey(ref, "encrypt");
+                return AesGcm.encrypt(plain, key, ref);
+            },
+            async decrypt(ref, row: Row) {
+                const key = await masterKey(ref, "decrypt");
+                return AesGcm.decrypt(SkspRowBinary.ciphertext(row), SkspRowBinary.iv(row, ref), key, ref);
+            },
+        };
+    },
 
-  createKeyringMasterKey({ service, label, displayName, platform, open }: KeyringMasterKeyOptions): KeyringMasterKey {
-    let testPassthrough = false;
-    let testMasterKey: Uint8Array | undefined;
+    createKeyringMasterKey({ service, label, displayName, platform, open }: KeyringMasterKeyOptions): KeyringMasterKey {
+        let testPassthrough = false;
+        let testMasterKey: Uint8Array | undefined;
 
-    return {
-      setTestPassthrough(enabled) {
-        testPassthrough = enabled;
-        if (enabled && !testMasterKey) {
-          testMasterKey = randomBytes(MASTER_KEY_BYTES);
-        }
-      },
+        return {
+            setTestPassthrough(enabled) {
+                testPassthrough = enabled;
+                if (enabled && !testMasterKey) {
+                    testMasterKey = randomBytes(MASTER_KEY_BYTES);
+                }
+            },
 
-      async getOrCreate(ref, operation) {
-        if (testPassthrough) {
-          if (!testMasterKey) {
-            testMasterKey = randomBytes(MASTER_KEY_BYTES);
-          }
-          return testMasterKey;
-        }
-        if (process.platform !== platform) {
-          throw new SkspError(operation === "encrypt" ? "ENCRYPT_FAILED" : "DECRYPT_FAILED", operation === "encrypt" ? `${displayName} is only available on ${platform}` : `${displayName} decrypt failed for ${ref} (not on ${platform}). Re-run: nm provider edit --apiKey`, { ref });
-        }
-        const code: SkspErrorCode = operation === "encrypt" ? "ENCRYPT_FAILED" : "DECRYPT_FAILED";
-        try {
-          const entry = await open(service, USER);
-          const existing = entry.getPassword();
-          if (existing != null) {
-            const buf = Buffer.from(existing, "base64");
-            if (buf.length !== MASTER_KEY_BYTES) {
-              throw new SkspError("DECRYPT_FAILED", `Invalid master key in ${label} for ${ref}. Re-run: nm provider edit --apiKey`, { ref });
-            }
-            return new Uint8Array(buf);
-          }
-          const key = randomBytes(MASTER_KEY_BYTES);
-          entry.setPassword(Buffer.from(key).toString("base64"));
-          return new Uint8Array(key);
-        } catch (cause) {
-          if (cause instanceof SkspError) {
-            throw cause;
-          }
-          throw new SkspError(code, code === "ENCRYPT_FAILED" ? `${label} access failed for ${ref}` : `${label} access failed for ${ref}. Re-run: nm provider edit --apiKey`, { ref, cause });
-        }
-      },
-    };
-  },
+            async getOrCreate(ref, operation) {
+                if (testPassthrough) {
+                    if (!testMasterKey) {
+                        testMasterKey = randomBytes(MASTER_KEY_BYTES);
+                    }
+                    return testMasterKey;
+                }
+                if (process.platform !== platform) {
+                    throw new SkspError(operation === "encrypt" ? "ENCRYPT_FAILED" : "DECRYPT_FAILED", operation === "encrypt" ? `${displayName} is only available on ${platform}` : `${displayName} decrypt failed for ${ref} (not on ${platform}). Re-run: nm provider edit --apiKey`, { ref });
+                }
+                const code: SkspErrorCode = operation === "encrypt" ? "ENCRYPT_FAILED" : "DECRYPT_FAILED";
+                try {
+                    const entry = await open(service, USER);
+                    const existing = entry.getPassword();
+                    if (existing != null) {
+                        const buf = Buffer.from(existing, "base64");
+                        if (buf.length !== MASTER_KEY_BYTES) {
+                            throw new SkspError("DECRYPT_FAILED", `Invalid master key in ${label} for ${ref}. Re-run: nm provider edit --apiKey`, { ref });
+                        }
+                        return new Uint8Array(buf);
+                    }
+                    const key = randomBytes(MASTER_KEY_BYTES);
+                    entry.setPassword(Buffer.from(key).toString("base64"));
+                    return new Uint8Array(key);
+                } catch (cause) {
+                    if (cause instanceof SkspError) {
+                        throw cause;
+                    }
+                    throw new SkspError(code, code === "ENCRYPT_FAILED" ? `${label} access failed for ${ref}` : `${label} access failed for ${ref}. Re-run: nm provider edit --apiKey`, { ref, cause });
+                }
+            },
+        };
+    },
 } as const;

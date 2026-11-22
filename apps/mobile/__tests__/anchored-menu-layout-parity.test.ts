@@ -15,57 +15,57 @@ import {AnchoredMenuPlacement} from '@/webview-host/chat-transcript/anchored-men
 import * as shared from '../src/webview-host/chat-transcript/anchored-menu-layout';
 
 describe('anchored-menu-layout 黄金值（单端口：web 真源）', () => {
-  const items = [
-    {label: '编辑'},
-    {label: '复制'},
-    {label: '置位'},
-    {label: '分叉'},
-    {label: '回滚'},
-  ];
+    const items = [
+        {label: '编辑'},
+        {label: '复制'},
+        {label: '置位'},
+        {label: '分叉'},
+        {label: '回滚'},
+    ];
 
-  it('exports the layout math the web menu wrapper delegates to', () => {
-    expect(typeof shared.AnchoredMenuPlacement.layoutAnchoredMenu).toBe('function');
-    expect(typeof shared.AnchoredMenuPlacement.layoutAnchoredMenuForHeight).toBe('function');
-    expect(typeof shared.AnchoredMenuPlacement.computeAnchoredMenuWidth).toBe('function');
-  });
-
-  it('width matches the pre-refactor WebView formula (min width floor wins)', () => {
-    // longest=2 → 2*14+32=60 < MIN_WIDTH 132；cap=360-24=336；min(336,200,132)=132
-    expect(shared.AnchoredMenuPlacement.computeAnchoredMenuWidth(items, 360)).toBe(132);
-  });
-
-  it('flips above with pre-refactor WebView golden layout', () => {
-    const layout = shared.AnchoredMenuPlacement.layoutAnchoredMenu(
-      {x: 40, y: 520, width: 200, height: 48},
-      items.length,
-      132,
-      360,
-      640,
-    );
-    expect(layout).toEqual({
-      left: 74,
-      top: 272,
-      width: 132,
-      maxHeight: 240,
-      scrollable: false,
+    it('exports the layout math the web menu wrapper delegates to', () => {
+        expect(typeof shared.AnchoredMenuPlacement.layoutAnchoredMenu).toBe('function');
+        expect(typeof shared.AnchoredMenuPlacement.layoutAnchoredMenuForHeight).toBe('function');
+        expect(typeof shared.AnchoredMenuPlacement.computeAnchoredMenuWidth).toBe('function');
     });
-  });
 
-  it('scrolls with height cap via layoutAnchoredMenuForHeight golden layout', () => {
-    // WebView wrapper 走 layoutAnchoredMenuForHeight（measuredHeight 路径）
-    const layout = shared.AnchoredMenuPlacement.layoutAnchoredMenuForHeight(
-      {x: 40, y: 200, width: 200, height: 48},
-      480,
-      132,
-      360,
-      640,
-    );
-    expect(layout).toEqual({
-      left: 74,
-      top: 256,
-      width: 132,
-      maxHeight: 288,
-      scrollable: true,
+    it('width matches the pre-refactor WebView formula (min width floor wins)', () => {
+        // longest=2 → 2*14+32=60 < MIN_WIDTH 132；cap=360-24=336；min(336,200,132)=132
+        expect(shared.AnchoredMenuPlacement.computeAnchoredMenuWidth(items, 360)).toBe(132);
     });
-  });
+
+    it('flips above with pre-refactor WebView golden layout', () => {
+        const layout = shared.AnchoredMenuPlacement.layoutAnchoredMenu(
+            {x: 40, y: 520, width: 200, height: 48},
+            items.length,
+            132,
+            360,
+            640,
+        );
+        expect(layout).toEqual({
+            left: 74,
+            top: 272,
+            width: 132,
+            maxHeight: 240,
+            scrollable: false,
+        });
+    });
+
+    it('scrolls with height cap via layoutAnchoredMenuForHeight golden layout', () => {
+        // WebView wrapper 走 layoutAnchoredMenuForHeight（measuredHeight 路径）
+        const layout = shared.AnchoredMenuPlacement.layoutAnchoredMenuForHeight(
+            {x: 40, y: 200, width: 200, height: 48},
+            480,
+            132,
+            360,
+            640,
+        );
+        expect(layout).toEqual({
+            left: 74,
+            top: 256,
+            width: 132,
+            maxHeight: 288,
+            scrollable: true,
+        });
+    });
 });

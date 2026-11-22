@@ -4,13 +4,13 @@
 import { ABORT_KEY, type AbortScope } from "@novel-master/core/abort";
 import { AppError, type Outcome } from "@novel-master/core/errors";
 import type {
-  CloudSyncConfigDto,
-  CloudSyncLocalStatusDto,
-  CloudSyncPullResult,
-  CloudSyncPushRequest,
-  CloudSyncPushResult,
-  CloudSyncSetConfigRequest,
-  IpcResult,
+    CloudSyncConfigDto,
+    CloudSyncLocalStatusDto,
+    CloudSyncPullResult,
+    CloudSyncPushRequest,
+    CloudSyncPushResult,
+    CloudSyncSetConfigRequest,
+    IpcResult,
 } from "../../../../shared/ipc-types.js";
 import { DesktopRuntimeSingleton } from "../../runtime/desktop-runtime-singleton.js";
 import { CloudSyncService } from "../../services/cloud-sync.service.js";
@@ -23,70 +23,70 @@ import { LogFactory } from "@novel-master/core/log";
 const log = LogFactory.create("desktop.ipc.cloud-sync");
 
 export namespace CloudSync {
-  export async function getConfig(): Promise<IpcResult<CloudSyncConfigDto>> {
-    try {
-      const serviceR = await CloudSyncService.get();
-      // runtime 装配的已知失败沿 Result 到达（错误通道迁移七期），就地转码。
-      if (!serviceR.ok) return IpcResults.err(FormatIpcError.format(serviceR.error));
-      const service = serviceR.value;
-      return IpcResults.from(await service.getConfig());
-    } catch (err) {
-      return { ok: false, error: FormatIpcError.format(err) };
+    export async function getConfig(): Promise<IpcResult<CloudSyncConfigDto>> {
+        try {
+            const serviceR = await CloudSyncService.get();
+            // runtime 装配的已知失败沿 Result 到达（错误通道迁移七期），就地转码。
+            if (!serviceR.ok) return IpcResults.err(FormatIpcError.format(serviceR.error));
+            const service = serviceR.value;
+            return IpcResults.from(await service.getConfig());
+        } catch (err) {
+            return { ok: false, error: FormatIpcError.format(err) };
+        }
     }
-  }
 
-  export async function setConfig(req: CloudSyncSetConfigRequest): Promise<IpcResult<void>> {
-    try {
-      const serviceR = await CloudSyncService.get();
-      if (!serviceR.ok) return IpcResults.err(FormatIpcError.format(serviceR.error));
-      const service = serviceR.value;
-      const r = await service.setConfig(req);
-      if (!r.ok) return IpcResults.err(FormatIpcError.format(r.error));
-      return { ok: true, data: undefined };
-    } catch (err) {
-      return { ok: false, error: FormatIpcError.format(err) };
+    export async function setConfig(req: CloudSyncSetConfigRequest): Promise<IpcResult<void>> {
+        try {
+            const serviceR = await CloudSyncService.get();
+            if (!serviceR.ok) return IpcResults.err(FormatIpcError.format(serviceR.error));
+            const service = serviceR.value;
+            const r = await service.setConfig(req);
+            if (!r.ok) return IpcResults.err(FormatIpcError.format(r.error));
+            return { ok: true, data: undefined };
+        } catch (err) {
+            return { ok: false, error: FormatIpcError.format(err) };
+        }
     }
-  }
 
-  export async function setEnabled(enabled: boolean): Promise<IpcResult<void>> {
-    try {
-      const serviceR = await CloudSyncService.get();
-      if (!serviceR.ok) return IpcResults.err(FormatIpcError.format(serviceR.error));
-      const service = serviceR.value;
-      await service.setEnabled(enabled);
-      return { ok: true, data: undefined };
-    } catch (err) {
-      return { ok: false, error: FormatIpcError.format(err) };
+    export async function setEnabled(enabled: boolean): Promise<IpcResult<void>> {
+        try {
+            const serviceR = await CloudSyncService.get();
+            if (!serviceR.ok) return IpcResults.err(FormatIpcError.format(serviceR.error));
+            const service = serviceR.value;
+            await service.setEnabled(enabled);
+            return { ok: true, data: undefined };
+        } catch (err) {
+            return { ok: false, error: FormatIpcError.format(err) };
+        }
     }
-  }
 
-  export async function testConnection(): Promise<IpcResult<void>> {
-    try {
-      const serviceR = await CloudSyncService.get();
-      if (!serviceR.ok) return IpcResults.err(FormatIpcError.format(serviceR.error));
-      const service = serviceR.value;
-      const r = await service.testConnection();
-      if (!r.ok) return IpcResults.err(FormatIpcError.format(r.error));
-      return { ok: true, data: undefined };
-    } catch (err) {
-      return { ok: false, error: FormatIpcError.format(err) };
+    export async function testConnection(): Promise<IpcResult<void>> {
+        try {
+            const serviceR = await CloudSyncService.get();
+            if (!serviceR.ok) return IpcResults.err(FormatIpcError.format(serviceR.error));
+            const service = serviceR.value;
+            const r = await service.testConnection();
+            if (!r.ok) return IpcResults.err(FormatIpcError.format(r.error));
+            return { ok: true, data: undefined };
+        } catch (err) {
+            return { ok: false, error: FormatIpcError.format(err) };
+        }
     }
-  }
 
-  export async function getLocalStatus(): Promise<IpcResult<CloudSyncLocalStatusDto>> {
-    try {
-      const serviceR = await CloudSyncService.get();
-      if (!serviceR.ok) return IpcResults.err(FormatIpcError.format(serviceR.error));
-      const service = serviceR.value;
-      const status = await service.getLocalStatus();
-      if (!status.ok) return IpcResults.err(FormatIpcError.format(status.error));
-      return { ok: true, data: status.value };
-    } catch (err) {
-      return { ok: false, error: FormatIpcError.format(err) };
+    export async function getLocalStatus(): Promise<IpcResult<CloudSyncLocalStatusDto>> {
+        try {
+            const serviceR = await CloudSyncService.get();
+            if (!serviceR.ok) return IpcResults.err(FormatIpcError.format(serviceR.error));
+            const service = serviceR.value;
+            const status = await service.getLocalStatus();
+            if (!status.ok) return IpcResults.err(FormatIpcError.format(status.error));
+            return { ok: true, data: status.value };
+        } catch (err) {
+            return { ok: false, error: FormatIpcError.format(err) };
+        }
     }
-  }
 
-  /**
+    /**
    * 云同步 pull（signal-abort-scope §五）：key 固定 `sync:local`（S3 配置无
    * provider 概念，`syncBusy` 全局互斥），不设 timeout，**禁止 race**。
    *
@@ -94,111 +94,111 @@ export namespace CloudSync {
    * rebootstrap/记账属于不可中断窗口——库已换代却提前 settle 会让 runtime
    * 继续绑在已关闭的连接上，比「取消不生效」危险得多。
    */
-  export async function pull(): Promise<IpcResult<CloudSyncPullResult>> {
-    // ic-20 外层令牌：busy 为计数/令牌配对——底层快照搬运函数已
-    // acquire/release 自平衡；pull 会整库替换并 rebootstrap，这里再持一枚
-    // 覆盖「库文件已替换、rebootstrap 尚未完成」的重建窗口，release 严格在
-    // rebootstrap + 记账完成之后（finally 兜底失败路径）。push 无 rebootstrap，
-    // 由底层令牌覆盖即可，不加外层。
-    //
-    // 契约顺序：**换库 → 重建 runtime → 用新 runtime 记账 → 再放互斥令牌**。
-    // 判定口径是「库文件真的换了吗」（databaseReplaced，来自 import 函数的
-    // 返回值／异常这一物理事实），**不是**「pull 抛错了吗」——后者会被
-    // ALREADY_UP_TO_DATE 早返回路径污染，且会让「已是最新」白付一次全量重建。
-    maintenanceBusy.acquire();
-    try {
-      const built = await DesktopRuntimeSingleton.get();
-      if (!built.ok) return IpcResults.err(FormatIpcError.format(built.error));
-      const rt = built.value;
-      // exclusive：pull/push 共用固定 key，第二个请求必须在不覆盖在途 scope 的前提下
-      // 被拒（register 覆盖会让在途任务的取消入口静默消失，见 T-S15 的 key 语义）。
-      return await RunScope.abortable(
-        { registry: rt.abortRegistry, key: ABORT_KEY.cloudSync("local"), exclusive: true, conflictError: new AppError("CLI_INVALID_ARGUMENT", { detail: "云同步进行中，请稍后再试" }) },
-        (scope) => CloudSync.doPull(scope)
-      );
-    } finally {
-      maintenanceBusy.release();
-    }
-  }
-
-  /** 可中断的 pull 段：入口检查点 + 未换代时的阶段边界检查点。 */
-  // nm-style: keep-local — run-abort-scope.test 直引断言 pull 段取消/换代语义；内联会破坏测试锁名。
-  export async function doPull(scope: AbortScope): Promise<Outcome<CloudSyncPullResult>> {
-    const stopped = RunScope.outcomeIfAborted(scope);
-    if (stopped != null) return stopped;
-    try {
-      const serviceR = await CloudSyncService.get();
-      if (!serviceR.ok) return { kind: "failed", error: serviceR.error };
-      const service = serviceR.value;
-      // 阶段边界 checkpoint 由 core coordinator 在 pull:downloaded / pull:before-import 调用；
-      // 换库窗口之前命中即抛 AbortError，原样经 runAbortable 收成 IPC_ABORTED。
-      const pulled = await service.pull({ checkpoint: () => scope.checkpoint() });
-      // 已知失败沿 Result 到达；coordinator 侧故障仍走下方 catch。
-      if (!pulled.ok) {
-        // 换代失败（error-matrix-final R2：DB_BACKUP_REPLACE_INCOMPLETE 沿 Result 到达，
-        // 不再经异常通道）：runtime 换代优先于报错——「库已换却不重建」比「记账失败」
-        // 更糟（后续请求继续绑在已关连接上）。
-        if (pulled.error.key === "DB_BACKUP_REPLACE_INCOMPLETE") {
-          const rebuilt = await DesktopRuntimeSingleton.rebootstrap();
-          if (!rebuilt.ok) return { kind: "failed", error: rebuilt.error };
-          // providerTablesRestored 等字段值只进日志；用户文案在 error 的 detail 里，
-          // 不要把 TypeScript 字段名拼进 toast（CR cloudsync P2-2）。
-          log.warn("库已换代但服务商配置表未完全恢复", { providerTablesRestored: pulled.error.details?.providerTablesRestored });
+    export async function pull(): Promise<IpcResult<CloudSyncPullResult>> {
+        // ic-20 外层令牌：busy 为计数/令牌配对——底层快照搬运函数已
+        // acquire/release 自平衡；pull 会整库替换并 rebootstrap，这里再持一枚
+        // 覆盖「库文件已替换、rebootstrap 尚未完成」的重建窗口，release 严格在
+        // rebootstrap + 记账完成之后（finally 兜底失败路径）。push 无 rebootstrap，
+        // 由底层令牌覆盖即可，不加外层。
+        //
+        // 契约顺序：**换库 → 重建 runtime → 用新 runtime 记账 → 再放互斥令牌**。
+        // 判定口径是「库文件真的换了吗」（databaseReplaced，来自 import 函数的
+        // 返回值／异常这一物理事实），**不是**「pull 抛错了吗」——后者会被
+        // ALREADY_UP_TO_DATE 早返回路径污染，且会让「已是最新」白付一次全量重建。
+        maintenanceBusy.acquire();
+        try {
+            const built = await DesktopRuntimeSingleton.get();
+            if (!built.ok) return IpcResults.err(FormatIpcError.format(built.error));
+            const rt = built.value;
+            // exclusive：pull/push 共用固定 key，第二个请求必须在不覆盖在途 scope 的前提下
+            // 被拒（register 覆盖会让在途任务的取消入口静默消失，见 T-S15 的 key 语义）。
+            return await RunScope.abortable(
+                { registry: rt.abortRegistry, key: ABORT_KEY.cloudSync("local"), exclusive: true, conflictError: new AppError("CLI_INVALID_ARGUMENT", { detail: "云同步进行中，请稍后再试" }) },
+                (scope) => CloudSync.doPull(scope)
+            );
+        } finally {
+            maintenanceBusy.release();
         }
-        return { kind: "failed", error: pulled.error };
-      }
-      const result = pulled.value;
-      if (result.databaseReplaced) {
-        // 换库窗口不可中断：rebootstrap/记账无条件跑完（见上方注释）。
-        const rebuilt = await DesktopRuntimeSingleton.rebootstrap();
-        if (!rebuilt.ok) return { kind: "failed", error: rebuilt.error };
-        // 记账必须用重建后的 runtime：service 实例是 rebootstrap 之前捕获的旧代，
-        // 它自带的 configStore 背后的连接已被换库关掉。
-        await service.recordPullSuccess(result.rev);
-      } else {
-        const interrupted = RunScope.outcomeIfAborted(scope);
-        if (interrupted != null) return interrupted;
-      }
-      return { kind: "completed", value: result };
-    } catch (err) {
-      // 库已换代但收尾失败（error-matrix-final R2：DB_BACKUP_REPLACE_INCOMPLETE 沿 Result
-      // 到达此处）：runtime 换代优先于报错——「库已换却不重建」比「记账失败」更糟
-      // （后续请求继续绑在已关连接上）。
-      if (err instanceof AppError && err.key === "DB_BACKUP_REPLACE_INCOMPLETE") {
-        const rebuilt = await DesktopRuntimeSingleton.rebootstrap();
-        if (!rebuilt.ok) return { kind: "failed", error: rebuilt.error };
-        // providerTablesRestored 等字段值只进日志；用户文案在 error 的 descriptor 里，
-        // 不要把 TypeScript 字段名拼进 toast（CR cloudsync P2-2）。
-        log.warn("库已换代但服务商配置表未完全恢复", { providerTablesRestored: err.details?.providerTablesRestored });
-        return { kind: "failed", error: err };
-      }
-      throw err;
     }
-  }
 
-  /**
+    /** 可中断的 pull 段：入口检查点 + 未换代时的阶段边界检查点。 */
+    // nm-style: keep-local — run-abort-scope.test 直引断言 pull 段取消/换代语义；内联会破坏测试锁名。
+    export async function doPull(scope: AbortScope): Promise<Outcome<CloudSyncPullResult>> {
+        const stopped = RunScope.outcomeIfAborted(scope);
+        if (stopped != null) return stopped;
+        try {
+            const serviceR = await CloudSyncService.get();
+            if (!serviceR.ok) return { kind: "failed", error: serviceR.error };
+            const service = serviceR.value;
+            // 阶段边界 checkpoint 由 core coordinator 在 pull:downloaded / pull:before-import 调用；
+            // 换库窗口之前命中即抛 AbortError，原样经 runAbortable 收成 IPC_ABORTED。
+            const pulled = await service.pull({ checkpoint: () => scope.checkpoint() });
+            // 已知失败沿 Result 到达；coordinator 侧故障仍走下方 catch。
+            if (!pulled.ok) {
+                // 换代失败（error-matrix-final R2：DB_BACKUP_REPLACE_INCOMPLETE 沿 Result 到达，
+                // 不再经异常通道）：runtime 换代优先于报错——「库已换却不重建」比「记账失败」
+                // 更糟（后续请求继续绑在已关连接上）。
+                if (pulled.error.key === "DB_BACKUP_REPLACE_INCOMPLETE") {
+                    const rebuilt = await DesktopRuntimeSingleton.rebootstrap();
+                    if (!rebuilt.ok) return { kind: "failed", error: rebuilt.error };
+                    // providerTablesRestored 等字段值只进日志；用户文案在 error 的 detail 里，
+                    // 不要把 TypeScript 字段名拼进 toast（CR cloudsync P2-2）。
+                    log.warn("库已换代但服务商配置表未完全恢复", { providerTablesRestored: pulled.error.details?.providerTablesRestored });
+                }
+                return { kind: "failed", error: pulled.error };
+            }
+            const result = pulled.value;
+            if (result.databaseReplaced) {
+                // 换库窗口不可中断：rebootstrap/记账无条件跑完（见上方注释）。
+                const rebuilt = await DesktopRuntimeSingleton.rebootstrap();
+                if (!rebuilt.ok) return { kind: "failed", error: rebuilt.error };
+                // 记账必须用重建后的 runtime：service 实例是 rebootstrap 之前捕获的旧代，
+                // 它自带的 configStore 背后的连接已被换库关掉。
+                await service.recordPullSuccess(result.rev);
+            } else {
+                const interrupted = RunScope.outcomeIfAborted(scope);
+                if (interrupted != null) return interrupted;
+            }
+            return { kind: "completed", value: result };
+        } catch (err) {
+            // 库已换代但收尾失败（error-matrix-final R2：DB_BACKUP_REPLACE_INCOMPLETE 沿 Result
+            // 到达此处）：runtime 换代优先于报错——「库已换却不重建」比「记账失败」更糟
+            // （后续请求继续绑在已关连接上）。
+            if (err instanceof AppError && err.key === "DB_BACKUP_REPLACE_INCOMPLETE") {
+                const rebuilt = await DesktopRuntimeSingleton.rebootstrap();
+                if (!rebuilt.ok) return { kind: "failed", error: rebuilt.error };
+                // providerTablesRestored 等字段值只进日志；用户文案在 error 的 descriptor 里，
+                // 不要把 TypeScript 字段名拼进 toast（CR cloudsync P2-2）。
+                log.warn("库已换代但服务商配置表未完全恢复", { providerTablesRestored: err.details?.providerTablesRestored });
+                return { kind: "failed", error: err };
+            }
+            throw err;
+        }
+    }
+
+    /**
    * 云同步 push：同 key、不设 timeout、**禁止 race**（临时文件清理与底层流程
    * 同生命周期）。入口检查点之后进入快照导出 → 上传的连续段。
    */
-  export async function push(req?: CloudSyncPushRequest): Promise<IpcResult<CloudSyncPushResult>> {
-    const built = await DesktopRuntimeSingleton.get();
-    if (!built.ok) return IpcResults.err(FormatIpcError.format(built.error));
-    const rt = built.value;
-    return RunScope.abortable(
-      { registry: rt.abortRegistry, key: ABORT_KEY.cloudSync("local"), exclusive: true, conflictError: new AppError("CLI_INVALID_ARGUMENT", { detail: "云同步进行中，请稍后再试" }) },
-      (scope) => CloudSync.doPush(req, scope)
-    );
-  }
+    export async function push(req?: CloudSyncPushRequest): Promise<IpcResult<CloudSyncPushResult>> {
+        const built = await DesktopRuntimeSingleton.get();
+        if (!built.ok) return IpcResults.err(FormatIpcError.format(built.error));
+        const rt = built.value;
+        return RunScope.abortable(
+            { registry: rt.abortRegistry, key: ABORT_KEY.cloudSync("local"), exclusive: true, conflictError: new AppError("CLI_INVALID_ARGUMENT", { detail: "云同步进行中，请稍后再试" }) },
+            (scope) => CloudSync.doPush(req, scope)
+        );
+    }
 
-  /** 可中断的 push 段：仅入口检查点（上传完成即自然终态，不把已推送翻成取消）。 */
-  // nm-style: keep-local — run-abort-scope.test 直引断言 push 段取消语义；内联会破坏测试锁名。
-  export async function doPush(req: CloudSyncPushRequest | undefined, scope: AbortScope): Promise<Outcome<CloudSyncPushResult>> {
-    const stopped = RunScope.outcomeIfAborted(scope);
-    if (stopped != null) return stopped;
-    const serviceR = await CloudSyncService.get();
-    if (!serviceR.ok) return { kind: "failed", error: serviceR.error };
-    // push:exported / push:before-upload 阶段边界由 core coordinator 判停。
-    const pushed = await serviceR.value.push({ forceOverwriteRemote: req?.forceOverwriteRemote, checkpoint: () => scope.checkpoint() });
-    return pushed.ok ? { kind: "completed", value: pushed.value } : { kind: "failed", error: pushed.error };
-  }
+    /** 可中断的 push 段：仅入口检查点（上传完成即自然终态，不把已推送翻成取消）。 */
+    // nm-style: keep-local — run-abort-scope.test 直引断言 push 段取消语义；内联会破坏测试锁名。
+    export async function doPush(req: CloudSyncPushRequest | undefined, scope: AbortScope): Promise<Outcome<CloudSyncPushResult>> {
+        const stopped = RunScope.outcomeIfAborted(scope);
+        if (stopped != null) return stopped;
+        const serviceR = await CloudSyncService.get();
+        if (!serviceR.ok) return { kind: "failed", error: serviceR.error };
+        // push:exported / push:before-upload 阶段边界由 core coordinator 判停。
+        const pushed = await serviceR.value.push({ forceOverwriteRemote: req?.forceOverwriteRemote, checkpoint: () => scope.checkpoint() });
+        return pushed.ok ? { kind: "completed", value: pushed.value } : { kind: "failed", error: pushed.error };
+    }
 }

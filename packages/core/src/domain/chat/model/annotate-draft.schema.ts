@@ -25,67 +25,67 @@ const optionalNonNegInt = z.number().int().nonnegative().optional();
  * nm-style: keep-public — AnnotateDraft 类型源与 schema 单测入口。
  */
 export const annotateDraftSchema = z.object({
-  id: z.string().min(1),
-  path: z.string().min(1),
-  /** Recogito quote（划词原文）。 */
-  originalText: z.string(),
-  userAnnotation: z.string(),
-  /**
+    id: z.string().min(1),
+    path: z.string().min(1),
+    /** Recogito quote（划词原文）。 */
+    originalText: z.string(),
+    userAnnotation: z.string(),
+    /**
    * MD 渲染正文 / Recogito 容器坐标系半开起点（UTF-16 code unit；`[renderStart, renderEnd)`）。
    * 新稿必写；缺省兼容仅有旧 VFS offset 的存量草稿。
    */
-  renderStart: optionalNonNegInt,
-  /**
+    renderStart: optionalNonNegInt,
+    /**
    * MD 渲染正文 / Recogito 容器坐标系半开终点（不含）；须严格大于 `renderStart`。
    */
-  renderEnd: optionalNonNegInt,
-  /**
+    renderEnd: optionalNonNegInt,
+    /**
    * 旧 VFS soft offset 起点（UTF-16；相对 VFS 全文；`[startOffset, endOffset)`）。
    * 非预览投影权威；缺省兼容旧草稿。
    */
-  startOffset: optionalNonNegInt,
-  /**
+    startOffset: optionalNonNegInt,
+    /**
    * 旧 VFS soft offset 终点（不含）；须严格大于 `startOffset`。非预览投影权威。
    */
-  endOffset: optionalNonNegInt,
-  /** 宽松窗口起始行（1-based，含）；由 offset 派生；非预览投影权威。 */
-  startLine: optionalPositiveInt,
-  /** 宽松窗口结束行（1-based，含）；非预览投影权威。 */
-  endLine: optionalPositiveInt,
-  /** 起始列（1-based，含）；缺省表示自行首；非预览投影权威。 */
-  startCol: optionalPositiveInt,
-  /** 结束列（1-based，含）；缺省表示至行尾；非预览投影权威。 */
-  endCol: optionalPositiveInt,
+    endOffset: optionalNonNegInt,
+    /** 宽松窗口起始行（1-based，含）；由 offset 派生；非预览投影权威。 */
+    startLine: optionalPositiveInt,
+    /** 宽松窗口结束行（1-based，含）；非预览投影权威。 */
+    endLine: optionalPositiveInt,
+    /** 起始列（1-based，含）；缺省表示自行首；非预览投影权威。 */
+    startCol: optionalPositiveInt,
+    /** 结束列（1-based，含）；缺省表示至行尾；非预览投影权威。 */
+    endCol: optionalPositiveInt,
 }).strict().superRefine((val, ctx) => {
-  const { renderStart, renderEnd, startOffset, endOffset } = val;
+    const { renderStart, renderEnd, startOffset, endOffset } = val;
 
-  if ((renderStart == null) !== (renderEnd == null)) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "error.chat.annotate_render_range_pair_required",
-      path: renderStart != null ? ["renderEnd"] : ["renderStart"],
-    });
-  } else if (renderStart != null && renderEnd != null && renderStart >= renderEnd) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "error.chat.annotate_render_range_order",
-      path: ["renderEnd"],
-    });
-  }
+    if ((renderStart == null) !== (renderEnd == null)) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "error.chat.annotate_render_range_pair_required",
+            path: renderStart != null ? ["renderEnd"] : ["renderStart"],
+        });
+    } else if (renderStart != null && renderEnd != null && renderStart >= renderEnd) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "error.chat.annotate_render_range_order",
+            path: ["renderEnd"],
+        });
+    }
 
-  if ((startOffset == null) !== (endOffset == null)) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "error.chat.annotate_offset_pair_required",
-      path: startOffset != null ? ["endOffset"] : ["startOffset"],
-    });
-  } else if (startOffset != null && endOffset != null && startOffset >= endOffset) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "error.chat.annotate_offset_order",
-      path: ["endOffset"],
-    });
-  }
+    if ((startOffset == null) !== (endOffset == null)) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "error.chat.annotate_offset_pair_required",
+            path: startOffset != null ? ["endOffset"] : ["startOffset"],
+        });
+    } else if (startOffset != null && endOffset != null && startOffset >= endOffset) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "error.chat.annotate_offset_order",
+            path: ["endOffset"],
+        });
+    }
 });
 
 export type AnnotateDraft = z.infer<typeof annotateDraftSchema>;
@@ -97,8 +97,8 @@ export type AnnotateDraft = z.infer<typeof annotateDraftSchema>;
 export type SendAnnotateDraft = AnnotateDraft;
 
 export const AnnotateDraftSchema = {
-  /** `path.includes('__message__:')` → 历史消息批注伪 path（Undo 恢复须跳过）。 */
-  isMessagePath(path: string | null | undefined): boolean {
-    return typeof path === "string" && path.includes("__message__:");
-  },
+    /** `path.includes('__message__:')` → 历史消息批注伪 path（Undo 恢复须跳过）。 */
+    isMessagePath(path: string | null | undefined): boolean {
+        return typeof path === "string" && path.includes("__message__:");
+    },
 } as const;

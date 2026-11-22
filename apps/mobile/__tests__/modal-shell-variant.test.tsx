@@ -10,25 +10,25 @@ import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
 
 const src = readFileSync(
-  join(__dirname, '../src/components/ui/ModalShell.tsx'),
-  'utf8',
+    join(__dirname, '../src/components/ui/ModalShell.tsx'),
+    'utf8',
 );
 
 describe('ModalShell variant 布局（regression: 项目抽屉不可见）', () => {
-  it('left 样式定义为横向布局（flexDirection: row）', () => {
-    expect(src).toMatch(
-      /left:\s*\{\s*flex:\s*1,\s*flexDirection:\s*'row',?\s*\}/,
-    );
-  });
+    it('left 样式定义为横向布局（flexDirection: row）', () => {
+        expect(src).toMatch(
+            /left:\s*\{\s*flex:\s*1,\s*flexDirection:\s*'row',?\s*\}/,
+        );
+    });
 
-  it('containerStyleList 按 center/left/bottom 三分派，left 不再落入 bottom 分支', () => {
-    // 三元链：center → left → bottom（left 必须独立分支，不能与 bottom 共享）
-    expect(src).toMatch(
-      /variant === 'center'\s*\?\s*styles\.center\s*:\s*variant === 'left'\s*\?\s*styles\.left\s*:\s*styles\.bottom/,
-    );
-  });
+    it('containerStyleList 按 center/left/bottom 三分派，left 不再落入 bottom 分支', () => {
+        // 三元链：center → left → bottom（left 必须独立分支，不能与 bottom 共享）
+        expect(src).toMatch(
+            /variant === 'center'\s*\?\s*styles\.center\s*:\s*variant === 'left'\s*\?\s*styles\.left\s*:\s*styles\.bottom/,
+        );
+    });
 
-  it('leftBackdrop 为遮罩（flex:1，与 drawer 同层横向排布）', () => {
-    expect(src).toMatch(/leftBackdrop:\s*\{\s*flex:\s*1,?\s*\}/);
-  });
+    it('leftBackdrop 为遮罩（flex:1，与 drawer 同层横向排布）', () => {
+        expect(src).toMatch(/leftBackdrop:\s*\{\s*flex:\s*1,?\s*\}/);
+    });
 });

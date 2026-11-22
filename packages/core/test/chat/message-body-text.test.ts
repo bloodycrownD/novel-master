@@ -3,39 +3,39 @@ import {  describe, it  } from "node:test";
 import {  MessageBodyText  } from "../../src/domain/chat/content/message-body-text.js";
 
 describe("MessageBodyText.fromBlocks", () => {
-  it("text only → hello", () => {
-    assert.equal(MessageBodyText.fromBlocks([{ type: "text", text: "hello" }]), "hello");
-  });
+    it("text only → hello", () => {
+        assert.equal(MessageBodyText.fromBlocks([{ type: "text", text: "hello" }]), "hello");
+    });
 
-  it("text + tool_use + tool_result without JSON blob", () => {
-    const body = MessageBodyText.fromBlocks([
-      { type: "text", text: "run tool" },
-      { type: "tool_use", id: "tu_1", name: "grep", input: {} },
-      { type: "tool_result", toolUseId: "tu_1", content: "hits" },
-    ]);
-    assert.ok(body.includes("run tool"));
-    assert.match(body, /\[tool_use name=grep id=tu_1\]/);
-    assert.match(body, /\[tool_result id=tu_1\]/);
-    assert.ok(body.includes("hits"));
-    assert.ok(!body.startsWith("{"));
-  });
+    it("text + tool_use + tool_result without JSON blob", () => {
+        const body = MessageBodyText.fromBlocks([
+            { type: "text", text: "run tool" },
+            { type: "tool_use", id: "tu_1", name: "grep", input: {} },
+            { type: "tool_result", toolUseId: "tu_1", content: "hits" },
+        ]);
+        assert.ok(body.includes("run tool"));
+        assert.match(body, /\[tool_use name=grep id=tu_1\]/);
+        assert.match(body, /\[tool_result id=tu_1\]/);
+        assert.ok(body.includes("hits"));
+        assert.ok(!body.startsWith("{"));
+    });
 
-  it("thinking only → empty", () => {
-    assert.equal(
-      MessageBodyText.fromBlocks([{ type: "thinking", text: "secret" }]),
-      "",
-    );
-  });
+    it("thinking only → empty", () => {
+        assert.equal(
+            MessageBodyText.fromBlocks([{ type: "thinking", text: "secret" }]),
+            "",
+        );
+    });
 
-  it("image → [image]", () => {
-    assert.equal(
-      MessageBodyText.fromBlocks([
-        {
-          type: "image",
-          source: { kind: "url", url: "https://x.test/p.png" },
-        },
-      ]),
-      "[image]",
-    );
-  });
+    it("image → [image]", () => {
+        assert.equal(
+            MessageBodyText.fromBlocks([
+                {
+                    type: "image",
+                    source: { kind: "url", url: "https://x.test/p.png" },
+                },
+            ]),
+            "[image]",
+        );
+    });
 });

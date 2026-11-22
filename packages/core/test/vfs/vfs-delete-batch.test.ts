@@ -20,26 +20,26 @@ import {  rejectsErr, unwrap  } from "../helpers/result-unwrap.js";
 import {  AppErrorOps  } from "../../src/errors/app-error.js";
 
 type CountingCtx = NovelMasterTestContext & {
-  readonly counter: import("../helpers/sql-counting-connection.js").SqlCounter;
+    readonly counter: import("../helpers/sql-counting-connection.js").SqlCounter;
 };
 
 let ctx: CountingCtx | undefined;
 
 before(async () => {
-  ctx = (await openSqlCountingNovelMasterTestConnection()) as CountingCtx;
+    ctx = (await openSqlCountingNovelMasterTestConnection()) as CountingCtx;
 });
 after(async () => {
-  if (ctx != null) {
-    await ctx.conn.close();
-    ctx = undefined;
-  }
+    if (ctx != null) {
+        await ctx.conn.close();
+        ctx = undefined;
+    }
 });
 
 function getCtx(): CountingCtx {
-  if (ctx == null) {
-    throw new Error("before hook did not run");
-  }
-  return ctx;
+    if (ctx == null) {
+        throw new Error("before hook did not run");
+    }
+    return ctx;
 }
 
 const FILE_COUNT = 100;
@@ -47,85 +47,85 @@ const FILE_COUNT = 100;
 const SQL_UPPER_BOUND = 20;
 
 describe("T-DEL1 vfs.delete 递归删除批量化", () => {
-  it(`删 ${FILE_COUNT} 文件目录：SQL 总数 ≤ ${SQL_UPPER_BOUND}`, async () => {
-    const c = getCtx();
-    const project = await c.projects.create(`P-${testIsolationSuffix()}`);
-    const vfs = c.projectVfs(project.id);
+    it(`删 ${FILE_COUNT} 文件目录：SQL 总数 ≤ ${SQL_UPPER_BOUND}`, async () => {
+        const c = getCtx();
+        const project = await c.projects.create(`P-${testIsolationSuffix()}`);
+        const vfs = c.projectVfs(project.id);
 
-    // 准备阶段：建目录 + 写 100 个文件（这部分 SQL 不计入统计）。
-    await vfs.mkdir("/tree");
-    for (let i = 0; i < FILE_COUNT; i++) {
-      await vfs.write(`/tree/f${i}.md`, `body-${i}`);
-    }
+        // 准备阶段：建目录 + 写 100 个文件（这部分 SQL 不计入统计）。
+        await vfs.mkdir("/tree");
+        for (let i = 0; i < FILE_COUNT; i++) {
+            await vfs.write(`/tree/f${i}.md`, `body-${i}`);
+        }
 
-    // 清掉准备阶段的 SQL，只统计 delete 这一段。
-    c.counter.clear();
+        // 清掉准备阶段的 SQL，只统计 delete 这一段。
+        c.counter.clear();
 
-    await vfs.delete("/tree", { recursive: true });
+        await vfs.delete("/tree", { recursive: true });
 
-    const total = c.counter.count();
-    // 调试失败时把语句打出来，方便定位是哪一步又退化成逐条。
-    if (total > SQL_UPPER_BOUND) {
-      for (const r of c.counter.all()) {
-        console.log(`[${r.via}] ${r.kind}: ${r.sql.slice(0, 120)}`);
-      }
-    }
-    assert.ok(
-      total <= SQL_UPPER_BOUND,
-      `vfs.delete 发出 ${total} 条 SQL，超过上限 ${SQL_UPPER_BOUND}（改造前 ~302）`,
-    );
-  });
+        const total = c.counter.count();
+        // 调试失败时把语句打出来，方便定位是哪一步又退化成逐条。
+        if (total > SQL_UPPER_BOUND) {
+            for (const r of c.counter.all()) {
+                console.log(`[${r.via}] ${r.kind}: ${r.sql.slice(0, 120)}`);
+            }
+        }
+        assert.ok(
+            total <= SQL_UPPER_BOUND,
+            `vfs.delete 发出 ${total} 条 SQL，超过上限 ${SQL_UPPER_BOUND}（改造前 ~302）`,
+        );
+    });
 
-  it("正确性：每个子文件都留下 deleted 墓碑且旧 active ref_count 归零", async () => {
-    const c = getCtx();
-    const project = await c.projects.create(`P-${testIsolationSuffix()}`);
-    const vfs = c.projectVfs(project.id);
+    it("正确性：每个子文件都留下 deleted 墓碑且旧 active ref_count 归零", async () => {
+        const c = getCtx();
+        const project = await c.projects.create(`P-${testIsolationSuffix()}`);
+        const vfs = c.projectVfs(project.id);
 
-    await vfs.mkdir("/tree2");
-    for (let i = 0; i < FILE_COUNT; i++) {
-      await vfs.write(`/tree2/g${i}.md`, `body-${i}`);
-    }
-    await vfs.delete("/tree2", { recursive: true });
+        await vfs.mkdir("/tree2");
+        for (let i = 0; i < FILE_COUNT; i++) {
+            await vfs.write(`/tree2/g${i}.md`, `body-${i}`);
+        }
+        await vfs.delete("/tree2", { recursive: true });
 
-    // 墓碑数量 = 文件数（deleted revision，ref_count=1）。
-    const tombstones = await c.conn.query<{ c: number }>(
-      `SELECT COUNT(*) AS c FROM vfs_revision WHERE status = 'deleted'`,
-    );
-    // 项目 scope 下旧 active 行的 ref_count 应该都被 -1 到 0（墓碑 +1 在 deleted 行上）。
-    const staleActive = await c.conn.query<{ c: number }>(
-      `SELECT COUNT(*) AS c
+        // 墓碑数量 = 文件数（deleted revision，ref_count=1）。
+        const tombstones = await c.conn.query<{ c: number }>(
+            `SELECT COUNT(*) AS c FROM vfs_revision WHERE status = 'deleted'`,
+        );
+        // 项目 scope 下旧 active 行的 ref_count 应该都被 -1 到 0（墓碑 +1 在 deleted 行上）。
+        const staleActive = await c.conn.query<{ c: number }>(
+            `SELECT COUNT(*) AS c
     FROM vfs_revision r
     JOIN vfs_entry e ON e.entry_id = r.entry_id
     WHERE e.scope_key = ? AND e.path LIKE '/tree2/%' AND r.status = 'active' AND r.ref_count > 0`,
-      [project.id],
-    );
+            [project.id],
+        );
 
-    assert.ok(
-      tombstones[0].c >= FILE_COUNT,
-      `deleted 墓碑应至少 ${FILE_COUNT} 条，实际 ${tombstones[0].c}`,
-    );
-    assert.equal(
-      staleActive[0].c,
-      0,
-      "旧 active revision 的 ref_count 应全部归零",
-    );
-  });
-
-  it("可见性：删除后子文件不可读", async () => {
-    const c = getCtx();
-    const project = await c.projects.create(`P-${testIsolationSuffix()}`);
-    const vfs = c.projectVfs(project.id);
-
-    await vfs.mkdir("/tree3");
-    await vfs.write("/tree3/a.md", "A");
-    await vfs.write("/tree3/b.md", "B");
-    await vfs.delete("/tree3", { recursive: true });
-
-    await rejectsErr(() => vfs.read("/tree3/a.md"), (e: unknown) => {
-      assert.ok(AppErrorOps.is(e, "VFS_NOT_FOUND"));
+        assert.ok(
+            tombstones[0].c >= FILE_COUNT,
+            `deleted 墓碑应至少 ${FILE_COUNT} 条，实际 ${tombstones[0].c}`,
+        );
+        assert.equal(
+            staleActive[0].c,
+            0,
+            "旧 active revision 的 ref_count 应全部归零",
+        );
     });
-    await rejectsErr(() => vfs.read("/tree3/b.md"), (e: unknown) => {
-      assert.ok(AppErrorOps.is(e, "VFS_NOT_FOUND"));
+
+    it("可见性：删除后子文件不可读", async () => {
+        const c = getCtx();
+        const project = await c.projects.create(`P-${testIsolationSuffix()}`);
+        const vfs = c.projectVfs(project.id);
+
+        await vfs.mkdir("/tree3");
+        await vfs.write("/tree3/a.md", "A");
+        await vfs.write("/tree3/b.md", "B");
+        await vfs.delete("/tree3", { recursive: true });
+
+        await rejectsErr(() => vfs.read("/tree3/a.md"), (e: unknown) => {
+            assert.ok(AppErrorOps.is(e, "VFS_NOT_FOUND"));
+        });
+        await rejectsErr(() => vfs.read("/tree3/b.md"), (e: unknown) => {
+            assert.ok(AppErrorOps.is(e, "VFS_NOT_FOUND"));
+        });
     });
-  });
 });

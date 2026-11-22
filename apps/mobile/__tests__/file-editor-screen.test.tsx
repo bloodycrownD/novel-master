@@ -9,167 +9,167 @@ const mockShowToast = jest.fn();
 const mockCodeEditorBlur = jest.fn();
 
 const mockRead = jest.fn(async () => ({
-  content: '# Hello\n\nworld',
-  version: 1,
-  mtimeMs: 1_700_000_000_000,
+    content: '# Hello\n\nworld',
+    version: 1,
+    mtimeMs: 1_700_000_000_000,
 }));
 
 const mockWrite = jest.fn(async () => ({ok: true as const, value: {version: 1}}));
 
 const mockRuntime = {
-  globalVfs: () => ({read: mockRead, write: mockWrite}),
-  projectVfs: () => ({read: mockRead, write: mockWrite}),
-  sessionVfs: () => ({read: mockRead, write: mockWrite}),
-  physicalVfs: () => ({read: mockRead}),
+    globalVfs: () => ({read: mockRead, write: mockWrite}),
+    projectVfs: () => ({read: mockRead, write: mockWrite}),
+    sessionVfs: () => ({read: mockRead, write: mockWrite}),
+    physicalVfs: () => ({read: mockRead}),
 };
 
 // 路由参数可变：默认 global，physical 用例自行覆盖。
 const mockRouteParams: {
-  path: string;
-  scopeKind: 'global' | 'project' | 'session' | 'skill' | 'physical';
+    path: string;
+    scopeKind: 'global' | 'project' | 'session' | 'skill' | 'physical';
 } = {
-  path: '/notes/readme.md',
-  scopeKind: 'global',
+    path: '/notes/readme.md',
+    scopeKind: 'global',
 };
 
 jest.mock('@react-navigation/native', () => ({
-  useRoute: () => ({
-    params: mockRouteParams,
-  }),
-  useNavigation: () => ({
-    addListener: jest.fn(() => jest.fn()),
-  }),
+    useRoute: () => ({
+        params: mockRouteParams,
+    }),
+    useNavigation: () => ({
+        addListener: jest.fn(() => jest.fn()),
+    }),
 }));
 
 jest.mock('@/hooks/useRuntime', () => ({
-  useRuntime: () => mockRuntime,
+    useRuntime: () => mockRuntime,
 }));
 
 jest.mock('@/hooks/useUnsavedGuard', () => ({
-  useUnsavedGuard: jest.fn(),
+    useUnsavedGuard: jest.fn(),
 }));
 
 jest.mock('@/theme/ThemeProvider', () => ({
-  useTheme: () => ({
-    tokens: {
-      background: '#fff',
-      surface: '#f8f8f8',
-      border: '#ddd',
-      borderLight: '#eee',
-      text: '#111',
-      textSecondary: '#666',
-      primary: '#06c',
-      danger: '#c00',
-    },
-  }),
+    useTheme: () => ({
+        tokens: {
+            background: '#fff',
+            surface: '#f8f8f8',
+            border: '#ddd',
+            borderLight: '#eee',
+            text: '#111',
+            textSecondary: '#666',
+            primary: '#06c',
+            danger: '#c00',
+        },
+    }),
 }));
 
 jest.mock('@/components/chrome/ToastHost', () => ({
-  useToast: () => ({showToast: mockShowToast}),
+    useToast: () => ({showToast: mockShowToast}),
 }));
 
 jest.mock('@/errors/toast-message', () => {
-  const legacy = {
-  toastMessage: (_title: string, err: unknown) =>
-    err instanceof Error ? err.message : String(err),
+    const legacy = {
+    toastMessage: (_title: string, err: unknown) =>
+        err instanceof Error ? err.message : String(err),
 };
-  return {...legacy, ToastMessage: {toast: legacy.toastMessage}};
+    return {...legacy, ToastMessage: {toast: legacy.toastMessage}};
 });
 
 // session 域保存那一支的两个开关。jest.mock 工厂被提升到 import 之前，
 // 不能引用后面声明的 const（TDZ）——所以只导出 jest.fn()，
 // 由用例在运行时通过 requireMock 改实现。
 jest.mock('@novel-master/core/feature-flags', () => ({
-  userVfsUnifiedToolTurnFlag: {isEnabled: jest.fn(() => false)},
+    userVfsUnifiedToolTurnFlag: {isEnabled: jest.fn(() => false)},
 }));
 
 jest.mock('@/services/vfs-operations.service', () => {
-  const legacy = {
-  sessionSaveVfsFile: jest.fn(),
+    const legacy = {
+    sessionSaveVfsFile: jest.fn(),
 };
-  return {...legacy, VfsOperationsService: {sessionSaveFile: legacy.sessionSaveVfsFile}};
+    return {...legacy, VfsOperationsService: {sessionSaveFile: legacy.sessionSaveVfsFile}};
 });
 
 jest.mock('@/components/vfs/FileMarkdownPreview', () => {
-  const mockReact = require('react');
-  return {
-    FileMarkdownPreview: (props: Record<string, unknown>) =>
-      mockReact.createElement('View', {
-        testID: 'file-markdown-preview',
-        ...props,
-      }),
-    MarkdownPreview: {isPath: () => true},
-  };
+    const mockReact = require('react');
+    return {
+        FileMarkdownPreview: (props: Record<string, unknown>) =>
+            mockReact.createElement('View', {
+                testID: 'file-markdown-preview',
+                ...props,
+            }),
+        MarkdownPreview: {isPath: () => true},
+    };
 });
 
 jest.mock('@/components/ui/SegmentedControl', () => {
-  const mockReact = require('react');
-  return {
-    SegmentedControl: () =>
-      mockReact.createElement('View', {testID: 'preview-segmented-control'}),
-  };
+    const mockReact = require('react');
+    return {
+        SegmentedControl: () =>
+            mockReact.createElement('View', {testID: 'preview-segmented-control'}),
+    };
 });
 
 jest.mock('@/components/vfs/CodeEditorWebView', () => {
-  const mockReact = require('react');
-  return {
-    CodeEditorWebView: mockReact.forwardRef(
-      (
-        props: {
-          testID?: string;
-          value?: string;
-          path?: string;
-          onFocusChange?: (focused: boolean) => void;
-        },
-        ref: React.Ref<{blur: jest.Mock}>,
-      ) => {
-        mockReact.useImperativeHandle(ref, () => ({
-          blur: mockCodeEditorBlur,
-        }));
-        return mockReact.createElement('View', props);
-      },
-    ),
-  };
+    const mockReact = require('react');
+    return {
+        CodeEditorWebView: mockReact.forwardRef(
+            (
+                props: {
+                    testID?: string;
+                    value?: string;
+                    path?: string;
+                    onFocusChange?: (focused: boolean) => void;
+                },
+                ref: React.Ref<{blur: jest.Mock}>,
+            ) => {
+                mockReact.useImperativeHandle(ref, () => ({
+                    blur: mockCodeEditorBlur,
+                }));
+                return mockReact.createElement('View', props);
+            },
+        ),
+    };
 });
 
 jest.mock('react-native', () => {
-  const mockReact = require('react');
-  return {
-    ActivityIndicator: () => mockReact.createElement('ActivityIndicator'),
-    Keyboard: {dismiss: (...args: unknown[]) => mockDismiss(...args)},
-    Platform: {OS: 'android'},
-    Pressable: ({
-      children,
-      onPress,
-      disabled,
-      testID,
-      ...props
-    }: {
-      children?: React.ReactNode;
-      onPress?: () => void;
-      disabled?: boolean;
-      testID?: string;
-    }) =>
-      mockReact.createElement(
-        'Pressable',
-        {testID, onPress: disabled ? undefined : onPress, ...props},
-        children,
-      ),
-    StyleSheet: {
-      hairlineWidth: 1,
-      create: (s: object) => s,
-    },
-    Text: ({children, ...props}: {children?: React.ReactNode}) =>
-      mockReact.createElement('Text', props, children),
-    View: ({
-      children,
-      testID,
-      ...props
-    }: {
-      children?: React.ReactNode;
-      testID?: string;
-    }) => mockReact.createElement('View', {testID, ...props}, children),
-  };
+    const mockReact = require('react');
+    return {
+        ActivityIndicator: () => mockReact.createElement('ActivityIndicator'),
+        Keyboard: {dismiss: (...args: unknown[]) => mockDismiss(...args)},
+        Platform: {OS: 'android'},
+        Pressable: ({
+            children,
+            onPress,
+            disabled,
+            testID,
+            ...props
+        }: {
+            children?: React.ReactNode;
+            onPress?: () => void;
+            disabled?: boolean;
+            testID?: string;
+        }) =>
+            mockReact.createElement(
+                'Pressable',
+                {testID, onPress: disabled ? undefined : onPress, ...props},
+                children,
+            ),
+        StyleSheet: {
+            hairlineWidth: 1,
+            create: (s: object) => s,
+        },
+        Text: ({children, ...props}: {children?: React.ReactNode}) =>
+            mockReact.createElement('Text', props, children),
+        View: ({
+            children,
+            testID,
+            ...props
+        }: {
+            children?: React.ReactNode;
+            testID?: string;
+        }) => mockReact.createElement('View', {testID, ...props}, children),
+    };
 });
 
 /**
@@ -178,363 +178,363 @@ jest.mock('react-native', () => {
  * `ElementType` 不再容纳任意字符串字面量，直接比较会报 TS2367，故统一走这里。
  */
 function isHostType(node: {type: unknown}, type: string): boolean {
-  return (node.type as string) === type;
+    return (node.type as string) === type;
 }
 
 function findToolbarPressableByLabel(
-  root: TestRenderer.ReactTestInstance,
-  label: string,
+    root: TestRenderer.ReactTestInstance,
+    label: string,
 ): TestRenderer.ReactTestInstance {
-  const textNode = root.find(
-    node => isHostType(node, 'Text') && node.props.children === label,
-  );
-  let current: TestRenderer.ReactTestInstance | null = textNode;
-  while (current && !isHostType(current, 'Pressable')) {
-    current = current.parent;
-  }
-  if (!current) {
-    throw new Error(`未找到标签为「${label}」的工具栏按钮`);
-  }
-  return current;
+    const textNode = root.find(
+        node => isHostType(node, 'Text') && node.props.children === label,
+    );
+    let current: TestRenderer.ReactTestInstance | null = textNode;
+    while (current && !isHostType(current, 'Pressable')) {
+        current = current.parent;
+    }
+    if (!current) {
+        throw new Error(`未找到标签为「${label}」的工具栏按钮`);
+    }
+    return current;
 }
 
 function findOptionalByTestId(
-  root: TestRenderer.ReactTestInstance,
-  testID: string,
+    root: TestRenderer.ReactTestInstance,
+    testID: string,
 ): TestRenderer.ReactTestInstance | undefined {
-  try {
-    return root.findByProps({testID});
-  } catch {
-    return undefined;
-  }
+    try {
+        return root.findByProps({testID});
+    } catch {
+        return undefined;
+    }
 }
 
 async function renderLoadedScreen(): Promise<TestRenderer.ReactTestRenderer> {
-  let tree!: TestRenderer.ReactTestRenderer;
-  await act(async () => {
-    tree = TestRenderer.create(<FileEditorScreen />);
-  });
-  await act(async () => {
-    await Promise.resolve();
-  });
-  // heavyPreviewReady 有 80ms 延迟挂载（避开推屏转场窗口），真计时器
-  // flush 过去，预览分支的用例才能断言到 FileMarkdownPreview。
-  await act(async () => {
-    await new Promise(resolve => setTimeout(resolve, 120));
-  });
-  return tree;
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+        tree = TestRenderer.create(<FileEditorScreen />);
+    });
+    await act(async () => {
+        await Promise.resolve();
+    });
+    // heavyPreviewReady 有 80ms 延迟挂载（避开推屏转场窗口），真计时器
+    // flush 过去，预览分支的用例才能断言到 FileMarkdownPreview。
+    await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 120));
+    });
+    return tree;
 }
 
 async function switchToEditMode(
-  tree: TestRenderer.ReactTestRenderer,
+    tree: TestRenderer.ReactTestRenderer,
 ): Promise<void> {
-  const editBtn = findToolbarPressableByLabel(tree.root, '编辑');
-  await act(async () => {
-    editBtn.props.onPress();
-  });
+    const editBtn = findToolbarPressableByLabel(tree.root, '编辑');
+    await act(async () => {
+        editBtn.props.onPress();
+    });
 }
 
 async function focusEditor(
-  tree: TestRenderer.ReactTestRenderer,
+    tree: TestRenderer.ReactTestRenderer,
 ): Promise<void> {
-  const editor = tree.root.findByProps({testID: 'file-editor-input'});
-  await act(async () => {
-    editor.props.onFocusChange?.(true);
-  });
+    const editor = tree.root.findByProps({testID: 'file-editor-input'});
+    await act(async () => {
+        editor.props.onFocusChange?.(true);
+    });
 }
 
 /** 扁平化 style 数组后是否含 textAlign: 'center'。 */
 function styleHasTextAlignCenter(style: unknown): boolean {
-  if (style == null) {
+    if (style == null) {
+        return false;
+    }
+    if (Array.isArray(style)) {
+        return style.some(styleHasTextAlignCenter);
+    }
+    if (typeof style === 'object' && 'textAlign' in (style as object)) {
+        return (style as {textAlign?: string}).textAlign === 'center';
+    }
     return false;
-  }
-  if (Array.isArray(style)) {
-    return style.some(styleHasTextAlignCenter);
-  }
-  if (typeof style === 'object' && 'textAlign' in (style as object)) {
-    return (style as {textAlign?: string}).textAlign === 'center';
-  }
-  return false;
 }
 
 function findToolbarPathText(
-  root: TestRenderer.ReactTestInstance,
-  label: string,
+    root: TestRenderer.ReactTestInstance,
+    label: string,
 ): TestRenderer.ReactTestInstance {
-  return root.find(
-    node => isHostType(node, 'Text') && node.props.children === label,
-  );
+    return root.find(
+        node => isHostType(node, 'Text') && node.props.children === label,
+    );
 }
 
 describe('FileEditorScreen', () => {
-  beforeEach(() => {
-    mockDismiss.mockClear();
-    mockShowToast.mockClear();
-    mockRead.mockClear();
-    mockWrite.mockClear();
-    mockCodeEditorBlur.mockClear();
-    mockRouteParams.path = '/notes/readme.md';
-    mockRouteParams.scopeKind = 'global';
-    mockRead.mockResolvedValue({
-      ok: true,
-      value: {
-        content: '# Hello\n\nworld',
-        version: 1,
-        mtimeMs: 1_700_000_000_000,
-      },
-    });
-  });
-
-  afterEach(() => {
-    jest.restoreAllMocks();
-  });
-
-  it('T-F1: 进入编辑态显示 CodeEditorWebView，非 TextInput', async () => {
-    const tree = await renderLoadedScreen();
-    await switchToEditMode(tree);
-
-    const editor = tree.root.findByProps({testID: 'file-editor-input'});
-    expect(editor).toBeTruthy();
-    expect(
-      findOptionalByTestId(tree.root, 'file-editor-browse-scroll'),
-    ).toBeUndefined();
-  });
-
-  it('T-F2: 编辑态 value 传入 CodeEditorWebView', async () => {
-    const tree = await renderLoadedScreen();
-    await switchToEditMode(tree);
-
-    const editor = tree.root.findByProps({testID: 'file-editor-input'});
-    expect(editor.props.value).toBe('# Hello\n\nworld');
-    expect(editor.props.path).toBe('/notes/readme.md');
-  });
-
-  it('T-F3: 点击统计行收起键盘，编辑器仍挂载', async () => {
-    const tree = await renderLoadedScreen();
-    await switchToEditMode(tree);
-    await focusEditor(tree);
-    mockDismiss.mockClear();
-    mockCodeEditorBlur.mockClear();
-
-    const dismissStats = tree.root.findByProps({
-      testID: 'file-editor-dismiss-stats',
-    });
-    await act(async () => {
-      dismissStats.props.onPress();
+    beforeEach(() => {
+        mockDismiss.mockClear();
+        mockShowToast.mockClear();
+        mockRead.mockClear();
+        mockWrite.mockClear();
+        mockCodeEditorBlur.mockClear();
+        mockRouteParams.path = '/notes/readme.md';
+        mockRouteParams.scopeKind = 'global';
+        mockRead.mockResolvedValue({
+            ok: true,
+            value: {
+                content: '# Hello\n\nworld',
+                version: 1,
+                mtimeMs: 1_700_000_000_000,
+            },
+        });
     });
 
-    expect(tree.root.findByProps({testID: 'file-editor-input'})).toBeTruthy();
-    expect(mockCodeEditorBlur).toHaveBeenCalled();
-    expect(mockDismiss).toHaveBeenCalled();
-  });
-
-  it('T-F3: 点击工具栏标题收起键盘，编辑器仍挂载', async () => {
-    const tree = await renderLoadedScreen();
-    await switchToEditMode(tree);
-    await focusEditor(tree);
-    mockDismiss.mockClear();
-    mockCodeEditorBlur.mockClear();
-
-    const dismissToolbar = tree.root.findByProps({
-      testID: 'file-editor-dismiss-toolbar',
-    });
-    await act(async () => {
-      dismissToolbar.props.onPress();
+    afterEach(() => {
+        jest.restoreAllMocks();
     });
 
-    expect(tree.root.findByProps({testID: 'file-editor-input'})).toBeTruthy();
-    expect(mockCodeEditorBlur).toHaveBeenCalled();
-    expect(mockDismiss).toHaveBeenCalled();
-  });
+    it('T-F1: 进入编辑态显示 CodeEditorWebView，非 TextInput', async () => {
+        const tree = await renderLoadedScreen();
+        await switchToEditMode(tree);
 
-  it('T-F3: 切预览收起键盘', async () => {
-    const tree = await renderLoadedScreen();
-    await switchToEditMode(tree);
-    await focusEditor(tree);
-    mockDismiss.mockClear();
-
-    const previewBtn = findToolbarPressableByLabel(tree.root, '预览');
-    await act(async () => {
-      previewBtn.props.onPress();
+        const editor = tree.root.findByProps({testID: 'file-editor-input'});
+        expect(editor).toBeTruthy();
+        expect(
+            findOptionalByTestId(tree.root, 'file-editor-browse-scroll'),
+        ).toBeUndefined();
     });
 
-    expect(
-      findOptionalByTestId(tree.root, 'file-markdown-preview'),
-    ).toBeTruthy();
-    expect(
-      findOptionalByTestId(tree.root, 'file-editor-input'),
-    ).toBeUndefined();
-    expect(mockDismiss).toHaveBeenCalled();
-  });
+    it('T-F2: 编辑态 value 传入 CodeEditorWebView', async () => {
+        const tree = await renderLoadedScreen();
+        await switchToEditMode(tree);
 
-  it('T-F3: 收起键盘不会卸载 CodeEditorWebView', async () => {
-    const tree = await renderLoadedScreen();
-    await switchToEditMode(tree);
-    await focusEditor(tree);
-
-    const dismissStats = tree.root.findByProps({
-      testID: 'file-editor-dismiss-stats',
-    });
-    await act(async () => {
-      dismissStats.props.onPress();
+        const editor = tree.root.findByProps({testID: 'file-editor-input'});
+        expect(editor.props.value).toBe('# Hello\n\nworld');
+        expect(editor.props.path).toBe('/notes/readme.md');
     });
 
-    expect(tree.root.findByProps({testID: 'file-editor-input'})).toBeTruthy();
-  });
+    it('T-F3: 点击统计行收起键盘，编辑器仍挂载', async () => {
+        const tree = await renderLoadedScreen();
+        await switchToEditMode(tree);
+        await focusEditor(tree);
+        mockDismiss.mockClear();
+        mockCodeEditorBlur.mockClear();
 
-  it('T-F4: 预览分支仍可渲染', async () => {
-    const tree = await renderLoadedScreen();
+        const dismissStats = tree.root.findByProps({
+            testID: 'file-editor-dismiss-stats',
+        });
+        await act(async () => {
+            dismissStats.props.onPress();
+        });
 
-    expect(
-      findOptionalByTestId(tree.root, 'file-markdown-preview'),
-    ).toBeTruthy();
-    expect(
-      findOptionalByTestId(tree.root, 'preview-segmented-control'),
-    ).toBeTruthy();
-    expect(
-      findOptionalByTestId(tree.root, 'file-editor-browse-scroll'),
-    ).toBeUndefined();
-    expect(
-      findOptionalByTestId(tree.root, 'file-editor-input'),
-    ).toBeUndefined();
-  });
-
-  it('T-F6: CodeEditorWebView 挂载；滚动由 Web 侧 CM 处理', async () => {
-    const tree = await renderLoadedScreen();
-    await switchToEditMode(tree);
-
-    const editor = tree.root.findByProps({testID: 'file-editor-input'});
-    expect(editor).toBeTruthy();
-    expect(editor.props.style).toEqual({flex: 1, minHeight: 0});
-  });
-
-  it('T-FE1: 预览/聚焦/脏态工具栏文件名均 textAlign center', async () => {
-    const tree = await renderLoadedScreen();
-
-    const previewPath = findToolbarPathText(tree.root, 'readme.md');
-    expect(styleHasTextAlignCenter(previewPath.props.style)).toBe(true);
-
-    await switchToEditMode(tree);
-    await focusEditor(tree);
-    const focusedPath = findToolbarPathText(tree.root, 'readme.md');
-    expect(styleHasTextAlignCenter(focusedPath.props.style)).toBe(true);
-
-    const editor = tree.root.findByProps({testID: 'file-editor-input'});
-    await act(async () => {
-      editor.props.onChange?.('# Hello\n\nworld\nedited');
-    });
-    const dirtyPath = findToolbarPathText(tree.root, '未保存');
-    expect(styleHasTextAlignCenter(dirtyPath.props.style)).toBe(true);
-  });
-
-  it('T-F7: 输入末字后保存——保存前先 blur 收口，写盘内容含该字', async () => {
-    const tree = await renderLoadedScreen();
-    await switchToEditMode(tree);
-    await focusEditor(tree);
-
-    // 末字的 change 已落到 RN 镜像（web 侧 rAF 那一帧已跑完）。
-    const typed = '# Hello\n\nworld!';
-    const editor = tree.root.findByProps({testID: 'file-editor-input'});
-    await act(async () => {
-      editor.props.onChange?.(typed);
-    });
-    mockWrite.mockClear();
-    mockCodeEditorBlur.mockClear();
-
-    const saveBtn = tree.root.findByProps({testID: 'file-editor-save'});
-    expect(saveBtn.props.disabled).toBe(false);
-
-    await act(async () => {
-      saveBtn.props.onPress();
-      await Promise.resolve();
+        expect(tree.root.findByProps({testID: 'file-editor-input'})).toBeTruthy();
+        expect(mockCodeEditorBlur).toHaveBeenCalled();
+        expect(mockDismiss).toHaveBeenCalled();
     });
 
-    // 关键顺序：保存路径必须先 blur（web 侧 change 合帧的同步收口点，
-    // 与 dismissEditor 同款），再动 vfs.write——否则按压与 contenteditable
-    // 失焦的先后无保证。
-    expect(mockCodeEditorBlur).toHaveBeenCalled();
-    expect(
-      mockCodeEditorBlur.mock.invocationCallOrder[0],
-    ).toBeLessThan(mockWrite.mock.invocationCallOrder[0]);
-    // 写盘内容是含末字的完整全文（不是滞后一帧的镜像）。
-    expect(mockWrite).toHaveBeenCalledWith('/notes/readme.md', typed);
-    expect(mockShowToast).toHaveBeenCalledWith('已保存');
-  });
+    it('T-F3: 点击工具栏标题收起键盘，编辑器仍挂载', async () => {
+        const tree = await renderLoadedScreen();
+        await switchToEditMode(tree);
+        await focusEditor(tree);
+        mockDismiss.mockClear();
+        mockCodeEditorBlur.mockClear();
 
-  it('T-PB3: physical 只读分支——经 physicalVfs().read 读取，保存禁用且无编辑切换', async () => {
-    mockRouteParams.path = '/projects/p1/template/note.md';
-    mockRouteParams.scopeKind = 'physical';
-    const tree = await renderLoadedScreen();
+        const dismissToolbar = tree.root.findByProps({
+            testID: 'file-editor-dismiss-toolbar',
+        });
+        await act(async () => {
+            dismissToolbar.props.onPress();
+        });
 
-    // 数据源：只读物理树（无 write 方法）。
-    expect(mockRead).toHaveBeenCalledWith('/projects/p1/template/note.md');
-    expect(mockWrite).not.toHaveBeenCalled();
+        expect(tree.root.findByProps({testID: 'file-editor-input'})).toBeTruthy();
+        expect(mockCodeEditorBlur).toHaveBeenCalled();
+        expect(mockDismiss).toHaveBeenCalled();
+    });
 
-    // 保存按钮禁用（既有只读样式：置灰 + disabled）。
-    const saveBtn = tree.root.findByProps({testID: 'file-editor-save'});
-    expect(saveBtn.props.disabled).toBe(true);
+    it('T-F3: 切预览收起键盘', async () => {
+        const tree = await renderLoadedScreen();
+        await switchToEditMode(tree);
+        await focusEditor(tree);
+        mockDismiss.mockClear();
 
-    // 不提供编辑切换（纯只读预览）。
-    const editBtn = tree.root.findAll(
-      node => isHostType(node, 'Text') && node.props.children === '编辑',
-    );
-    expect(editBtn).toHaveLength(0);
+        const previewBtn = findToolbarPressableByLabel(tree.root, '预览');
+        await act(async () => {
+            previewBtn.props.onPress();
+        });
 
-    // 预览主体仍正常渲染（只读分支延迟挂重预览：等交互空闲，轮询等待）。
-    let previewNode = null;
-    for (let i = 0; i < 20 && previewNode == null; i++) {
-      previewNode = findOptionalByTestId(tree.root, 'file-markdown-preview');
-      if (previewNode == null) {
-        await act(
-          () =>
-            new Promise<void>(resolve => {
-              setTimeout(resolve, 10);
-            }),
+        expect(
+            findOptionalByTestId(tree.root, 'file-markdown-preview'),
+        ).toBeTruthy();
+        expect(
+            findOptionalByTestId(tree.root, 'file-editor-input'),
+        ).toBeUndefined();
+        expect(mockDismiss).toHaveBeenCalled();
+    });
+
+    it('T-F3: 收起键盘不会卸载 CodeEditorWebView', async () => {
+        const tree = await renderLoadedScreen();
+        await switchToEditMode(tree);
+        await focusEditor(tree);
+
+        const dismissStats = tree.root.findByProps({
+            testID: 'file-editor-dismiss-stats',
+        });
+        await act(async () => {
+            dismissStats.props.onPress();
+        });
+
+        expect(tree.root.findByProps({testID: 'file-editor-input'})).toBeTruthy();
+    });
+
+    it('T-F4: 预览分支仍可渲染', async () => {
+        const tree = await renderLoadedScreen();
+
+        expect(
+            findOptionalByTestId(tree.root, 'file-markdown-preview'),
+        ).toBeTruthy();
+        expect(
+            findOptionalByTestId(tree.root, 'preview-segmented-control'),
+        ).toBeTruthy();
+        expect(
+            findOptionalByTestId(tree.root, 'file-editor-browse-scroll'),
+        ).toBeUndefined();
+        expect(
+            findOptionalByTestId(tree.root, 'file-editor-input'),
+        ).toBeUndefined();
+    });
+
+    it('T-F6: CodeEditorWebView 挂载；滚动由 Web 侧 CM 处理', async () => {
+        const tree = await renderLoadedScreen();
+        await switchToEditMode(tree);
+
+        const editor = tree.root.findByProps({testID: 'file-editor-input'});
+        expect(editor).toBeTruthy();
+        expect(editor.props.style).toEqual({flex: 1, minHeight: 0});
+    });
+
+    it('T-FE1: 预览/聚焦/脏态工具栏文件名均 textAlign center', async () => {
+        const tree = await renderLoadedScreen();
+
+        const previewPath = findToolbarPathText(tree.root, 'readme.md');
+        expect(styleHasTextAlignCenter(previewPath.props.style)).toBe(true);
+
+        await switchToEditMode(tree);
+        await focusEditor(tree);
+        const focusedPath = findToolbarPathText(tree.root, 'readme.md');
+        expect(styleHasTextAlignCenter(focusedPath.props.style)).toBe(true);
+
+        const editor = tree.root.findByProps({testID: 'file-editor-input'});
+        await act(async () => {
+            editor.props.onChange?.('# Hello\n\nworld\nedited');
+        });
+        const dirtyPath = findToolbarPathText(tree.root, '未保存');
+        expect(styleHasTextAlignCenter(dirtyPath.props.style)).toBe(true);
+    });
+
+    it('T-F7: 输入末字后保存——保存前先 blur 收口，写盘内容含该字', async () => {
+        const tree = await renderLoadedScreen();
+        await switchToEditMode(tree);
+        await focusEditor(tree);
+
+        // 末字的 change 已落到 RN 镜像（web 侧 rAF 那一帧已跑完）。
+        const typed = '# Hello\n\nworld!';
+        const editor = tree.root.findByProps({testID: 'file-editor-input'});
+        await act(async () => {
+            editor.props.onChange?.(typed);
+        });
+        mockWrite.mockClear();
+        mockCodeEditorBlur.mockClear();
+
+        const saveBtn = tree.root.findByProps({testID: 'file-editor-save'});
+        expect(saveBtn.props.disabled).toBe(false);
+
+        await act(async () => {
+            saveBtn.props.onPress();
+            await Promise.resolve();
+        });
+
+        // 关键顺序：保存路径必须先 blur（web 侧 change 合帧的同步收口点，
+        // 与 dismissEditor 同款），再动 vfs.write——否则按压与 contenteditable
+        // 失焦的先后无保证。
+        expect(mockCodeEditorBlur).toHaveBeenCalled();
+        expect(
+            mockCodeEditorBlur.mock.invocationCallOrder[0],
+        ).toBeLessThan(mockWrite.mock.invocationCallOrder[0]);
+        // 写盘内容是含末字的完整全文（不是滞后一帧的镜像）。
+        expect(mockWrite).toHaveBeenCalledWith('/notes/readme.md', typed);
+        expect(mockShowToast).toHaveBeenCalledWith('已保存');
+    });
+
+    it('T-PB3: physical 只读分支——经 physicalVfs().read 读取，保存禁用且无编辑切换', async () => {
+        mockRouteParams.path = '/projects/p1/template/note.md';
+        mockRouteParams.scopeKind = 'physical';
+        const tree = await renderLoadedScreen();
+
+        // 数据源：只读物理树（无 write 方法）。
+        expect(mockRead).toHaveBeenCalledWith('/projects/p1/template/note.md');
+        expect(mockWrite).not.toHaveBeenCalled();
+
+        // 保存按钮禁用（既有只读样式：置灰 + disabled）。
+        const saveBtn = tree.root.findByProps({testID: 'file-editor-save'});
+        expect(saveBtn.props.disabled).toBe(true);
+
+        // 不提供编辑切换（纯只读预览）。
+        const editBtn = tree.root.findAll(
+            node => isHostType(node, 'Text') && node.props.children === '编辑',
         );
-      }
-    }
-    expect(previewNode).toBeTruthy();
-    expect(
-      findOptionalByTestId(tree.root, 'file-editor-input'),
-    ).toBeUndefined();
-  });
+        expect(editBtn).toHaveLength(0);
 
-  it('T-FEPar-2: 重渲染之后 session 域保存成功，回调仍被调用一次', async () => {
-    // session 域 + 统一工具回合开关打开（否则走 vfs.write 另一支，不触发回调）。
-    mockRouteParams.path = '/sessions/s1/notes/a.md';
-    mockRouteParams.scopeKind = 'session';
-    (mockRouteParams as Record<string, unknown>).projectId = 'p1';
-    (mockRouteParams as Record<string, unknown>).sessionId = 's1';
-    const featureFlags = jest.requireMock(
-      '@novel-master/core/feature-flags',
-    ) as {userVfsUnifiedToolTurnFlag: {isEnabled: jest.Mock}};
-    const vfsOps = jest.requireMock('@/services/vfs-operations.service') as {
-      sessionSaveVfsFile: jest.Mock;
-    };
-    featureFlags.userVfsUnifiedToolTurnFlag.isEnabled.mockReturnValue(true);
-    vfsOps.sessionSaveVfsFile.mockResolvedValue({ok: true, value: undefined});
-
-    // 挂载前写入回调（模拟 openFileEditor 在 navigate 前 setter）
-    const spy = jest.fn();
-    fileEditorOnSessionVfsSavedSlot.set(spy);
-
-    const tree = await renderLoadedScreen();
-    await switchToEditMode(tree);
-
-    // ⚠️ 关键：挂载（take 走）之后、触发保存之前，**必须先制造一次重渲染**。
-    // 少了这一步，把 useRef 惰性初始化改回渲染期裸调 take 也照样绿
-    // ——首次挂载那一次保存仍能工作，照不出「回调已被重取成 null」这个洞。
-    await act(async () => {
-      tree.root
-        .findByProps({testID: 'file-editor-input'})
-        .props.onChange('# Hello\n\nworld\n\n改一行');
+        // 预览主体仍正常渲染（只读分支延迟挂重预览：等交互空闲，轮询等待）。
+        let previewNode = null;
+        for (let i = 0; i < 20 && previewNode == null; i++) {
+            previewNode = findOptionalByTestId(tree.root, 'file-markdown-preview');
+            if (previewNode == null) {
+                await act(
+                    () =>
+                        new Promise<void>(resolve => {
+                            setTimeout(resolve, 10);
+                        }),
+                );
+            }
+        }
+        expect(previewNode).toBeTruthy();
+        expect(
+            findOptionalByTestId(tree.root, 'file-editor-input'),
+        ).toBeUndefined();
     });
 
-    await act(async () => {
-      tree.root.findByProps({testID: 'file-editor-save'}).props.onPress();
-    });
+    it('T-FEPar-2: 重渲染之后 session 域保存成功，回调仍被调用一次', async () => {
+        // session 域 + 统一工具回合开关打开（否则走 vfs.write 另一支，不触发回调）。
+        mockRouteParams.path = '/sessions/s1/notes/a.md';
+        mockRouteParams.scopeKind = 'session';
+        (mockRouteParams as Record<string, unknown>).projectId = 'p1';
+        (mockRouteParams as Record<string, unknown>).sessionId = 's1';
+        const featureFlags = jest.requireMock(
+            '@novel-master/core/feature-flags',
+        ) as {userVfsUnifiedToolTurnFlag: {isEnabled: jest.Mock}};
+        const vfsOps = jest.requireMock('@/services/vfs-operations.service') as {
+            sessionSaveVfsFile: jest.Mock;
+        };
+        featureFlags.userVfsUnifiedToolTurnFlag.isEnabled.mockReturnValue(true);
+        vfsOps.sessionSaveVfsFile.mockResolvedValue({ok: true, value: undefined});
 
-    expect(vfsOps.sessionSaveVfsFile).toHaveBeenCalledTimes(1);
-    expect(spy).toHaveBeenCalledTimes(1);
-  });
+        // 挂载前写入回调（模拟 openFileEditor 在 navigate 前 setter）
+        const spy = jest.fn();
+        fileEditorOnSessionVfsSavedSlot.set(spy);
+
+        const tree = await renderLoadedScreen();
+        await switchToEditMode(tree);
+
+        // ⚠️ 关键：挂载（take 走）之后、触发保存之前，**必须先制造一次重渲染**。
+        // 少了这一步，把 useRef 惰性初始化改回渲染期裸调 take 也照样绿
+        // ——首次挂载那一次保存仍能工作，照不出「回调已被重取成 null」这个洞。
+        await act(async () => {
+            tree.root
+                .findByProps({testID: 'file-editor-input'})
+                .props.onChange('# Hello\n\nworld\n\n改一行');
+        });
+
+        await act(async () => {
+            tree.root.findByProps({testID: 'file-editor-save'}).props.onPress();
+        });
+
+        expect(vfsOps.sessionSaveVfsFile).toHaveBeenCalledTimes(1);
+        expect(spy).toHaveBeenCalledTimes(1);
+    });
 });

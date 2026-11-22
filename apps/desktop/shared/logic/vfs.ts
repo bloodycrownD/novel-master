@@ -17,10 +17,10 @@ import { coreT } from "./core-i18n.js";
 export type { VfsScope } from "@novel-master/core/vfs";
 
 export function formatVfsErrorForUser(error: unknown, scope?: VfsScope): string {
-  return coreT(VfsErrorForUser.format(error, scope));
+    return coreT(VfsErrorForUser.format(error, scope));
 }
 
 export function validateVfsEntryName(name: string): { readonly ok: true } | { readonly ok: false; readonly reason: string } {
-  const result = EntryNameValidator.validate(name);
-  return result.ok ? result : { ok: false, reason: coreT(result.reason) };
+    const result = EntryNameValidator.validate(name);
+    return result.ok ? result : { ok: false, reason: coreT(result.reason) };
 }

@@ -33,9 +33,9 @@ import { CurlImport } from "./curl-import.js";
 
 /** 单条搜索结果（DuckDuckGo 适配器形态；模板引擎不产生该结构）。 */
 export interface SearchResult {
-  readonly title: string;
-  readonly url: string;
-  readonly snippet: string;
+    readonly title: string;
+    readonly url: string;
+    readonly snippet: string;
 }
 
 /**
@@ -45,8 +45,8 @@ export interface SearchResult {
  * `results` 仍为结构化列表（HTML 解析的本仓唯一消费者）。
  */
 export interface SearchResponse {
-  readonly engine: string;
-  readonly results: readonly SearchResult[] | string;
+    readonly engine: string;
+    readonly results: readonly SearchResult[] | string;
 }
 
 /**
@@ -54,9 +54,9 @@ export interface SearchResponse {
  * 工具结果只回路径与说明（overflow-sink Step 5/6 接线后出现）。
  */
 export interface SearchOversizeOutput {
-  readonly engine: string;
-  readonly savedPath: string;
-  readonly message: string;
+    readonly engine: string;
+    readonly savedPath: string;
+    readonly message: string;
 }
 
 /**
@@ -65,12 +65,12 @@ export interface SearchOversizeOutput {
  * 零降级无轨迹可记）。适配器层不感知该字段。
  */
 export type SearchChainOutput = SearchResponse & {
-  readonly attempts?: string;
+    readonly attempts?: string;
 };
 
 /** 引擎执行入参选项（query / engine / params 在 search-tool 层消费）。 */
 export interface SearchToolOptions {
-  readonly maxResults?: number;
+    readonly maxResults?: number;
 }
 
 /** HTTP fetch 函数形态（引擎执行器注入点；本域自持别名，不反向依赖 infra）。 */
@@ -87,14 +87,14 @@ export type ToolParams = Readonly<Record<string, unknown>>;
  * 不做二次查找。duckduckgo 无模板（HTML 解析适配器保留），`template` 恒缺省。
  */
 export interface ResolvedEngineConfig {
-  /** 引擎实例 id（动态全集：预置 / custom:{nanoid8} / duckduckgo）。 */
-  readonly engine: string;
-  /** 模板引用 `{{apiKey}}` 时的明文 API key；不引用则缺省。 */
-  readonly apiKey?: string;
-  /** 模板引用 `{{baseUrl}}` 时的规范化 baseUrl（http/https、无尾斜杠）；不引用则缺省。 */
-  readonly baseUrl?: string;
-  /** 引擎模板（duckduckgo 缺省）。 */
-  readonly template?: SearchEngineTemplate;
+    /** 引擎实例 id（动态全集：预置 / custom:{nanoid8} / duckduckgo）。 */
+    readonly engine: string;
+    /** 模板引用 `{{apiKey}}` 时的明文 API key；不引用则缺省。 */
+    readonly apiKey?: string;
+    /** 模板引用 `{{baseUrl}}` 时的规范化 baseUrl（http/https、无尾斜杠）；不引用则缺省。 */
+    readonly baseUrl?: string;
+    /** 引擎模板（duckduckgo 缺省）。 */
+    readonly template?: SearchEngineTemplate;
 }
 
 /** 默认结果条数（maxResults 缺省 / 非法 / 小于 1 时回落此值；仅本模块 normalizeMaxResults 消费）。 */

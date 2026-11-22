@@ -17,16 +17,16 @@ type Translator = (m: MessageLike) => string;
  * 共享的 mermaid 全屏关闭按钮（另一处；chat-transcript 通道亦携带同键）。
  */
 const RICH_DOCUMENT_LABEL_KEYS = [
-  'ui.rich_document.over_limit_hint',
-  'ui.common.close',
+    'ui.rich_document.over_limit_hint',
+    'ui.common.close',
 ] as const;
 
 // nm-style: keep-public — 第二桥指定的独立装配面（宿主 init.labels 下发）；内联会把 i18n key 映射埋进 WebView 组件。
 /** core 文案 translator → web 渲染层文案（ui.* map，key 与 core catalog 一一对应）。 */
 export namespace RichDocumentLabelsFactory {
-  export function build(t: Translator): RichDocumentLabels {
-    const ui: Record<string, string> = {};
-    for (const key of RICH_DOCUMENT_LABEL_KEYS) ui[key] = t({key});
-    return {ui};
-  }
+    export function build(t: Translator): RichDocumentLabels {
+        const ui: Record<string, string> = {};
+        for (const key of RICH_DOCUMENT_LABEL_KEYS) ui[key] = t({key});
+        return {ui};
+    }
 }

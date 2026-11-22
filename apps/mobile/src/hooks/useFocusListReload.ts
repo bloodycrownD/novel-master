@@ -14,58 +14,58 @@ import {useFocusEffect} from '@react-navigation/native';
 import {FormatError} from '../errors/format-error';
 
 interface UseFocusListReloadOptions<T> {
-  /** 数据拉取；抛错由 hook 统一分流（默认进 error 态）。 */
-  fetcher: () => Promise<T | null | undefined>;
-  /** fetcher 返回 null/undefined 时的兜底值（须为模块级稳定引用）。 */
-  fallbackValue: T;
-  /** 聚焦重载是否静默（不置 loading）。 */
-  focusSilent?: boolean;
-  /** 错误处理：不传时进 error 态；传了则走调用方语义（如 toast），rows 保持原值。 */
-  onError?: (cause: unknown) => void;
+    /** 数据拉取；抛错由 hook 统一分流（默认进 error 态）。 */
+    fetcher: () => Promise<T | null | undefined>;
+    /** fetcher 返回 null/undefined 时的兜底值（须为模块级稳定引用）。 */
+    fallbackValue: T;
+    /** 聚焦重载是否静默（不置 loading）。 */
+    focusSilent?: boolean;
+    /** 错误处理：不传时进 error 态；传了则走调用方语义（如 toast），rows 保持原值。 */
+    onError?: (cause: unknown) => void;
 }
 
 interface FocusListReloadResult<T> {
-  rows: T;
-  loading: boolean;
-  error: string | undefined;
-  /** 重新拉取；silent 为 true 时不置 loading（聚焦返回的静默刷新）。 */
-  reload: (opts?: {silent?: boolean}) => Promise<void>;
-  /** 行集 setter：供行内乐观更新（如开关翻转）直接修改 rows。 */
-  setRows: Dispatch<SetStateAction<T>>;
+    rows: T;
+    loading: boolean;
+    error: string | undefined;
+    /** 重新拉取；silent 为 true 时不置 loading（聚焦返回的静默刷新）。 */
+    reload: (opts?: {silent?: boolean}) => Promise<void>;
+    /** 行集 setter：供行内乐观更新（如开关翻转）直接修改 rows。 */
+    setRows: Dispatch<SetStateAction<T>>;
 }
 
 export function useFocusListReload<T>({fetcher, fallbackValue, focusSilent = false, onError}: UseFocusListReloadOptions<T>): FocusListReloadResult<T> {
-  const [rows, setRows] = useState<T>(fallbackValue);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | undefined>();
+    const [rows, setRows] = useState<T>(fallbackValue);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | undefined>();
 
-  const reload = useCallback(
-    async (opts?: {silent?: boolean}) => {
-      if (!opts?.silent) {
-        setLoading(true);
-      }
-      setError(undefined);
-      try {
-        const next = await fetcher();
-        setRows(next ?? fallbackValue);
-      } catch (cause) {
-        if (onError) {
-          onError(cause);
-        } else {
-          setRows(fallbackValue);
-          setError(FormatError.format(cause));
-        }
-      } finally {
-        setLoading(false);
-      }
-    },
-    [fetcher, fallbackValue, onError],
-  );
+    const reload = useCallback(
+        async (opts?: {silent?: boolean}) => {
+            if (!opts?.silent) {
+                setLoading(true);
+            }
+            setError(undefined);
+            try {
+                const next = await fetcher();
+                setRows(next ?? fallbackValue);
+            } catch (cause) {
+                if (onError) {
+                    onError(cause);
+                } else {
+                    setRows(fallbackValue);
+                    setError(FormatError.format(cause));
+                }
+            } finally {
+                setLoading(false);
+            }
+        },
+        [fetcher, fallbackValue, onError],
+    );
 
-  const onScreenFocus = useCallback(() => {
-    reload(focusSilent ? {silent: true} : undefined).catch(() => undefined);
-  }, [reload, focusSilent]);
-  useFocusEffect(onScreenFocus);
+    const onScreenFocus = useCallback(() => {
+        reload(focusSilent ? {silent: true} : undefined).catch(() => undefined);
+    }, [reload, focusSilent]);
+    useFocusEffect(onScreenFocus);
 
-  return {rows, loading, error, reload, setRows};
+    return {rows, loading, error, reload, setRows};
 }

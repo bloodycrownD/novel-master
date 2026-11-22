@@ -29,36 +29,36 @@ export type FillPolicy = "hidden" | "filename" | "header" | "full";
 
 /** Persisted directory rule row. */
 export interface WorkplaceDirRule {
-  readonly scopeKey: string;
-  readonly logicalPath: string;
-  readonly ruleEnabled: boolean;
-  readonly sortField: SortField;
-  readonly sortOrder: SortOrder;
-  readonly headCount: number;
-  readonly tailCount: number;
-  readonly fillPolicy: FillPolicy;
+    readonly scopeKey: string;
+    readonly logicalPath: string;
+    readonly ruleEnabled: boolean;
+    readonly sortField: SortField;
+    readonly sortOrder: SortOrder;
+    readonly headCount: number;
+    readonly tailCount: number;
+    readonly fillPolicy: FillPolicy;
 }
 
 /** Persisted file rule row. */
 export interface WorkplaceFileRule {
-  readonly scopeKey: string;
-  readonly logicalPath: string;
-  readonly inclusionMode: InclusionMode;
+    readonly scopeKey: string;
+    readonly logicalPath: string;
+    readonly inclusionMode: InclusionMode;
 }
 
 /** RuleEngine DFS 单行：目录行。 */
 type WorkplaceDirRuleRow = {
-  readonly kind: "dir";
-  readonly path: string;
-  readonly ruleState: RuleState;
+    readonly kind: "dir";
+    readonly path: string;
+    readonly ruleState: RuleState;
 };
 
 /** RuleEngine DFS 单行：文件行。 */
 type WorkplaceFileRuleRow = {
-  readonly kind: "file";
-  readonly path: string;
-  readonly inclusionMode: InclusionMode;
-  readonly displayState: DisplayState;
+    readonly kind: "file";
+    readonly path: string;
+    readonly inclusionMode: InclusionMode;
+    readonly displayState: DisplayState;
 };
 
 /** RuleEngine DFS 单行；dir / file 分支字段互斥。 */
@@ -69,17 +69,17 @@ export type WorkplaceListRow = WorkplaceRuleRow;
 
 /** Input for setting a directory rule via CLI/service. */
 export interface SetDirRuleInput {
-  readonly logicalPath: string;
-  readonly ruleEnabled?: boolean;
-  readonly sortField?: SortField;
-  readonly sortOrder?: SortOrder;
-  readonly headCount?: number;
-  readonly tailCount?: number;
-  readonly fillPolicy?: FillPolicy;
+    readonly logicalPath: string;
+    readonly ruleEnabled?: boolean;
+    readonly sortField?: SortField;
+    readonly sortOrder?: SortOrder;
+    readonly headCount?: number;
+    readonly tailCount?: number;
+    readonly fillPolicy?: FillPolicy;
 }
 
 /** Input for setting a file rule. */
 export interface SetFileRuleInput {
-  readonly logicalPath: string;
-  readonly inclusionMode: InclusionMode;
+    readonly logicalPath: string;
+    readonly inclusionMode: InclusionMode;
 }

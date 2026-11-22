@@ -16,56 +16,56 @@ import {readFileSync} from 'fs';
 import {join} from 'path';
 
 const detailPath = join(
-  __dirname,
-  '../src/screens/stack/ProviderDetailScreen.tsx',
+    __dirname,
+    '../src/screens/stack/ProviderDetailScreen.tsx',
 );
 const listPath = join(__dirname, '../src/screens/stack/ProvidersScreen.tsx');
 const detailSource = readFileSync(detailPath, 'utf8');
 const listSource = readFileSync(listPath, 'utf8');
 
 describe('ProviderDetailScreen (mobile) — T-T1', () => {
-  it('顶部有 SegmentedControl，两个 tab（服务商配置 + 模型管理）', () => {
-    expect(detailSource).toMatch(/import.*SegmentedControl/);
-    // i18n 迁移后锁 coreT descriptor 调用形态与键名（文案由 catalog 保证）。
-    expect(detailSource).toMatch(/\{value: 'config', label: coreT\(\{key: "ui\.nav\.providers"\}\)\}/);
-    expect(detailSource).toMatch(/\{value: 'models', label: coreT\(\{key: "ui\.nav\.model_management"\}\)\}/);
-  });
+    it('顶部有 SegmentedControl，两个 tab（服务商配置 + 模型管理）', () => {
+        expect(detailSource).toMatch(/import.*SegmentedControl/);
+        // i18n 迁移后锁 coreT descriptor 调用形态与键名（文案由 catalog 保证）。
+        expect(detailSource).toMatch(/\{value: 'config', label: coreT\(\{key: "ui\.nav\.providers"\}\)\}/);
+        expect(detailSource).toMatch(/\{value: 'models', label: coreT\(\{key: "ui\.nav\.model_management"\}\)\}/);
+    });
 
-  it('默认 tab 是「服务商配置」（create 后直接可编辑）', () => {
-    expect(detailSource).toMatch(/useState<'config' \| 'models'>\('config'\)/);
-  });
+    it('默认 tab 是「服务商配置」（create 后直接可编辑）', () => {
+        expect(detailSource).toMatch(/useState<'config' \| 'models'>\('config'\)/);
+    });
 
-  it('服务商配置 tab 内嵌 ProviderForm mode="edit"', () => {
-    expect(detailSource).toMatch(/<ProviderForm\s+mode="edit"/);
-  });
+    it('服务商配置 tab 内嵌 ProviderForm mode="edit"', () => {
+        expect(detailSource).toMatch(/<ProviderForm\s+mode="edit"/);
+    });
 
-  it('模型管理 tab 保留 ManageHeader + 模型列表（含添加/远程）', () => {
-    expect(detailSource).toMatch(/title=\{coreT\(\{key: "ui\.provider\.models_saved_done"\}\)\}/);
-    expect(detailSource).toMatch(/navigation\.navigate\('ModelSampling'/);
-  });
+    it('模型管理 tab 保留 ManageHeader + 模型列表（含添加/远程）', () => {
+        expect(detailSource).toMatch(/title=\{coreT\(\{key: "ui\.provider\.models_saved_done"\}\)\}/);
+        expect(detailSource).toMatch(/navigation\.navigate\('ModelSampling'/);
+    });
 
-  it('删模型批量模式接入全选（onSelectAll + allSelected，全选后可清空）', () => {
-    expect(detailSource).toMatch(/onSelectAll=\{/);
-    expect(detailSource).toMatch(/allSelected=\{/);
-    expect(detailSource).toMatch(/rows\.map\(row => row\.savedModelId\)/);
-  });
+    it('删模型批量模式接入全选（onSelectAll + allSelected，全选后可清空）', () => {
+        expect(detailSource).toMatch(/onSelectAll=\{/);
+        expect(detailSource).toMatch(/allSelected=\{/);
+        expect(detailSource).toMatch(/rows\.map\(row => row\.savedModelId\)/);
+    });
 
-  it('ProviderEdit 路由已删除（无 import / navigate ProviderEdit）', () => {
-    expect(detailSource).not.toMatch(/navigate\('ProviderEdit'/);
-  });
+    it('ProviderEdit 路由已删除（无 import / navigate ProviderEdit）', () => {
+        expect(detailSource).not.toMatch(/navigate\('ProviderEdit'/);
+    });
 });
 
 describe('ProvidersScreen (mobile) — T-T4', () => {
-  it('BottomSheetMenu 无「编辑」项', () => {
-    // 菜单 items 数组里只剩删除
-    const itemsMatch = listSource.match(/items=\{\[([\s\S]*?)\]\}/);
-    expect(itemsMatch).toBeTruthy();
-    expect(itemsMatch![1]).not.toMatch(/action: 'edit'/);
-    expect(itemsMatch![1]).toMatch(/action: 'delete'/);
-  });
+    it('BottomSheetMenu 无「编辑」项', () => {
+        // 菜单 items 数组里只剩删除
+        const itemsMatch = listSource.match(/items=\{\[([\s\S]*?)\]\}/);
+        expect(itemsMatch).toBeTruthy();
+        expect(itemsMatch![1]).not.toMatch(/action: 'edit'/);
+        expect(itemsMatch![1]).toMatch(/action: 'delete'/);
+    });
 
-  it('handler 无 edit 分支、无 navigate ProviderEdit', () => {
-    expect(listSource).not.toMatch(/if \(action === 'edit'\)/);
-    expect(listSource).not.toMatch(/navigate\('ProviderEdit'/);
-  });
+    it('handler 无 edit 分支、无 navigate ProviderEdit', () => {
+        expect(listSource).not.toMatch(/if \(action === 'edit'\)/);
+        expect(listSource).not.toMatch(/navigate\('ProviderEdit'/);
+    });
 });

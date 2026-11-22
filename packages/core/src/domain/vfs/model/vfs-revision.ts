@@ -14,10 +14,10 @@ export type VfsRevisionStatus = "active" | "deleted";
  * Immutable content revision for a single file entry.
  */
 export interface VfsRevision {
-  /** 对应 vfs_entry.entry_id；rename / move 后仍指向同一文件。 */
-  readonly entryId: number;
-  readonly version: number;
-  readonly content: string | null;
-  readonly status: VfsRevisionStatus;
-  readonly mtimeMs: number;
+    /** 对应 vfs_entry.entry_id；rename / move 后仍指向同一文件。 */
+    readonly entryId: number;
+    readonly version: number;
+    readonly content: string | null;
+    readonly status: VfsRevisionStatus;
+    readonly mtimeMs: number;
 }

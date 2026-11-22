@@ -27,66 +27,66 @@ import { RunScope } from "../run-scope.js";
 export type BackupRunRequest = { readonly runId?: string };
 
 export const Backup = {
-  async handleExport(req?: BackupRunRequest): Promise<IpcResult<BackupExportResult>> {
-    const built = await DesktopRuntimeSingleton.get();
-    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
-    if (!built.ok) return IpcResults.err(FormatIpcError.format(built.error));
-    const rt = built.value;
-    // 策略表：scope（含 300s deadline）在原生保存对话框 resolve 后创建；对话框
-    // 期间的 abort 不承诺生效，deadline 也不该消耗在模态窗口上。
-    const picked = await DbBackupService.pickExportPath(BrowserWindow.getFocusedWindow());
-    if (!picked.ok) return IpcResults.err(FormatIpcError.format(picked.error));
-    if (picked.value == null) return IpcResults.ok("cancelled");
-    const destPath = picked.value;
-    return RunScope.abortable({ registry: rt.abortRegistry, key: RunScope.key(ABORT_KEY.backup, req?.runId), timeoutMs: 300_000 }, (scope) => Backup.export(rt, destPath, scope));
-  },
+    async handleExport(req?: BackupRunRequest): Promise<IpcResult<BackupExportResult>> {
+        const built = await DesktopRuntimeSingleton.get();
+        // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+        if (!built.ok) return IpcResults.err(FormatIpcError.format(built.error));
+        const rt = built.value;
+        // 策略表：scope（含 300s deadline）在原生保存对话框 resolve 后创建；对话框
+        // 期间的 abort 不承诺生效，deadline 也不该消耗在模态窗口上。
+        const picked = await DbBackupService.pickExportPath(BrowserWindow.getFocusedWindow());
+        if (!picked.ok) return IpcResults.err(FormatIpcError.format(picked.error));
+        if (picked.value == null) return IpcResults.ok("cancelled");
+        const destPath = picked.value;
+        return RunScope.abortable({ registry: rt.abortRegistry, key: RunScope.key(ABORT_KEY.backup, req?.runId), timeoutMs: 300_000 }, (scope) => Backup.export(rt, destPath, scope));
+    },
 
-  /** 可被中断的备份导出段（对话框已 resolve，只剩 copyFile）；检查点命中返回 `Outcome.cancelled`。 */
-  // nm-style: keep-local — run-abort-scope.test 直引断言取消/完成分支；内联会破坏测试锁名。
-  async export(rt: DesktopNovelMasterRuntime, destPath: string, scope: AbortScope): Promise<Outcome<BackupExportResult>> {
-    const stopped = RunScope.outcomeIfAborted(scope);
-    if (stopped != null) return stopped;
-    try {
-      // 中断沿返回值上行（Outcome 通道）：cancelled/replaced 原样透传给 handler 消费方。
-      const exported = await DbBackupService.exportToPath(rt, destPath, () => scope.checkpoint());
-      return exported.kind === "completed" ? { kind: "completed", value: "saved" } : exported;
-    } catch (err) {
-      // 兜底：未来 throw 源的 AbortError 转回控制流 Outcome。
-      if (RequestAbort.isAbortLikeError(err)) return { kind: "cancelled", reason: scope.reason ?? "user-stop" };
-      throw err;
-    }
-  },
+    /** 可被中断的备份导出段（对话框已 resolve，只剩 copyFile）；检查点命中返回 `Outcome.cancelled`。 */
+    // nm-style: keep-local — run-abort-scope.test 直引断言取消/完成分支；内联会破坏测试锁名。
+    async export(rt: DesktopNovelMasterRuntime, destPath: string, scope: AbortScope): Promise<Outcome<BackupExportResult>> {
+        const stopped = RunScope.outcomeIfAborted(scope);
+        if (stopped != null) return stopped;
+        try {
+            // 中断沿返回值上行（Outcome 通道）：cancelled/replaced 原样透传给 handler 消费方。
+            const exported = await DbBackupService.exportToPath(rt, destPath, () => scope.checkpoint());
+            return exported.kind === "completed" ? { kind: "completed", value: "saved" } : exported;
+        } catch (err) {
+            // 兜底：未来 throw 源的 AbortError 转回控制流 Outcome。
+            if (RequestAbort.isAbortLikeError(err)) return { kind: "cancelled", reason: scope.reason ?? "user-stop" };
+            throw err;
+        }
+    },
 
-  async handleImport(req?: BackupRunRequest): Promise<IpcResult<BackupImportResult>> {
-    // ic-20 外层令牌：busy 为计数/令牌配对——底层 importDatabaseBackupFromBytes
-    // 已 acquire/release 自平衡；这里再持一枚，覆盖「库文件已替换、
-    // rebootstrap 尚未完成」的重建窗口，release 严格在 rebootstrap 完成之后
-    // （finally 兜底失败路径）。计数语义下与底层令牌互不提前清位。
-    maintenanceBusy.acquire();
-    try {
-      const built = await DesktopRuntimeSingleton.get();
-      if (!built.ok) return IpcResults.err(FormatIpcError.format(built.error));
-      const rt = built.value;
-      return await RunScope.abortable({ registry: rt.abortRegistry, key: RunScope.key(ABORT_KEY.backup, req?.runId) }, (scope) => Backup.import(scope));
-    } finally {
-      maintenanceBusy.release();
-    }
-  },
+    async handleImport(req?: BackupRunRequest): Promise<IpcResult<BackupImportResult>> {
+        // ic-20 外层令牌：busy 为计数/令牌配对——底层 importDatabaseBackupFromBytes
+        // 已 acquire/release 自平衡；这里再持一枚，覆盖「库文件已替换、
+        // rebootstrap 尚未完成」的重建窗口，release 严格在 rebootstrap 完成之后
+        // （finally 兜底失败路径）。计数语义下与底层令牌互不提前清位。
+        maintenanceBusy.acquire();
+        try {
+            const built = await DesktopRuntimeSingleton.get();
+            if (!built.ok) return IpcResults.err(FormatIpcError.format(built.error));
+            const rt = built.value;
+            return await RunScope.abortable({ registry: rt.abortRegistry, key: RunScope.key(ABORT_KEY.backup, req?.runId) }, (scope) => Backup.import(scope));
+        } finally {
+            maintenanceBusy.release();
+        }
+    },
 
-  /**
+    /**
    * 备份导入段：`close → 覆盖 → restore` 不可中断，因此**只有入口检查点**，
    * 完成之后不再判取消——库已换代却回 `IPC_ABORTED` 会让用户以为没导入。
    */
-  // nm-style: keep-local — run-abort-scope.test 直引断言导入段取消语义；内联会破坏测试锁名。
-  async import(scope: AbortScope): Promise<Outcome<BackupImportResult>> {
-    const stopped = RunScope.outcomeIfAborted(scope);
-    if (stopped != null) return stopped;
-    const result = await DbBackupService.importWithDialog(BrowserWindow.getFocusedWindow());
-    if (!result.ok) return { kind: "failed", error: result.error };
-    if (result.value === "imported") {
-      const rebuilt = await DesktopRuntimeSingleton.rebootstrap();
-      if (!rebuilt.ok) return { kind: "failed", error: rebuilt.error };
-    }
-    return { kind: "completed", value: result.value };
-  },
+    // nm-style: keep-local — run-abort-scope.test 直引断言导入段取消语义；内联会破坏测试锁名。
+    async import(scope: AbortScope): Promise<Outcome<BackupImportResult>> {
+        const stopped = RunScope.outcomeIfAborted(scope);
+        if (stopped != null) return stopped;
+        const result = await DbBackupService.importWithDialog(BrowserWindow.getFocusedWindow());
+        if (!result.ok) return { kind: "failed", error: result.error };
+        if (result.value === "imported") {
+            const rebuilt = await DesktopRuntimeSingleton.rebootstrap();
+            if (!rebuilt.ok) return { kind: "failed", error: rebuilt.error };
+        }
+        return { kind: "completed", value: result.value };
+    },
 } as const;

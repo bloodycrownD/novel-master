@@ -11,92 +11,92 @@ import type { SavedModelRepository } from "../../../src/domain/provider/reposito
 import type { LlmProtocolKind } from "../../../src/infra/llm-protocol/ports/adapter.port.js";
 
 function stubProvider(
-  id: string,
-  protocol: LlmProtocolKind,
+    id: string,
+    protocol: LlmProtocolKind,
 ): LlmProvider {
-  return {
-    id,
-    builtinKey: null,
-    protocol,
-    baseUrl: "https://example.com/v1",
-    displayName: id,
-    secretRef: null,
-    headers: {},
-    isBuiltin: true,
-    createdAtMs: 0,
-    updatedAtMs: 0,
-  };
+    return {
+        id,
+        builtinKey: null,
+        protocol,
+        baseUrl: "https://example.com/v1",
+        displayName: id,
+        secretRef: null,
+        headers: {},
+        isBuiltin: true,
+        createdAtMs: 0,
+        updatedAtMs: 0,
+    };
 }
 
 const noopProviderRepo: ProviderRepository = {
-  list: async () => [],
-  findById: async () => null,
-  insert: async () => {},
-  update: async () => {},
-  delete: async () => false,
+    list: async () => [],
+    findById: async () => null,
+    insert: async () => {},
+    update: async () => {},
+    delete: async () => false,
 };
 
 const noopSavedModelRepo: SavedModelRepository = {
-  listByProvider: async () => [],
-  find: async () => null,
-  insert: async () => {},
-  update: async () => {},
-  delete: async () => false,
-  deleteByProvider: async () => {},
+    listByProvider: async () => [],
+    find: async () => null,
+    insert: async () => {},
+    update: async () => {},
+    delete: async () => false,
+    deleteByProvider: async () => {},
 };
 
 /** Provider repo that returns a fixed protocol per id (unknown id → null). */
 export function mockProviderRepository(
-  protocolById: Readonly<Record<string, LlmProtocolKind>>,
+    protocolById: Readonly<Record<string, LlmProtocolKind>>,
 ): ProviderRepository {
-  return {
-    ...noopProviderRepo,
-    findById: async (id) =>
-      protocolById[id] != null ? stubProvider(id, protocolById[id]!) : null,
-  };
+    return {
+        ...noopProviderRepo,
+        findById: async (id) =>
+            protocolById[id] != null ? stubProvider(id, protocolById[id]!) : null,
+    };
 }
 
 /** Mutable provider protocol for a single id (simulates provider edit without restart). */
 export function mutableProviderRepository(
-  providerId: string,
-  initialProtocol: LlmProtocolKind,
+    providerId: string,
+    initialProtocol: LlmProtocolKind,
 ): { repo: ProviderRepository; setProtocol: (p: LlmProtocolKind) => void } {
-  let protocol = initialProtocol;
-  return {
-    setProtocol: (p) => {
-      protocol = p;
-    },
-    repo: {
-      ...noopProviderRepo,
-      findById: async (id) =>
-        id === providerId ? stubProvider(id, protocol) : null,
-    },
-  };
+    let protocol = initialProtocol;
+    return {
+        setProtocol: (p) => {
+            protocol = p;
+        },
+        repo: {
+            ...noopProviderRepo,
+            findById: async (id) =>
+                id === providerId ? stubProvider(id, protocol) : null,
+        },
+    };
 }
 
 /** Saved-model repo: only keys in the set are considered saved. */
 export function mockSavedModelRepository(
-  savedKeys: ReadonlySet<string>,
+    savedKeys: ReadonlySet<string>,
 ): SavedModelRepository {
-  return {
-    ...noopSavedModelRepo,
-    find: async (providerId, vendorModelId) => {
-      const key = `${providerId}/${vendorModelId}`;
-      if (!savedKeys.has(key)) {
-        return null;
-      }
-      return {
-        providerId,
-        vendorModelId,
-        displayName: null,
-        createdAtMs: 0,
-        updatedAtMs: 0,
-      } satisfies SavedModel;
-    },
-  };
+    return {
+        ...noopSavedModelRepo,
+        find: async (providerId, vendorModelId) => {
+            const key = `${providerId}/${vendorModelId}`;
+            if (!savedKeys.has(key)) {
+                return null;
+            }
+            return {
+                providerId,
+                vendorModelId,
+                displayName: null,
+                createdAtMs: 0,
+                updatedAtMs: 0,
+            } satisfies SavedModel;
+        },
+    };
 }
 
 /** Empty registry deps (model-name routing needs no DB). */
 export function emptyRegistryDeps(): Record<string, never> {
-  return {};
+    return {};
 }

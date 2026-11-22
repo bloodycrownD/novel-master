@@ -13,41 +13,41 @@ import type {UpdateCheckData} from '@novel-master/core/common';
 import {UpdateCheckResultModal} from './UpdateCheckResultModal';
 
 function showUpdateDetailAlert(data: UpdateCheckData, onLater: () => void, showToast: (message: string) => void): void {
-  const openSuffix = coreT({key: "ui.update.open_releases_suffix"});
-  let message: string;
-  if (data.releaseNotesExcerpt) {
-    message = `v${data.remoteVersion}\n\n${data.releaseNotesExcerpt}\n\n${openSuffix}`;
-  } else {
-    message = `v${data.remoteVersion}\n\n${openSuffix}`;
-  }
+    const openSuffix = coreT({key: "ui.update.open_releases_suffix"});
+    let message: string;
+    if (data.releaseNotesExcerpt) {
+        message = `v${data.remoteVersion}\n\n${data.releaseNotesExcerpt}\n\n${openSuffix}`;
+    } else {
+        message = `v${data.remoteVersion}\n\n${openSuffix}`;
+    }
 
-  Alert.alert(coreT({key: "ui.update.available_title"}), message, [
-    {text: coreT({key: "ui.common.cancel"}), style: 'cancel'},
-    {text: coreT({key: "ui.update.later"}), onPress: onLater},
-    {
-      text: coreT({key: "ui.update.go_download"}),
-      onPress: () => {
-        // 对齐 AboutScreen openLink：外跳失败（无浏览器可处理等）toast 而非裸 rejection。
-        void Linking.openURL(data.releaseUrl).catch(err => showToast(ToastMessage.toast(coreT({key: "ui.common.open_link_failed"}), err)));
-      },
-    },
-  ]);
+    Alert.alert(coreT({key: "ui.update.available_title"}), message, [
+        {text: coreT({key: "ui.common.cancel"}), style: 'cancel'},
+        {text: coreT({key: "ui.update.later"}), onPress: onLater},
+        {
+            text: coreT({key: "ui.update.go_download"}),
+            onPress: () => {
+                // 对齐 AboutScreen openLink：外跳失败（无浏览器可处理等）toast 而非裸 rejection。
+                void Linking.openURL(data.releaseUrl).catch(err => showToast(ToastMessage.toast(coreT({key: "ui.common.open_link_failed"}), err)));
+            },
+        },
+    ]);
 }
 
 export function UpdateCheckHost() {
-  const {showToast} = useToast();
+    const {showToast} = useToast();
 
-  const showUpdateDetail = useCallback(
-    (data: UpdateCheckData, onLater: () => void) => {
-      showUpdateDetailAlert(data, onLater, showToast);
-    },
-    [showToast],
-  );
+    const showUpdateDetail = useCallback(
+        (data: UpdateCheckData, onLater: () => void) => {
+            showUpdateDetailAlert(data, onLater, showToast);
+        },
+        [showToast],
+    );
 
-  const {resultModal, closeResultModal, snoozeToday} = useAutoUpdateCheck({
-    showToast,
-    showUpdateDetail,
-  });
+    const {resultModal, closeResultModal, snoozeToday} = useAutoUpdateCheck({
+        showToast,
+        showUpdateDetail,
+    });
 
-  return <UpdateCheckResultModal visible={resultModal != null} kind={resultModal ?? 'up-to-date'} onClose={closeResultModal} onSnoozeToday={snoozeToday} />;
+    return <UpdateCheckResultModal visible={resultModal != null} kind={resultModal ?? 'up-to-date'} onClose={closeResultModal} onSnoozeToday={snoozeToday} />;
 }

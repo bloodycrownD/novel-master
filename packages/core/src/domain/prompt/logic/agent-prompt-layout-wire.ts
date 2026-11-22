@@ -8,9 +8,9 @@ import type { DynamicPromptBlock, PersistTextPromptBlock } from "../model/agent-
 
 /** persist 文本块 wire 形状。 */
 type PersistTextBlockWire = {
-  readonly type: "text";
-  readonly role: "user" | "assistant";
-  readonly content: string;
+    readonly type: "text";
+    readonly role: "user" | "assistant";
+    readonly content: string;
 };
 
 /** persist 块 wire 形状（仅 text）。 */
@@ -18,29 +18,29 @@ type PersistPromptBlockWire = PersistTextBlockWire;
 
 /** dynamic 块 wire 形状（lifecycle 已下线，恒不带该键）。 */
 type DynamicPromptBlockWire = {
-  readonly type: "text";
-  readonly role: "user" | "assistant";
-  readonly content: string;
+    readonly type: "text";
+    readonly role: "user" | "assistant";
+    readonly content: string;
 };
 
 export const AgentPromptLayoutWire = {
-  /**
+    /**
    * 将 persist 文本块序列化为 wire map 条目。
    */
-  persistBlock(block: PersistTextPromptBlock): PersistPromptBlockWire {
-    return { type: "text", role: block.role, content: block.content };
-  },
+    persistBlock(block: PersistTextPromptBlock): PersistPromptBlockWire {
+        return { type: "text", role: block.role, content: block.content };
+    },
 
-  /**
+    /**
    * 将 dynamic 区块序列化为 wire map 条目。
    *
    * @remarks lifecycle 已下线：写出的块恒不含该键（存量读入侧由 schema preprocess 剥除）。
    */
-  dynamicBlock(block: DynamicPromptBlock): DynamicPromptBlockWire {
-    return {
-      type: "text",
-      role: block.role,
-      content: block.content,
-    };
-  },
+    dynamicBlock(block: DynamicPromptBlock): DynamicPromptBlockWire {
+        return {
+            type: "text",
+            role: block.role,
+            content: block.content,
+        };
+    },
 } as const;

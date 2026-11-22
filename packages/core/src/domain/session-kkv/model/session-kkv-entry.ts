@@ -6,8 +6,8 @@
 
 /** 会话作用域下的键值行。 */
 export interface SessionKkvEntry {
-  readonly sessionId: string;
-  readonly domain: string;
-  readonly key: string;
-  readonly value: string;
+    readonly sessionId: string;
+    readonly domain: string;
+    readonly key: string;
+    readonly value: string;
 }

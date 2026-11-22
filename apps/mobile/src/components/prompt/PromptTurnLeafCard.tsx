@@ -20,61 +20,61 @@ import {coreT} from '@/i18n/core';
 
 /** 详情页标题：thinking 卡单独叫「thinking」，其余读 core 给的 role 展示标签。 */
 function promptLeafTitle(card: PromptTextCardData): string {
-  if (card.type === 'thinking') {
-    return 'thinking';
-  }
-  return card.role === '' ? coreT({key: "ui.common.text"}) : card.role;
+    if (card.type === 'thinking') {
+        return 'thinking';
+    }
+    return card.role === '' ? coreT({key: "ui.common.text"}) : card.role;
 }
 
 type Props = {
-  card: PromptTextCardData;
-  turnId: string;
+    card: PromptTextCardData;
+    turnId: string;
 };
 
 export function PromptTurnLeafCard({card, turnId}: Props) {
-  const {tokens} = useTheme();
-  const openDetail = useOpenPromptDetail();
+    const {tokens} = useTheme();
+    const openDetail = useOpenPromptDetail();
 
-  const handlePress = useCallback(() => {
-    openDetail({
-      title: promptLeafTitle(card),
-      body: card.body,
-      leafId: card.id,
-      turnId,
-    });
-  }, [openDetail, card, turnId]);
+    const handlePress = useCallback(() => {
+        openDetail({
+            title: promptLeafTitle(card),
+            body: card.body,
+            leafId: card.id,
+            turnId,
+        });
+    }, [openDetail, card, turnId]);
 
-  return (
-    <Pressable
-      testID="prompt-turn-leaf-card"
-      accessibilityRole="button"
-      accessibilityLabel={`${promptLeafTitle(card)}，${card.body.slice(0, 20)}`}
-      onPress={handlePress}
-      style={[
-        styles.card,
-        {
-          backgroundColor: tokens.bgSecondary,
-          borderColor: tokens.border,
-          borderLeftColor: tokens.primary,
-        },
-      ]}>
-      <Text
-        testID="prompt-turn-leaf-preview"
-        style={[styles.preview, {color: tokens.text}]}
-        numberOfLines={6}>
-        {card.body}
-      </Text>
-    </Pressable>
-  );
+    return (
+        <Pressable
+            testID="prompt-turn-leaf-card"
+            accessibilityRole="button"
+            accessibilityLabel={`${promptLeafTitle(card)}，${card.body.slice(0, 20)}`}
+            onPress={handlePress}
+            style={[
+                styles.card,
+                {
+                    backgroundColor: tokens.bgSecondary,
+                    borderColor: tokens.border,
+                    borderLeftColor: tokens.primary,
+                },
+            ]}>
+            <Text
+                testID="prompt-turn-leaf-preview"
+                style={[styles.preview, {color: tokens.text}]}
+                numberOfLines={6}>
+                {card.body}
+            </Text>
+        </Pressable>
+    );
 }
 
 const styles = StyleSheet.create({
-  // blockCard 形态（智能体配置同款）：1px 边 + 左 3px primary 粗条 + 10 圆角。
-  card: {
-    borderWidth: 1,
-    borderLeftWidth: 3,
-    borderRadius: 10,
-    padding: 12,
-  },
-  preview: {fontSize: 12, lineHeight: 17},
+    // blockCard 形态（智能体配置同款）：1px 边 + 左 3px primary 粗条 + 10 圆角。
+    card: {
+        borderWidth: 1,
+        borderLeftWidth: 3,
+        borderRadius: 10,
+        padding: 12,
+    },
+    preview: {fontSize: 12, lineHeight: 17},
 });

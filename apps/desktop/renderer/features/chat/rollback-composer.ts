@@ -2,13 +2,13 @@ import { type RollbackMode } from '@shared/logic/chat';
 import type { MessageAttachmentDto } from '@shared/ipc-types';
 
 type ComposerDraftSnapshot = {
-  readonly text: string;
-  readonly attachments: readonly MessageAttachmentDto[];
+    readonly text: string;
+    readonly attachments: readonly MessageAttachmentDto[];
 };
 
 type ComposerRestoreSnapshot = {
-  readonly text: string | null;
-  readonly attachments: readonly MessageAttachmentDto[] | null | undefined;
+    readonly text: string | null;
+    readonly attachments: readonly MessageAttachmentDto[] | null | undefined;
 };
 
 /**
@@ -17,14 +17,14 @@ type ComposerRestoreSnapshot = {
  *（main 已推空；renderer 再 ∪ annotate）。
  */
 export function resolveComposerDraftAfterRollbackSuccess(current: ComposerDraftSnapshot, rollbackMode: RollbackMode, restore: ComposerRestoreSnapshot): ComposerDraftSnapshot {
-  if (rollbackMode === 'undo_send' && restore.text != null) {
+    if (rollbackMode === 'undo_send' && restore.text != null) {
+        return {
+            text: restore.text,
+            attachments: [],
+        };
+    }
     return {
-      text: restore.text,
-      attachments: [],
+        text: current.text,
+        attachments: [],
     };
-  }
-  return {
-    text: current.text,
-    attachments: [],
-  };
 }

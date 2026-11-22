@@ -18,11 +18,11 @@ import type {TranscriptToolView} from './ChatTranscriptBridge';
 import type {StreamWireChunk} from '@/services/stream-wire-queue';
 
 export type ChatTranscriptWebViewHandle = {
-  pushStream: (payload: {
-    streamId: string;
-    segments: readonly StreamWireChunk[];
-    tools?: readonly TranscriptToolView[];
-  }) => void;
-  resetStream: (streamIds?: readonly string[]) => void;
-  forceSnapshot: () => void;
+    pushStream: (payload: {
+        streamId: string;
+        segments: readonly StreamWireChunk[];
+        tools?: readonly TranscriptToolView[];
+    }) => void;
+    resetStream: (streamIds?: readonly string[]) => void;
+    forceSnapshot: () => void;
 };

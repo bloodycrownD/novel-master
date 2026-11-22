@@ -9,46 +9,46 @@
 import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {
-  CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION,
-  type HostToTranscriptType,
-  type TranscriptToHostType,
+    CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION,
+    type HostToTranscriptType,
+    type TranscriptToHostType,
 } from '@/components/chat/ChatTranscriptBridge';
 import {CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION as SOURCE_SCHEMA_VERSION} from '@/services/chat-transcript-scroll-cache';
 
 /** 编译期穷尽：union 增删 type 时这里必须同步（否则 tsc 报错）。 */
 const HOST_TO_TRANSCRIPT_TYPES: Record<HostToTranscriptType, true> = {
-  init: true,
-  sessionSnapshot: true,
-  prependPage: true,
-  appendTailRows: true,
-  streamDelta: true,
-  streamBlockCommit: true,
-  streamReset: true,
-  streamStatus: true,
-  themeUpdate: true,
-  flagsUpdate: true,
-  closeMenu: true,
-  closeMermaidViewer: true,
+    init: true,
+    sessionSnapshot: true,
+    prependPage: true,
+    appendTailRows: true,
+    streamDelta: true,
+    streamBlockCommit: true,
+    streamReset: true,
+    streamStatus: true,
+    themeUpdate: true,
+    flagsUpdate: true,
+    closeMenu: true,
+    closeMermaidViewer: true,
 };
 
 const TRANSCRIPT_TO_HOST_TYPES: Record<TranscriptToHostType, true> = {
-  ready: true,
-  scrollSnapshot: true,
-  loadOlder: true,
-  openMessageMenu: true,
-  openToolFile: true,
-  linkClick: true,
-  openSubagentSession: true,
-  openSkillDetail: true,
-  openToolResult: true,
-  messageMenuAction: true,
-  menuOpened: true,
-  menuClosed: true,
-  mermaidViewerOpened: true,
-  mermaidViewerClosed: true,
-  copyCode: true,
-  streamResync: true,
-  visibility: true,
+    ready: true,
+    scrollSnapshot: true,
+    loadOlder: true,
+    openMessageMenu: true,
+    openToolFile: true,
+    linkClick: true,
+    openSubagentSession: true,
+    openSkillDetail: true,
+    openToolResult: true,
+    messageMenuAction: true,
+    menuOpened: true,
+    menuClosed: true,
+    mermaidViewerOpened: true,
+    mermaidViewerClosed: true,
+    copyCode: true,
+    streamResync: true,
+    visibility: true,
 };
 
 /**
@@ -56,17 +56,17 @@ const TRANSCRIPT_TO_HOST_TYPES: Record<TranscriptToHostType, true> = {
  * 运行时只能靠这里与上面的清单双向对账（改了源没改清单 → 红）。
  */
 function declaredWireTypes(startMarker: string, endMarker: string): string[] {
-  const source = readFileSync(
-    join(__dirname, '../src/components/chat/ChatTranscriptBridge.ts'),
-    'utf8',
-  );
-  const start = source.indexOf(startMarker);
-  const end = source.indexOf(endMarker, start);
-  if (start < 0 || end < 0) {
-    throw new Error(`wire type region not found: ${startMarker}`);
-  }
-  const region = source.slice(start, end);
-  return [...region.matchAll(/BridgeEnvelope<\s*'([^']+)'/g)].map(
+    const source = readFileSync(
+        join(__dirname, '../src/components/chat/ChatTranscriptBridge.ts'),
+        'utf8',
+    );
+    const start = source.indexOf(startMarker);
+    const end = source.indexOf(endMarker, start);
+    if (start < 0 || end < 0) {
+        throw new Error(`wire type region not found: ${startMarker}`);
+    }
+    const region = source.slice(start, end);
+    return [...region.matchAll(/BridgeEnvelope<\s*'([^']+)'/g)].map(
     match => match[1]!,
   );
 }

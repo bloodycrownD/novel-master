@@ -14,58 +14,58 @@ import { TokenizerAssetsRoot } from "./resolve-tokenizer-assets-root.js";
 
 /** 单例连接槽（模块内 holder，对象管理）：共享连接、首次 open 的在途 Promise 与驱动注册闩锁。 */
 const connectionSlot = {
-  /** 共享连接（undefined = 未打开）。 */
-  current: undefined as TdbcConnection | undefined,
-  /** 首次 open 的在途 Promise（双检：并发 get 只建一次）。 */
-  pending: undefined as Promise<TdbcConnection> | undefined,
-  /** 平台驱动是否已注册（进程内一次）。 */
-  driversRegistered: false,
+    /** 共享连接（undefined = 未打开）。 */
+    current: undefined as TdbcConnection | undefined,
+    /** 首次 open 的在途 Promise（双检：并发 get 只建一次）。 */
+    pending: undefined as Promise<TdbcConnection> | undefined,
+    /** 平台驱动是否已注册（进程内一次）。 */
+    driversRegistered: false,
 };
 
 // nm-style 注记：命名镜像 mobile db/connection.ts 的 MobileDb 先例。
 export namespace DesktopDb {
-  /** Opens (once) the app DB with core bootstrap and platform drivers. */
-  export async function get(): Promise<TdbcConnection> {
-    if (connectionSlot.current) {
-      return connectionSlot.current;
-    }
-    if (!connectionSlot.pending) {
-      connectionSlot.pending = (async (): Promise<TdbcConnection> => {
-        // SKSP 平台解析失败沿拒绝通道出：本 singleton 的失败通道是 rejection
-        // （bootstrap 的 INFRA_BASELINE_TOO_OLD 同款），不为此把
-        // DesktopDb.get 改成 Result 去波及全部调用方。
-        if (!connectionSlot.driversRegistered) {
-          BetterSqlite3Register.register();
-          const sksp = DesktopSksp.registerDriver();
-          if (!sksp.ok) return Promise.reject(sksp.error);
-          TokenizerNodeRegister.register({ assetsRoot: TokenizerAssetsRoot.resolve() });
-          // Node 侧原生 zlib 加速器（P1-4）：core 禁止静态 import node: 模块，
-          // 由 desktop main（唯一跑解压的进程；renderer 不引 core 解压路径）注册。
-          // 注意：compressZlib 目前恒不传 level，下面三元里的 level 分支是给
-          // 将来 level 透传预留的；保持它是因为加速器契约里 level 是可选形参。
-          ZlibAccelerator.register({ deflate: (data, level) => (level === undefined ? deflateSync(data) : deflateSync(data, { level })), inflate: (data) => inflateSync(data) });
-          connectionSlot.driversRegistered = true;
+    /** Opens (once) the app DB with core bootstrap and platform drivers. */
+    export async function get(): Promise<TdbcConnection> {
+        if (connectionSlot.current) {
+            return connectionSlot.current;
         }
-        const dbPath = resolve(DesktopDbPath.resolve());
-        await mkdir(dirname(dbPath), { recursive: true });
-        const c = await TdbcOpen.open(`tdbc:sqlite:file:${dbPath}`, { driver: "better-sqlite3" });
-        await NovelMasterBootstrap.bootstrap(c);
-        connectionSlot.current = c;
-        return c;
-      })();
+        if (!connectionSlot.pending) {
+            connectionSlot.pending = (async (): Promise<TdbcConnection> => {
+                // SKSP 平台解析失败沿拒绝通道出：本 singleton 的失败通道是 rejection
+                // （bootstrap 的 INFRA_BASELINE_TOO_OLD 同款），不为此把
+                // DesktopDb.get 改成 Result 去波及全部调用方。
+                if (!connectionSlot.driversRegistered) {
+                    BetterSqlite3Register.register();
+                    const sksp = DesktopSksp.registerDriver();
+                    if (!sksp.ok) return Promise.reject(sksp.error);
+                    TokenizerNodeRegister.register({ assetsRoot: TokenizerAssetsRoot.resolve() });
+                    // Node 侧原生 zlib 加速器（P1-4）：core 禁止静态 import node: 模块，
+                    // 由 desktop main（唯一跑解压的进程；renderer 不引 core 解压路径）注册。
+                    // 注意：compressZlib 目前恒不传 level，下面三元里的 level 分支是给
+                    // 将来 level 透传预留的；保持它是因为加速器契约里 level 是可选形参。
+                    ZlibAccelerator.register({ deflate: (data, level) => (level === undefined ? deflateSync(data) : deflateSync(data, { level })), inflate: (data) => inflateSync(data) });
+                    connectionSlot.driversRegistered = true;
+                }
+                const dbPath = resolve(DesktopDbPath.resolve());
+                await mkdir(dirname(dbPath), { recursive: true });
+                const c = await TdbcOpen.open(`tdbc:sqlite:file:${dbPath}`, { driver: "better-sqlite3" });
+                await NovelMasterBootstrap.bootstrap(c);
+                connectionSlot.current = c;
+                return c;
+            })();
+        }
+        return connectionSlot.pending;
     }
-    return connectionSlot.pending;
-  }
 
-  /** Closes the shared connection and clears init state (backup import / rebootstrap). */
-  export async function close(): Promise<void> {
-    await connectionSlot.current?.close();
-    connectionSlot.current = undefined;
-    connectionSlot.pending = undefined;
-  }
+    /** Closes the shared connection and clears init state (backup import / rebootstrap). */
+    export async function close(): Promise<void> {
+        await connectionSlot.current?.close();
+        connectionSlot.current = undefined;
+        connectionSlot.pending = undefined;
+    }
 
-  /** WAL checkpoint before file-level copy (export backup). */
-  export async function checkpoint(connection: TdbcConnection): Promise<void> {
-    await connection.execute("PRAGMA wal_checkpoint(FULL)");
-  }
+    /** WAL checkpoint before file-level copy (export backup). */
+    export async function checkpoint(connection: TdbcConnection): Promise<void> {
+        await connection.execute("PRAGMA wal_checkpoint(FULL)");
+    }
 }

@@ -22,178 +22,178 @@ import {styles} from './agent-editor-form.styles';
 import {type AgentEditorTokens} from './agent-editor-types';
 
 type Props = {
-  tokens: AgentEditorTokens;
-  label: string;
-  persistEnabled: boolean;
-  onPersistEnabledChange: (value: boolean) => void;
-  persist: PersistPromptBlock[];
-  setPersist: (
-    apply: (prev: PersistPromptBlock[]) => PersistPromptBlock[],
-  ) => void;
-  onAdd: () => void;
-  onMove: (index: number, dir: -1 | 1) => void;
-  onDelete: (index: number) => void;
-  openPromptEditor: (
-    title: string,
-    text: string,
-    onSaved: (text: string) => void,
-  ) => void;
-  /** 只读态（内置智能体详情）：开关/添加/块操作/输入全禁用灰显。 */
-  readOnly?: boolean;
+    tokens: AgentEditorTokens;
+    label: string;
+    persistEnabled: boolean;
+    onPersistEnabledChange: (value: boolean) => void;
+    persist: PersistPromptBlock[];
+    setPersist: (
+        apply: (prev: PersistPromptBlock[]) => PersistPromptBlock[],
+    ) => void;
+    onAdd: () => void;
+    onMove: (index: number, dir: -1 | 1) => void;
+    onDelete: (index: number) => void;
+    openPromptEditor: (
+        title: string,
+        text: string,
+        onSaved: (text: string) => void,
+    ) => void;
+    /** 只读态（内置智能体详情）：开关/添加/块操作/输入全禁用灰显。 */
+    readOnly?: boolean;
 };
 
 export function PersistBlocksCard({
-  tokens,
-  label,
-  persistEnabled,
-  onPersistEnabledChange,
-  persist,
-  setPersist,
-  onAdd,
-  onMove,
-  onDelete,
-  openPromptEditor,
-  readOnly = false,
+    tokens,
+    label,
+    persistEnabled,
+    onPersistEnabledChange,
+    persist,
+    setPersist,
+    onAdd,
+    onMove,
+    onDelete,
+    openPromptEditor,
+    readOnly = false,
 }: Props) {
-  /** 内层区块卡片统一样式：白底常规边框 + 左侧主题色粗边。 */
-  const blockCardStyle = [
-    styles.blockCard,
-    {
-      backgroundColor: tokens.surface,
-      borderColor: tokens.border,
-      borderLeftColor: tokens.primary,
-    },
-  ];
+    /** 内层区块卡片统一样式：白底常规边框 + 左侧主题色粗边。 */
+    const blockCardStyle = [
+        styles.blockCard,
+        {
+            backgroundColor: tokens.surface,
+            borderColor: tokens.border,
+            borderLeftColor: tokens.primary,
+        },
+    ];
 
-  return (
-    <>
-      <PromptSectionHead
-        label={label}
-        tokens={tokens}
-        switchValue={persistEnabled}
-        onSwitchChange={onPersistEnabledChange}
-        disabled={readOnly}
-        {...(persistEnabled ? {onAdd} : {})}
-      />
-      <View style={blockCardStyle}>
-        {persistEnabled ? (
-          <View style={styles.blockList}>
-            {persist.filter(
-              (b): b is PersistTextPromptBlock => b.type === 'text',
-            ).length === 0 ? (
-              <Text
-                style={[
-                  styles.emptyHint,
-                  {
-                    color: tokens.textSecondary,
-                    borderColor: tokens.borderLight,
-                  },
-                ]}
-              >
-                {PROMPT_REGION_LABELS.emptyPersistHint}
-              </Text>
-            ) : null}
-            {persist
-              .filter((b): b is PersistTextPromptBlock => b.type === 'text')
-              .map((block, index, textBlocks) => (
-                <View key={`persist-block-${index}`} style={blockCardStyle}>
-                  <View style={styles.blockHeader}>
-                    <Text
-                      style={[styles.blockName, {color: tokens.text}]}
-                      numberOfLines={1}
-                    >
-                      {block.name}
+    return (
+        <>
+            <PromptSectionHead
+                label={label}
+                tokens={tokens}
+                switchValue={persistEnabled}
+                onSwitchChange={onPersistEnabledChange}
+                disabled={readOnly}
+                {...(persistEnabled ? {onAdd} : {})}
+            />
+            <View style={blockCardStyle}>
+                {persistEnabled ? (
+                    <View style={styles.blockList}>
+                        {persist.filter(
+                            (b): b is PersistTextPromptBlock => b.type === 'text',
+                        ).length === 0 ? (
+                            <Text
+                                style={[
+                                    styles.emptyHint,
+                                    {
+                                        color: tokens.textSecondary,
+                                        borderColor: tokens.borderLight,
+                                    },
+                                ]}
+                            >
+                                {PROMPT_REGION_LABELS.emptyPersistHint}
+                            </Text>
+                        ) : null}
+                        {persist
+                            .filter((b): b is PersistTextPromptBlock => b.type === 'text')
+                            .map((block, index, textBlocks) => (
+                                <View key={`persist-block-${index}`} style={blockCardStyle}>
+                                    <View style={styles.blockHeader}>
+                                        <Text
+                                            style={[styles.blockName, {color: tokens.text}]}
+                                            numberOfLines={1}
+                                        >
+                                            {block.name}
+                                        </Text>
+                                        <PromptBlockActions
+                                            index={index}
+                                            total={textBlocks.length}
+                                            tokens={tokens}
+                                            onMove={onMove}
+                                            onDelete={onDelete}
+                                            disabled={readOnly}
+                                        />
+                                    </View>
+                                    <FormField label={coreT({key: "ui.common.name"})} tokens={tokens}>
+                                        <FormTextInput
+                                            tokens={tokens}
+                                            value={block.name}
+                                            disabled={readOnly}
+                                            onChangeText={v =>
+                                                setPersist(prev =>
+                                                    AgentEditorState.mapPersistTextBlocks(prev, (b, i) =>
+                                                        i === index ? {...b, name: v} : b,
+                                                    ),
+                                                )
+                                            }
+                                        />
+                                    </FormField>
+                                    <FormField label={coreT({key: "ui.common.role"})} tokens={tokens}>
+                                        <FormSelectField
+                                            tokens={tokens}
+                                            value={block.role}
+                                            onChange={role =>
+                                                setPersist(prev =>
+                                                    AgentEditorState.mapPersistTextBlocks(prev, (b, i) =>
+                                                        i === index
+                                                            ? {
+                                                                    ...b,
+                                                                    role: role as PersistTextPromptBlock['role'],
+                                                                }
+                                                            : b,
+                                                    ),
+                                                )
+                                            }
+                                            options={ROLE_OPTIONS}
+                                            sheetTitle={coreT({key: "ui.agent.block_role_picker_title"})}
+                                            disabled={readOnly}
+                                        />
+                                    </FormField>
+                                    <Text
+                                        style={[styles.fieldHint, {color: tokens.textSecondary}]}
+                                    >
+                                        {PROMPT_REGION_LABELS.persistRegionHint}
+                                    </Text>
+                                    {/* persist 是 filter 后 text 块的 index，闭包捕获当次渲染的 index 回填。 */}
+                                    <ExpandablePromptInput
+                                        label={coreT({key: "ui.common.content"})}
+                                        disabled={readOnly}
+                                        openEditor={() =>
+                                            openPromptEditor(block.name, block.content, v =>
+                                                setPersist(prev =>
+                                                    AgentEditorState.mapPersistTextBlocks(prev, (b, i) =>
+                                                        i === index ? {...b, content: v} : b,
+                                                    ),
+                                                ),
+                                            )
+                                        }
+                                        renderInline={ctx => (
+                                            <FormTextInput
+                                                tokens={tokens}
+                                                value={block.content}
+                                                onChangeText={v =>
+                                                    setPersist(prev =>
+                                                        AgentEditorState.mapPersistTextBlocks(prev, (b, i) =>
+                                                            i === index ? {...b, content: v} : b,
+                                                        ),
+                                                    )
+                                                }
+                                                multiline
+                                                disabled={readOnly}
+                                                style={ctx.style}
+                                                selection={ctx.selection}
+                                                onSelectionChange={ctx.onSelectionChange}
+                                            />
+                                        )}
+                                    />
+                                </View>
+                            ))}
+                    </View>
+                ) : (
+                    <Text style={[styles.fieldHint, {color: tokens.textSecondary}]}>
+                        {PROMPT_REGION_LABELS.persistDisabledHint}
                     </Text>
-                    <PromptBlockActions
-                      index={index}
-                      total={textBlocks.length}
-                      tokens={tokens}
-                      onMove={onMove}
-                      onDelete={onDelete}
-                      disabled={readOnly}
-                    />
-                  </View>
-                  <FormField label={coreT({key: "ui.common.name"})} tokens={tokens}>
-                    <FormTextInput
-                      tokens={tokens}
-                      value={block.name}
-                      disabled={readOnly}
-                      onChangeText={v =>
-                        setPersist(prev =>
-                          AgentEditorState.mapPersistTextBlocks(prev, (b, i) =>
-                            i === index ? {...b, name: v} : b,
-                          ),
-                        )
-                      }
-                    />
-                  </FormField>
-                  <FormField label={coreT({key: "ui.common.role"})} tokens={tokens}>
-                    <FormSelectField
-                      tokens={tokens}
-                      value={block.role}
-                      onChange={role =>
-                        setPersist(prev =>
-                          AgentEditorState.mapPersistTextBlocks(prev, (b, i) =>
-                            i === index
-                              ? {
-                                  ...b,
-                                  role: role as PersistTextPromptBlock['role'],
-                                }
-                              : b,
-                          ),
-                        )
-                      }
-                      options={ROLE_OPTIONS}
-                      sheetTitle={coreT({key: "ui.agent.block_role_picker_title"})}
-                      disabled={readOnly}
-                    />
-                  </FormField>
-                  <Text
-                    style={[styles.fieldHint, {color: tokens.textSecondary}]}
-                  >
-                    {PROMPT_REGION_LABELS.persistRegionHint}
-                  </Text>
-                  {/* persist 是 filter 后 text 块的 index，闭包捕获当次渲染的 index 回填。 */}
-                  <ExpandablePromptInput
-                    label={coreT({key: "ui.common.content"})}
-                    disabled={readOnly}
-                    openEditor={() =>
-                      openPromptEditor(block.name, block.content, v =>
-                        setPersist(prev =>
-                          AgentEditorState.mapPersistTextBlocks(prev, (b, i) =>
-                            i === index ? {...b, content: v} : b,
-                          ),
-                        ),
-                      )
-                    }
-                    renderInline={ctx => (
-                      <FormTextInput
-                        tokens={tokens}
-                        value={block.content}
-                        onChangeText={v =>
-                          setPersist(prev =>
-                            AgentEditorState.mapPersistTextBlocks(prev, (b, i) =>
-                              i === index ? {...b, content: v} : b,
-                            ),
-                          )
-                        }
-                        multiline
-                        disabled={readOnly}
-                        style={ctx.style}
-                        selection={ctx.selection}
-                        onSelectionChange={ctx.onSelectionChange}
-                      />
-                    )}
-                  />
-                </View>
-              ))}
-          </View>
-        ) : (
-          <Text style={[styles.fieldHint, {color: tokens.textSecondary}]}>
-            {PROMPT_REGION_LABELS.persistDisabledHint}
-          </Text>
-        )}
-      </View>
-    </>
-  );
+                )}
+            </View>
+        </>
+    );
 }

@@ -15,28 +15,28 @@ import type { WorkplaceService } from "./workplace.port.js";
 
 /** Workplace service 工厂集合。 */
 export const WorkplaceServiceFactory = {
-  /**
+    /**
    * Creates a {@link WorkplaceService} for the given scope and connection.
    *
    * @param conn - Open connection after {@link NovelMasterBootstrap.bootstrap}
    * @param scope - global, project, or session VFS scope
    */
-  create(conn: TdbcConnection, scope: WorkplaceScope): WorkplaceService {
-    // smart 规则装配统一走 SmartSortRuleService.listCompiledRules（core/C-2），
-    // 与管理页/CLI 同源，消除工厂内联「listOrdered→filter→compile」平行实现。
-    const smartSortRuleService = SmartSortRuleServiceFactory.create(conn);
-    return new DefaultWorkplaceService({
-      conn,
-      scope,
-      vfs: new SqliteVfsEntryRepository(conn),
-      workplace: new SqliteWorkplaceRepository(conn),
-      // 懒加载 smart 规则 provider（Step 6）：仅当存在 sortField='smart' 的
-      // 目录规则时才被调用（查表 + 编译，启用过滤由 service 承担）；三端
-      // runtime 均经本工厂构造，零逐端接线。
-      smartRules: () => smartSortRuleService.listCompiledRules(),
-      // 原始行 provider（L1 签名采样，core/B-3）：仅查表不编译，同一 repo 类
-      // （每次新建实例、共享同一 conn）。
-      smartRuleRows: () => new SqliteSmartSortRuleRepository(conn).listOrdered(),
-    });
-  },
+    create(conn: TdbcConnection, scope: WorkplaceScope): WorkplaceService {
+        // smart 规则装配统一走 SmartSortRuleService.listCompiledRules（core/C-2），
+        // 与管理页/CLI 同源，消除工厂内联「listOrdered→filter→compile」平行实现。
+        const smartSortRuleService = SmartSortRuleServiceFactory.create(conn);
+        return new DefaultWorkplaceService({
+            conn,
+            scope,
+            vfs: new SqliteVfsEntryRepository(conn),
+            workplace: new SqliteWorkplaceRepository(conn),
+            // 懒加载 smart 规则 provider（Step 6）：仅当存在 sortField='smart' 的
+            // 目录规则时才被调用（查表 + 编译，启用过滤由 service 承担）；三端
+            // runtime 均经本工厂构造，零逐端接线。
+            smartRules: () => smartSortRuleService.listCompiledRules(),
+            // 原始行 provider（L1 签名采样，core/B-3）：仅查表不编译，同一 repo 类
+            // （每次新建实例、共享同一 conn）。
+            smartRuleRows: () => new SqliteSmartSortRuleRepository(conn).listOrdered(),
+        });
+    },
 } as const;

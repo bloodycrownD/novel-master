@@ -11,76 +11,76 @@ import {ThinkingSection} from './ThinkingSection';
 import {ToolGroup} from './ToolGroup';
 
 type AssistantBubbleInnerProps = {
-  text: unknown;
-  textHtml: string | null | undefined;
-  thinking: unknown;
-  /** 折叠标题（state.labels.thinking；Ask 方负责下发，避免组件直读 state）。 */
-  thinkingTitle: string;
-  thinkingKey: string;
-  thinkingExpanded: boolean;
-  thinkingHtml: string | null | undefined;
-  tools: ToolCallRow[] | null | undefined;
-  toolGroupKey: string;
-  toolGroupExpanded: boolean;
-  richText: boolean;
-  /** 文案（R6 波 4a：labels 对象随 props 下传给 ToolGroup，不直读 state）。 */
-  labels: TranscriptLabels;
+    text: unknown;
+    textHtml: string | null | undefined;
+    thinking: unknown;
+    /** 折叠标题（state.labels.thinking；Ask 方负责下发，避免组件直读 state）。 */
+    thinkingTitle: string;
+    thinkingKey: string;
+    thinkingExpanded: boolean;
+    thinkingHtml: string | null | undefined;
+    tools: ToolCallRow[] | null | undefined;
+    toolGroupKey: string;
+    toolGroupExpanded: boolean;
+    richText: boolean;
+    /** 文案（R6 波 4a：labels 对象随 props 下传给 ToolGroup，不直读 state）。 */
+    labels: TranscriptLabels;
 };
 
 export function AssistantBubbleInner({
-  text,
-  textHtml,
-  thinking,
-  thinkingTitle,
-  thinkingKey,
-  thinkingExpanded,
-  thinkingHtml,
-  tools,
-  toolGroupKey,
-  toolGroupExpanded,
-  richText,
-  labels,
+    text,
+    textHtml,
+    thinking,
+    thinkingTitle,
+    thinkingKey,
+    thinkingExpanded,
+    thinkingHtml,
+    tools,
+    toolGroupKey,
+    toolGroupExpanded,
+    richText,
+    labels,
 }: AssistantBubbleInnerProps) {
-  const hasThinking = !!(thinking && String(thinking).trim());
-  const hasTools = !!(tools && tools.length > 0);
-  const hasText = !!(text && String(text).trim());
-  const useRichText = !!(richText && textHtml);
+    const hasThinking = !!(thinking && String(thinking).trim());
+    const hasTools = !!(tools && tools.length > 0);
+    const hasText = !!(text && String(text).trim());
+    const useRichText = !!(richText && textHtml);
 
-  return (
-    <>
-      {hasThinking ? (
-        <ThinkingSection
-          text={thinking}
-          title={thinkingTitle}
-          thinkingKey={thinkingKey}
-          expanded={thinkingExpanded}
-          thinkingHtml={thinkingHtml}
-          showDividerBelow={hasText || hasTools}
-          richText={richText}
-        />
-      ) : null}
-      {hasText ? (
-        useRichText ? (
-          <TrustedHtml html={textHtml!} className="bubble-body rich" />
-        ) : (
-          <div className="bubble-body">{String(text)}</div>
-        )
-      ) : hasThinking ? (
-        // WHY: 仅有 thinking、正文为空时预置空壳，供后续 text 增量挂载。
-        <div
-          className={'bubble-body' + (useRichText ? ' rich' : '')}
-          data-text-shell="1"
-        />
-      ) : null}
-      {hasTools ? (
-        <ToolGroup
-          tools={tools!}
-          groupKey={toolGroupKey}
-          expanded={toolGroupExpanded}
-          showDividerBelow={false}
-          labels={labels}
-        />
-      ) : null}
-    </>
-  );
+    return (
+        <>
+            {hasThinking ? (
+                <ThinkingSection
+                    text={thinking}
+                    title={thinkingTitle}
+                    thinkingKey={thinkingKey}
+                    expanded={thinkingExpanded}
+                    thinkingHtml={thinkingHtml}
+                    showDividerBelow={hasText || hasTools}
+                    richText={richText}
+                />
+            ) : null}
+            {hasText ? (
+                useRichText ? (
+                    <TrustedHtml html={textHtml!} className="bubble-body rich" />
+                ) : (
+                    <div className="bubble-body">{String(text)}</div>
+                )
+            ) : hasThinking ? (
+                // WHY: 仅有 thinking、正文为空时预置空壳，供后续 text 增量挂载。
+                <div
+                    className={'bubble-body' + (useRichText ? ' rich' : '')}
+                    data-text-shell="1"
+                />
+            ) : null}
+            {hasTools ? (
+                <ToolGroup
+                    tools={tools!}
+                    groupKey={toolGroupKey}
+                    expanded={toolGroupExpanded}
+                    showDividerBelow={false}
+                    labels={labels}
+                />
+            ) : null}
+        </>
+    );
 }

@@ -11,27 +11,27 @@ import {MobileDatabaseFilePath} from './db-file-path';
 
 /** 单例连接槽（模块内 holder，对象管理）：共享连接与初始化中的 Promise。 */
 const connectionSlot = {
-  conn: undefined as TdbcConnection | undefined,
-  initPromise: undefined as Promise<TdbcConnection> | undefined,
+    conn: undefined as TdbcConnection | undefined,
+    initPromise: undefined as Promise<TdbcConnection> | undefined,
 };
 
 export const MobileDb = {
-  /**
+    /**
    * 打印错误及其 cause 链（最多 5 层）：驱动层的 TdbcError 会把原始错误
    * （JSI 异常、路径不可写、disk I/O error 等）包在 cause 里，UI 只显示主文案。
    */
-  logCauseChain: (label: string, err: unknown): void => {
-    console.error(`[nm-boot] ${label} 失败:`, err);
-    let cause: unknown = err instanceof Error ? err.cause : undefined;
-    let depth = 0;
-    while (cause && depth < 5) {
-      console.error(`[nm-boot] ${label} cause[${depth}]:`, cause);
-      cause = cause instanceof Error ? cause.cause : undefined;
-      depth++;
-    }
-  },
+    logCauseChain: (label: string, err: unknown): void => {
+        console.error(`[nm-boot] ${label} 失败:`, err);
+        let cause: unknown = err instanceof Error ? err.cause : undefined;
+        let depth = 0;
+        while (cause && depth < 5) {
+            console.error(`[nm-boot] ${label} cause[${depth}]:`, cause);
+            cause = cause instanceof Error ? cause.cause : undefined;
+            depth++;
+        }
+    },
 
-  /**
+    /**
    * 注册移动端 op-sqlite 驱动——移动端装配的**唯一入口**。
    *
    * 注入后台探测：RN 后台 JS 定时器停摆，事务内 setTimeout(0) 量子
@@ -44,57 +44,57 @@ export const MobileDb = {
    * 后台探测。因此 app 层所有需要打开 op-sqlite 连接的入口
    * （如 db-backup 的服务商表恢复短连接）都必须调本函数。
    */
-  registerMobileOpSqliteDriver: (): void => {
-    OpSqliteNativeRegister.register(undefined, () => AppState.currentState === 'background');
-  },
+    registerMobileOpSqliteDriver: (): void => {
+        OpSqliteNativeRegister.register(undefined, () => AppState.currentState === 'background');
+    },
 
-  /** Opens (once) the app DB with core bootstrap and SKSP Android driver. */
-  getMobileConnection: async (): Promise<TdbcConnection> => {
-    if (connectionSlot.conn) {
-      return connectionSlot.conn;
-    }
-    if (!connectionSlot.initPromise) {
-      connectionSlot.initPromise = (async () => {
-        MobileDb.registerMobileOpSqliteDriver();
-        SkspAndroidRegister.register();
-        TokenizerRnRegister.register();
-        let c: TdbcConnection;
-        try {
-          c = await TdbcOpen.open(MOBILE_TDBC_URL, {driver: 'op-sqlite'});
-        } catch (openErr: unknown) {
-          MobileDb.logCauseChain('open', openErr);
-          throw openErr;
+    /** Opens (once) the app DB with core bootstrap and SKSP Android driver. */
+    getMobileConnection: async (): Promise<TdbcConnection> => {
+        if (connectionSlot.conn) {
+            return connectionSlot.conn;
         }
-        try {
-          await NovelMasterBootstrap.bootstrap(c);
-        } catch (bootErr: unknown) {
-          MobileDb.logCauseChain('bootstrap', bootErr);
-          // 此时 connectionSlot.conn 还没赋值，MobileDb.closeMobileConnection() 里的 connectionSlot.conn?.close()
-          // 关不到这条连接；不在这里手动 close，局部变量 c 持有的已打开连接
-          // 会随 throw 一起丢弃，文件句柄和 WAL 锁随之泄漏——Android 上重试
-          // 重新 open 同一个库时，新旧连接可能互相锁死。close 本身失败不掩盖
-          // 原始的 bootstrap 错误，所以吞掉它的异常。
-          await c.close().catch(() => {});
-          throw bootErr;
+        if (!connectionSlot.initPromise) {
+            connectionSlot.initPromise = (async () => {
+                MobileDb.registerMobileOpSqliteDriver();
+                SkspAndroidRegister.register();
+                TokenizerRnRegister.register();
+                let c: TdbcConnection;
+                try {
+                    c = await TdbcOpen.open(MOBILE_TDBC_URL, {driver: 'op-sqlite'});
+                } catch (openErr: unknown) {
+                    MobileDb.logCauseChain('open', openErr);
+                    throw openErr;
+                }
+                try {
+                    await NovelMasterBootstrap.bootstrap(c);
+                } catch (bootErr: unknown) {
+                    MobileDb.logCauseChain('bootstrap', bootErr);
+                    // 此时 connectionSlot.conn 还没赋值，MobileDb.closeMobileConnection() 里的 connectionSlot.conn?.close()
+                    // 关不到这条连接；不在这里手动 close，局部变量 c 持有的已打开连接
+                    // 会随 throw 一起丢弃，文件句柄和 WAL 锁随之泄漏——Android 上重试
+                    // 重新 open 同一个库时，新旧连接可能互相锁死。close 本身失败不掩盖
+                    // 原始的 bootstrap 错误，所以吞掉它的异常。
+                    await c.close().catch(() => {});
+                    throw bootErr;
+                }
+                await MobileDatabaseFilePath.probeAndCache();
+                connectionSlot.conn = c;
+                return c;
+            })();
         }
-        await MobileDatabaseFilePath.probeAndCache();
-        connectionSlot.conn = c;
-        return c;
-      })();
-    }
-    return connectionSlot.initPromise;
-  },
+        return connectionSlot.initPromise;
+    },
 
-  /** Closes the shared connection and clears init state. */
-  closeMobileConnection: async (): Promise<void> => {
-    await connectionSlot.conn?.close();
-    connectionSlot.conn = undefined;
-    connectionSlot.initPromise = undefined;
-    MobileDatabaseFilePath.clearCache();
-  },
+    /** Closes the shared connection and clears init state. */
+    closeMobileConnection: async (): Promise<void> => {
+        await connectionSlot.conn?.close();
+        connectionSlot.conn = undefined;
+        connectionSlot.initPromise = undefined;
+        MobileDatabaseFilePath.clearCache();
+    },
 
-  /** WAL checkpoint before file-level copy (export backup). */
-  checkpointMobileDatabase: async (connection: TdbcConnection): Promise<void> => {
-    await connection.execute('PRAGMA wal_checkpoint(FULL)');
-  },
+    /** WAL checkpoint before file-level copy (export backup). */
+    checkpointMobileDatabase: async (connection: TdbcConnection): Promise<void> => {
+        await connection.execute('PRAGMA wal_checkpoint(FULL)');
+    },
 } as const;

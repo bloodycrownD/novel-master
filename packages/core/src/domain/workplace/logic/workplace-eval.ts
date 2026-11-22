@@ -12,110 +12,110 @@ import { SmartSort, type CompiledSmartSortRule, type SmartSortKeyCache } from ".
 
 /** File metadata used for sorting within a directory. */
 export interface WorkplaceFileSortMeta {
-  readonly logicalPath: string;
-  readonly mtimeMs: number;
+    readonly logicalPath: string;
+    readonly mtimeMs: number;
 }
 
 /** Optional inputs for {@link WorkplaceEval.sortFilesForDir} (smart sort rules, spec D4). */
 export interface SortFilesForDirOptions {
-  /** Pre-compiled smart rules; when omitted `smart` degrades to natural sort. */
-  readonly smartRules?: readonly CompiledSmartSortRule[];
+    /** Pre-compiled smart rules; when omitted `smart` degrades to natural sort. */
+    readonly smartRules?: readonly CompiledSmartSortRule[];
 }
 
 /** Optional inputs for {@link WorkplaceEval.sortDirPaths} (smart rules + dir mtimes, spec D4/D7). */
 export interface SortDirPathsOptions {
-  /** Pre-compiled smart rules; when omitted `smart` degrades to natural sort. */
-  readonly smartRules?: readonly CompiledSmartSortRule[];
-  /** Directory path → mtime; when omitted `created`/`updated` degrade to name order (D7). */
-  readonly dirMtimeByPath?: ReadonlyMap<string, number>;
+    /** Pre-compiled smart rules; when omitted `smart` degrades to natural sort. */
+    readonly smartRules?: readonly CompiledSmartSortRule[];
+    /** Directory path → mtime; when omitted `created`/`updated` degrade to name order (D7). */
+    readonly dirMtimeByPath?: ReadonlyMap<string, number>;
 }
 
 export const WorkplaceEval = {
-  compareStrings(a: string, b: string, order: SortOrder): number {
-    const cmp = a.localeCompare(b);
-    return order === "asc" ? cmp : -cmp;
-  },
+    compareStrings(a: string, b: string, order: SortOrder): number {
+        const cmp = a.localeCompare(b);
+        return order === "asc" ? cmp : -cmp;
+    },
 
-  compareNumbers(a: number, b: number, order: SortOrder): number {
-    const cmp = a - b;
-    return order === "asc" ? cmp : -cmp;
-  },
+    compareNumbers(a: number, b: number, order: SortOrder): number {
+        const cmp = a - b;
+        return order === "asc" ? cmp : -cmp;
+    },
 
-  /** Decorate-sort-undecorate: pre-extract ordinals once per basename (D5). */
-  decorateSmartCache(basenames: readonly string[], rules: readonly CompiledSmartSortRule[]): SmartSortKeyCache {
-    const cache: SmartSortKeyCache = new Map();
-    for (const base of basenames) {
-      if (!cache.has(base)) {
-        cache.set(base, SmartSort.extractSortKey(base, rules));
-      }
-    }
-    return cache;
-  },
+    /** Decorate-sort-undecorate: pre-extract ordinals once per basename (D5). */
+    decorateSmartCache(basenames: readonly string[], rules: readonly CompiledSmartSortRule[]): SmartSortKeyCache {
+        const cache: SmartSortKeyCache = new Map();
+        for (const base of basenames) {
+            if (!cache.has(base)) {
+                cache.set(base, SmartSort.extractSortKey(base, rules));
+            }
+        }
+        return cache;
+    },
 
-  /**
+    /**
    * Sorts direct child files using directory rule (or name asc default).
    */
-  sortFilesForDir(files: readonly WorkplaceFileSortMeta[], dirRule: WorkplaceDirRule | null, opts?: SortFilesForDirOptions): WorkplaceFileSortMeta[] {
-    const sortField: SortField = dirRule?.sortField ?? DEFAULT_WORKPLACE_DIR_RULE.sortField;
-    const sortOrder: SortOrder = dirRule?.sortOrder ?? DEFAULT_WORKPLACE_DIR_RULE.sortOrder;
-    let smartCache: SmartSortKeyCache | undefined;
-    if (sortField === "smart") {
-      smartCache = WorkplaceEval.decorateSmartCache(files.map((f) => Path.basename(f.logicalPath)), opts?.smartRules ?? []);
-    }
-    const sorted = [...files];
-    sorted.sort((a, b) => {
-      switch (sortField) {
-        case "name":
-          return WorkplaceEval.compareStrings(Path.basename(a.logicalPath), Path.basename(b.logicalPath), sortOrder);
-        case "created":
-        case "updated":
-          return WorkplaceEval.compareNumbers(a.mtimeMs, b.mtimeMs, sortOrder);
-        case "smart":
-          return SmartSort.compareBasenames(Path.basename(a.logicalPath), Path.basename(b.logicalPath), sortOrder, smartCache);
-      }
-    });
-    return sorted;
-  },
+    sortFilesForDir(files: readonly WorkplaceFileSortMeta[], dirRule: WorkplaceDirRule | null, opts?: SortFilesForDirOptions): WorkplaceFileSortMeta[] {
+        const sortField: SortField = dirRule?.sortField ?? DEFAULT_WORKPLACE_DIR_RULE.sortField;
+        const sortOrder: SortOrder = dirRule?.sortOrder ?? DEFAULT_WORKPLACE_DIR_RULE.sortOrder;
+        let smartCache: SmartSortKeyCache | undefined;
+        if (sortField === "smart") {
+            smartCache = WorkplaceEval.decorateSmartCache(files.map((f) => Path.basename(f.logicalPath)), opts?.smartRules ?? []);
+        }
+        const sorted = [...files];
+        sorted.sort((a, b) => {
+            switch (sortField) {
+                case "name":
+                    return WorkplaceEval.compareStrings(Path.basename(a.logicalPath), Path.basename(b.logicalPath), sortOrder);
+                case "created":
+                case "updated":
+                    return WorkplaceEval.compareNumbers(a.mtimeMs, b.mtimeMs, sortOrder);
+                case "smart":
+                    return SmartSort.compareBasenames(Path.basename(a.logicalPath), Path.basename(b.logicalPath), sortOrder, smartCache);
+            }
+        });
+        return sorted;
+    },
 
-  /**
+    /**
    * Evaluates display state for one file under its parent directory.
    */
-  evaluateFileDisplay(params: { readonly inclusion: InclusionMode; readonly parentRuleOn: boolean; readonly dirRule: WorkplaceDirRule | null; readonly indexInSortedAutoFiles: number; readonly autoFileCount: number; readonly logicalPath: string }): DisplayState {
-    if (params.inclusion === "hide") {
-      return "hidden";
-    }
-    if (params.inclusion === "show") {
-      return "full";
-    }
-    if (!params.parentRuleOn) {
-      return "hidden";
-    }
-    const head = params.dirRule?.headCount ?? DEFAULT_WORKPLACE_DIR_RULE.headCount;
-    const tail = params.dirRule?.tailCount ?? DEFAULT_WORKPLACE_DIR_RULE.tailCount;
-    const fill: FillPolicy = params.dirRule?.fillPolicy ?? DEFAULT_WORKPLACE_DIR_RULE.fillPolicy;
-    const priority = Number.headTailIndices(params.autoFileCount, head, tail);
-    if (priority.has(params.indexInSortedAutoFiles)) {
-      return "full";
-    }
-    if (fill === "hidden") {
-      return "hidden";
-    }
-    if (fill === "full") {
-      return "full";
-    }
-    if (fill === "filename") {
-      return "filename";
-    }
-    const base = params.logicalPath.slice(params.logicalPath.lastIndexOf("/") + 1);
-    const dot = base.lastIndexOf(".");
-    const ext = (dot >= 0 ? base.slice(dot) : "").toLowerCase();
-    if (ext !== ".md" && ext !== ".markdown") {
-      return "hidden";
-    }
-    return "header";
-  },
+    evaluateFileDisplay(params: { readonly inclusion: InclusionMode; readonly parentRuleOn: boolean; readonly dirRule: WorkplaceDirRule | null; readonly indexInSortedAutoFiles: number; readonly autoFileCount: number; readonly logicalPath: string }): DisplayState {
+        if (params.inclusion === "hide") {
+            return "hidden";
+        }
+        if (params.inclusion === "show") {
+            return "full";
+        }
+        if (!params.parentRuleOn) {
+            return "hidden";
+        }
+        const head = params.dirRule?.headCount ?? DEFAULT_WORKPLACE_DIR_RULE.headCount;
+        const tail = params.dirRule?.tailCount ?? DEFAULT_WORKPLACE_DIR_RULE.tailCount;
+        const fill: FillPolicy = params.dirRule?.fillPolicy ?? DEFAULT_WORKPLACE_DIR_RULE.fillPolicy;
+        const priority = Number.headTailIndices(params.autoFileCount, head, tail);
+        if (priority.has(params.indexInSortedAutoFiles)) {
+            return "full";
+        }
+        if (fill === "hidden") {
+            return "hidden";
+        }
+        if (fill === "full") {
+            return "full";
+        }
+        if (fill === "filename") {
+            return "filename";
+        }
+        const base = params.logicalPath.slice(params.logicalPath.lastIndexOf("/") + 1);
+        const dot = base.lastIndexOf(".");
+        const ext = (dot >= 0 ? base.slice(dot) : "").toLowerCase();
+        if (ext !== ".md" && ext !== ".markdown") {
+            return "hidden";
+        }
+        return "header";
+    },
 
-  /**
+    /**
    * Sorts sibling directory paths using the parent directory's rule.
    *
    * `name` keeps the legacy basename lexicographic order (zero regression);
@@ -124,40 +124,40 @@ export const WorkplaceEval = {
    * spec D7); `smart` orders by extracted ordinals (missing rules degrade to
    * natural order). Direction (`sortOrder`) applies uniformly.
    */
-  sortDirPaths(paths: readonly string[], parentDirRule: WorkplaceDirRule | null, opts?: SortDirPathsOptions): string[] {
-    const sortOrder: SortOrder = parentDirRule?.sortOrder ?? "asc";
-    const sortField: SortField = parentDirRule?.sortField ?? DEFAULT_WORKPLACE_DIR_RULE.sortField;
-    let smartCache: SmartSortKeyCache | undefined;
-    if (sortField === "smart") {
-      smartCache = WorkplaceEval.decorateSmartCache(paths.map((p) => Path.basename(p)), opts?.smartRules ?? []);
-    }
-    const sorted = [...paths];
-    sorted.sort((a, b) => {
-      let cmp: number;
-      switch (sortField) {
-        case "created":
-        case "updated": {
-          const mtimeA = opts?.dirMtimeByPath?.get(a);
-          const mtimeB = opts?.dirMtimeByPath?.get(b);
-          if (mtimeA != null && mtimeB != null && mtimeA !== mtimeB) {
-            cmp = WorkplaceEval.compareNumbers(mtimeA, mtimeB, sortOrder);
-          } else {
-            // 缺 mtime（缺省 map / 孤儿路径）或 mtime 相等 → basename 字典序（D7 退化分支）
-            cmp = WorkplaceEval.compareStrings(Path.basename(a), Path.basename(b), sortOrder);
-          }
-          break;
+    sortDirPaths(paths: readonly string[], parentDirRule: WorkplaceDirRule | null, opts?: SortDirPathsOptions): string[] {
+        const sortOrder: SortOrder = parentDirRule?.sortOrder ?? "asc";
+        const sortField: SortField = parentDirRule?.sortField ?? DEFAULT_WORKPLACE_DIR_RULE.sortField;
+        let smartCache: SmartSortKeyCache | undefined;
+        if (sortField === "smart") {
+            smartCache = WorkplaceEval.decorateSmartCache(paths.map((p) => Path.basename(p)), opts?.smartRules ?? []);
         }
-        case "smart":
-          cmp = SmartSort.compareBasenames(Path.basename(a), Path.basename(b), sortOrder, smartCache);
-          break;
-        default:
-          cmp = WorkplaceEval.compareStrings(Path.basename(a), Path.basename(b), sortOrder);
-      }
-      if (cmp !== 0) {
-        return cmp;
-      }
-      return WorkplaceEval.compareStrings(a, b, sortOrder);
-    });
-    return sorted;
-  },
+        const sorted = [...paths];
+        sorted.sort((a, b) => {
+            let cmp: number;
+            switch (sortField) {
+                case "created":
+                case "updated": {
+                    const mtimeA = opts?.dirMtimeByPath?.get(a);
+                    const mtimeB = opts?.dirMtimeByPath?.get(b);
+                    if (mtimeA != null && mtimeB != null && mtimeA !== mtimeB) {
+                        cmp = WorkplaceEval.compareNumbers(mtimeA, mtimeB, sortOrder);
+                    } else {
+                        // 缺 mtime（缺省 map / 孤儿路径）或 mtime 相等 → basename 字典序（D7 退化分支）
+                        cmp = WorkplaceEval.compareStrings(Path.basename(a), Path.basename(b), sortOrder);
+                    }
+                    break;
+                }
+                case "smart":
+                    cmp = SmartSort.compareBasenames(Path.basename(a), Path.basename(b), sortOrder, smartCache);
+                    break;
+                default:
+                    cmp = WorkplaceEval.compareStrings(Path.basename(a), Path.basename(b), sortOrder);
+            }
+            if (cmp !== 0) {
+                return cmp;
+            }
+            return WorkplaceEval.compareStrings(a, b, sortOrder);
+        });
+        return sorted;
+    },
 } as const;

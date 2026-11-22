@@ -11,45 +11,45 @@ import {styles} from './agent-editor-form.styles';
 import {type AgentEditorTokens} from './agent-editor-types';
 
 type Props = {
-  label: string;
-  tokens: AgentEditorTokens;
-  onAdd?: () => void;
-  switchValue?: boolean;
-  onSwitchChange?: (value: boolean) => void;
-  /** 禁用态（只读详情）：添加按钮与开关均禁点并灰显。 */
-  disabled?: boolean;
+    label: string;
+    tokens: AgentEditorTokens;
+    onAdd?: () => void;
+    switchValue?: boolean;
+    onSwitchChange?: (value: boolean) => void;
+    /** 禁用态（只读详情）：添加按钮与开关均禁点并灰显。 */
+    disabled?: boolean;
 };
 
 export function PromptSectionHead({
-  label,
-  tokens,
-  onAdd,
-  switchValue,
-  onSwitchChange,
-  disabled = false,
+    label,
+    tokens,
+    onAdd,
+    switchValue,
+    onSwitchChange,
+    disabled = false,
 }: Props) {
-  return (
-    <View style={styles.sectionHead}>
-      <Text style={[styles.sectionLabel, {color: tokens.text}]}>{label}</Text>
-      <View style={styles.sectionHeadActions}>
-        {onAdd != null ? (
-          <Pressable
-            disabled={disabled}
-            style={disabled ? styles.actionDisabled : undefined}
-            onPress={onAdd}
-          >
-            <Text style={{color: tokens.primary, fontWeight: '600'}}>{coreT({key: "ui.common.add"})}</Text>
-          </Pressable>
-        ) : null}
-        {switchValue !== undefined && onSwitchChange != null ? (
-          <Switch
-            value={switchValue}
-            onValueChange={onSwitchChange}
-            disabled={disabled}
-            trackColor={{false: tokens.border, true: tokens.primary}}
-          />
-        ) : null}
-      </View>
-    </View>
-  );
+    return (
+        <View style={styles.sectionHead}>
+            <Text style={[styles.sectionLabel, {color: tokens.text}]}>{label}</Text>
+            <View style={styles.sectionHeadActions}>
+                {onAdd != null ? (
+                    <Pressable
+                        disabled={disabled}
+                        style={disabled ? styles.actionDisabled : undefined}
+                        onPress={onAdd}
+                    >
+                        <Text style={{color: tokens.primary, fontWeight: '600'}}>{coreT({key: "ui.common.add"})}</Text>
+                    </Pressable>
+                ) : null}
+                {switchValue !== undefined && onSwitchChange != null ? (
+                    <Switch
+                        value={switchValue}
+                        onValueChange={onSwitchChange}
+                        disabled={disabled}
+                        trackColor={{false: tokens.border, true: tokens.primary}}
+                    />
+                ) : null}
+            </View>
+        </View>
+    );
 }

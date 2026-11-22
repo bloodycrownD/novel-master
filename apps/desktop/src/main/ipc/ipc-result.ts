@@ -26,31 +26,31 @@ import { FormatIpcError } from "./format-ipc-error.js";
  * 多路返回的 T 推断稳定。
  */
 type ResultValueOf<R> = R extends PromiseLike<infer P>
-  ? (P extends Result<infer T, AppError> ? T : never)
-  : (R extends Result<infer T, AppError> ? T : never);
+    ? (P extends Result<infer T, AppError> ? T : never)
+    : (R extends Result<infer T, AppError> ? T : never);
 
 function from<R extends Result<unknown, AppError>>(r: R): IpcResult<ResultValueOf<R>>;
 function from<R extends PromiseLike<Result<unknown, AppError>>>(work: () => R): Promise<IpcResult<ResultValueOf<R>>>;
 function from(r: unknown): unknown {
-  return typeof r === "function"
-    ? (r as () => PromiseLike<Result<unknown, AppError>>)().then(
-        (x) => (x.ok ? IpcResults.ok(x.value) : IpcResults.err(FormatIpcError.format(x.error))),
-        (err) => IpcResults.err(FormatIpcError.format(err)),
-      )
-    : (r as Result<unknown, AppError>).ok
-      ? IpcResults.ok((r as Result<unknown, AppError> & { ok: true }).value)
-      : IpcResults.err(FormatIpcError.format((r as Result<never, AppError> & { ok: false }).error));
+    return typeof r === "function"
+        ? (r as () => PromiseLike<Result<unknown, AppError>>)().then(
+                (x) => (x.ok ? IpcResults.ok(x.value) : IpcResults.err(FormatIpcError.format(x.error))),
+                (err) => IpcResults.err(FormatIpcError.format(err)),
+            )
+        : (r as Result<unknown, AppError>).ok
+            ? IpcResults.ok((r as Result<unknown, AppError> & { ok: true }).value)
+            : IpcResults.err(FormatIpcError.format((r as Result<never, AppError> & { ok: false }).error));
 }
 
 export const IpcResults = {
-  /** 成功侧包装（与既有 `{ ok: true, data }` 字面量同形）。 */
-  ok<T>(data: T): IpcResult<T> {
-    return { ok: true, data };
-  },
-  /** 失败侧包装：入参是已转码的 payload（`formatIpcError` 的产物）。 */
-  err(error: IpcErrorPayload): IpcResult<never> {
-    return { ok: false, error };
-  },
-  /** `Result`（E 为 AppError）一次性转码；成功值原样透传，不在此层做映射。 */
-  from,
+    /** 成功侧包装（与既有 `{ ok: true, data }` 字面量同形）。 */
+    ok<T>(data: T): IpcResult<T> {
+        return { ok: true, data };
+    },
+    /** 失败侧包装：入参是已转码的 payload（`formatIpcError` 的产物）。 */
+    err(error: IpcErrorPayload): IpcResult<never> {
+        return { ok: false, error };
+    },
+    /** `Result`（E 为 AppError）一次性转码；成功值原样透传，不在此层做映射。 */
+    from,
 } as const;

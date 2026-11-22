@@ -14,40 +14,40 @@ import {useEffect, useState} from 'react';
 import {DeviceEventEmitter} from 'react-native';
 
 type UseChatTabMessagesParams = {
-  readonly sessionId: string | undefined;
-  /**
+    readonly sessionId: string | undefined;
+    /**
    * session-transcript-changed 命中当前会话时的回调（Provider 提供：
    * manager force 回源刷新消息面 + 刷新 token 计数）。
    */
-  readonly onTranscriptChanged?: () => void;
+    readonly onTranscriptChanged?: () => void;
 };
 
 export function useChatTabMessages({
-  sessionId,
-  onTranscriptChanged,
+    sessionId,
+    onTranscriptChanged,
 }: UseChatTabMessagesParams) {
-  const [draftRestoreToken, setDraftRestoreToken] = useState(0);
+    const [draftRestoreToken, setDraftRestoreToken] = useState(0);
 
-  // 详情页压缩/置位后 DB 消息 hidden 已变，经回调交上层刷新（消息面归
-  // manager，本 hook 不再自持 state）。监听随会话切换重建，回调经闭包
-  // 取最新。
-  useEffect(() => {
-    if (sessionId == null) {
-      return;
-    }
-    const sub = DeviceEventEmitter.addListener(
-      'session-transcript-changed',
-      (e?: {sessionId?: string}) => {
-        if (e?.sessionId === sessionId) {
-          onTranscriptChanged?.();
+    // 详情页压缩/置位后 DB 消息 hidden 已变，经回调交上层刷新（消息面归
+    // manager，本 hook 不再自持 state）。监听随会话切换重建，回调经闭包
+    // 取最新。
+    useEffect(() => {
+        if (sessionId == null) {
+            return;
         }
-      },
-    );
-    return () => sub.remove();
-  }, [sessionId, onTranscriptChanged]);
+        const sub = DeviceEventEmitter.addListener(
+            'session-transcript-changed',
+            (e?: {sessionId?: string}) => {
+                if (e?.sessionId === sessionId) {
+                    onTranscriptChanged?.();
+                }
+            },
+        );
+        return () => sub.remove();
+    }, [sessionId, onTranscriptChanged]);
 
-  return {
-    draftRestoreToken,
-    setDraftRestoreToken,
-  };
+    return {
+        draftRestoreToken,
+        setDraftRestoreToken,
+    };
 }

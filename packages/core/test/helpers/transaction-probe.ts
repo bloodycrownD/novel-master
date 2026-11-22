@@ -16,61 +16,61 @@ import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.
 
 /** 一条被记录下来的语句。 */
 export interface ProbedStatement {
-  /** 所属事务的序号（0 起）；`null` 表示在事务之外执行。 */
-  readonly txIndex: number | null;
-  /** 调用入口。 */
-  readonly via: "execute" | "query" | "batch";
-  /** 原始 SQL（trim 过）。 */
-  readonly sql: string;
-  /** 位置参数个数（`batch` 取单组长度）。 */
-  readonly paramCount: number;
+    /** 所属事务的序号（0 起）；`null` 表示在事务之外执行。 */
+    readonly txIndex: number | null;
+    /** 调用入口。 */
+    readonly via: "execute" | "query" | "batch";
+    /** 原始 SQL（trim 过）。 */
+    readonly sql: string;
+    /** 位置参数个数（`batch` 取单组长度）。 */
+    readonly paramCount: number;
 }
 
 /** 事务探针记录器。 */
 export class TransactionProbe {
-  /** 事务按开始顺序编号（0 起）。 */
-  transactionCount = 0;
+    /** 事务按开始顺序编号（0 起）。 */
+    transactionCount = 0;
 
-  private readonly statements: ProbedStatement[] = [];
+    private readonly statements: ProbedStatement[] = [];
 
-  /** 事务结束时回调（用于记录该事务抛错/正常）。 */
-  readonly transactions: Array<{ index: number; failed: boolean }> = [];
+    /** 事务结束时回调（用于记录该事务抛错/正常）。 */
+    readonly transactions: Array<{ index: number; failed: boolean }> = [];
 
-  record(
-    txIndex: number | null,
-    via: ProbedStatement["via"],
-    sql: string,
-    paramCount: number
-  ): void {
-    this.statements.push({ txIndex, via, sql: sql.trim(), paramCount });
-  }
+    record(
+        txIndex: number | null,
+        via: ProbedStatement["via"],
+        sql: string,
+        paramCount: number
+    ): void {
+        this.statements.push({ txIndex, via, sql: sql.trim(), paramCount });
+    }
 
-  /** 全部已记录语句。 */
-  all(): readonly ProbedStatement[] {
-    return this.statements;
-  }
+    /** 全部已记录语句。 */
+    all(): readonly ProbedStatement[] {
+        return this.statements;
+    }
 
-  /** 第 index 条事务内发出的语句。 */
-  statementsInTransaction(index: number): readonly ProbedStatement[] {
-    return this.statements.filter((s) => s.txIndex === index);
-  }
+    /** 第 index 条事务内发出的语句。 */
+    statementsInTransaction(index: number): readonly ProbedStatement[] {
+        return this.statements.filter((s) => s.txIndex === index);
+    }
 
-  /** 第 index 条事务内的语句数。 */
-  statementCountInTransaction(index: number): number {
-    return this.statementsInTransaction(index).length;
-  }
+    /** 第 index 条事务内的语句数。 */
+    statementCountInTransaction(index: number): number {
+        return this.statementsInTransaction(index).length;
+    }
 
-  /** 事务之外的语句（按进入顺序）。 */
-  statementsOutsideTransactions(): readonly ProbedStatement[] {
-    return this.statements.filter((s) => s.txIndex === null);
-  }
+    /** 事务之外的语句（按进入顺序）。 */
+    statementsOutsideTransactions(): readonly ProbedStatement[] {
+        return this.statements.filter((s) => s.txIndex === null);
+    }
 
-  /** 清空记录（bootstrap / 造夹具阶段之后调用）。 */
-  reset(): void {
-    this.statements.length = 0;
-    this.transactionCount = 0;
-    this.transactions.length = 0;
-  }
+    /** 清空记录（bootstrap / 造夹具阶段之后调用）。 */
+    reset(): void {
+        this.statements.length = 0;
+        this.transactionCount = 0;
+        this.transactions.length = 0;
+    }
 }
 
 /**
@@ -81,62 +81,62 @@ export class TransactionProbe {
  * 「业务语句数」，这正是验收想要的量。
  */
 export function probeTransactions(inner: TdbcConnection): {
-  conn: TdbcConnection;
-  probe: TransactionProbe;
+    conn: TdbcConnection;
+    probe: TransactionProbe;
 } {
-  const probe = new TransactionProbe();
-  let current: number | null = null;
+    const probe = new TransactionProbe();
+    let current: number | null = null;
 
-  const wrap = (target: TdbcConnection): TdbcConnection => ({
-    execute: (sql, parameters) => {
-      probe.record(current, "execute", sql, parameters?.length ?? 0);
-      return target.execute(sql, parameters);
-    },
-    query: <T extends Record<string, unknown>>(
-      sql: string,
-      parameters?: readonly unknown[]
-    ) => {
-      probe.record(current, "query", sql, parameters?.length ?? 0);
-      return target.query<T>(sql, parameters);
-    },
-    batch: (sql, parametersList) => {
-      probe.record(
-        current,
-        "batch",
-        sql,
-        parametersList[0]?.length ?? 0
-      );
-      return target.batch(sql, parametersList);
-    },
-    // 嵌套事务本仓不存在（NESTED_TRANSACTION 会抛），保持直通语义。
-    transaction: <U>(fn: (tx: TdbcConnection) => Promise<U>) =>
-      target.transaction(fn),
-    close: () => target.close(),
-  });
+    const wrap = (target: TdbcConnection): TdbcConnection => ({
+        execute: (sql, parameters) => {
+            probe.record(current, "execute", sql, parameters?.length ?? 0);
+            return target.execute(sql, parameters);
+        },
+        query: <T extends Record<string, unknown>>(
+            sql: string,
+            parameters?: readonly unknown[]
+        ) => {
+            probe.record(current, "query", sql, parameters?.length ?? 0);
+            return target.query<T>(sql, parameters);
+        },
+        batch: (sql, parametersList) => {
+            probe.record(
+                current,
+                "batch",
+                sql,
+                parametersList[0]?.length ?? 0
+            );
+            return target.batch(sql, parametersList);
+        },
+        // 嵌套事务本仓不存在（NESTED_TRANSACTION 会抛），保持直通语义。
+        transaction: <U>(fn: (tx: TdbcConnection) => Promise<U>) =>
+            target.transaction(fn),
+        close: () => target.close(),
+    });
 
-  const outer = wrap(inner);
+    const outer = wrap(inner);
 
-  const conn: TdbcConnection = {
-    execute: (sql, parameters) => outer.execute(sql, parameters),
-    query: (sql, parameters) => outer.query(sql, parameters),
-    batch: (sql, parametersList) => outer.batch(sql, parametersList),
-    async transaction<T>(fn: (tx: TdbcConnection) => Promise<T>): Promise<T> {
-      const index = probe.transactionCount++;
-      const previous = current;
-      current = index;
-      const slot = { index, failed: false };
-      probe.transactions.push(slot);
-      try {
-        return await inner.transaction((tx) => fn(wrap(tx)));
-      } catch (error) {
-        slot.failed = true;
-        throw error;
-      } finally {
-        current = previous;
-      }
-    },
-    close: () => inner.close(),
-  };
+    const conn: TdbcConnection = {
+        execute: (sql, parameters) => outer.execute(sql, parameters),
+        query: (sql, parameters) => outer.query(sql, parameters),
+        batch: (sql, parametersList) => outer.batch(sql, parametersList),
+        async transaction<T>(fn: (tx: TdbcConnection) => Promise<T>): Promise<T> {
+            const index = probe.transactionCount++;
+            const previous = current;
+            current = index;
+            const slot = { index, failed: false };
+            probe.transactions.push(slot);
+            try {
+                return await inner.transaction((tx) => fn(wrap(tx)));
+            } catch (error) {
+                slot.failed = true;
+                throw error;
+            } finally {
+                current = previous;
+            }
+        },
+        close: () => inner.close(),
+    };
 
-  return { conn, probe };
+    return { conn, probe };
 }

@@ -4,84 +4,84 @@ import {  AnthropicProtocolAdapter  } from "../../src/infra/llm-protocol/impl/an
 import {  AnthropicMapper  } from "../../src/infra/llm-protocol/logic/anthropic-content-mapper.js";
 
 describe("anthropic content mapper", () => {
-  it("drops empty text segments from API response", () => {
-    const blocks = AnthropicMapper.contentToBlocks([
-      { type: "text", text: "" },
-      { type: "tool_use", id: "tu_1", name: "grep", input: {} },
-    ]);
-    assert.equal(blocks.length, 1);
-    assert.equal(blocks[0]!.type, "tool_use");
-  });
+    it("drops empty text segments from API response", () => {
+        const blocks = AnthropicMapper.contentToBlocks([
+            { type: "text", text: "" },
+            { type: "tool_use", id: "tu_1", name: "grep", input: {} },
+        ]);
+        assert.equal(blocks.length, 1);
+        assert.equal(blocks[0]!.type, "tool_use");
+    });
 
-  it("maps tool_use and text from API response", () => {
-    const blocks = AnthropicMapper.contentToBlocks([
-      {
-        type: "tool_use",
-        id: "tu_1",
-        name: "grep",
-        input: { pattern: "foo" },
-      },
-      { type: "text", text: "done" },
-    ]);
-    assert.equal(blocks.length, 2);
-    assert.equal(blocks[0]!.type, "tool_use");
-    assert.equal(blocks[1]!.type, "text");
-    assert.equal(blocks[1]!.type === "text" && blocks[1].text, "done");
-  });
+    it("maps tool_use and text from API response", () => {
+        const blocks = AnthropicMapper.contentToBlocks([
+            {
+                type: "tool_use",
+                id: "tu_1",
+                name: "grep",
+                input: { pattern: "foo" },
+            },
+            { type: "text", text: "done" },
+        ]);
+        assert.equal(blocks.length, 2);
+        assert.equal(blocks[0]!.type, "tool_use");
+        assert.equal(blocks[1]!.type, "text");
+        assert.equal(blocks[1]!.type === "text" && blocks[1].text, "done");
+    });
 
-  it("parses thinking without signature (legacy payload)", () => {
-    const blocks = AnthropicMapper.contentToBlocks([
-      { type: "thinking", thinking: "old" },
-    ]);
-    assert.equal(blocks.length, 1);
-    if (blocks[0]?.type === "thinking") {
-      assert.equal(blocks[0].text, "old");
-      assert.equal(blocks[0].thinkingSignature, undefined);
-    }
-  });
+    it("parses thinking without signature (legacy payload)", () => {
+        const blocks = AnthropicMapper.contentToBlocks([
+            { type: "thinking", thinking: "old" },
+        ]);
+        assert.equal(blocks.length, 1);
+        if (blocks[0]?.type === "thinking") {
+            assert.equal(blocks[0].text, "old");
+            assert.equal(blocks[0].thinkingSignature, undefined);
+        }
+    });
 
-  it("blocksToAnthropicContent includes tool_use", () => {
-    const api = AnthropicMapper.blocksToContent([
-      {
-        type: "tool_use",
-        id: "tu_1",
-        name: "grep",
-        input: { pattern: "x" },
-      },
-    ]);
-    assert.equal(api[0]?.type, "tool_use");
-  });
+    it("blocksToAnthropicContent includes tool_use", () => {
+        const api = AnthropicMapper.blocksToContent([
+            {
+                type: "tool_use",
+                id: "tu_1",
+                name: "grep",
+                input: { pattern: "x" },
+            },
+        ]);
+        assert.equal(api[0]?.type, "tool_use");
+    });
 });
 
 describe("AnthropicProtocolAdapter blocks", () => {
-  it("returns blocks from multi-part response", async () => {
-    const fetchFn = mock.fn(async () => {
-      return new Response(
-        JSON.stringify({
-          content: [
-            {
-              type: "tool_use",
-              id: "tu_1",
-              name: "grep",
-              input: { pattern: "foo" },
-            },
-            { type: "text", text: "summary" },
-          ],
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      );
-    });
+    it("returns blocks from multi-part response", async () => {
+        const fetchFn = mock.fn(async () => {
+            return new Response(
+                JSON.stringify({
+                    content: [
+                        {
+                            type: "tool_use",
+                            id: "tu_1",
+                            name: "grep",
+                            input: { pattern: "foo" },
+                        },
+                        { type: "text", text: "summary" },
+                    ],
+                }),
+                { status: 200, headers: { "Content-Type": "application/json" } },
+            );
+        });
 
-    const adapter = new AnthropicProtocolAdapter(fetchFn as typeof fetch);
-    const result = await adapter.chat({
-      baseUrl: "https://api.anthropic.com",
-      apiKey: "key",
-      vendorModelId: "claude-3-5-sonnet",
-      userContent: "hello",
-    });
+        const adapter = new AnthropicProtocolAdapter(fetchFn as typeof fetch);
+        const result = await adapter.chat({
+            baseUrl: "https://api.anthropic.com",
+            apiKey: "key",
+            vendorModelId: "claude-3-5-sonnet",
+            userContent: "hello",
+        });
 
-    assert.equal(result.blocks.length, 2);
-    assert.equal(result.blocks[0]!.type, "tool_use");
-    assert.ok(result.assistantText.includes("summary"));
-  });
+        assert.equal(result.blocks.length, 2);
+        assert.equal(result.blocks[0]!.type, "tool_use");
+        assert.ok(result.assistantText.includes("summary"));
+    });
 });

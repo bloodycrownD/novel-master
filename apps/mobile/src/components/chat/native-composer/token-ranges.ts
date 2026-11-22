@@ -44,7 +44,7 @@ const NM_TOKEN_SCHEME = 'nmtoken://';
 const NM_SKILL_SCHEME = 'nmskill://';
 
 export namespace TokenRanges {
-  /**
+    /**
    * 扫描明文，返回全部 token 区间（按出现顺序，互不重叠）。
    *
    * 定位（D1 后）：**undefined 兜底 + 发送/测试辅助**——运行期水化优先用持久化
@@ -54,12 +54,12 @@ export namespace TokenRanges {
    * `composer-highlight.ts` 一处，desktop 已不再共用这套明文形态（双端分叉是
    * spec 已认的取舍，见 chat-ux-fixes-2026-10 A 特性风险 11）。
    */
-  // nm-style: keep-public — 区间扫描公开入口（controller / composer 多模块消费）
-  export function scanTokensToRanges(text: string): readonly TokenRange[] {
-    return ComposerHighlight.tokenRanges(text);
-  }
+    // nm-style: keep-public — 区间扫描公开入口（controller / composer 多模块消费）
+    export function scanTokensToRanges(text: string): readonly TokenRange[] {
+        return ComposerHighlight.tokenRanges(text);
+    }
 
-  /**
+    /**
    * 单编辑区差分重映射（胶囊确认制的编辑侧核心，2026-10-07 真机轮拍板）。
    *
    * 语义前提：胶囊区间只在「引用落文」（typeahead / 选择器插入）与水化引导时
@@ -92,97 +92,97 @@ export namespace TokenRanges {
    * 或未传编辑前光标则**回退原差分口径**（只增强不回退）。删除锚与插入锚按
    * `delta` 符号分流，互不干扰。
    */
-  export function remapTokenRanges(prev: string, next: string, ranges: readonly TokenRange[], nextCursor?: number, prevCursor?: number): TokenRange[] {
-    if (prev === next) {
-      return [...ranges];
-    }
-    let prefix = 0;
-    const maxPrefix = Math.min(prev.length, next.length);
-    while (prefix < maxPrefix && prev[prefix] === next[prefix]) {
-      prefix++;
-    }
-    let suffix = 0;
-    while (suffix < prev.length - prefix && suffix < next.length - prefix && prev[prev.length - 1 - suffix] === next[next.length - 1 - suffix]) {
-      suffix++;
-    }
-    const editStart = prefix;
-    const editEndPrev = prev.length - suffix;
-    const delta = next.length - prev.length;
-    // 删除锚（D11）：净删除且编辑前光标可用时，用光标差反推真实删除段；
-    // 解析失败（守卫不过 / 未给光标）落回下面的差分口径。
-    if (delta < 0) {
-      // 删除段解析：删除锚的候选删除段按优先级取——调用方显式给的编辑后光标
-      // （命令式通道的 `cursor`，两光标直接构成 D）→ 光标在差分编辑区右缘
-      // （退格 / 选区删除常态）→ 左缘（前向删除）→ 差分编辑区内（公共前后缀
-      // 咬进邻接文本的歧义区，D11 的原始缺陷面）。每个候选都过**纯删除一致性**
-      // 守卫：`prev` 去掉 D 后必须逐字等于 `next`（同时排除替换编辑与越界光标）。
-      let deletion: {start: number; end: number} | null = null;
-      if (prevCursor != null && Number.isInteger(prevCursor) && prevCursor >= 0 && prevCursor <= prev.length) {
-        const candidates: Array<{start: number; end: number}> = [];
-        if (nextCursor != null && Number.isInteger(nextCursor) && nextCursor >= 0 && nextCursor <= next.length) {
-          candidates.push({start: Math.min(prevCursor, nextCursor), end: Math.max(prevCursor, nextCursor)});
+    export function remapTokenRanges(prev: string, next: string, ranges: readonly TokenRange[], nextCursor?: number, prevCursor?: number): TokenRange[] {
+        if (prev === next) {
+            return [...ranges];
         }
-        if (prevCursor >= editEndPrev) {
-          candidates.push({start: prevCursor + delta, end: prevCursor});
-        } else if (prevCursor <= editStart) {
-          candidates.push({start: prevCursor, end: prevCursor - delta});
-        } else {
-          candidates.push({start: prevCursor + delta, end: prevCursor}, {start: prevCursor, end: prevCursor - delta});
+        let prefix = 0;
+        const maxPrefix = Math.min(prev.length, next.length);
+        while (prefix < maxPrefix && prev[prefix] === next[prefix]) {
+            prefix++;
         }
-        for (const {start, end} of candidates) {
-          if (start < 0 || end > prev.length || start >= end) {
-            continue;
-          }
-          if (prev.slice(0, start) + prev.slice(end) === next) {
-            deletion = {start, end};
-            break;
-          }
+        let suffix = 0;
+        while (suffix < prev.length - prefix && suffix < next.length - prefix && prev[prev.length - 1 - suffix] === next[next.length - 1 - suffix]) {
+            suffix++;
         }
-      }
-      if (deletion != null) {
-        // 删除锚的区间分流：与删除段**有公共字符**（端点相触不算）的区间摘除，
-        // 其余幸存——删除段左侧原位、右侧按 `delta`（负）平移。
-        const remappedByDeletion: TokenRange[] = [];
+        const editStart = prefix;
+        const editEndPrev = prev.length - suffix;
+        const delta = next.length - prev.length;
+        // 删除锚（D11）：净删除且编辑前光标可用时，用光标差反推真实删除段；
+        // 解析失败（守卫不过 / 未给光标）落回下面的差分口径。
+        if (delta < 0) {
+            // 删除段解析：删除锚的候选删除段按优先级取——调用方显式给的编辑后光标
+            // （命令式通道的 `cursor`，两光标直接构成 D）→ 光标在差分编辑区右缘
+            // （退格 / 选区删除常态）→ 左缘（前向删除）→ 差分编辑区内（公共前后缀
+            // 咬进邻接文本的歧义区，D11 的原始缺陷面）。每个候选都过**纯删除一致性**
+            // 守卫：`prev` 去掉 D 后必须逐字等于 `next`（同时排除替换编辑与越界光标）。
+            let deletion: {start: number; end: number} | null = null;
+            if (prevCursor != null && Number.isInteger(prevCursor) && prevCursor >= 0 && prevCursor <= prev.length) {
+                const candidates: Array<{start: number; end: number}> = [];
+                if (nextCursor != null && Number.isInteger(nextCursor) && nextCursor >= 0 && nextCursor <= next.length) {
+                    candidates.push({start: Math.min(prevCursor, nextCursor), end: Math.max(prevCursor, nextCursor)});
+                }
+                if (prevCursor >= editEndPrev) {
+                    candidates.push({start: prevCursor + delta, end: prevCursor});
+                } else if (prevCursor <= editStart) {
+                    candidates.push({start: prevCursor, end: prevCursor - delta});
+                } else {
+                    candidates.push({start: prevCursor + delta, end: prevCursor}, {start: prevCursor, end: prevCursor - delta});
+                }
+                for (const {start, end} of candidates) {
+                    if (start < 0 || end > prev.length || start >= end) {
+                        continue;
+                    }
+                    if (prev.slice(0, start) + prev.slice(end) === next) {
+                        deletion = {start, end};
+                        break;
+                    }
+                }
+            }
+            if (deletion != null) {
+                // 删除锚的区间分流：与删除段**有公共字符**（端点相触不算）的区间摘除，
+                // 其余幸存——删除段左侧原位、右侧按 `delta`（负）平移。
+                const remappedByDeletion: TokenRange[] = [];
+                for (const range of ranges) {
+                    if (range.start < deletion.end && deletion.start < range.end) {
+                        continue;
+                    }
+                    if (range.end <= deletion.start) {
+                        remappedByDeletion.push({start: range.start, end: range.end});
+                    } else {
+                        remappedByDeletion.push({start: range.start + delta, end: range.end + delta});
+                    }
+                }
+                return remappedByDeletion;
+            }
+        }
+        let anchor = editStart;
+        if (editStart === editEndPrev && nextCursor != null) {
+            // 纯插入：插入段长 = delta，真实插入点 = 光标 - delta。
+            const inferred = nextCursor - delta;
+            const plausible = Number.isInteger(inferred) && inferred >= 0 && inferred <= prev.length && next.startsWith(prev.slice(0, inferred)) && next.endsWith(prev.slice(inferred));
+            if (plausible) {
+                anchor = inferred;
+            }
+        }
+        const remapped: TokenRange[] = [];
+        // 纯插入（编辑区在 prev 侧为空）时左右边界同为一个插入点（可能已被光标锚
+        // 修正）；替换场景维持原双边界：跨编辑区的区间一律摘除。
+        const pureInsert = editStart === editEndPrev;
+        const leftBound = pureInsert ? anchor : editStart;
+        const rightBound = pureInsert ? anchor : editEndPrev;
         for (const range of ranges) {
-          if (range.start < deletion.end && deletion.start < range.end) {
-            continue;
-          }
-          if (range.end <= deletion.start) {
-            remappedByDeletion.push({start: range.start, end: range.end});
-          } else {
-            remappedByDeletion.push({start: range.start + delta, end: range.end + delta});
-          }
+            if (range.end <= leftBound) {
+                remapped.push({start: range.start, end: range.end});
+            } else if (range.start >= rightBound) {
+                remapped.push({start: range.start + delta, end: range.end + delta});
+            }
+            // 其余情形（区间跨插入点 / 与编辑区相交）一律摘除，不做部分保留。
         }
-        return remappedByDeletion;
-      }
+        return remapped;
     }
-    let anchor = editStart;
-    if (editStart === editEndPrev && nextCursor != null) {
-      // 纯插入：插入段长 = delta，真实插入点 = 光标 - delta。
-      const inferred = nextCursor - delta;
-      const plausible = Number.isInteger(inferred) && inferred >= 0 && inferred <= prev.length && next.startsWith(prev.slice(0, inferred)) && next.endsWith(prev.slice(inferred));
-      if (plausible) {
-        anchor = inferred;
-      }
-    }
-    const remapped: TokenRange[] = [];
-    // 纯插入（编辑区在 prev 侧为空）时左右边界同为一个插入点（可能已被光标锚
-    // 修正）；替换场景维持原双边界：跨编辑区的区间一律摘除。
-    const pureInsert = editStart === editEndPrev;
-    const leftBound = pureInsert ? anchor : editStart;
-    const rightBound = pureInsert ? anchor : editEndPrev;
-    for (const range of ranges) {
-      if (range.end <= leftBound) {
-        remapped.push({start: range.start, end: range.end});
-      } else if (range.start >= rightBound) {
-        remapped.push({start: range.start + delta, end: range.end + delta});
-      }
-      // 其余情形（区间跨插入点 / 与编辑区相交）一律摘除，不做部分保留。
-    }
-    return remapped;
-  }
 
-  /**
+    /**
    * 明文 → 胶囊 markdown 合成（水化 / 命令式 setText 的唯一合成入口）。
    *
    * 逐 token 包成链接、普通段原样拼接；无 token 时原串返回（不做无谓拷贝）。
@@ -193,11 +193,11 @@ export namespace TokenRanges {
    * 语义吃明文零影响。destination 里的 `(` / `)` 则走百分号编码（对齐库端
    * `LinkCoordinator.sanitizeUrl` 的括号编码口径），避免破坏链接语法。
    */
-  export function synthesizeTokenMarkdown(text: string): string {
-    return TokenRanges.synthesizeTokenMarkdownFromRanges(text, TokenRanges.scanTokensToRanges(text));
-  }
+    export function synthesizeTokenMarkdown(text: string): string {
+        return TokenRanges.synthesizeTokenMarkdownFromRanges(text, TokenRanges.scanTokensToRanges(text));
+    }
 
-  /**
+    /**
    * 按确认区间合成胶囊 markdown（胶囊确认制的合成侧入口，2026-10-07 真机轮）。
    *
    * 与 {@link synthesizeTokenMarkdown} 的唯一区别：区间由调用方给定（引用落文
@@ -206,40 +206,40 @@ export namespace TokenRanges {
    * 越界/翻转/负下标的非法区间一律跳过（跳到下一区间，其余段照常拼接）——纯
    * 防御，见循环内守卫注释。
    */
-  export function synthesizeTokenMarkdownFromRanges(text: string, ranges: readonly TokenRange[]): string {
-    if (ranges.length === 0) {
-      return text;
-    }
-    const parts: string[] = [];
-    let cursor = 0;
-    for (const range of ranges) {
-      // 守卫：负 start 会让 slice(cursor, -1) 改为按 from-end 切、切出错拼文本；
-      // end < start 的翻转区间同理。上游数学上不产出非法区间，这里是纯防御缺口
-      // （登记/重映射的产物天然合法，坏数据从外部调用方进来时才见）。
-      if (range.start < 0 || range.end < range.start || range.end > text.length || range.start < cursor) {
-        continue;
-      }
-      parts.push(text.slice(cursor, range.start));
-      // 单个 token（形如 `@path@` / `$name$`）→ 链接 markdown；不可合成时原样返回。
-      const token = text.slice(range.start, range.end);
-      let tokenMarkdown = token;
-      // 终止符 = 触发符同字符：先做形态校验，首尾不同字符一律原文返回（半截 token 不成胶囊）
-      if (token.length >= 3 && token[0] === token[token.length - 1]) {
-        const indicator = token[0];
-        // 剥掉两端触发符：destination 只留 body，LINK 文本保留完整明文（native 侧回声逐字一致）
-        const body = token.slice(1, -1);
-        // 链接文本破坏字符（`[` / `]`）与空 body：不合成（理由见 synthesizeTokenMarkdown 的转义兜底说明）
-        if (body.length > 0 && !body.includes('[') && !body.includes(']')) {
-          const scheme = indicator === '@' ? NM_TOKEN_SCHEME : NM_SKILL_SCHEME;
-          // destination 的括号百分号编码（对齐库端 `LinkCoordinator.sanitizeUrl`）。
-          const destination = scheme + body.replace(/\(/g, '%28').replace(/\)/g, '%29');
-          tokenMarkdown = `[${token}](${destination})`;
+    export function synthesizeTokenMarkdownFromRanges(text: string, ranges: readonly TokenRange[]): string {
+        if (ranges.length === 0) {
+            return text;
         }
-      }
-      parts.push(tokenMarkdown);
-      cursor = range.end;
+        const parts: string[] = [];
+        let cursor = 0;
+        for (const range of ranges) {
+            // 守卫：负 start 会让 slice(cursor, -1) 改为按 from-end 切、切出错拼文本；
+            // end < start 的翻转区间同理。上游数学上不产出非法区间，这里是纯防御缺口
+            // （登记/重映射的产物天然合法，坏数据从外部调用方进来时才见）。
+            if (range.start < 0 || range.end < range.start || range.end > text.length || range.start < cursor) {
+                continue;
+            }
+            parts.push(text.slice(cursor, range.start));
+            // 单个 token（形如 `@path@` / `$name$`）→ 链接 markdown；不可合成时原样返回。
+            const token = text.slice(range.start, range.end);
+            let tokenMarkdown = token;
+            // 终止符 = 触发符同字符：先做形态校验，首尾不同字符一律原文返回（半截 token 不成胶囊）
+            if (token.length >= 3 && token[0] === token[token.length - 1]) {
+                const indicator = token[0];
+                // 剥掉两端触发符：destination 只留 body，LINK 文本保留完整明文（native 侧回声逐字一致）
+                const body = token.slice(1, -1);
+                // 链接文本破坏字符（`[` / `]`）与空 body：不合成（理由见 synthesizeTokenMarkdown 的转义兜底说明）
+                if (body.length > 0 && !body.includes('[') && !body.includes(']')) {
+                    const scheme = indicator === '@' ? NM_TOKEN_SCHEME : NM_SKILL_SCHEME;
+                    // destination 的括号百分号编码（对齐库端 `LinkCoordinator.sanitizeUrl`）。
+                    const destination = scheme + body.replace(/\(/g, '%28').replace(/\)/g, '%29');
+                    tokenMarkdown = `[${token}](${destination})`;
+                }
+            }
+            parts.push(tokenMarkdown);
+            cursor = range.end;
+        }
+        parts.push(text.slice(cursor));
+        return parts.join('');
     }
-    parts.push(text.slice(cursor));
-    return parts.join('');
-  }
 }

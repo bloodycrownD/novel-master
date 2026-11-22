@@ -10,44 +10,44 @@ import {state} from '../state/state';
 import type {MessageRow} from '../state/state';
 
 type BodySeed = {
-  html?: string;
-  text?: string;
+    html?: string;
+    text?: string;
 };
 
 type StreamRenderSignature = {
-  text: string;
-  thinking: string;
-  textHtml: string;
-  thinkingHtml: string;
+    text: string;
+    thinking: string;
+    textHtml: string;
+    thinkingHtml: string;
 };
 
 const lastStreamRenderSignature = new Map<string, StreamRenderSignature>();
 
 export const FinishedStreamRowDom = {
-  /** 按行 id 找窗口内的行元素（窗口外未渲染 → null）。 */
-  findRowElement: (id: string): Element | null => {
-    if (typeof document.querySelector !== 'function') {
-      return null;
-    }
-    return document.querySelector('[data-id="' + id + '"]');
-  },
+    /** 按行 id 找窗口内的行元素（窗口外未渲染 → null）。 */
+    findRowElement: (id: string): Element | null => {
+        if (typeof document.querySelector !== 'function') {
+            return null;
+        }
+        return document.querySelector('[data-id="' + id + '"]');
+    },
 
-  /** 全量写 body 自身（不是 .stream-active-tail）：rich 用 html，plain 用纯文本。 */
-  writeBodyFull: (body: Element, seed: BodySeed): void => {
-    if (state.flags.richText && seed.html) {
-      TrustedHtmlWriter.apply(body, seed.html);
-      body.classList.remove('stream-tail-plain');
-      body.classList.add('rich');
-      return;
-    }
-    // rich 开→关（P1-5）：与 streaming 行 plain-reseed 同口径摘掉 rich，否则
-    // `.bubble-body.rich{white-space:normal}` 会把纯文本的换行/空行折叠成一段。
-    body.classList.remove('rich');
-    body.classList.remove('stream-tail-plain');
-    body.textContent = String(seed.text || '');
-  },
+    /** 全量写 body 自身（不是 .stream-active-tail）：rich 用 html，plain 用纯文本。 */
+    writeBodyFull: (body: Element, seed: BodySeed): void => {
+        if (state.flags.richText && seed.html) {
+            TrustedHtmlWriter.apply(body, seed.html);
+            body.classList.remove('stream-tail-plain');
+            body.classList.add('rich');
+            return;
+        }
+        // rich 开→关（P1-5）：与 streaming 行 plain-reseed 同口径摘掉 rich，否则
+        // `.bubble-body.rich{white-space:normal}` 会把纯文本的换行/空行折叠成一段。
+        body.classList.remove('rich');
+        body.classList.remove('stream-tail-plain');
+        body.textContent = String(seed.text || '');
+    },
 
-  /**
+    /**
    * gap 恢复/快照 seed 的唯一 DOM 写入口（P0-2）：按 data-id 找行，把
    * `.bubble-body/.thinking-body` 自身一次性重写为行内完整 text/thinking/html。
    * 无壳直接 return（壳已由本次 renderRows 建好，这里不再 renderRows）。
@@ -56,92 +56,92 @@ export const FinishedStreamRowDom = {
    * （spec P0-2），与 reconcile 共用 writeBodyFull；移出 snapshot 是为了断开
    * stream.ts ↔ snapshot.ts 的循环依赖（spec §3.6）。
    */
-  reseed: (row: MessageRow): void => {
-    const el = FinishedStreamRowDom.findRowElement(row.id);
-    if (!el) {
-      return;
-    }
-    const bubble = el.querySelector('.bubble');
-    if (!bubble) {
-      return;
-    }
-    const textBody = bubble.querySelector('.bubble-body');
-    if (textBody) {
-      FinishedStreamRowDom.writeBodyFull(textBody, {html: row.textHtml, text: row.text});
-    }
-    const thinkingBody = bubble.querySelector('.thinking-body');
-    if (thinkingBody) {
-      FinishedStreamRowDom.writeBodyFull(thinkingBody, {html: row.thinkingHtml, text: row.thinking});
-    }
-  },
+    reseed: (row: MessageRow): void => {
+        const el = FinishedStreamRowDom.findRowElement(row.id);
+        if (!el) {
+            return;
+        }
+        const bubble = el.querySelector('.bubble');
+        if (!bubble) {
+            return;
+        }
+        const textBody = bubble.querySelector('.bubble-body');
+        if (textBody) {
+            FinishedStreamRowDom.writeBodyFull(textBody, {html: row.textHtml, text: row.text});
+        }
+        const thinkingBody = bubble.querySelector('.thinking-body');
+        if (thinkingBody) {
+            FinishedStreamRowDom.writeBodyFull(thinkingBody, {html: row.thinkingHtml, text: row.thinking});
+        }
+    },
 
-  /**
+    /**
    * 清理已不在 rows 的签名条目（P2-11）：行被删除（streamReset / 窗口外重建）
    * 后签名不应长期滞留，否则长会话按 streamId 单调增长。
    *
    * nm-style: keep-public — stream.ts `Stream.applyReset` 的跨模块唯一清理入口；
    * 签名表是模块私有的渲染态，不能为了内联把它暴露给调用方。
    */
-  pruneSignatures: (): void => {
-    if (lastStreamRenderSignature.size === 0) {
-      return;
-    }
-    const live = new Set<string>();
-    for (let i = 0; i < state.rows.length; i++) {
-      live.add(state.rows[i].id);
-    }
-    lastStreamRenderSignature.forEach((_signature, id) => {
-      if (!live.has(id)) {
-        lastStreamRenderSignature.delete(id);
-      }
-    });
-  },
+    pruneSignatures: (): void => {
+        if (lastStreamRenderSignature.size === 0) {
+            return;
+        }
+        const live = new Set<string>();
+        for (let i = 0; i < state.rows.length; i++) {
+            live.add(state.rows[i].id);
+        }
+        lastStreamRenderSignature.forEach((_signature, id) => {
+            if (!live.has(id)) {
+                lastStreamRenderSignature.delete(id);
+            }
+        });
+    },
 
-  /**
+    /**
    * finished 流式行的正文校正：只处理窗口内命中的 `[data-id]`，签名（四个
    * 字符串全等）未变直接跳过；无壳跳过；**不调用 renderRows**；只写
    * `.bubble-body/.thinking-body` 自身（不经 Stream.renderTarget，块模式会把
    * 全量 html 写进尾容器复制已提交块）。
    */
-  reconcile: (): void => {
-    for (let i = 0; i < state.rows.length; i++) {
-      const row = state.rows[i];
-      if (row.kind !== 'message' || row.status !== 'finished') {
-        continue;
-      }
-      const el = FinishedStreamRowDom.findRowElement(row.id);
-      if (!el) {
-        continue;
-      }
-      const next: StreamRenderSignature = {
-        text: String(row.text || ''),
-        thinking: String(row.thinking || ''),
-        textHtml: String(row.textHtml || ''),
-        thinkingHtml: String(row.thinkingHtml || ''),
-      };
-      const prev = lastStreamRenderSignature.get(row.id);
-      if (
-        prev != null &&
-        prev.text === next.text &&
-        prev.thinking === next.thinking &&
-        prev.textHtml === next.textHtml &&
-        prev.thinkingHtml === next.thinkingHtml
-      ) {
-        continue;
-      }
-      const bubble = el.querySelector('.bubble');
-      if (!bubble) {
-        continue;
-      }
-      const textBody = bubble.querySelector('.bubble-body');
-      if (textBody) {
-        FinishedStreamRowDom.writeBodyFull(textBody, {html: row.textHtml, text: row.text});
-      }
-      const thinkingBody = bubble.querySelector('.thinking-body');
-      if (thinkingBody) {
-        FinishedStreamRowDom.writeBodyFull(thinkingBody, {html: row.thinkingHtml, text: row.thinking});
-      }
-      lastStreamRenderSignature.set(row.id, next);
-    }
-  },
+    reconcile: (): void => {
+        for (let i = 0; i < state.rows.length; i++) {
+            const row = state.rows[i];
+            if (row.kind !== 'message' || row.status !== 'finished') {
+                continue;
+            }
+            const el = FinishedStreamRowDom.findRowElement(row.id);
+            if (!el) {
+                continue;
+            }
+            const next: StreamRenderSignature = {
+                text: String(row.text || ''),
+                thinking: String(row.thinking || ''),
+                textHtml: String(row.textHtml || ''),
+                thinkingHtml: String(row.thinkingHtml || ''),
+            };
+            const prev = lastStreamRenderSignature.get(row.id);
+            if (
+                prev != null &&
+                prev.text === next.text &&
+                prev.thinking === next.thinking &&
+                prev.textHtml === next.textHtml &&
+                prev.thinkingHtml === next.thinkingHtml
+            ) {
+                continue;
+            }
+            const bubble = el.querySelector('.bubble');
+            if (!bubble) {
+                continue;
+            }
+            const textBody = bubble.querySelector('.bubble-body');
+            if (textBody) {
+                FinishedStreamRowDom.writeBodyFull(textBody, {html: row.textHtml, text: row.text});
+            }
+            const thinkingBody = bubble.querySelector('.thinking-body');
+            if (thinkingBody) {
+                FinishedStreamRowDom.writeBodyFull(thinkingBody, {html: row.thinkingHtml, text: row.thinking});
+            }
+            lastStreamRenderSignature.set(row.id, next);
+        }
+    },
 } as const;

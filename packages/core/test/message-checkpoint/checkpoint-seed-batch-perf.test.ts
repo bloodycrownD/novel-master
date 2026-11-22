@@ -35,47 +35,47 @@ const MESSAGE_COUNT = 500;
 const SEED_BUDGET_MS = 1500;
 
 describe("checkpoint seed 批量化性能（200 文件 × 500 消息）", () => {
-  it("T-PERF-BATCH：500 条消息各 insertCheckpoint（200 文件指针）应在预算内完成", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
-    const entries = new SqliteVfsEntryRepository(ctx.conn);
-    const sk = LogicalPath.scopeKey({
-      kind: "session",
-      projectId: project.id,
-      sessionId: session.id,
+    it("T-PERF-BATCH：500 条消息各 insertCheckpoint（200 文件指针）应在预算内完成", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
+        const entries = new SqliteVfsEntryRepository(ctx.conn);
+        const sk = LogicalPath.scopeKey({
+            kind: "session",
+            projectId: project.id,
+            sessionId: session.id,
+        });
+
+        // 准备 200 个文件，收集 (entryId, version) 指针
+        const pointers: Array<{ entryId: number; revisionVersion: number }> = [];
+        for (let i = 0; i < FILE_COUNT; i++) {
+            const p = `/perf-${i}.md`;
+            await svfs.write(p, `body-${i}`, { versionCheck: false });
+            const entry = unwrap(await entries.findByPath(sk, p));
+            const version = unwrap(await svfs.read(p)).version;
+            pointers.push({ entryId: entry!.entryId, revisionVersion: version });
+        }
+
+        const checkpoints = new SqliteMessageCheckpointRepository(ctx.conn);
+
+        // 准备 500 条消息 ID
+        const messageIds = Array.from({ length: MESSAGE_COUNT }, (_, m) => ({ id: `msg-perf-${m}` }));
+
+        // 测 seedCheckpoints（seedForkCopyParity 的批量路径）
+        const start = performance.now();
+        await checkpoints.seedCheckpoints(session.id, messageIds, pointers, 0);
+        const elapsed = performance.now() - start;
+
+        // 校验数据正确性：最后一条消息的 checkpoint 应有 200 个文件指针
+        const lastTree = await checkpoints.loadFileTree(session.id, `msg-perf-${MESSAGE_COUNT - 1}`);
+        assert.ok(lastTree, "末条消息须有 checkpoint");
+        assert.equal(lastTree.size, FILE_COUNT, "末条 checkpoint 须包含全部 200 文件");
+
+        // 性能断言：批量实现应远低于预算；逐条实现会跑到 ~1.8s+ 超出预算
+        assert.ok(
+            elapsed < SEED_BUDGET_MS,
+            `seedCheckpoints（${MESSAGE_COUNT} 消息 × ${FILE_COUNT} 文件）耗时 ${elapsed.toFixed(1)}ms 超出预算 ${SEED_BUDGET_MS}ms，疑似退化为逐条`,
+        );
     });
-
-    // 准备 200 个文件，收集 (entryId, version) 指针
-    const pointers: Array<{ entryId: number; revisionVersion: number }> = [];
-    for (let i = 0; i < FILE_COUNT; i++) {
-      const p = `/perf-${i}.md`;
-      await svfs.write(p, `body-${i}`, { versionCheck: false });
-      const entry = unwrap(await entries.findByPath(sk, p));
-      const version = unwrap(await svfs.read(p)).version;
-      pointers.push({ entryId: entry!.entryId, revisionVersion: version });
-    }
-
-    const checkpoints = new SqliteMessageCheckpointRepository(ctx.conn);
-
-    // 准备 500 条消息 ID
-    const messageIds = Array.from({ length: MESSAGE_COUNT }, (_, m) => ({ id: `msg-perf-${m}` }));
-
-    // 测 seedCheckpoints（seedForkCopyParity 的批量路径）
-    const start = performance.now();
-    await checkpoints.seedCheckpoints(session.id, messageIds, pointers, 0);
-    const elapsed = performance.now() - start;
-
-    // 校验数据正确性：最后一条消息的 checkpoint 应有 200 个文件指针
-    const lastTree = await checkpoints.loadFileTree(session.id, `msg-perf-${MESSAGE_COUNT - 1}`);
-    assert.ok(lastTree, "末条消息须有 checkpoint");
-    assert.equal(lastTree.size, FILE_COUNT, "末条 checkpoint 须包含全部 200 文件");
-
-    // 性能断言：批量实现应远低于预算；逐条实现会跑到 ~1.8s+ 超出预算
-    assert.ok(
-      elapsed < SEED_BUDGET_MS,
-      `seedCheckpoints（${MESSAGE_COUNT} 消息 × ${FILE_COUNT} 文件）耗时 ${elapsed.toFixed(1)}ms 超出预算 ${SEED_BUDGET_MS}ms，疑似退化为逐条`,
-    );
-  });
 });

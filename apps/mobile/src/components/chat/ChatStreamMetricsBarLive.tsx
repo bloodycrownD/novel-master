@@ -26,14 +26,14 @@ import {MetricDetailSheet} from '../sheet/MetricDetailSheet';
 import {ChatStreamMetricsBar} from './ChatStreamMetricsBar';
 
 type Props = {
-  readonly agentRunning: boolean;
-  /** 指标归属会话：切会话只换数据源，不重置（单元/ settled 投影按会话归属）。 */
-  readonly sessionId: string | undefined;
-  /**
+    readonly agentRunning: boolean;
+    /** 指标归属会话：切会话只换数据源，不重置（单元/ settled 投影按会话归属）。 */
+    readonly sessionId: string | undefined;
+    /**
    * 「上下文占用」行现成读数（metric-detail-sheet）：主屏传
    * agentMeta.tokenLabel（与 chip 同源）；子会话屏无 meta chip，不传出「—」。
    */
-  readonly contextTokenLabel?: string;
+    readonly contextTokenLabel?: string;
 };
 
 /**
@@ -49,84 +49,84 @@ type Props = {
 // 偏离登记：文件名 ChatStreamMetricsBarLive 与组件同名，tsx helper namespace 不得撞组件名，
 // 按内容主体（settled 指标可见性）起名 SettledMetrics，成员剥词尾主体词。
 export namespace SettledMetrics {
-  export function hasVisible(view: SessionStreamUnitView): boolean {
-    return SessionStreamUnit.isSettled(view.status) && (view.startedAtMs > 0 || view.metrics.textChars > 0 || view.metrics.thinkingChars > 0 || view.metrics.completionTokens > 0);
-  }
+    export function hasVisible(view: SessionStreamUnitView): boolean {
+        return SessionStreamUnit.isSettled(view.status) && (view.startedAtMs > 0 || view.metrics.textChars > 0 || view.metrics.thinkingChars > 0 || view.metrics.completionTokens > 0);
+    }
 }
 
 export function ChatStreamMetricsBarLive({agentRunning, sessionId, contextTokenLabel}: Props) {
-  const runtime = useRuntime();
-  const manager = runtime.sessionStreamUnitManager;
-  const [, setTick] = useState(0);
-  // metric-detail-sheet：详情 sheet 独立 state（不进 metrics 快照——
-  // 250ms tick 只重渲本子树的计时读数，弹窗状态不随 tick 抖动；打开时
-  // 由 MetricDetailSheet 按 sessionId 自取，本层零取数）。
-  const [detailOpen, setDetailOpen] = useState(false);
+    const runtime = useRuntime();
+    const manager = runtime.sessionStreamUnitManager;
+    const [, setTick] = useState(0);
+    // metric-detail-sheet：详情 sheet 独立 state（不进 metrics 快照——
+    // 250ms tick 只重渲本子树的计时读数，弹窗状态不随 tick 抖动；打开时
+    // 由 MetricDetailSheet 按 sessionId 自取，本层零取数）。
+    const [detailOpen, setDetailOpen] = useState(false);
 
-  // 活跃期间 250ms tick 刷新 live 计时；空闲时靠 manager 订阅触发
-  // （收尾写 settled 投影、切会话换源、水合回填均经 notifyChanged）。
-  useEffect(() => {
-    if (!agentRunning) {
-      return undefined;
+    // 活跃期间 250ms tick 刷新 live 计时；空闲时靠 manager 订阅触发
+    // （收尾写 settled 投影、切会话换源、水合回填均经 notifyChanged）。
+    useEffect(() => {
+        if (!agentRunning) {
+            return undefined;
+        }
+        const id = setInterval(() => {
+            setTick(t => t + 1);
+        }, 250);
+        return () => clearInterval(id);
+    }, [agentRunning]);
+
+    useEffect(() => {
+        const sync = () => setTick(t => t + 1);
+        return manager.subscribe(sync);
+    }, [manager]);
+
+    // 首帧延迟打点：agentRunning 翻真后的首次渲染时刻（React 实际画出来的时机）
+    useEffect(() => {
+        if (agentRunning) {
+            timingLog('metrics bar rendered');
+        }
+    }, [agentRunning]);
+
+    let metrics: AgentStreamMetricsView | null = null;
+    /** 中断现场的正面标识（Step 7）：仅水合出的 interrupted 单元冻结指标携带。 */
+    let interrupted = false;
+    if (sessionId != null) {
+        const view = manager.snapshot(sessionId);
+        if (view != null && SettledMetrics.hasVisible(view)) {
+            // 终态快照即冻结指标。事件收尾的单元 elapsedMs 已冻结；水合
+            // interrupted 单元 elapsedMs 为 null，以 settledAtMs-startedAtMs
+            // 近似冻结历时；全零守卫兜底极老形态（起点与字数皆无的空行）。
+            // 受理即置起点后，starting 阶段被杀的水合单元带短历时（字数为零）
+            // ——「已中断 · 数百 ms」比静默消失更可感知，属预期口径。
+            interrupted = view.status === 'interrupted';
+            const elapsedMs = view.elapsedMs != null ? view.elapsedMs : view.startedAtMs > 0 ? Math.max(0, (view.settledAtMs ?? Date.now()) - view.startedAtMs) : 0;
+            // 冻结态：token 计数照显 + 收尾冻结的末值速率（无样本则省略速率段）。
+            const frozenSample = {elapsedMs, completionTokens: view.metrics.completionTokens, tokenSource: view.metrics.tokenSource};
+            metrics = AgentStreamMetrics.toView(false, frozenSample, manager.rateTokensPerSecond(sessionId, Date.now()));
+        } else if (agentRunning && view != null && view.startedAtMs > 0) {
+            // starting 阶段起点已随 begin() 置位（用户请求时刻），指标条自受理
+            // 即显示（计时在走、token 为零的「准备中」形态），不等 RUN_STARTED。
+            const elapsedMs = Math.max(0, Date.now() - view.startedAtMs);
+            const startingSample = {elapsedMs, completionTokens: view.metrics.completionTokens, tokenSource: view.metrics.tokenSource};
+            metrics = AgentStreamMetrics.toView(true, startingSample, manager.rateTokensPerSecond(sessionId, Date.now()));
+        }
     }
-    const id = setInterval(() => {
-      setTick(t => t + 1);
-    }, 250);
-    return () => clearInterval(id);
-  }, [agentRunning]);
-
-  useEffect(() => {
-    const sync = () => setTick(t => t + 1);
-    return manager.subscribe(sync);
-  }, [manager]);
-
-  // 首帧延迟打点：agentRunning 翻真后的首次渲染时刻（React 实际画出来的时机）
-  useEffect(() => {
-    if (agentRunning) {
-      timingLog('metrics bar rendered');
+    if (metrics == null && sessionId != null) {
+        const lastRun = manager.getSettledProjection(sessionId);
+        if (lastRun != null) {
+            const settledSample = {elapsedMs: lastRun.elapsedMs, completionTokens: lastRun.metrics.completionTokens, tokenSource: lastRun.metrics.tokenSource};
+            metrics = AgentStreamMetrics.toView(false, settledSample, lastRun.rateTokensPerSecond);
+        }
     }
-  }, [agentRunning]);
 
-  let metrics: AgentStreamMetricsView | null = null;
-  /** 中断现场的正面标识（Step 7）：仅水合出的 interrupted 单元冻结指标携带。 */
-  let interrupted = false;
-  if (sessionId != null) {
-    const view = manager.snapshot(sessionId);
-    if (view != null && SettledMetrics.hasVisible(view)) {
-      // 终态快照即冻结指标。事件收尾的单元 elapsedMs 已冻结；水合
-      // interrupted 单元 elapsedMs 为 null，以 settledAtMs-startedAtMs
-      // 近似冻结历时；全零守卫兜底极老形态（起点与字数皆无的空行）。
-      // 受理即置起点后，starting 阶段被杀的水合单元带短历时（字数为零）
-      // ——「已中断 · 数百 ms」比静默消失更可感知，属预期口径。
-      interrupted = view.status === 'interrupted';
-      const elapsedMs = view.elapsedMs != null ? view.elapsedMs : view.startedAtMs > 0 ? Math.max(0, (view.settledAtMs ?? Date.now()) - view.startedAtMs) : 0;
-      // 冻结态：token 计数照显 + 收尾冻结的末值速率（无样本则省略速率段）。
-      const frozenSample = {elapsedMs, completionTokens: view.metrics.completionTokens, tokenSource: view.metrics.tokenSource};
-      metrics = AgentStreamMetrics.toView(false, frozenSample, manager.rateTokensPerSecond(sessionId, Date.now()));
-    } else if (agentRunning && view != null && view.startedAtMs > 0) {
-      // starting 阶段起点已随 begin() 置位（用户请求时刻），指标条自受理
-      // 即显示（计时在走、token 为零的「准备中」形态），不等 RUN_STARTED。
-      const elapsedMs = Math.max(0, Date.now() - view.startedAtMs);
-      const startingSample = {elapsedMs, completionTokens: view.metrics.completionTokens, tokenSource: view.metrics.tokenSource};
-      metrics = AgentStreamMetrics.toView(true, startingSample, manager.rateTokensPerSecond(sessionId, Date.now()));
+    if (metrics == null) {
+        return null;
     }
-  }
-  if (metrics == null && sessionId != null) {
-    const lastRun = manager.getSettledProjection(sessionId);
-    if (lastRun != null) {
-      const settledSample = {elapsedMs: lastRun.elapsedMs, completionTokens: lastRun.metrics.completionTokens, tokenSource: lastRun.metrics.tokenSource};
-      metrics = AgentStreamMetrics.toView(false, settledSample, lastRun.rateTokensPerSecond);
-    }
-  }
 
-  if (metrics == null) {
-    return null;
-  }
-
-  return (
-    <>
-      <ChatStreamMetricsBar metrics={metrics} interrupted={interrupted} onPress={() => setDetailOpen(true)} />
-      {sessionId != null ? <MetricDetailSheet visible={detailOpen} sessionId={sessionId} contextTokenLabel={contextTokenLabel} onClose={() => setDetailOpen(false)} /> : null}
-    </>
-  );
+    return (
+        <>
+            <ChatStreamMetricsBar metrics={metrics} interrupted={interrupted} onPress={() => setDetailOpen(true)} />
+            {sessionId != null ? <MetricDetailSheet visible={detailOpen} sessionId={sessionId} contextTokenLabel={contextTokenLabel} onClose={() => setDetailOpen(false)} /> : null}
+        </>
+    );
 }

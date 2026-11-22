@@ -40,27 +40,27 @@ const DUCKDUCKGO_USER_AGENT = "Mozilla/5.0 (compatible; novel-master/1.0; +https
 
 /** 锚标签解析结果：属性串 + innerHTML。 */
 interface AnchorMatch {
-  readonly attrs: string;
-  readonly innerHtml: string;
+    readonly attrs: string;
+    readonly innerHtml: string;
 }
 
 export const Duckduckgo = {
-  /**
+    /**
    * 锚文本清洗：去内嵌标签（snippet 内的 `<b>` 高亮等）→ 实体解码 →
    * 折叠空白（HTML 折行缩进折成单空格）→ trim。对应 DOM 的
    * `textContent.trim()` 加浏览器渲染的空白折叠语义。
    */
-  // nm-style: keep-local — 标签剥离 + 空白折叠是 DDG 的 DOM 语义适配（两处复用），实体解码本身走 Text.decodeHtmlEntities。
-  cleanAnchorText(innerHtml: string): string {
-    const stripped = Text.decodeHtmlEntities(innerHtml.replace(/<[^>]*>/g, ""));
-    return stripped.replace(/\s+/g, " ").trim();
-  },
+    // nm-style: keep-local — 标签剥离 + 空白折叠是 DDG 的 DOM 语义适配（两处复用），实体解码本身走 Text.decodeHtmlEntities。
+    cleanAnchorText(innerHtml: string): string {
+        const stripped = Text.decodeHtmlEntities(innerHtml.replace(/<[^>]*>/g, ""));
+        return stripped.replace(/\s+/g, " ").trim();
+    },
 
-  /** 块内取第一个 class token 精确等于 `className` 的锚（querySelector 语义）。 */
-  findAnchorByClass(blockHtml: string, className: string): AnchorMatch | null {
-    for (const match of blockHtml.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/g)) {
-      const attrs = match[1] ?? "";
-      const classAttr = attrs.match(/\bclass\s*=\s*"([^"]*)"/);
+    /** 块内取第一个 class token 精确等于 `className` 的锚（querySelector 语义）。 */
+    findAnchorByClass(blockHtml: string, className: string): AnchorMatch | null {
+        for (const match of blockHtml.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/g)) {
+            const attrs = match[1] ?? "";
+            const classAttr = attrs.match(/\bclass\s*=\s*"([^"]*)"/);
       const tokens = (classAttr?.[1] ?? "").split(/\s+/);
       if (tokens.includes(className)) return { attrs, innerHtml: match[2] ?? "" };
     }
@@ -121,25 +121,25 @@ export const Duckduckgo = {
       }> = [];
       for (const match of html.matchAll(/<div\b[^>]*>/g)) {
         const classAttr = match[0].match(/\bclass\s*=\s*"([^"]*)"/);
-        const tokens = (classAttr?.[1] ?? "").split(/\s+/);
-        const tagStart = match.index ?? 0;
-        if (tokens.includes("result"))
-          blocks.push({
-            contentStart: tagStart + match[0].length,
-            tagStart,
-            isAd: tokens.includes("result--ad"),
-          });
-      }
+                const tokens = (classAttr?.[1] ?? "").split(/\s+/);
+                const tagStart = match.index ?? 0;
+                if (tokens.includes("result"))
+                    blocks.push({
+                        contentStart: tagStart + match[0].length,
+                        tagStart,
+                        isAd: tokens.includes("result--ad"),
+                    });
+            }
 
-      const results: SearchResult[] = [];
-      let parseableResults = 0;
-      for (let blockIndex = 0; blockIndex < blocks.length; blockIndex++) {
-        const block = blocks[blockIndex]!;
-        if (block.isAd) continue;
-        const blockHtml = html.slice(block.contentStart, blockIndex + 1 < blocks.length ? blocks[blockIndex + 1]!.tagStart : html.length);
-        const anchor = Duckduckgo.findAnchorByClass(blockHtml, "result__a");
-        const title = anchor == null ? "" : Duckduckgo.cleanAnchorText(anchor.innerHtml);
-        const href = anchor?.attrs.match(/\bhref\s*=\s*"([^"]*)"/)?.[1] ?? "";
+            const results: SearchResult[] = [];
+            let parseableResults = 0;
+            for (let blockIndex = 0; blockIndex < blocks.length; blockIndex++) {
+                const block = blocks[blockIndex]!;
+                if (block.isAd) continue;
+                const blockHtml = html.slice(block.contentStart, blockIndex + 1 < blocks.length ? blocks[blockIndex + 1]!.tagStart : html.length);
+                const anchor = Duckduckgo.findAnchorByClass(blockHtml, "result__a");
+                const title = anchor == null ? "" : Duckduckgo.cleanAnchorText(anchor.innerHtml);
+                const href = anchor?.attrs.match(/\bhref\s*=\s*"([^"]*)"/)?.[1] ?? "";
         // href 解码（对应 DOM `getAttribute("href")` 的实体解码语义）：`&amp;` 先解成 `&`，
         // 再按 uddg 重定向参数取真实 URL（仅接受 http/https；非法值按不可解析跳过该块）。
         let resultUrl: string | null = null;

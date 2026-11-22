@@ -22,611 +22,611 @@ import { Result } from "@novel-master/core/errors";
 
 register(new URL("./usage-stats-runtime-hook.mjs", import.meta.url));
 const { UsageStats } = await import(
-  "../src/main/ipc/handlers/usage-stats.js"
+    "../src/main/ipc/handlers/usage-stats.js"
 );
 
 /** stub service 的 core 返回体样例（字段与 core UsageStats* 一致）。 */
 const SUMMARY = {
-  calls: 12,
-  promptTokens: 1000,
-  completionTokens: 2000,
-  totalTokens: 3000,
-  cacheReadTokens: 400,
-  cacheCreationTokens: 600,
-  billedInputTokens: 2000,
-  avgFirstTokenMs: 850.5,
-  avgTokensPerSecond: 42.25,
+    calls: 12,
+    promptTokens: 1000,
+    completionTokens: 2000,
+    totalTokens: 3000,
+    cacheReadTokens: 400,
+    cacheCreationTokens: 600,
+    billedInputTokens: 2000,
+    avgFirstTokenMs: 850.5,
+    avgTokensPerSecond: 42.25,
 };
 
 const BUCKETS = [
-  {
-    bucketStartMs: 1_800_000_000_000,
-    calls: 2,
-    promptTokens: 100,
-    completionTokens: 200,
-    cacheReadTokens: 40,
-    cacheCreationTokens: 60,
-    billedInputTokens: 200,
-    avgFirstTokenMs: 620,
-    avgTokensPerSecond: 33.5,
-  },
-  {
-    bucketStartMs: 1_800_086_400_000,
-    calls: 1,
-    promptTokens: 10,
-    completionTokens: 20,
-    cacheReadTokens: 4,
-    cacheCreationTokens: 6,
-    billedInputTokens: 20,
-    // 存量 NULL 行：两新指标 null 保真透传
-    avgFirstTokenMs: null,
-    avgTokensPerSecond: null,
-  },
+    {
+        bucketStartMs: 1_800_000_000_000,
+        calls: 2,
+        promptTokens: 100,
+        completionTokens: 200,
+        cacheReadTokens: 40,
+        cacheCreationTokens: 60,
+        billedInputTokens: 200,
+        avgFirstTokenMs: 620,
+        avgTokensPerSecond: 33.5,
+    },
+    {
+        bucketStartMs: 1_800_086_400_000,
+        calls: 1,
+        promptTokens: 10,
+        completionTokens: 20,
+        cacheReadTokens: 4,
+        cacheCreationTokens: 6,
+        billedInputTokens: 20,
+        // 存量 NULL 行：两新指标 null 保真透传
+        avgFirstTokenMs: null,
+        avgTokensPerSecond: null,
+    },
 ];
 
 const MODEL_ROWS = [
-  {
-    providerId: null,
-    modelName: null,
-    calls: 5,
-    promptTokens: 500,
-    completionTokens: 600,
-    totalTokens: 1100,
-    cacheReadTokens: 0,
-    billedInputTokens: 500,
-  },
-  {
-    providerId: "p1",
-    modelName: "gpt-4o",
-    calls: 7,
-    promptTokens: 500,
-    completionTokens: 1400,
-    totalTokens: 1900,
-    cacheReadTokens: 400,
-    billedInputTokens: 500,
-  },
+    {
+        providerId: null,
+        modelName: null,
+        calls: 5,
+        promptTokens: 500,
+        completionTokens: 600,
+        totalTokens: 1100,
+        cacheReadTokens: 0,
+        billedInputTokens: 500,
+    },
+    {
+        providerId: "p1",
+        modelName: "gpt-4o",
+        calls: 7,
+        promptTokens: 500,
+        completionTokens: 1400,
+        totalTokens: 1900,
+        cacheReadTokens: 400,
+        billedInputTokens: 500,
+    },
 ];
 
 const REQUEST_PAGE = {
-  rows: [
-    {
-      createdAtMs: 1_800_000_000_000,
-      modelName: "gpt-4o",
-      promptTokens: 100,
-      completionTokens: 200,
-      totalTokens: 300,
-      cacheReadTokens: 40,
-      cacheCreationTokens: 60,
-      firstTokenMs: 620,
-      durationMs: 8_000,
-    },
-    {
-      createdAtMs: 1_799_900_000_000,
-      // 存量 NULL 行：timing/cache 字段 null 保真透传
-      modelName: null,
-      promptTokens: 10,
-      completionTokens: 20,
-      totalTokens: 30,
-      cacheReadTokens: null,
-      cacheCreationTokens: null,
-      firstTokenMs: null,
-      durationMs: null,
-    },
-  ],
-  total: 12,
+    rows: [
+        {
+            createdAtMs: 1_800_000_000_000,
+            modelName: "gpt-4o",
+            promptTokens: 100,
+            completionTokens: 200,
+            totalTokens: 300,
+            cacheReadTokens: 40,
+            cacheCreationTokens: 60,
+            firstTokenMs: 620,
+            durationMs: 8_000,
+        },
+        {
+            createdAtMs: 1_799_900_000_000,
+            // 存量 NULL 行：timing/cache 字段 null 保真透传
+            modelName: null,
+            promptTokens: 10,
+            completionTokens: 20,
+            totalTokens: 30,
+            cacheReadTokens: null,
+            cacheCreationTokens: null,
+            firstTokenMs: null,
+            durationMs: null,
+        },
+    ],
+    total: 12,
 };
 
 /** kind=sessionDetail 的 core 返回体样例（字段与 core SessionUsageDetail 一致；
  *  会话累计输入/输出已随 totals 字段移除，2026-09-29 拍板）。 */
 const SESSION_DETAIL = {
-  last: {
-    seq: 7,
-    modelName: "claude-x",
-    provider: "anthropic",
-    promptTokens: 100,
-    completionTokens: 40,
-    cacheReadTokens: 2048,
-    cacheCreationTokens: null,
-    atMs: 1_800_000_000_000,
-  },
-  visibleMessageCount: 9,
-  toolUseCount: 3,
+    last: {
+        seq: 7,
+        modelName: "claude-x",
+        provider: "anthropic",
+        promptTokens: 100,
+        completionTokens: 40,
+        cacheReadTokens: 2048,
+        cacheCreationTokens: null,
+        atMs: 1_800_000_000_000,
+    },
+    visibleMessageCount: 9,
+    toolUseCount: 3,
 };
 
 interface RecordedCall {
-  method: string;
-  args: unknown[];
+    method: string;
+    args: unknown[];
 }
 
 /** 记录调用并返回样例数据的 stub service；getSummary 抛错可注入，modelBreakdown 返回体可注入。 */
 function makeStubUsageStats(
-  calls: RecordedCall[],
-  summaryError?: Error,
-  modelRows?: unknown[]
+    calls: RecordedCall[],
+    summaryError?: Error,
+    modelRows?: unknown[]
 ): {
-  usageStats: unknown;
+    usageStats: unknown;
 } {
-  // 错误通道迁移四期后 handler 走 Result 组合子（.map 链），stub 必须返回
-  // 真 Result 实例（裸 {ok, value} 字面量没有原型方法，会伪装成未知异常）；
-  // listModels 仍返回裸数组（签名未迁移）。
-  const usageStats = {
-    getSummary: async (filter: unknown) => {
-      calls.push({ method: "getSummary", args: [filter] });
-      if (summaryError) {
-        throw summaryError;
-      }
-      return Result.ok(SUMMARY);
-    },
-    getDailyBuckets: async (filter: unknown) => {
-      calls.push({ method: "getDailyBuckets", args: [filter] });
-      return Result.ok(BUCKETS);
-    },
-    getHourlyBuckets: async (dayLocalDate: string, filter: unknown) => {
-      calls.push({ method: "getHourlyBuckets", args: [dayLocalDate, filter] });
-      return Result.ok(BUCKETS);
-    },
-    getModelBreakdown: async (filter: unknown) => {
-      calls.push({ method: "getModelBreakdown", args: [filter] });
-      return Result.ok(modelRows ?? MODEL_ROWS);
-    },
-    listModels: async () => {
-      calls.push({ method: "listModels", args: [] });
-      return ["gpt-4o", "claude-3-5-sonnet"];
-    },
-    listRequestUsage: async (filter: unknown, page: unknown) => {
-      calls.push({ method: "listRequestUsage", args: [filter, page] });
-      return Result.ok(REQUEST_PAGE);
-    },
-    getSessionUsageDetail: async (sessionId: string) => {
-      calls.push({ method: "getSessionUsageDetail", args: [sessionId] });
-      return Result.ok(SESSION_DETAIL);
-    },
-  };
-  return { usageStats };
+    // 错误通道迁移四期后 handler 走 Result 组合子（.map 链），stub 必须返回
+    // 真 Result 实例（裸 {ok, value} 字面量没有原型方法，会伪装成未知异常）；
+    // listModels 仍返回裸数组（签名未迁移）。
+    const usageStats = {
+        getSummary: async (filter: unknown) => {
+            calls.push({ method: "getSummary", args: [filter] });
+            if (summaryError) {
+                throw summaryError;
+            }
+            return Result.ok(SUMMARY);
+        },
+        getDailyBuckets: async (filter: unknown) => {
+            calls.push({ method: "getDailyBuckets", args: [filter] });
+            return Result.ok(BUCKETS);
+        },
+        getHourlyBuckets: async (dayLocalDate: string, filter: unknown) => {
+            calls.push({ method: "getHourlyBuckets", args: [dayLocalDate, filter] });
+            return Result.ok(BUCKETS);
+        },
+        getModelBreakdown: async (filter: unknown) => {
+            calls.push({ method: "getModelBreakdown", args: [filter] });
+            return Result.ok(modelRows ?? MODEL_ROWS);
+        },
+        listModels: async () => {
+            calls.push({ method: "listModels", args: [] });
+            return ["gpt-4o", "claude-3-5-sonnet"];
+        },
+        listRequestUsage: async (filter: unknown, page: unknown) => {
+            calls.push({ method: "listRequestUsage", args: [filter, page] });
+            return Result.ok(REQUEST_PAGE);
+        },
+        getSessionUsageDetail: async (sessionId: string) => {
+            calls.push({ method: "getSessionUsageDetail", args: [sessionId] });
+            return Result.ok(SESSION_DETAIL);
+        },
+    };
+    return { usageStats };
 }
 
 /** 挂 stub runtime 到 globalThis（hook 替身从这里取），返回记录数组。 */
 function installStubRuntime(
-  summaryError?: Error,
-  modelRows?: unknown[]
+    summaryError?: Error,
+    modelRows?: unknown[]
 ): RecordedCall[] {
-  const calls: RecordedCall[] = [];
-  const g = globalThis as unknown as {
-    __usageStatsTestRuntime?: unknown;
-  };
-  g.__usageStatsTestRuntime = makeStubUsageStats(
-    calls,
-    summaryError,
-    modelRows
-  );
-  return calls;
+    const calls: RecordedCall[] = [];
+    const g = globalThis as unknown as {
+        __usageStatsTestRuntime?: unknown;
+    };
+    g.__usageStatsTestRuntime = makeStubUsageStats(
+        calls,
+        summaryError,
+        modelRows
+    );
+    return calls;
 }
 
 const RANGE_FILTER: UsageStatsFilterDto = {
-  range: { fromDay: "2026-08-24", toDay: "2026-08-30" },
+    range: { fromDay: "2026-08-24", toDay: "2026-08-30" },
 };
 
 describe("usage stats IPC handler（T-S6 + Step 2 适配）", () => {
-  it("kind=summary 转发 getSummary，区间 DTO 逐字段映射（summary 无 today 子对象）", async () => {
-    const calls = installStubRuntime();
-    const res = await UsageStats.handleQuery({
-      kind: "summary",
-      filter: RANGE_FILTER,
+    it("kind=summary 转发 getSummary，区间 DTO 逐字段映射（summary 无 today 子对象）", async () => {
+        const calls = installStubRuntime();
+        const res = await UsageStats.handleQuery({
+            kind: "summary",
+            filter: RANGE_FILTER,
+        });
+        assert.equal(res.ok, true);
+        if (!res.ok) {
+            return;
+        }
+        assert.deepEqual(res.data, {
+            calls: 12,
+            promptTokens: 1000,
+            completionTokens: 2000,
+            totalTokens: 3000,
+            cacheReadTokens: 400,
+            cacheCreationTokens: 600,
+            billedInputTokens: 2000,
+            avgFirstTokenMs: 850.5,
+            avgTokensPerSecond: 42.25,
+        });
+        assert.deepEqual(calls, [
+            {
+                method: "getSummary",
+                args: [{ range: { fromDay: "2026-08-24", toDay: "2026-08-30" } }],
+            },
+        ]);
     });
-    assert.equal(res.ok, true);
-    if (!res.ok) {
-      return;
-    }
-    assert.deepEqual(res.data, {
-      calls: 12,
-      promptTokens: 1000,
-      completionTokens: 2000,
-      totalTokens: 3000,
-      cacheReadTokens: 400,
-      cacheCreationTokens: 600,
-      billedInputTokens: 2000,
-      avgFirstTokenMs: 850.5,
-      avgTokensPerSecond: 42.25,
-    });
-    assert.deepEqual(calls, [
-      {
-        method: "getSummary",
-        args: [{ range: { fromDay: "2026-08-24", toDay: "2026-08-30" } }],
-      },
-    ]);
-  });
 
-  it("filter 无 range 时透传为无 range 的 core filter（model 三态保留）", async () => {
-    const calls = installStubRuntime();
-    const res = await UsageStats.handleQuery({
-      kind: "requests",
-      filter: { model: null },
+    it("filter 无 range 时透传为无 range 的 core filter（model 三态保留）", async () => {
+        const calls = installStubRuntime();
+        const res = await UsageStats.handleQuery({
+            kind: "requests",
+            filter: { model: null },
+        });
+        assert.equal(res.ok, true);
+        if (!res.ok) {
+            return;
+        }
+        assert.deepEqual(res.data, REQUEST_PAGE);
+        assert.deepEqual(calls, [
+            {
+                method: "listRequestUsage",
+                args: [{ model: null }, { offset: 0, limit: 50 }],
+            },
+        ]);
     });
-    assert.equal(res.ok, true);
-    if (!res.ok) {
-      return;
-    }
-    assert.deepEqual(res.data, REQUEST_PAGE);
-    assert.deepEqual(calls, [
-      {
-        method: "listRequestUsage",
-        args: [{ model: null }, { offset: 0, limit: 50 }],
-      },
-    ]);
-  });
 
-  it("kind=daily 转发 getDailyBuckets，bucket 数组逐字段映射（model:null 三态保留）", async () => {
-    const calls = installStubRuntime();
-    const res = await UsageStats.handleQuery({
-      kind: "daily",
-      filter: {
-        range: { fromDay: "2026-08-01", toDay: "2026-08-30" },
-        model: null,
-      },
+    it("kind=daily 转发 getDailyBuckets，bucket 数组逐字段映射（model:null 三态保留）", async () => {
+        const calls = installStubRuntime();
+        const res = await UsageStats.handleQuery({
+            kind: "daily",
+            filter: {
+                range: { fromDay: "2026-08-01", toDay: "2026-08-30" },
+                model: null,
+            },
+        });
+        assert.equal(res.ok, true);
+        if (!res.ok) {
+            return;
+        }
+        assert.deepEqual(res.data, BUCKETS);
+        assert.deepEqual(calls, [
+            {
+                method: "getDailyBuckets",
+                args: [
+                    {
+                        range: { fromDay: "2026-08-01", toDay: "2026-08-30" },
+                        model: null,
+                    },
+                ],
+            },
+        ]);
     });
-    assert.equal(res.ok, true);
-    if (!res.ok) {
-      return;
-    }
-    assert.deepEqual(res.data, BUCKETS);
-    assert.deepEqual(calls, [
-      {
-        method: "getDailyBuckets",
-        args: [
-          {
-            range: { fromDay: "2026-08-01", toDay: "2026-08-30" },
-            model: null,
-          },
-        ],
-      },
-    ]);
-  });
 
-  it("kind=hourly 转发 getHourlyBuckets，dayLocalDate 作为首参透传", async () => {
-    const calls = installStubRuntime();
-    const res = await UsageStats.handleQuery({
-      kind: "hourly",
-      filter: RANGE_FILTER,
-      dayLocalDate: "2026-08-23",
+    it("kind=hourly 转发 getHourlyBuckets，dayLocalDate 作为首参透传", async () => {
+        const calls = installStubRuntime();
+        const res = await UsageStats.handleQuery({
+            kind: "hourly",
+            filter: RANGE_FILTER,
+            dayLocalDate: "2026-08-23",
+        });
+        assert.equal(res.ok, true);
+        assert.deepEqual(calls, [
+            {
+                method: "getHourlyBuckets",
+                args: [
+                    "2026-08-23",
+                    { range: { fromDay: "2026-08-24", toDay: "2026-08-30" } },
+                ],
+            },
+        ]);
     });
-    assert.equal(res.ok, true);
-    assert.deepEqual(calls, [
-      {
-        method: "getHourlyBuckets",
-        args: [
-          "2026-08-23",
-          { range: { fromDay: "2026-08-24", toDay: "2026-08-30" } },
-        ],
-      },
-    ]);
-  });
 
-  it("kind=hourly 缺 dayLocalDate 时传空串（由服务层日期校验拒绝）", async () => {
-    const calls = installStubRuntime();
-    const res = await UsageStats.handleQuery({
-      kind: "hourly",
-      filter: RANGE_FILTER,
+    it("kind=hourly 缺 dayLocalDate 时传空串（由服务层日期校验拒绝）", async () => {
+        const calls = installStubRuntime();
+        const res = await UsageStats.handleQuery({
+            kind: "hourly",
+            filter: RANGE_FILTER,
+        });
+        assert.equal(res.ok, true);
+        assert.deepEqual(calls, [
+            {
+                method: "getHourlyBuckets",
+                args: ["", { range: { fromDay: "2026-08-24", toDay: "2026-08-30" } }],
+            },
+        ]);
     });
-    assert.equal(res.ok, true);
-    assert.deepEqual(calls, [
-      {
-        method: "getHourlyBuckets",
-        args: ["", { range: { fromDay: "2026-08-24", toDay: "2026-08-30" } }],
-      },
-    ]);
-  });
 
-  it("kind=modelBreakdown 转发 getModelBreakdown，providerId/modelName null 透传", async () => {
-    const calls = installStubRuntime();
-    const res = await UsageStats.handleQuery({
-      kind: "modelBreakdown",
-      filter: {
-        range: { fromDay: "2026-08-24", toDay: "2026-08-25" },
-        model: "gpt-4o",
-      },
+    it("kind=modelBreakdown 转发 getModelBreakdown，providerId/modelName null 透传", async () => {
+        const calls = installStubRuntime();
+        const res = await UsageStats.handleQuery({
+            kind: "modelBreakdown",
+            filter: {
+                range: { fromDay: "2026-08-24", toDay: "2026-08-25" },
+                model: "gpt-4o",
+            },
+        });
+        assert.equal(res.ok, true);
+        if (!res.ok) {
+            return;
+        }
+        assert.deepEqual(res.data, MODEL_ROWS);
+        assert.deepEqual(calls, [
+            {
+                method: "getModelBreakdown",
+                args: [
+                    {
+                        range: { fromDay: "2026-08-24", toDay: "2026-08-25" },
+                        model: "gpt-4o",
+                    },
+                ],
+            },
+        ]);
     });
-    assert.equal(res.ok, true);
-    if (!res.ok) {
-      return;
-    }
-    assert.deepEqual(res.data, MODEL_ROWS);
-    assert.deepEqual(calls, [
-      {
-        method: "getModelBreakdown",
-        args: [
-          {
-            range: { fromDay: "2026-08-24", toDay: "2026-08-25" },
-            model: "gpt-4o",
-          },
-        ],
-      },
-    ]);
-  });
 
-  it("kind=modelBreakdown 同名模型多服务商保持多行原样透出（饼图复合维度）", async () => {
-    // core 按 (providerId, modelName) 复合分组，同名模型多服务商各返回一行；
-    // DTO 侧原样透传（不再按 modelName 归并），renderer 饼图按复合维度展示。
-    const rows = [
-      {
-        providerId: "p1",
-        modelName: "gpt-4o",
-        calls: 3,
-        promptTokens: 100,
-        completionTokens: 200,
-        totalTokens: 300,
-        cacheReadTokens: 40,
-        billedInputTokens: 120,
-      },
-      {
-        providerId: "p2",
-        modelName: "gpt-4o",
-        calls: 4,
-        promptTokens: 500,
-        completionTokens: 900,
-        totalTokens: 1400,
-        cacheReadTokens: 60,
-        billedInputTokens: 480,
-      },
-    ];
-    const calls = installStubRuntime(undefined, rows);
-    const res = await UsageStats.handleQuery({
-      kind: "modelBreakdown",
-      filter: RANGE_FILTER,
+    it("kind=modelBreakdown 同名模型多服务商保持多行原样透出（饼图复合维度）", async () => {
+        // core 按 (providerId, modelName) 复合分组，同名模型多服务商各返回一行；
+        // DTO 侧原样透传（不再按 modelName 归并），renderer 饼图按复合维度展示。
+        const rows = [
+            {
+                providerId: "p1",
+                modelName: "gpt-4o",
+                calls: 3,
+                promptTokens: 100,
+                completionTokens: 200,
+                totalTokens: 300,
+                cacheReadTokens: 40,
+                billedInputTokens: 120,
+            },
+            {
+                providerId: "p2",
+                modelName: "gpt-4o",
+                calls: 4,
+                promptTokens: 500,
+                completionTokens: 900,
+                totalTokens: 1400,
+                cacheReadTokens: 60,
+                billedInputTokens: 480,
+            },
+        ];
+        const calls = installStubRuntime(undefined, rows);
+        const res = await UsageStats.handleQuery({
+            kind: "modelBreakdown",
+            filter: RANGE_FILTER,
+        });
+        assert.equal(res.ok, true);
+        if (!res.ok) {
+            return;
+        }
+        assert.deepEqual(res.data, rows);
+        assert.deepEqual(calls, [
+            {
+                method: "getModelBreakdown",
+                args: [{ range: { fromDay: "2026-08-24", toDay: "2026-08-30" } }],
+            },
+        ]);
     });
-    assert.equal(res.ok, true);
-    if (!res.ok) {
-      return;
-    }
-    assert.deepEqual(res.data, rows);
-    assert.deepEqual(calls, [
-      {
-        method: "getModelBreakdown",
-        args: [{ range: { fromDay: "2026-08-24", toDay: "2026-08-30" } }],
-      },
-    ]);
-  });
 
-  it("kind=models 转发 listModels，字符串数组原样返回", async () => {
-    const calls = installStubRuntime();
-    const res = await UsageStats.handleQuery({
-      kind: "models",
-      filter: RANGE_FILTER,
+    it("kind=models 转发 listModels，字符串数组原样返回", async () => {
+        const calls = installStubRuntime();
+        const res = await UsageStats.handleQuery({
+            kind: "models",
+            filter: RANGE_FILTER,
+        });
+        assert.equal(res.ok, true);
+        assert.deepEqual(res.data, ["gpt-4o", "claude-3-5-sonnet"]);
+        assert.deepEqual(calls, [{ method: "listModels", args: [] }]);
     });
-    assert.equal(res.ok, true);
-    assert.deepEqual(res.data, ["gpt-4o", "claude-3-5-sonnet"]);
-    assert.deepEqual(calls, [{ method: "listModels", args: [] }]);
-  });
 
-  it("kind=requests 转发 listRequestUsage，offset/limit 透传且分页/NULL 字段保真", async () => {
-    const calls = installStubRuntime();
-    const res = await UsageStats.handleQuery({
-      kind: "requests",
-      filter: {
-        range: { fromDay: "2026-08-24", toDay: "2026-08-30" },
-        model: "gpt-4o",
-      },
-      offset: 50,
-      limit: 100,
+    it("kind=requests 转发 listRequestUsage，offset/limit 透传且分页/NULL 字段保真", async () => {
+        const calls = installStubRuntime();
+        const res = await UsageStats.handleQuery({
+            kind: "requests",
+            filter: {
+                range: { fromDay: "2026-08-24", toDay: "2026-08-30" },
+                model: "gpt-4o",
+            },
+            offset: 50,
+            limit: 100,
+        });
+        assert.equal(res.ok, true);
+        if (!res.ok) {
+            return;
+        }
+        assert.deepEqual(res.data, REQUEST_PAGE);
+        assert.deepEqual(calls, [
+            {
+                method: "listRequestUsage",
+                args: [
+                    {
+                        range: { fromDay: "2026-08-24", toDay: "2026-08-30" },
+                        model: "gpt-4o",
+                    },
+                    { offset: 50, limit: 100 },
+                ],
+            },
+        ]);
     });
-    assert.equal(res.ok, true);
-    if (!res.ok) {
-      return;
-    }
-    assert.deepEqual(res.data, REQUEST_PAGE);
-    assert.deepEqual(calls, [
-      {
-        method: "listRequestUsage",
-        args: [
-          {
-            range: { fromDay: "2026-08-24", toDay: "2026-08-30" },
-            model: "gpt-4o",
-          },
-          { offset: 50, limit: 100 },
-        ],
-      },
-    ]);
-  });
 
-  it("kind=requests 缺省 offset/limit 时回落 0/50", async () => {
-    const calls = installStubRuntime();
-    const res = await UsageStats.handleQuery({
-      kind: "requests",
-      filter: RANGE_FILTER,
+    it("kind=requests 缺省 offset/limit 时回落 0/50", async () => {
+        const calls = installStubRuntime();
+        const res = await UsageStats.handleQuery({
+            kind: "requests",
+            filter: RANGE_FILTER,
+        });
+        assert.equal(res.ok, true);
+        assert.deepEqual(calls, [
+            {
+                method: "listRequestUsage",
+                args: [
+                    { range: { fromDay: "2026-08-24", toDay: "2026-08-30" } },
+                    { offset: 0, limit: 50 },
+                ],
+            },
+        ]);
     });
-    assert.equal(res.ok, true);
-    assert.deepEqual(calls, [
-      {
-        method: "listRequestUsage",
-        args: [
-          { range: { fromDay: "2026-08-24", toDay: "2026-08-30" } },
-          { offset: 0, limit: 50 },
-        ],
-      },
-    ]);
-  });
 
-  it("新指标字段显式透传且 null 保真：summary 有值 / bucket 存量 null（T-IP1）", async () => {
-    const calls = installStubRuntime();
-    const summaryRes = await UsageStats.handleQuery({
-      kind: "summary",
-      filter: RANGE_FILTER,
-    });
-    assert.equal(summaryRes.ok, true);
-    if (!summaryRes.ok) {
-      return;
-    }
-    const summary = summaryRes.data;
-    assert.equal(
-      typeof summary === "object" &&
-        summary != null &&
-        "avgFirstTokenMs" in summary,
-      true
-    );
-    if (
-      typeof summary === "object" &&
-      summary != null &&
-      "avgFirstTokenMs" in summary
-    ) {
-      assert.equal(summary.avgFirstTokenMs, 850.5);
-      assert.equal(summary.avgTokensPerSecond, 42.25);
-    }
+    it("新指标字段显式透传且 null 保真：summary 有值 / bucket 存量 null（T-IP1）", async () => {
+        const calls = installStubRuntime();
+        const summaryRes = await UsageStats.handleQuery({
+            kind: "summary",
+            filter: RANGE_FILTER,
+        });
+        assert.equal(summaryRes.ok, true);
+        if (!summaryRes.ok) {
+            return;
+        }
+        const summary = summaryRes.data;
+        assert.equal(
+            typeof summary === "object" &&
+                summary != null &&
+                "avgFirstTokenMs" in summary,
+            true
+        );
+        if (
+            typeof summary === "object" &&
+            summary != null &&
+            "avgFirstTokenMs" in summary
+        ) {
+            assert.equal(summary.avgFirstTokenMs, 850.5);
+            assert.equal(summary.avgTokensPerSecond, 42.25);
+        }
 
-    const dailyRes = await UsageStats.handleQuery({
-      kind: "daily",
-      filter: RANGE_FILTER,
+        const dailyRes = await UsageStats.handleQuery({
+            kind: "daily",
+            filter: RANGE_FILTER,
+        });
+        assert.equal(dailyRes.ok, true);
+        if (!dailyRes.ok) {
+            return;
+        }
+        assert.ok(Array.isArray(dailyRes.data));
+        if (Array.isArray(dailyRes.data)) {
+            const [withValues, legacyNull] = dailyRes.data;
+            assert.equal(withValues.avgFirstTokenMs, 620);
+            assert.equal(withValues.avgTokensPerSecond, 33.5);
+            assert.equal(legacyNull.avgFirstTokenMs, null);
+            assert.equal(legacyNull.avgTokensPerSecond, null);
+        }
+        assert.equal(calls.length, 2);
     });
-    assert.equal(dailyRes.ok, true);
-    if (!dailyRes.ok) {
-      return;
-    }
-    assert.ok(Array.isArray(dailyRes.data));
-    if (Array.isArray(dailyRes.data)) {
-      const [withValues, legacyNull] = dailyRes.data;
-      assert.equal(withValues.avgFirstTokenMs, 620);
-      assert.equal(withValues.avgTokensPerSecond, 33.5);
-      assert.equal(legacyNull.avgFirstTokenMs, null);
-      assert.equal(legacyNull.avgTokensPerSecond, null);
-    }
-    assert.equal(calls.length, 2);
-  });
 
-  it("区间校验：fromDay > toDay 在 IPC 边界拒绝，不触达 service", async () => {
-    const calls = installStubRuntime();
-    const res = await UsageStats.handleQuery({
-      kind: "summary",
-      filter: { range: { fromDay: "2026-08-31", toDay: "2026-08-24" } },
+    it("区间校验：fromDay > toDay 在 IPC 边界拒绝，不触达 service", async () => {
+        const calls = installStubRuntime();
+        const res = await UsageStats.handleQuery({
+            kind: "summary",
+            filter: { range: { fromDay: "2026-08-31", toDay: "2026-08-24" } },
+        });
+        assert.equal(res.ok, false);
+        if (res.ok) {
+            return;
+        }
+        assert.equal(res.error.code, "INFRA_UNEXPECTED_ERROR");
+        assert.ok(res.error.message.includes("fromDay 不能晚于 toDay"));
+        assert.equal(calls.length, 0, "校验失败不应转发 service");
     });
-    assert.equal(res.ok, false);
-    if (res.ok) {
-      return;
-    }
-    assert.equal(res.error.code, "INFRA_UNEXPECTED_ERROR");
-    assert.ok(res.error.message.includes("fromDay 不能晚于 toDay"));
-    assert.equal(calls.length, 0, "校验失败不应转发 service");
-  });
 
-  it("区间校验：非法格式与溢出日历日（02-30）在 IPC 边界拒绝", async () => {
-    const calls = installStubRuntime();
-    const badCases: Array<{
-      range: { fromDay: string; toDay: string };
-      hint: string;
-    }> = [
-      { range: { fromDay: "2026/08/24", toDay: "2026-08-30" }, hint: "格式" },
-      {
-        range: { fromDay: "2026-02-30", toDay: "2026-03-01" },
-        hint: "合法日期",
-      },
-      {
-        range: { fromDay: "2026-08-24", toDay: "2026-13-01" },
-        hint: "合法日期",
-      },
-    ];
-    for (const { range, hint } of badCases) {
-      const res = await UsageStats.handleQuery({
-        kind: "summary",
-        filter: { range },
-      });
-      assert.equal(res.ok, false, `区间 ${JSON.stringify(range)} 应被拒绝`);
-      if (!res.ok) {
-        assert.ok(res.error.message.includes(hint));
-      }
-    }
-    assert.equal(calls.length, 0, "校验失败不应转发 service");
-  });
+    it("区间校验：非法格式与溢出日历日（02-30）在 IPC 边界拒绝", async () => {
+        const calls = installStubRuntime();
+        const badCases: Array<{
+            range: { fromDay: string; toDay: string };
+            hint: string;
+        }> = [
+            { range: { fromDay: "2026/08/24", toDay: "2026-08-30" }, hint: "格式" },
+            {
+                range: { fromDay: "2026-02-30", toDay: "2026-03-01" },
+                hint: "合法日期",
+            },
+            {
+                range: { fromDay: "2026-08-24", toDay: "2026-13-01" },
+                hint: "合法日期",
+            },
+        ];
+        for (const { range, hint } of badCases) {
+            const res = await UsageStats.handleQuery({
+                kind: "summary",
+                filter: { range },
+            });
+            assert.equal(res.ok, false, `区间 ${JSON.stringify(range)} 应被拒绝`);
+            if (!res.ok) {
+                assert.ok(res.error.message.includes(hint));
+            }
+        }
+        assert.equal(calls.length, 0, "校验失败不应转发 service");
+    });
 
-  it("kind=sessionDetail 转发 getSessionUsageDetail：filter:{} 占位不触达、DTO 逐字段映射（T-MD3）", async () => {
-    const calls = installStubRuntime();
-    const res = await UsageStats.handleQuery({
-      kind: "sessionDetail",
-      // filter 为必填字段：sessionDetail 携带空对象占位（handler 该 case 不读）。
-      filter: {},
-      sessionId: "sess-1",
+    it("kind=sessionDetail 转发 getSessionUsageDetail：filter:{} 占位不触达、DTO 逐字段映射（T-MD3）", async () => {
+        const calls = installStubRuntime();
+        const res = await UsageStats.handleQuery({
+            kind: "sessionDetail",
+            // filter 为必填字段：sessionDetail 携带空对象占位（handler 该 case 不读）。
+            filter: {},
+            sessionId: "sess-1",
+        });
+        assert.equal(res.ok, true);
+        if (!res.ok) {
+            return;
+        }
+        // DTO 镜像逐字段映射：deepEqual 同时钉死「无 undefined 字段」
+        // （renderer 拿到的对象与 core 返回体结构一致，cache null 透传）。
+        assert.deepEqual(res.data, SESSION_DETAIL);
+        assert.deepEqual(calls, [
+            { method: "getSessionUsageDetail", args: ["sess-1"] },
+        ]);
     });
-    assert.equal(res.ok, true);
-    if (!res.ok) {
-      return;
-    }
-    // DTO 镜像逐字段映射：deepEqual 同时钉死「无 undefined 字段」
-    // （renderer 拿到的对象与 core 返回体结构一致，cache null 透传）。
-    assert.deepEqual(res.data, SESSION_DETAIL);
-    assert.deepEqual(calls, [
-      { method: "getSessionUsageDetail", args: ["sess-1"] },
-    ]);
-  });
 
-  it("kind=sessionDetail 空态 last null 透传（cache 列缺失协议出「—」的原料）", async () => {
-    const calls = installStubRuntime();
-    const g = globalThis as unknown as {
-      __usageStatsTestRuntime?: { usageStats: Record<string, unknown> };
-    };
-    g.__usageStatsTestRuntime!.usageStats.getSessionUsageDetail = async (
-      sessionId: string
-    ) => {
-      calls.push({ method: "getSessionUsageDetail", args: [sessionId] });
-      return Result.ok({ last: null, visibleMessageCount: 0, toolUseCount: 0 });
-    };
-    const res = await UsageStats.handleQuery({
-      kind: "sessionDetail",
-      filter: {},
-      sessionId: "empty",
+    it("kind=sessionDetail 空态 last null 透传（cache 列缺失协议出「—」的原料）", async () => {
+        const calls = installStubRuntime();
+        const g = globalThis as unknown as {
+            __usageStatsTestRuntime?: { usageStats: Record<string, unknown> };
+        };
+        g.__usageStatsTestRuntime!.usageStats.getSessionUsageDetail = async (
+            sessionId: string
+        ) => {
+            calls.push({ method: "getSessionUsageDetail", args: [sessionId] });
+            return Result.ok({ last: null, visibleMessageCount: 0, toolUseCount: 0 });
+        };
+        const res = await UsageStats.handleQuery({
+            kind: "sessionDetail",
+            filter: {},
+            sessionId: "empty",
+        });
+        assert.equal(res.ok, true);
+        if (!res.ok) {
+            return;
+        }
+        assert.deepEqual(res.data, {
+            last: null,
+            visibleMessageCount: 0,
+            toolUseCount: 0,
+        });
+        assert.deepEqual(calls, [
+            { method: "getSessionUsageDetail", args: ["empty"] },
+        ]);
     });
-    assert.equal(res.ok, true);
-    if (!res.ok) {
-      return;
-    }
-    assert.deepEqual(res.data, {
-      last: null,
-      visibleMessageCount: 0,
-      toolUseCount: 0,
-    });
-    assert.deepEqual(calls, [
-      { method: "getSessionUsageDetail", args: ["empty"] },
-    ]);
-  });
 
-  it("kind=sessionDetail 缺 sessionId 时传空串，由服务层校验拒绝落入 IpcResult error", async () => {
-    const calls = installStubRuntime();
-    const g = globalThis as unknown as {
-      __usageStatsTestRuntime?: { usageStats: Record<string, unknown> };
-    };
-    g.__usageStatsTestRuntime!.usageStats.getSessionUsageDetail = async (
-      sessionId: string
-    ) => {
-      calls.push({ method: "getSessionUsageDetail", args: [sessionId] });
-      throw new AppError("CHAT_INVALID_ARGUMENT", {
-        detail: "sessionId 须提供",
-      });
-    };
-    const res = await UsageStats.handleQuery({
-      kind: "sessionDetail",
-      filter: {},
+    it("kind=sessionDetail 缺 sessionId 时传空串，由服务层校验拒绝落入 IpcResult error", async () => {
+        const calls = installStubRuntime();
+        const g = globalThis as unknown as {
+            __usageStatsTestRuntime?: { usageStats: Record<string, unknown> };
+        };
+        g.__usageStatsTestRuntime!.usageStats.getSessionUsageDetail = async (
+            sessionId: string
+        ) => {
+            calls.push({ method: "getSessionUsageDetail", args: [sessionId] });
+            throw new AppError("CHAT_INVALID_ARGUMENT", {
+                detail: "sessionId 须提供",
+            });
+        };
+        const res = await UsageStats.handleQuery({
+            kind: "sessionDetail",
+            filter: {},
+        });
+        assert.equal(res.ok, false);
+        if (res.ok) {
+            return;
+        }
+        assert.equal(res.error.code, "CHAT_INVALID_ARGUMENT");
+        assert.deepEqual(calls, [{ method: "getSessionUsageDetail", args: [""] }]);
     });
-    assert.equal(res.ok, false);
-    if (res.ok) {
-      return;
-    }
-    assert.equal(res.error.code, "CHAT_INVALID_ARGUMENT");
-    assert.deepEqual(calls, [{ method: "getSessionUsageDetail", args: [""] }]);
-  });
 
-  it("service 抛 CHAT_INVALID_ARGUMENT 时返回 IpcResult error 形态（key/message 透传）", async () => {
-    // 构造带 domain key 的 AppError（formatIpcError 直接透出 AppError.key）；
-    // 旧（key, message）签名已退役，文案走 params.detail。
-    const chatError = new AppError("CHAT_INVALID_ARGUMENT", {
-      detail: "自然日区间不合法",
+    it("service 抛 CHAT_INVALID_ARGUMENT 时返回 IpcResult error 形态（key/message 透传）", async () => {
+        // 构造带 domain key 的 AppError（formatIpcError 直接透出 AppError.key）；
+        // 旧（key, message）签名已退役，文案走 params.detail。
+        const chatError = new AppError("CHAT_INVALID_ARGUMENT", {
+            detail: "自然日区间不合法",
+        });
+        const calls = installStubRuntime(chatError);
+        const res = await UsageStats.handleQuery({
+            kind: "summary",
+            filter: RANGE_FILTER,
+        });
+        assert.deepEqual(res, {
+            ok: false,
+            error: {
+                code: "CHAT_INVALID_ARGUMENT",
+                message: "自然日区间不合法",
+            },
+        });
+        assert.equal(calls.length, 1);
     });
-    const calls = installStubRuntime(chatError);
-    const res = await UsageStats.handleQuery({
-      kind: "summary",
-      filter: RANGE_FILTER,
-    });
-    assert.deepEqual(res, {
-      ok: false,
-      error: {
-        code: "CHAT_INVALID_ARGUMENT",
-        message: "自然日区间不合法",
-      },
-    });
-    assert.equal(calls.length, 1);
-  });
 });

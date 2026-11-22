@@ -11,152 +11,152 @@ import {AnnotateRecogitoMap, type RecogitoTextAnnotation} from './annotate-recog
 import {AnnotateCollect} from './annotate-collect';
 
 export type AnnotateRenderMark = {
-  readonly id: string;
-  readonly originalText: string;
-  readonly renderStart: number;
-  readonly renderEnd: number;
+    readonly id: string;
+    readonly originalText: string;
+    readonly renderStart: number;
+    readonly renderEnd: number;
 };
 
 /** 划词批注运行时状态（模块内 holder，对象管理）。 */
 const annotateRuntime = {
-  /** 是否启用（RN menuItems 开关；关掉时同步销毁 Recogito）。 */
-  enabled: false,
-  /** 宿主下发的已确认批注渲染标记。 */
-  marks: [] as AnnotateRenderMark[],
-  // createTextAnnotator 工厂返回 TextAnnotationLike 形态（未 revive 的注解），字段类型与之对齐
-  /** Recogito 实例（null = 未建）。 */
-  instance: null as TextAnnotator<TextAnnotationLike, TextAnnotationLike> | null,
+    /** 是否启用（RN menuItems 开关；关掉时同步销毁 Recogito）。 */
+    enabled: false,
+    /** 宿主下发的已确认批注渲染标记。 */
+    marks: [] as AnnotateRenderMark[],
+    // createTextAnnotator 工厂返回 TextAnnotationLike 形态（未 revive 的注解），字段类型与之对齐
+    /** Recogito 实例（null = 未建）。 */
+    instance: null as TextAnnotator<TextAnnotationLike, TextAnnotationLike> | null,
 };
 /** 已由宿主确认并投影的 draft id；用于 selectionChanged 打开详情。 */
 const knownDraftIds = new Set<string>();
 
 export namespace Annotate {
-  export function setEnabled(enabled: boolean): void {
-    annotateRuntime.enabled = enabled === true;
-    if (!annotateRuntime.enabled) {
-      destroy();
-      return;
+    export function setEnabled(enabled: boolean): void {
+        annotateRuntime.enabled = enabled === true;
+        if (!annotateRuntime.enabled) {
+            destroy();
+            return;
+        }
+        ensureAnnotator();
+        applyAnnotationsToAnnotator();
     }
-    ensureAnnotator();
-    applyAnnotationsToAnnotator();
-  }
 
-  export function setAnnotations(next: readonly AnnotateRenderMark[]): void {
-    if (Array.isArray(next)) {
-      annotateRuntime.marks = next
-        .map(a => ({
-          id: String(a.id ?? ''),
-          originalText: String(a.originalText ?? ''),
-          renderStart: Number(a.renderStart),
-          renderEnd: Number(a.renderEnd),
-        }))
-        .filter(a => a.id.length > 0 && Number.isFinite(a.renderStart) && Number.isFinite(a.renderEnd) && a.renderStart >= 0 && a.renderEnd > a.renderStart);
-    } else {
-      annotateRuntime.marks = [];
+    export function setAnnotations(next: readonly AnnotateRenderMark[]): void {
+        if (Array.isArray(next)) {
+            annotateRuntime.marks = next
+                .map(a => ({
+                    id: String(a.id ?? ''),
+                    originalText: String(a.originalText ?? ''),
+                    renderStart: Number(a.renderStart),
+                    renderEnd: Number(a.renderEnd),
+                }))
+                .filter(a => a.id.length > 0 && Number.isFinite(a.renderStart) && Number.isFinite(a.renderEnd) && a.renderStart >= 0 && a.renderEnd > a.renderStart);
+        } else {
+            annotateRuntime.marks = [];
+        }
+        knownDraftIds.clear();
+        for (const a of annotateRuntime.marks) {
+            knownDraftIds.add(a.id);
+        }
+        if (!annotateRuntime.enabled) {
+            destroy();
+            return;
+        }
+        ensureAnnotator();
+        applyAnnotationsToAnnotator();
     }
-    knownDraftIds.clear();
-    for (const a of annotateRuntime.marks) {
-      knownDraftIds.add(a.id);
-    }
-    if (!annotateRuntime.enabled) {
-      destroy();
-      return;
-    }
-    ensureAnnotator();
-    applyAnnotationsToAnnotator();
-  }
 
-  /**
+    /**
    * setDocument 渲染后：重建 Recogito（DOM 已换）。
    * 由 main 的 documentViewSlot.register 回调在 Preact render 之后调用。
    */
-  export function refreshAfterDocument(): void {
-    destroy();
-    if (!annotateRuntime.enabled) {
-      return;
+    export function refreshAfterDocument(): void {
+        destroy();
+        if (!annotateRuntime.enabled) {
+            return;
+        }
+        ensureAnnotator();
+        applyAnnotationsToAnnotator();
     }
-    ensureAnnotator();
-    applyAnnotationsToAnnotator();
-  }
 
-  export function destroy(): void {
-    if (annotateRuntime.instance) {
-      try {
-        annotateRuntime.instance.destroy();
-      } catch {
-        // ignore
-      }
-      annotateRuntime.instance = null;
+    export function destroy(): void {
+        if (annotateRuntime.instance) {
+            try {
+                annotateRuntime.instance.destroy();
+            } catch {
+                // ignore
+            }
+            annotateRuntime.instance = null;
+        }
     }
-  }
 
-  /** 生命周期：挂 inject 采集桥；Recogito 在 ensureAnnotator 时挂到 .doc-body。 */
-  export function bindUi(): void {
-    AnnotateCollect.bindBridge();
-  }
+    /** 生命周期：挂 inject 采集桥；Recogito 在 ensureAnnotator 时挂到 .doc-body。 */
+    export function bindUi(): void {
+        AnnotateCollect.bindBridge();
+    }
 
-  function ensureAnnotator(): void {
-    if (annotateRuntime.instance) {
-      return;
+    function ensureAnnotator(): void {
+        if (annotateRuntime.instance) {
+            return;
+        }
+        const body = document.querySelector('.doc-body');
+        if (!(body instanceof HTMLElement)) {
+            return;
+        }
+        const anno = createTextAnnotator(body, {
+            // 划词不自动建批注，避免选区变蓝并吞掉系统选区菜单
+            annotatingEnabled: false,
+            // 已投影批注用下划线，不用大块蓝底
+            style: {
+                fill: 'transparent',
+                fillOpacity: 0,
+                underlineStyle: 'solid',
+                underlineThickness: 2,
+                underlineOffset: 1,
+            },
+        });
+        anno.on('selectionChanged', onSelectionChanged);
+        annotateRuntime.instance = anno;
     }
-    const body = document.querySelector('.doc-body');
-    if (!(body instanceof HTMLElement)) {
-      return;
-    }
-    const anno = createTextAnnotator(body, {
-      // 划词不自动建批注，避免选区变蓝并吞掉系统选区菜单
-      annotatingEnabled: false,
-      // 已投影批注用下划线，不用大块蓝底
-      style: {
-        fill: 'transparent',
-        fillOpacity: 0,
-        underlineStyle: 'solid',
-        underlineThickness: 2,
-        underlineOffset: 1,
-      },
-    });
-    anno.on('selectionChanged', onSelectionChanged);
-    annotateRuntime.instance = anno;
-  }
 
-  function applyAnnotationsToAnnotator(): void {
-    if (!annotateRuntime.instance) {
-      return;
+    function applyAnnotationsToAnnotator(): void {
+        if (!annotateRuntime.instance) {
+            return;
+        }
+        const list = AnnotateRecogitoMap.draftsToAnnotations(annotateRuntime.marks) as RecogitoTextAnnotation[];
+        // Recogito setAnnotations 接受 TextAnnotation[]；映射形状与库一致
+        annotateRuntime.instance.setAnnotations(list as Parameters<TextAnnotator['setAnnotations']>[0]);
     }
-    const list = AnnotateRecogitoMap.draftsToAnnotations(annotateRuntime.marks) as RecogitoTextAnnotation[];
-    // Recogito setAnnotations 接受 TextAnnotation[]；映射形状与库一致
-    annotateRuntime.instance.setAnnotations(list as Parameters<TextAnnotator['setAnnotations']>[0]);
-  }
 
-  function onSelectionChanged(selected: unknown): void {
-    if (!Array.isArray(selected) || selected.length === 0) {
-      return;
+    function onSelectionChanged(selected: unknown): void {
+        if (!Array.isArray(selected) || selected.length === 0) {
+            return;
+        }
+        const ids: string[] = [];
+        for (const item of selected) {
+            const id = String((item as {id?: string})?.id ?? '');
+            if (id.length > 0 && knownDraftIds.has(id)) {
+                ids.push(id);
+            }
+        }
+        if (ids.length === 0) {
+            return;
+        }
+        post('annotateOpen', {ids});
+        // 立刻取消选中：否则同一批注二次点击不触发 selectionChanged，体感卡死/极慢
+        try {
+            annotateRuntime.instance?.cancelSelected();
+        } catch {
+            // ignore
+        }
     }
-    const ids: string[] = [];
-    for (const item of selected) {
-      const id = String((item as {id?: string})?.id ?? '');
-      if (id.length > 0 && knownDraftIds.has(id)) {
-        ids.push(id);
-      }
-    }
-    if (ids.length === 0) {
-      return;
-    }
-    post('annotateOpen', {ids});
-    // 立刻取消选中：否则同一批注二次点击不触发 selectionChanged，体感卡死/极慢
-    try {
-      annotateRuntime.instance?.cancelSelected();
-    } catch {
-      // ignore
-    }
-  }
 
-  /** 宿主关弹窗时清选中，避免残留选中态拖慢下一次点击。 */
-  export function clearSelection(): void {
-    try {
-      annotateRuntime.instance?.cancelSelected();
-    } catch {
-      // ignore
+    /** 宿主关弹窗时清选中，避免残留选中态拖慢下一次点击。 */
+    export function clearSelection(): void {
+        try {
+            annotateRuntime.instance?.cancelSelected();
+        } catch {
+            // ignore
+        }
     }
-  }
 }

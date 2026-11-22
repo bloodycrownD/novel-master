@@ -12,70 +12,70 @@ import { LogicalPath } from "./vfs-path-mapper.js";
 type VfsBatchPathError = AppError<"VFS_INVALID_PATH">;
 
 export const VfsBatchPath = {
-  /**
+    /**
    * 规范化 ingest 相对路径：去掉 leading `/`、反斜杠转正斜杠、拒绝 `..`。
    * @returns 规范化相对路径，或 `null`（非法）
    */
-  normalizeRelativePath(relativePath: string): string | null {
-    const trimmed = relativePath.trim().replace(/\\/g, "/");
-    if (trimmed.length === 0 || trimmed === ".") {
-      return null;
-    }
-    const withoutLeading = trimmed.replace(/^\/+/, "").replace(/\/+$/, "");
-    if (withoutLeading.length === 0) {
-      return null;
-    }
-    const segments = withoutLeading.split("/");
-    const stack: string[] = [];
-    for (const segment of segments) {
-      if (segment === "" || segment === ".") {
-        continue;
-      }
-      if (segment === "..") {
-        return null;
-      }
-      stack.push(segment);
-    }
-    if (stack.length === 0) {
-      return null;
-    }
-    return stack.join("/");
-  },
+    normalizeRelativePath(relativePath: string): string | null {
+        const trimmed = relativePath.trim().replace(/\\/g, "/");
+        if (trimmed.length === 0 || trimmed === ".") {
+            return null;
+        }
+        const withoutLeading = trimmed.replace(/^\/+/, "").replace(/\/+$/, "");
+        if (withoutLeading.length === 0) {
+            return null;
+        }
+        const segments = withoutLeading.split("/");
+        const stack: string[] = [];
+        for (const segment of segments) {
+            if (segment === "" || segment === ".") {
+                continue;
+            }
+            if (segment === "..") {
+                return null;
+            }
+            stack.push(segment);
+        }
+        if (stack.length === 0) {
+            return null;
+        }
+        return stack.join("/");
+    },
 
-  /** 将相对路径拼到目标目录下，得到逻辑绝对路径。 */
-  joinTargetLogicalPath(targetDir: string, relativePath: string): Result<string, VfsBatchPathError> {
-    const dir = LogicalPath.resolve(targetDir);
-    if (!dir.ok) return dir;
-    const rel = VfsBatchPath.normalizeRelativePath(relativePath);
-    if (rel == null) {
-      return Result.err(new AppError("VFS_INVALID_PATH", { detail: `invalid batch relative path: ${relativePath}`, path: relativePath }));
-    }
-    return Result.ok(dir.value === "/" ? `/${rel}` : `${dir.value}/${rel}`);
-  },
+    /** 将相对路径拼到目标目录下，得到逻辑绝对路径。 */
+    joinTargetLogicalPath(targetDir: string, relativePath: string): Result<string, VfsBatchPathError> {
+        const dir = LogicalPath.resolve(targetDir);
+        if (!dir.ok) return dir;
+        const rel = VfsBatchPath.normalizeRelativePath(relativePath);
+        if (rel == null) {
+            return Result.err(new AppError("VFS_INVALID_PATH", { detail: `invalid batch relative path: ${relativePath}`, path: relativePath }));
+        }
+        return Result.ok(dir.value === "/" ? `/${rel}` : `${dir.value}/${rel}`);
+    },
 
-  /**
+    /**
    * 逻辑路径相对导出锚点的相对路径（无 leading `/`）。
    * 锚点自身返回空串。
    *
    * nm-style: keep-public — 纯路径原语，与 normalizeRelativePath / joinTargetLogicalPath 同组导出；唯一消费方 vfs-batch-io 是 IO 编排服务，内联会把路径规范化与 Result 语义搬进 service 层（撤销导出还需同步 public/vfs.ts 与 allowlist）。
    */
-  relativePathUnderAnchor(logical: string, anchor: string): Result<string, VfsBatchPathError> {
-    const resolvedPath = LogicalPath.resolve(logical);
-    if (!resolvedPath.ok) return resolvedPath;
-    const resolvedRoot = LogicalPath.resolve(anchor);
-    if (!resolvedRoot.ok) return resolvedRoot;
-    const path = resolvedPath.value;
-    const root = resolvedRoot.value;
-    if (root === "/") {
-      return Result.ok(path === "/" ? "" : path.slice(1));
-    }
-    if (path === root) {
-      return Result.ok("");
-    }
-    const prefix = `${root}/`;
-    if (!path.startsWith(prefix)) {
-      return Result.err(new AppError("VFS_INVALID_PATH", { detail: `path ${path} is not under ${root}`, path }));
-    }
-    return Result.ok(path.slice(prefix.length));
-  },
+    relativePathUnderAnchor(logical: string, anchor: string): Result<string, VfsBatchPathError> {
+        const resolvedPath = LogicalPath.resolve(logical);
+        if (!resolvedPath.ok) return resolvedPath;
+        const resolvedRoot = LogicalPath.resolve(anchor);
+        if (!resolvedRoot.ok) return resolvedRoot;
+        const path = resolvedPath.value;
+        const root = resolvedRoot.value;
+        if (root === "/") {
+            return Result.ok(path === "/" ? "" : path.slice(1));
+        }
+        if (path === root) {
+            return Result.ok("");
+        }
+        const prefix = `${root}/`;
+        if (!path.startsWith(prefix)) {
+            return Result.err(new AppError("VFS_INVALID_PATH", { detail: `path ${path} is not under ${root}`, path }));
+        }
+        return Result.ok(path.slice(prefix.length));
+    },
 } as const;

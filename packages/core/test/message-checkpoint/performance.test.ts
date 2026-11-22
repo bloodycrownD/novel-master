@@ -23,103 +23,103 @@ const ROLLBACK_P95_MS = 500;
 const CI_SLACK = 6;
 
 function percentile(values: readonly number[], p: number): number {
-  const sorted = [...values].sort((a, b) => a - b);
-  const index = Math.ceil((p / 100) * sorted.length) - 1;
-  return sorted[Math.max(0, index)]!;
+    const sorted = [...values].sort((a, b) => a - b);
+    const index = Math.ceil((p / 100) * sorted.length) - 1;
+    return sorted[Math.max(0, index)]!;
 }
 
 async function seedFiles(
-  vfs: VfsService,
-  count: number,
-  namePrefix = "file",
+    vfs: VfsService,
+    count: number,
+    namePrefix = "file",
 ): Promise<void> {
-  for (let i = 0; i < count; i++) {
-    await vfs.write(`/${namePrefix}-${i}.txt`, `body-${i}`, {
-      versionCheck: false,
-    });
-  }
+    for (let i = 0; i < count; i++) {
+        await vfs.write(`/${namePrefix}-${i}.txt`, `body-${i}`, {
+            versionCheck: false,
+        });
+    }
 }
 
 
 novelMasterTestFixture();
 
 describe("message checkpoint performance", { timeout: 180_000 }, () => {
-  it("P1: capture 1000 files P95 within threshold", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`Perf-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const svfs = ctx.sessionVfs(project.id, session.id);
-    await seedFiles(svfs, FILE_COUNT);
+    it("P1: capture 1000 files P95 within threshold", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`Perf-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const svfs = ctx.sessionVfs(project.id, session.id);
+        await seedFiles(svfs, FILE_COUNT);
 
-    const assistant = unwrap(await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "capture" }],
-    }));
+        const assistant = unwrap(await ctx.messages.append(session.id, "assistant", {
+            blocks: [{ type: "text", text: "capture" }],
+        }));
 
-    const durations: number[] = [];
-    for (let run = 0; run < SAMPLE_RUNS; run++) {
-      const start = performance.now();
-      await ctx.messageCheckpoint.capture(session.id, project.id, assistant.id);
-      durations.push(performance.now() - start);
-    }
+        const durations: number[] = [];
+        for (let run = 0; run < SAMPLE_RUNS; run++) {
+            const start = performance.now();
+            await ctx.messageCheckpoint.capture(session.id, project.id, assistant.id);
+            durations.push(performance.now() - start);
+        }
 
-    const p95 = percentile(durations, 95);
-    assert.ok(
-      p95 < CAPTURE_P95_MS * CI_SLACK,
-      `capture P95 ${p95.toFixed(1)}ms exceeds ${CAPTURE_P95_MS * CI_SLACK}ms`,
-    );
-  });
+        const p95 = percentile(durations, 95);
+        assert.ok(
+            p95 < CAPTURE_P95_MS * CI_SLACK,
+            `capture P95 ${p95.toFixed(1)}ms exceeds ${CAPTURE_P95_MS * CI_SLACK}ms`,
+        );
+    });
 
-  it("P2: rollback diff 1000 files P95 within threshold", async () => {
-    const ctx = getNovelMasterTestContext();
-    const durations: number[] = [];
+    it("P2: rollback diff 1000 files P95 within threshold", async () => {
+        const ctx = getNovelMasterTestContext();
+        const durations: number[] = [];
 
-    for (let run = 0; run < SAMPLE_RUNS; run++) {
-      const project = unwrap(await ctx.projects.create(`Perf-${run}`));
-      const session = unwrap(await ctx.sessions.create(project.id));
-      const svfs = ctx.sessionVfs(project.id, session.id);
-      const prefix = `file-${run}`;
-      await seedFiles(svfs, FILE_COUNT, prefix);
+        for (let run = 0; run < SAMPLE_RUNS; run++) {
+            const project = unwrap(await ctx.projects.create(`Perf-${run}`));
+            const session = unwrap(await ctx.sessions.create(project.id));
+            const svfs = ctx.sessionVfs(project.id, session.id);
+            const prefix = `file-${run}`;
+            await seedFiles(svfs, FILE_COUNT, prefix);
 
-      const anchorAssistant = unwrap(await ctx.messages.append(session.id, "assistant", {
-        blocks: [{ type: "text", text: "anchor" }],
-      }));
-      await ctx.messageCheckpoint.capture(
-        session.id,
-        project.id,
-        anchorAssistant.id,
-      );
+            const anchorAssistant = unwrap(await ctx.messages.append(session.id, "assistant", {
+                blocks: [{ type: "text", text: "anchor" }],
+            }));
+            await ctx.messageCheckpoint.capture(
+                session.id,
+                project.id,
+                anchorAssistant.id,
+            );
 
-      for (let i = 0; i < 50; i++) {
-        unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of(`msg ${i}`)));
-      }
+            for (let i = 0; i < 50; i++) {
+                unwrap(await ctx.messages.append(session.id, "user", TextBlocks.of(`msg ${i}`)));
+            }
 
-      for (let i = 0; i < FILE_COUNT; i++) {
-        await svfs.write(`/${prefix}-${i}.txt`, `mutated-${run}-${i}`, {
-          versionCheck: false,
-        });
-      }
-      const tailAssistant = unwrap(await ctx.messages.append(session.id, "assistant", {
-        blocks: [{ type: "text", text: "tail" }],
-      }));
-      await ctx.messageCheckpoint.capture(
-        session.id,
-        project.id,
-        tailAssistant.id,
-      );
+            for (let i = 0; i < FILE_COUNT; i++) {
+                await svfs.write(`/${prefix}-${i}.txt`, `mutated-${run}-${i}`, {
+                    versionCheck: false,
+                });
+            }
+            const tailAssistant = unwrap(await ctx.messages.append(session.id, "assistant", {
+                blocks: [{ type: "text", text: "tail" }],
+            }));
+            await ctx.messageCheckpoint.capture(
+                session.id,
+                project.id,
+                tailAssistant.id,
+            );
 
-      const start = performance.now();
-      await ctx.sessionFs.rollbackFilesToMessage(
-        session.id,
-        project.id,
-        anchorAssistant.id,
-      );
-      durations.push(performance.now() - start);
-    }
+            const start = performance.now();
+            await ctx.sessionFs.rollbackFilesToMessage(
+                session.id,
+                project.id,
+                anchorAssistant.id,
+            );
+            durations.push(performance.now() - start);
+        }
 
-    const p95 = percentile(durations, 95);
-    assert.ok(
-      p95 < ROLLBACK_P95_MS * CI_SLACK,
-      `rollback P95 ${p95.toFixed(1)}ms exceeds ${ROLLBACK_P95_MS * CI_SLACK}ms`,
-    );
-  });
+        const p95 = percentile(durations, 95);
+        assert.ok(
+            p95 < ROLLBACK_P95_MS * CI_SLACK,
+            `rollback P95 ${p95.toFixed(1)}ms exceeds ${ROLLBACK_P95_MS * CI_SLACK}ms`,
+        );
+    });
 });

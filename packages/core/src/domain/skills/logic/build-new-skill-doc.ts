@@ -26,10 +26,10 @@
 type SkillDocBodyVariant = "desktop" | "mobile";
 
 export const NewSkillDoc = {
-  /** 新建技能的 SKILL.md 模板；`variant` 缺省取 `desktop`。 */
-  build(name: string, description: string, variant: SkillDocBodyVariant = "desktop"): string {
-    const frontMatter = ["---", `name: ${JSON.stringify(name)}`, `description: ${JSON.stringify(description)}`, "---", ""];
-    const body = variant === "mobile" ? [`# ${name}`, "", description, "", "## 使用说明", "", "- 这里描述技能的用途、触发时机与使用方式，模型会据此决定是否使用本技能。", "- 辅助文件可放在本目录或子目录（如 `references/notes.md`），", "  由模型经技能工具按需读取；正文无需内联全文。", ""] : [`# ${name}`, "", description, "", "<!-- 在这里编写技能说明。可添加辅助文件（如 references/x.md），模型会经 skill 工具按需读取。 -->", ""];
-    return [...frontMatter, ...body].join("\n");
-  },
+    /** 新建技能的 SKILL.md 模板；`variant` 缺省取 `desktop`。 */
+    build(name: string, description: string, variant: SkillDocBodyVariant = "desktop"): string {
+        const frontMatter = ["---", `name: ${JSON.stringify(name)}`, `description: ${JSON.stringify(description)}`, "---", ""];
+        const body = variant === "mobile" ? [`# ${name}`, "", description, "", "## 使用说明", "", "- 这里描述技能的用途、触发时机与使用方式，模型会据此决定是否使用本技能。", "- 辅助文件可放在本目录或子目录（如 `references/notes.md`），", "  由模型经技能工具按需读取；正文无需内联全文。", ""] : [`# ${name}`, "", description, "", "<!-- 在这里编写技能说明。可添加辅助文件（如 references/x.md），模型会经 skill 工具按需读取。 -->", ""];
+        return [...frontMatter, ...body].join("\n");
+    },
 } as const;

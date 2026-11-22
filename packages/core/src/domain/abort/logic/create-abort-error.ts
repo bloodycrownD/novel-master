@@ -15,14 +15,14 @@
  */
 
 export const AbortError = {
-  /** Creates an abort error in Node (DOMException) or RN (Error + name). */
-  create(message = "Request aborted"): Error {
-    const DOMEx = (globalThis as { DOMException?: new (msg: string, name: string) => Error }).DOMException;
-    if (typeof DOMEx === "function") {
-      return new DOMEx(message, "AbortError");
-    }
-    const err = new Error(message);
-    err.name = "AbortError";
-    return err;
-  },
+    /** Creates an abort error in Node (DOMException) or RN (Error + name). */
+    create(message = "Request aborted"): Error {
+        const DOMEx = (globalThis as { DOMException?: new (msg: string, name: string) => Error }).DOMException;
+        if (typeof DOMEx === "function") {
+            return new DOMEx(message, "AbortError");
+        }
+        const err = new Error(message);
+        err.name = "AbortError";
+        return err;
+    },
 } as const;

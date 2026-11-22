@@ -16,5 +16,5 @@
  *   `CHARACTER_CARD_BLOB_COMPRESSED_GATE_BYTES`）。
  */
 export type VfsContentSize =
-  | { readonly kind: "inlineChars"; readonly size: number; readonly mtimeMs: number }
-  | { readonly kind: "blobCompressedBytes"; readonly size: number; readonly mtimeMs: number };
+    | { readonly kind: "inlineChars"; readonly size: number; readonly mtimeMs: number }
+    | { readonly kind: "blobCompressedBytes"; readonly size: number; readonly mtimeMs: number };

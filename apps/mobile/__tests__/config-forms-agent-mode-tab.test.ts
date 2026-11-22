@@ -15,31 +15,31 @@ import { API_KEY_STATUS_LABELS } from "@/config-forms/ui-labels";
  * 过滤、双端 picker 字面口径一致）。改错任一分支必红。
  */
 it("agentModeMatchesTab 四态 × 两 tab 矩阵（T-C1）", () => {
-  // primary 定义：仅主 tab 显示。
-  assert.equal(AgentModeTab.agentModeMatchesTab("primary", "primary"), true);
-  assert.equal(AgentModeTab.agentModeMatchesTab("primary", "subagent"), false);
-  // subagent 定义：仅子 tab 显示。
-  assert.equal(AgentModeTab.agentModeMatchesTab("subagent", "primary"), false);
-  assert.equal(AgentModeTab.agentModeMatchesTab("subagent", "subagent"), true);
-  // all 定义：双侧 tab 都显示。
-  assert.equal(AgentModeTab.agentModeMatchesTab("all", "primary"), true);
-  assert.equal(AgentModeTab.agentModeMatchesTab("all", "subagent"), true);
-  // 未填写（undefined）：按 all 归一，双侧都显示。
-  assert.equal(AgentModeTab.agentModeMatchesTab(undefined, "primary"), true);
-  assert.equal(AgentModeTab.agentModeMatchesTab(undefined, "subagent"), true);
+    // primary 定义：仅主 tab 显示。
+    assert.equal(AgentModeTab.agentModeMatchesTab("primary", "primary"), true);
+    assert.equal(AgentModeTab.agentModeMatchesTab("primary", "subagent"), false);
+    // subagent 定义：仅子 tab 显示。
+    assert.equal(AgentModeTab.agentModeMatchesTab("subagent", "primary"), false);
+    assert.equal(AgentModeTab.agentModeMatchesTab("subagent", "subagent"), true);
+    // all 定义：双侧 tab 都显示。
+    assert.equal(AgentModeTab.agentModeMatchesTab("all", "primary"), true);
+    assert.equal(AgentModeTab.agentModeMatchesTab("all", "subagent"), true);
+    // 未填写（undefined）：按 all 归一，双侧都显示。
+    assert.equal(AgentModeTab.agentModeMatchesTab(undefined, "primary"), true);
+    assert.equal(AgentModeTab.agentModeMatchesTab(undefined, "subagent"), true);
 });
 
 /**
  * T-C2：DEFAULT_SUBAGENT_DEFINITION 经 /agent 公开子路径可导入且内容不漂移。
  */
 it("DEFAULT_SUBAGENT_DEFINITION 为虚拟 general 子代理（T-C2）", () => {
-  assert.equal(DEFAULT_SUBAGENT_DEFINITION.name, "general");
-  assert.equal(DEFAULT_SUBAGENT_DEFINITION.mode, "subagent");
+    assert.equal(DEFAULT_SUBAGENT_DEFINITION.name, "general");
+    assert.equal(DEFAULT_SUBAGENT_DEFINITION.mode, "subagent");
 });
 
 // 原 core test/config-forms/ui-labels.test.ts 的 API_KEY_STATUS_LABELS 断言
 // 随表单层迁两端（AGENT_LIST_LABELS 断言留在 core stored-config-validity 测试）。
 it("API_KEY_STATUS_LABELS 映射 set/notSet 为中文", () => {
-  assert.equal(API_KEY_STATUS_LABELS.set, "已连接");
-  assert.equal(API_KEY_STATUS_LABELS.notSet, "未连接");
+    assert.equal(API_KEY_STATUS_LABELS.set, "已连接");
+    assert.equal(API_KEY_STATUS_LABELS.notSet, "未连接");
 });

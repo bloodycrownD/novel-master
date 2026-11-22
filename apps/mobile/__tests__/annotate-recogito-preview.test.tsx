@@ -12,91 +12,91 @@ import { chatAnnotateDraftStore } from '@novel-master/core/chat';
 const mockReadEngine = jest.fn(async () => 'webview' as const);
 
 jest.mock('@/runtime/novel-master-context', () => ({
-  useNovelMaster: () => ({appUi: {get: jest.fn()}}),
+    useNovelMaster: () => ({appUi: {get: jest.fn()}}),
 }));
 
 jest.mock('@/storage/vfs-markdown-preview-engine', () => {
-  const legacy = {
-  defaultVfsMarkdownPreviewEngine: () => 'webview',
-  readVfsMarkdownPreviewEngine: (...args: unknown[]) => mockReadEngine(...args),
+    const legacy = {
+    defaultVfsMarkdownPreviewEngine: () => 'webview',
+    readVfsMarkdownPreviewEngine: (...args: unknown[]) => mockReadEngine(...args),
 };
-  return {...legacy, VfsMarkdownPreviewEngine: {read: legacy.readVfsMarkdownPreviewEngine, default: legacy.defaultVfsMarkdownPreviewEngine}};
+    return {...legacy, VfsMarkdownPreviewEngine: {read: legacy.readVfsMarkdownPreviewEngine, default: legacy.defaultVfsMarkdownPreviewEngine}};
 });
 
 jest.mock('@react-navigation/native', () => ({
-  useFocusEffect: (cb: () => void) => cb(),
-  useIsFocused: () => true,
+    useFocusEffect: (cb: () => void) => cb(),
+    useIsFocused: () => true,
 }));
 
 jest.mock('@/components/vfs/RichDocumentWebView', () => ({
-  RichDocumentWebView: jest.fn((props: Record<string, unknown>) => {
-    const React = require('react');
-    const {View} = require('react-native');
-    return React.createElement(View, {
-      testID: 'rich-document-webview',
-      ...props,
-    });
-  }),
+    RichDocumentWebView: jest.fn((props: Record<string, unknown>) => {
+        const React = require('react');
+        const {View} = require('react-native');
+        return React.createElement(View, {
+            testID: 'rich-document-webview',
+            ...props,
+        });
+    }),
 }));
 
 jest.mock('@/components/chat/MessageEditModal', () => ({
-  MessageEditModal: () => null,
+    MessageEditModal: () => null,
 }));
 
 jest.mock('@/components/vfs/AnnotatePickModal', () => ({
-  AnnotatePickModal: () => null,
+    AnnotatePickModal: () => null,
 }));
 
 jest.mock('@/components/rich-content/sanitize-rich-html', () => {
-  const legacy = {
-  sanitizeRichHtml: (html: string) => html,
+    const legacy = {
+    sanitizeRichHtml: (html: string) => html,
 };
-  return {...legacy, SanitizeRichHtml: {sanitize: legacy.sanitizeRichHtml}};
+    return {...legacy, SanitizeRichHtml: {sanitize: legacy.sanitizeRichHtml}};
 });
 
 jest.mock('@/components/rich-content/prepare-transcript-rich-html', () => {
-  const legacy = {
-  prepareTranscriptRichHtml: (md: string) => `<div class="clean">${md}</div>`,
+    const legacy = {
+    prepareTranscriptRichHtml: (md: string) => `<div class="clean">${md}</div>`,
 };
-  return {...legacy, TranscriptRichHtml: {prepare: legacy.prepareTranscriptRichHtml}};
+    return {...legacy, TranscriptRichHtml: {prepare: legacy.prepareTranscriptRichHtml}};
 });
 
 import {FileMarkdownPreview} from '@/components/vfs/FileMarkdownPreview';
 import {RichDocumentWebView} from '@/components/vfs/RichDocumentWebView';
 
 const mockRichDocumentWebView = RichDocumentWebView as jest.MockedFunction<
-  typeof RichDocumentWebView
+    typeof RichDocumentWebView
 >;
 
 const tokens = {
-  background: '#000',
-  surface: '#111',
-  bgSecondary: '#222',
-  border: '#333',
-  borderLight: '#444',
-  text: '#fff',
-  textSecondary: '#aaa',
-  primary: '#08f',
-  danger: '#f00',
-  textTertiary: '#666',
+    background: '#000',
+    surface: '#111',
+    bgSecondary: '#222',
+    border: '#333',
+    borderLight: '#444',
+    text: '#fff',
+    textSecondary: '#aaa',
+    primary: '#08f',
+    danger: '#f00',
+    textTertiary: '#666',
 };
 
 function readSrc(relFromSrc: string): string {
-  return readFileSync(join(__dirname, '..', 'src', relFromSrc), 'utf8');
+    return readFileSync(join(__dirname, '..', 'src', relFromSrc), 'utf8');
 }
 
 describe('T-RG2 无插锚预览主路径', () => {
-  it('RichDocumentWebView 无 DOM 搜字 fallback 开关', () => {
-    const src = readSrc('components/vfs/RichDocumentWebView.tsx');
-    expect(src).not.toMatch(/NM_ANNOTATE_DOM_SEARCH_FALLBACK/);
-    expect(src).not.toMatch(/setNmAnnotateDomSearchFallbackForTests/);
-    expect(src).not.toMatch(/setPreviewAnnotateDomSearchFallbackForTests/);
-  });
+    it('RichDocumentWebView 无 DOM 搜字 fallback 开关', () => {
+        const src = readSrc('components/vfs/RichDocumentWebView.tsx');
+        expect(src).not.toMatch(/NM_ANNOTATE_DOM_SEARCH_FALLBACK/);
+        expect(src).not.toMatch(/setNmAnnotateDomSearchFallbackForTests/);
+        expect(src).not.toMatch(/setPreviewAnnotateDomSearchFallbackForTests/);
+    });
 
-  it('annotate.ts 不走 applyAnnotateMarks / __NM_ANNOTATE_DOM_SEARCH_FALLBACK__', () => {
-    const src = readSrc('web/rich-document/webview/runtime/annotate.ts');
-    expect(src).not.toMatch(
-      /applyAnnotateMarks\s*\(|from\s+['"][^'"]*annotate-marks/,
+    it('annotate.ts 不走 applyAnnotateMarks / __NM_ANNOTATE_DOM_SEARCH_FALLBACK__', () => {
+        const src = readSrc('web/rich-document/webview/runtime/annotate.ts');
+        expect(src).not.toMatch(
+            /applyAnnotateMarks\s*\(|from\s+['"][^'"]*annotate-marks/,
     );
     expect(src).not.toMatch(/__NM_ANNOTATE_DOM_SEARCH_FALLBACK__/);
     expect(src).not.toMatch(/isAnnotateDomSearchFallbackEnabled/);

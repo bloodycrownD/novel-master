@@ -5,8 +5,8 @@
  */
 
 export const RevisionPairKey = {
-  /** 构造 revision 行的稳定键（entryId + version）。 */
-  build(entryId: number, version: number): string {
-    return `${entryId}:${version}`;
-  },
+    /** 构造 revision 行的稳定键（entryId + version）。 */
+    build(entryId: number, version: number): string {
+        return `${entryId}:${version}`;
+    },
 } as const;

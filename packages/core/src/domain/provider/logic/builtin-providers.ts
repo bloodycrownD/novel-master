@@ -8,15 +8,15 @@ import type { LlmProtocolKind } from "@/infra/llm-protocol/ports/adapter.port.js
 
 /** 内置 provider 种子行，与 PRD 内置表一致。 */
 type BuiltinProviderSeedRow = {
-  /** 稳定业务键（seed 幂等 / 协议护栏）；不对用户展示。 */
-  readonly key: string;
-  /** 跨安装一致的固定技术主键 UUID。 */
-  readonly id: string;
-  readonly protocol: LlmProtocolKind;
-  readonly baseUrl: string;
-  readonly displayName: string;
-  /** SKSP 未配置时使用的内置默认 apiKey（仅部分内置服务商）。 */
-  readonly defaultApiKey?: string;
+    /** 稳定业务键（seed 幂等 / 协议护栏）；不对用户展示。 */
+    readonly key: string;
+    /** 跨安装一致的固定技术主键 UUID。 */
+    readonly id: string;
+    readonly protocol: LlmProtocolKind;
+    readonly baseUrl: string;
+    readonly displayName: string;
+    /** SKSP 未配置时使用的内置默认 apiKey（仅部分内置服务商）。 */
+    readonly defaultApiKey?: string;
 };
 
 /** 内置 OpenAI 固定 UUID。 */
@@ -32,51 +32,51 @@ export const BUILTIN_PROVIDER_UUID_OPENCODE = "c0ffeeee-0001-4000-8000-000000000
 
 /** 单一数据源：内置 provider 列表。 */
 export const BUILTIN_PROVIDER_ROWS: readonly BuiltinProviderSeedRow[] = [
-  {
-    key: "openai",
-    id: BUILTIN_PROVIDER_UUID_OPENAI,
-    protocol: "openai",
-    baseUrl: "https://api.openai.com/v1",
-    displayName: "OpenAI",
-  },
-  {
-    key: "anthropic",
-    id: BUILTIN_PROVIDER_UUID_ANTHROPIC,
-    protocol: "anthropic",
-    baseUrl: "https://api.anthropic.com",
-    displayName: "Anthropic",
-  },
-  {
-    key: "google",
-    id: BUILTIN_PROVIDER_UUID_GOOGLE,
-    protocol: "gemini",
-    baseUrl: "https://generativelanguage.googleapis.com/v1beta",
-    displayName: "Google Gemini",
-  },
-  {
-    key: "openrouter",
-    id: BUILTIN_PROVIDER_UUID_OPENROUTER,
-    protocol: "openai",
-    baseUrl: "https://openrouter.ai/api/v1",
-    displayName: "OpenRouter",
-  },
-  {
-    key: "opencode",
-    id: BUILTIN_PROVIDER_UUID_OPENCODE,
-    protocol: "openai",
-    baseUrl: "https://opencode.ai/zen/v1",
-    displayName: "OpenCode Zen",
-    defaultApiKey: "public",
-  },
+    {
+        key: "openai",
+        id: BUILTIN_PROVIDER_UUID_OPENAI,
+        protocol: "openai",
+        baseUrl: "https://api.openai.com/v1",
+        displayName: "OpenAI",
+    },
+    {
+        key: "anthropic",
+        id: BUILTIN_PROVIDER_UUID_ANTHROPIC,
+        protocol: "anthropic",
+        baseUrl: "https://api.anthropic.com",
+        displayName: "Anthropic",
+    },
+    {
+        key: "google",
+        id: BUILTIN_PROVIDER_UUID_GOOGLE,
+        protocol: "gemini",
+        baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+        displayName: "Google Gemini",
+    },
+    {
+        key: "openrouter",
+        id: BUILTIN_PROVIDER_UUID_OPENROUTER,
+        protocol: "openai",
+        baseUrl: "https://openrouter.ai/api/v1",
+        displayName: "OpenRouter",
+    },
+    {
+        key: "opencode",
+        id: BUILTIN_PROVIDER_UUID_OPENCODE,
+        protocol: "openai",
+        baseUrl: "https://opencode.ai/zen/v1",
+        displayName: "OpenCode Zen",
+        defaultApiKey: "public",
+    },
 ] as const;
 
 const BUILTIN_DEFAULT_API_KEY_BY_KEY: Readonly<Record<string, string>> = Object.fromEntries(BUILTIN_PROVIDER_ROWS.flatMap((row) => (row.defaultApiKey != null ? [[row.key, row.defaultApiKey]] : [])));
 
 export const BuiltinProviders = {
-  /** 内置 provider 在无 SKSP 密钥时的默认 apiKey；按 builtin_key 查；无则 undefined。 */
-  defaultApiKey(builtinKey: string): string | undefined {
-    return BUILTIN_DEFAULT_API_KEY_BY_KEY[builtinKey];
-  },
+    /** 内置 provider 在无 SKSP 密钥时的默认 apiKey；按 builtin_key 查；无则 undefined。 */
+    defaultApiKey(builtinKey: string): string | undefined {
+        return BUILTIN_DEFAULT_API_KEY_BY_KEY[builtinKey];
+    },
 } as const;
 
 /** builtin_key → LLM 协议种类（由 BUILTIN_PROVIDER_ROWS 派生）。 */

@@ -9,17 +9,17 @@ import type { StoredConfigHealth } from "@novel-master/core/stored-config-validi
 import type { StoredConfigHealthDto } from "../../../../shared/ipc-types.js";
 
 export const StoredConfigHealthMapper = {
-  toDto<TValue extends object>(health: StoredConfigHealth<TValue>): StoredConfigHealthDto<TValue> {
-    if (health.status === "valid") {
-      return { status: "valid", value: health.value };
-    }
-    return {
-      status: "invalid",
-      code: health.code,
-      message: health.message,
-      ...(health.storedSchemaVersion != null
-        ? { storedSchemaVersion: health.storedSchemaVersion }
-        : {}),
-    };
-  },
+    toDto<TValue extends object>(health: StoredConfigHealth<TValue>): StoredConfigHealthDto<TValue> {
+        if (health.status === "valid") {
+            return { status: "valid", value: health.value };
+        }
+        return {
+            status: "invalid",
+            code: health.code,
+            message: health.message,
+            ...(health.storedSchemaVersion != null
+                ? { storedSchemaVersion: health.storedSchemaVersion }
+                : {}),
+        };
+    },
 } as const;

@@ -38,25 +38,25 @@ export type SavedModelSettingsDocument = z.infer<typeof savedModelSettingsV2Docu
 const savedModelSettingsV1ObjectSchema = z.object({ schemaVersion: z.literal(1), contextWindowTokens: z.number().int().positive(), sampling: savedModelSamplingSettingsSchema, tokenCounterMode: tokenCounterModeSchema }).strict();
 
 const savedModelSettingsV1DocumentSchema = savedModelSettingsV1ObjectSchema.transform(
-  (doc): SavedModelSettings => ({
-    schemaVersion: 2,
-    internal: {
-      contextWindowTokens: doc.contextWindowTokens,
-      tokenCounterMode: doc.tokenCounterMode,
-    },
-    generation: {
-      sampling: doc.sampling,
-      thinkingLevel: "off",
-    },
-  })
+    (doc): SavedModelSettings => ({
+        schemaVersion: 2,
+        internal: {
+            contextWindowTokens: doc.contextWindowTokens,
+            tokenCounterMode: doc.tokenCounterMode,
+        },
+        generation: {
+            sampling: doc.sampling,
+            thinkingLevel: "off",
+        },
+    })
 );
 
 const savedModelSettingsV2ToMemorySchema = savedModelSettingsV2DocumentSchema.transform(
-  (doc): SavedModelSettings => ({
-    schemaVersion: 2,
-    internal: doc.internal,
-    generation: doc.generation,
-  })
+    (doc): SavedModelSettings => ({
+        schemaVersion: 2,
+        internal: doc.internal,
+        generation: doc.generation,
+    })
 );
 
 /** 读盘：接受 v1 或 v2 文档，输出 v2 内存形态。 */

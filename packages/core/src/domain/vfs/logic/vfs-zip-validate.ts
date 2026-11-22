@@ -18,9 +18,9 @@ export { VFS_ZIP_MAX_UNCOMPRESSED_BYTES, VFS_ZIP_MAX_ENTRY_COUNT, VFS_ZIP_MAX_EN
 
 /** Validated ZIP payload ready for DB import. */
 interface VfsZipValidatedPayload {
-  readonly files: ReadonlyMap<string, string>;
-  /** Logical directory paths (e.g. `/empty-dir`), shallow paths first. */
-  readonly directories: readonly string[];
+    readonly files: ReadonlyMap<string, string>;
+    /** Logical directory paths (e.g. `/empty-dir`), shallow paths first. */
+    readonly directories: readonly string[];
 }
 
 /** validateEntries 的失败载荷（含路径映射透传的 `VFS_INVALID_PATH`）。 */
@@ -29,138 +29,138 @@ type VfsZipValidateError = AppError<"VFS_ZIP_INVALID_ARCHIVE" | "VFS_ZIP_INVALID
 const WINDOWS_DRIVE_PATH = /^[a-zA-Z]:[\\/]/;
 
 export const VfsZipValidate = {
-  /**
+    /**
    * Decodes bytes as UTF-8 text; rejects invalid sequences.
    * Uses round-trip encoding (not `fatal: true`) so Hermes matches Node behavior.
    */
-  decodeUtf8Entry(bytes: Uint8Array, entryName: string): Result<string, AppError<"VFS_ZIP_INVALID_UTF8">> {
-    // 去掉 UTF-8 BOM 再解码；round-trip 比对覆盖 BOM 之后的每个字节。
-    const payload = bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf ? bytes.subarray(3) : bytes;
-    const decoded = new TextDecoder("utf-8").decode(payload);
-    const roundTrip = new TextEncoder().encode(decoded);
-    let same = payload.length === roundTrip.length;
-    for (let i = 0; same && i < payload.length; i++) {
-      same = payload[i] === roundTrip[i];
-    }
-    if (!same) {
-      return Result.err(new AppError("VFS_ZIP_INVALID_UTF8", { detail: `ZIP entry "${entryName}" is not valid UTF-8 text (${bytes.byteLength} bytes)` }));
-    }
-    return Result.ok(decoded);
-  },
+    decodeUtf8Entry(bytes: Uint8Array, entryName: string): Result<string, AppError<"VFS_ZIP_INVALID_UTF8">> {
+        // 去掉 UTF-8 BOM 再解码；round-trip 比对覆盖 BOM 之后的每个字节。
+        const payload = bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf ? bytes.subarray(3) : bytes;
+        const decoded = new TextDecoder("utf-8").decode(payload);
+        const roundTrip = new TextEncoder().encode(decoded);
+        let same = payload.length === roundTrip.length;
+        for (let i = 0; same && i < payload.length; i++) {
+            same = payload[i] === roundTrip[i];
+        }
+        if (!same) {
+            return Result.err(new AppError("VFS_ZIP_INVALID_UTF8", { detail: `ZIP entry "${entryName}" is not valid UTF-8 text (${bytes.byteLength} bytes)` }));
+        }
+        return Result.ok(decoded);
+    },
 
-  assertEntryNameAllowed(entryName: string): VfsZipValidateError | null {
-    if (entryName.length === 0) {
-      return null;
-    }
-    if (entryName.length > VFS_ZIP_MAX_ENTRY_PATH_LEN) {
-      return new AppError("VFS_ZIP_PAYLOAD_TOO_LARGE", { detail: `ZIP entry path exceeds ${VFS_ZIP_MAX_ENTRY_PATH_LEN} characters: ${entryName}` });
-    }
-    if (entryName.includes("\\")) {
-      return new AppError("VFS_ZIP_INVALID_PATH", { detail: `backslash in ZIP entry: ${entryName}` });
-    }
-    if (entryName.includes("..")) {
-      return new AppError("VFS_ZIP_INVALID_PATH", { detail: `parent segment in ZIP entry: ${entryName}` });
-    }
-    if (WINDOWS_DRIVE_PATH.test(entryName)) {
-      return new AppError("VFS_ZIP_INVALID_PATH", { detail: `absolute Windows path in ZIP: ${entryName}` });
-    }
-    const lower = entryName.toLowerCase();
-    if (lower.startsWith("projects/") || lower.startsWith("/projects/")) {
-      return new AppError("VFS_ZIP_INVALID_PATH", { detail: `cross-domain path prefix in ZIP entry: ${entryName}` });
-    }
-    return null;
-  },
+    assertEntryNameAllowed(entryName: string): VfsZipValidateError | null {
+        if (entryName.length === 0) {
+            return null;
+        }
+        if (entryName.length > VFS_ZIP_MAX_ENTRY_PATH_LEN) {
+            return new AppError("VFS_ZIP_PAYLOAD_TOO_LARGE", { detail: `ZIP entry path exceeds ${VFS_ZIP_MAX_ENTRY_PATH_LEN} characters: ${entryName}` });
+        }
+        if (entryName.includes("\\")) {
+            return new AppError("VFS_ZIP_INVALID_PATH", { detail: `backslash in ZIP entry: ${entryName}` });
+        }
+        if (entryName.includes("..")) {
+            return new AppError("VFS_ZIP_INVALID_PATH", { detail: `parent segment in ZIP entry: ${entryName}` });
+        }
+        if (WINDOWS_DRIVE_PATH.test(entryName)) {
+            return new AppError("VFS_ZIP_INVALID_PATH", { detail: `absolute Windows path in ZIP: ${entryName}` });
+        }
+        const lower = entryName.toLowerCase();
+        if (lower.startsWith("projects/") || lower.startsWith("/projects/")) {
+            return new AppError("VFS_ZIP_INVALID_PATH", { detail: `cross-domain path prefix in ZIP entry: ${entryName}` });
+        }
+        return null;
+    },
 
-  assertLogicalAllowed(scope: VfsScope, logical: string, entryName: string): AppError<"VFS_ZIP_INVALID_PATH"> | null {
-    const allowed = LogicalPath.validate(scope, logical);
-    if (allowed.ok) return null;
-    return new AppError("VFS_ZIP_INVALID_PATH", { detail: `ZIP entry "${entryName}" → logical "${logical}": ${allowed.error.message}` });
-  },
+    assertLogicalAllowed(scope: VfsScope, logical: string, entryName: string): AppError<"VFS_ZIP_INVALID_PATH"> | null {
+        const allowed = LogicalPath.validate(scope, logical);
+        if (allowed.ok) return null;
+        return new AppError("VFS_ZIP_INVALID_PATH", { detail: `ZIP entry "${entryName}" → logical "${logical}": ${allowed.error.message}` });
+    },
 
-  /**
+    /**
    * Validates raw ZIP entries and returns files + explicit empty directories.
    * Does not touch the database.
    *
    * @param directoryPath - 导入目标目录（缺省 `/`）；entry 相对该目录。
    */
-  validateEntries(scope: VfsScope, entries: ReadonlyMap<string, Uint8Array>, directoryPath?: string): Result<VfsZipValidatedPayload, VfsZipValidateError> {
-    const dirResult = VfsZipPath.resolveDirectoryPath(directoryPath);
-    if (!dirResult.ok) return Result.err(dirResult.error);
-    const targetDir = dirResult.value;
-    const fileEntries: Array<{ entryName: string; bytes: Uint8Array }> = [];
-    const directoryEntries: string[] = [];
-    /** 用于「带域根前缀」判定的相对路径（已去 leading `/`、目录去 trailing `/`） */
-    const relativeNamesForPrefixCheck: string[] = [];
-    let totalBytes = 0;
+    validateEntries(scope: VfsScope, entries: ReadonlyMap<string, Uint8Array>, directoryPath?: string): Result<VfsZipValidatedPayload, VfsZipValidateError> {
+        const dirResult = VfsZipPath.resolveDirectoryPath(directoryPath);
+        if (!dirResult.ok) return Result.err(dirResult.error);
+        const targetDir = dirResult.value;
+        const fileEntries: Array<{ entryName: string; bytes: Uint8Array }> = [];
+        const directoryEntries: string[] = [];
+        /** 用于「带域根前缀」判定的相对路径（已去 leading `/`、目录去 trailing `/`） */
+        const relativeNamesForPrefixCheck: string[] = [];
+        let totalBytes = 0;
 
-    for (const [entryName, bytes] of entries) {
-      // macOS / archiver noise — skipped on import, not mapped to logical paths.
-      const lowerName = entryName.toLowerCase();
-      if (lowerName === "__macosx" || lowerName.startsWith("__macosx/") || lowerName === ".ds_store" || lowerName.endsWith("/.ds_store")) {
-        continue;
-      }
-      if (entryName.endsWith("/")) {
-        const dirKey = entryName.replace(/\/+$/, "");
-        const nameError = VfsZipValidate.assertEntryNameAllowed(dirKey);
-        if (nameError != null) return Result.err(nameError);
-        if (bytes.byteLength > 0) {
-          return Result.err(new AppError("VFS_ZIP_INVALID_ARCHIVE", { detail: `ZIP directory entry "${entryName}" must be empty (${bytes.byteLength} bytes)` }));
+        for (const [entryName, bytes] of entries) {
+            // macOS / archiver noise — skipped on import, not mapped to logical paths.
+            const lowerName = entryName.toLowerCase();
+            if (lowerName === "__macosx" || lowerName.startsWith("__macosx/") || lowerName === ".ds_store" || lowerName.endsWith("/.ds_store")) {
+                continue;
+            }
+            if (entryName.endsWith("/")) {
+                const dirKey = entryName.replace(/\/+$/, "");
+                const nameError = VfsZipValidate.assertEntryNameAllowed(dirKey);
+                if (nameError != null) return Result.err(nameError);
+                if (bytes.byteLength > 0) {
+                    return Result.err(new AppError("VFS_ZIP_INVALID_ARCHIVE", { detail: `ZIP directory entry "${entryName}" must be empty (${bytes.byteLength} bytes)` }));
+                }
+                if (dirKey.length > 0) {
+                    relativeNamesForPrefixCheck.push(dirKey);
+                }
+                directoryEntries.push(entryName);
+                continue;
+            }
+            if (entryName.length === 0) {
+                continue;
+            }
+            const nameError = VfsZipValidate.assertEntryNameAllowed(entryName);
+            if (nameError != null) return Result.err(nameError);
+            relativeNamesForPrefixCheck.push(entryName);
+            totalBytes += bytes.byteLength;
+            fileEntries.push({ entryName, bytes });
         }
-        if (dirKey.length > 0) {
-          relativeNamesForPrefixCheck.push(dirKey);
+
+        // WHY: 带目标目录名错误嵌套必须在任何写库前硬失败，且不剥前缀。
+        const prefixCheck = VfsZipPath.assertEntriesNotDomainRootPrefixed(targetDir, relativeNamesForPrefixCheck);
+        if (!prefixCheck.ok) return Result.err(prefixCheck.error);
+
+        const directoryLogicals: string[] = [];
+        for (const entryName of directoryEntries) {
+            const logical = VfsZipPath.logicalFromDirectoryEntryRelativeToDirectory(entryName, targetDir);
+            if (!logical.ok) return Result.err(logical.error);
+            const scopeError = VfsZipValidate.assertLogicalAllowed(scope, logical.value, entryName);
+            if (scopeError != null) return Result.err(scopeError);
+            if (!directoryLogicals.includes(logical.value)) {
+                directoryLogicals.push(logical.value);
+            }
         }
-        directoryEntries.push(entryName);
-        continue;
-      }
-      if (entryName.length === 0) {
-        continue;
-      }
-      const nameError = VfsZipValidate.assertEntryNameAllowed(entryName);
-      if (nameError != null) return Result.err(nameError);
-      relativeNamesForPrefixCheck.push(entryName);
-      totalBytes += bytes.byteLength;
-      fileEntries.push({ entryName, bytes });
-    }
 
-    // WHY: 带目标目录名错误嵌套必须在任何写库前硬失败，且不剥前缀。
-    const prefixCheck = VfsZipPath.assertEntriesNotDomainRootPrefixed(targetDir, relativeNamesForPrefixCheck);
-    if (!prefixCheck.ok) return Result.err(prefixCheck.error);
+        const entryCount = fileEntries.length + directoryLogicals.length;
+        if (entryCount > VFS_ZIP_MAX_ENTRY_COUNT) {
+            return Result.err(new AppError("VFS_ZIP_PAYLOAD_TOO_LARGE", { detail: `ZIP exceeds ${VFS_ZIP_MAX_ENTRY_COUNT} entries` }));
+        }
+        if (totalBytes > VFS_ZIP_MAX_UNCOMPRESSED_BYTES) {
+            return Result.err(new AppError("VFS_ZIP_PAYLOAD_TOO_LARGE", { detail: `ZIP uncompressed payload exceeds ${VFS_ZIP_MAX_UNCOMPRESSED_BYTES} bytes` }));
+        }
 
-    const directoryLogicals: string[] = [];
-    for (const entryName of directoryEntries) {
-      const logical = VfsZipPath.logicalFromDirectoryEntryRelativeToDirectory(entryName, targetDir);
-      if (!logical.ok) return Result.err(logical.error);
-      const scopeError = VfsZipValidate.assertLogicalAllowed(scope, logical.value, entryName);
-      if (scopeError != null) return Result.err(scopeError);
-      if (!directoryLogicals.includes(logical.value)) {
-        directoryLogicals.push(logical.value);
-      }
-    }
+        const files = new Map<string, string>();
+        for (const { entryName, bytes } of fileEntries) {
+            const logical = VfsZipPath.logicalFromEntryRelativeToDirectory(entryName, targetDir);
+            if (!logical.ok) return Result.err(logical.error);
+            if (files.has(logical.value) || directoryLogicals.includes(logical.value)) {
+                return Result.err(new AppError("VFS_ZIP_DUPLICATE_PATH", { detail: `duplicate logical path: ${logical.value}` }));
+            }
+            const scopeError = VfsZipValidate.assertLogicalAllowed(scope, logical.value, entryName);
+            if (scopeError != null) return Result.err(scopeError);
+            const content = VfsZipValidate.decodeUtf8Entry(bytes, entryName);
+            if (!content.ok) return Result.err(content.error);
+            files.set(logical.value, content.value);
+        }
 
-    const entryCount = fileEntries.length + directoryLogicals.length;
-    if (entryCount > VFS_ZIP_MAX_ENTRY_COUNT) {
-      return Result.err(new AppError("VFS_ZIP_PAYLOAD_TOO_LARGE", { detail: `ZIP exceeds ${VFS_ZIP_MAX_ENTRY_COUNT} entries` }));
-    }
-    if (totalBytes > VFS_ZIP_MAX_UNCOMPRESSED_BYTES) {
-      return Result.err(new AppError("VFS_ZIP_PAYLOAD_TOO_LARGE", { detail: `ZIP uncompressed payload exceeds ${VFS_ZIP_MAX_UNCOMPRESSED_BYTES} bytes` }));
-    }
+        directoryLogicals.sort((a, b) => a.length - b.length);
 
-    const files = new Map<string, string>();
-    for (const { entryName, bytes } of fileEntries) {
-      const logical = VfsZipPath.logicalFromEntryRelativeToDirectory(entryName, targetDir);
-      if (!logical.ok) return Result.err(logical.error);
-      if (files.has(logical.value) || directoryLogicals.includes(logical.value)) {
-        return Result.err(new AppError("VFS_ZIP_DUPLICATE_PATH", { detail: `duplicate logical path: ${logical.value}` }));
-      }
-      const scopeError = VfsZipValidate.assertLogicalAllowed(scope, logical.value, entryName);
-      if (scopeError != null) return Result.err(scopeError);
-      const content = VfsZipValidate.decodeUtf8Entry(bytes, entryName);
-      if (!content.ok) return Result.err(content.error);
-      files.set(logical.value, content.value);
-    }
-
-    directoryLogicals.sort((a, b) => a.length - b.length);
-
-    return Result.ok({ files, directories: directoryLogicals });
-  },
+        return Result.ok({ files, directories: directoryLogicals });
+    },
 } as const;

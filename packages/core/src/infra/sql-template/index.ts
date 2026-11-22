@@ -8,11 +8,11 @@
 export { SqlTemplateError } from "./errors.js";
 export type { SqlTemplateErrorCode } from "./errors.js";
 export type {
-  AstNode,
-  ForeachAttrs,
-  ParseOptions,
-  SqlParseResult,
-  TrimAttrs,
+    AstNode,
+    ForeachAttrs,
+    ParseOptions,
+    SqlParseResult,
+    TrimAttrs,
 } from "./types.js";
 export { SqlTemplateParse, TemplateParser } from "./parser.js";
 export { SqlTemplateExpression } from "./expression.js";
@@ -26,17 +26,17 @@ import type { ParseOptions, SqlParseResult } from "./types.js";
  * Parses MyBatis-style dynamic SQL templates into SQL and bound parameters.
  */
 export class SqlTemplateParser {
-  private readonly parser = new TemplateParser();
-  private readonly placeholder: string;
+    private readonly parser = new TemplateParser();
+    private readonly placeholder: string;
 
-  /**
+    /**
    * @param options - Optional placeholder character sequence for `#{...}` (default `?`).
    */
-  constructor(options?: ParseOptions) {
-    this.placeholder = options?.placeholder ?? "?";
-  }
+    constructor(options?: ParseOptions) {
+        this.placeholder = options?.placeholder ?? "?";
+    }
 
-  /**
+    /**
    * Parses `template` with `params` and returns final SQL plus ordered parameters.
    *
    * @param template - SQL template string with dynamic tags and `#{` / `${` placeholders.
@@ -47,9 +47,9 @@ export class SqlTemplateParser {
    * (for example fixed column names from an allow-list). Untrusted input in `${...}`
    * can cause SQL injection. Prefer `#{name}` for user-supplied values.
    */
-  parse(template: string, params: Record<string, unknown>): SqlParseResult {
-    const ast = this.parser.parse(template);
-    const evaluator = new TemplateEvaluator(this.placeholder);
-    return evaluator.evaluate(ast, params);
-  }
+    parse(template: string, params: Record<string, unknown>): SqlParseResult {
+        const ast = this.parser.parse(template);
+        const evaluator = new TemplateEvaluator(this.placeholder);
+        return evaluator.evaluate(ast, params);
+    }
 }

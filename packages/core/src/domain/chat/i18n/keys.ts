@@ -10,15 +10,15 @@
 import type { MessageDescriptor } from "@/common/i18n.js";
 
 export const CHAT_MESSAGE_KEYS = [
-  "chat.rollback.confirm.primary.undo_send",
-  "chat.rollback.confirm.primary.rewind",
-  "chat.rollback.confirm.degraded.undo_send",
-  "chat.rollback.confirm.degraded.rewind",
-  "chat.rollback.confirm.backfill",
-  "chat.rollback.confirm.backfill.file",
-  "chat.rollback.confirm.backfill.file.empty",
-  "chat.rollback.confirm.backfill.tail.undo_send",
-  "chat.rollback.confirm.backfill.tail.rewind",
+    "chat.rollback.confirm.primary.undo_send",
+    "chat.rollback.confirm.primary.rewind",
+    "chat.rollback.confirm.degraded.undo_send",
+    "chat.rollback.confirm.degraded.rewind",
+    "chat.rollback.confirm.backfill",
+    "chat.rollback.confirm.backfill.file",
+    "chat.rollback.confirm.backfill.file.empty",
+    "chat.rollback.confirm.backfill.tail.undo_send",
+    "chat.rollback.confirm.backfill.tail.rewind",
 ] as const;
 
 export type ChatMessageKey = (typeof CHAT_MESSAGE_KEYS)[number];

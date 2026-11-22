@@ -9,178 +9,178 @@ import {  LlmExport  } from "../../src/domain/prompt/logic/normalize-for-llm-exp
 import {  MessageBodyText  } from "../../src/domain/prompt/logic/message-body.js";
 
 function msg(
-  role: string,
-  text: string,
-  options?: {
-    readonly id?: string;
-    readonly raw?: Record<string, unknown> | null;
-    readonly blocks?: ChatMessageData["content"]["blocks"];
-  }
+    role: string,
+    text: string,
+    options?: {
+        readonly id?: string;
+        readonly raw?: Record<string, unknown> | null;
+        readonly blocks?: ChatMessageData["content"]["blocks"];
+    }
 ): ChatMessageData {
-  const blocks =
-    options?.blocks ?? (text === "" ? [] : [{ type: "text" as const, text }]);
-  return {
-    id: options?.id ?? `m-${role}`,
-    sessionId: "s1",
-    seq: 1,
-    role,
-    content: { blocks },
-    provider: null,
-    raw: options?.raw ?? null,
-    createdAtMs: 0,
-    hidden: false,
-  };
+    const blocks =
+        options?.blocks ?? (text === "" ? [] : [{ type: "text" as const, text }]);
+    return {
+        id: options?.id ?? `m-${role}`,
+        sessionId: "s1",
+        seq: 1,
+        role,
+        content: { blocks },
+        provider: null,
+        raw: options?.raw ?? null,
+        createdAtMs: 0,
+        hidden: false,
+    };
 }
 
 describe("LlmExport.normalize", () => {
-  it("persist 区内连续 user 纯文本 merge", () => {
-    const messages = [
-      msg("user", "a", { id: "p1" }),
-      msg("user", "b", { id: "p2" }),
-    ];
-    const out = LlmExport.normalize(messages, "anthropic", {
-      persistCount: 2,
-      dynamicCount: 0,
+    it("persist 区内连续 user 纯文本 merge", () => {
+        const messages = [
+            msg("user", "a", { id: "p1" }),
+            msg("user", "b", { id: "p2" }),
+        ];
+        const out = LlmExport.normalize(messages, "anthropic", {
+            persistCount: 2,
+            dynamicCount: 0,
+        });
+        assert.equal(out.length, 1);
+        assert.equal(MessageBodyText.fromBlocks(out[0]!.content.blocks), "a\n\nb");
+        assert.equal(out[0]!.id, "p1");
     });
-    assert.equal(out.length, 1);
-    assert.equal(MessageBodyText.fromBlocks(out[0]!.content.blocks), "a\n\nb");
-    assert.equal(out[0]!.id, "p1");
-  });
 
-  it("persist 与 chat 跨区不 merge", () => {
-    const messages = [
-      msg("user", "persist", { id: "p1" }),
-      msg("user", "chat", { id: "c1" }),
-    ];
-    const out = LlmExport.normalize(messages, "anthropic", {
-      persistCount: 1,
-      dynamicCount: 0,
+    it("persist 与 chat 跨区不 merge", () => {
+        const messages = [
+            msg("user", "persist", { id: "p1" }),
+            msg("user", "chat", { id: "c1" }),
+        ];
+        const out = LlmExport.normalize(messages, "anthropic", {
+            persistCount: 1,
+            dynamicCount: 0,
+        });
+        assert.equal(out.length, 2);
+        assert.equal(MessageBodyText.fromBlocks(out[0]!.content.blocks), "persist");
+        assert.equal(MessageBodyText.fromBlocks(out[1]!.content.blocks), "chat");
     });
-    assert.equal(out.length, 2);
-    assert.equal(MessageBodyText.fromBlocks(out[0]!.content.blocks), "persist");
-    assert.equal(MessageBodyText.fromBlocks(out[1]!.content.blocks), "chat");
-  });
 
-  it("vfs 段（metadata.kind）不与 plain chat merge", () => {
-    const vfsAction = msg(
-      "user",
-      '<action name="delete">\n{"path":"/x"}\n</action>',
-      {
-        id: "vfs1",
-        raw: { metadata: { kind: "user_vfs_action", source: "user" } },
-      },
-    );
-    const plain = msg("user", "hello", { id: "c1" });
-    const out = LlmExport.normalize([vfsAction, plain], "anthropic", {
-      persistCount: 0,
-      dynamicCount: 0,
+    it("vfs 段（metadata.kind）不与 plain chat merge", () => {
+        const vfsAction = msg(
+            "user",
+            '<action name="delete">\n{"path":"/x"}\n</action>',
+            {
+                id: "vfs1",
+                raw: { metadata: { kind: "user_vfs_action", source: "user" } },
+            },
+        );
+        const plain = msg("user", "hello", { id: "c1" });
+        const out = LlmExport.normalize([vfsAction, plain], "anthropic", {
+            persistCount: 0,
+            dynamicCount: 0,
+        });
+        assert.equal(out.length, 2);
     });
-    assert.equal(out.length, 2);
-  });
 
-  it("含 tool 块不 merge", () => {
-    const text = msg("user", "a", { id: "u1" });
-    const tool = msg("user", "", {
-      id: "u2",
-      blocks: [{ type: "tool_result", toolUseId: "tu_1", content: "ok" }],
+    it("含 tool 块不 merge", () => {
+        const text = msg("user", "a", { id: "u1" });
+        const tool = msg("user", "", {
+            id: "u2",
+            blocks: [{ type: "tool_result", toolUseId: "tu_1", content: "ok" }],
+        });
+        const out = LlmExport.normalize([text, tool], "anthropic", {
+            persistCount: 0,
+            dynamicCount: 0,
+        });
+        assert.equal(out.length, 2);
     });
-    const out = LlmExport.normalize([text, tool], "anthropic", {
-      persistCount: 0,
-      dynamicCount: 0,
-    });
-    assert.equal(out.length, 2);
-  });
 
-  it("UA 两条不拆分（条数保持）", () => {
-    const ua = [
-      msg(
-        "user",
-        '<system-message>\n<action name="delete">\n{"path":"/x"}\n</action>\n</system-message>',
-        {
-          id: "u1",
-          raw: { metadata: { kind: "user_vfs_action", source: "user" } },
-        },
-      ),
-      msg("assistant", "收到通知", {
-        id: "a1",
-        raw: { metadata: { kind: "user_vfs_ack", synthetic: true } },
-      }),
-    ];
-    const out = LlmExport.normalize(ua, "anthropic", {
-      persistCount: 0,
-      dynamicCount: 0,
+    it("UA 两条不拆分（条数保持）", () => {
+        const ua = [
+            msg(
+                "user",
+                '<system-message>\n<action name="delete">\n{"path":"/x"}\n</action>\n</system-message>',
+                {
+                    id: "u1",
+                    raw: { metadata: { kind: "user_vfs_action", source: "user" } },
+                },
+            ),
+            msg("assistant", "收到通知", {
+                id: "a1",
+                raw: { metadata: { kind: "user_vfs_ack", synthetic: true } },
+            }),
+        ];
+        const out = LlmExport.normalize(ua, "anthropic", {
+            persistCount: 0,
+            dynamicCount: 0,
+        });
+        assert.equal(out.length, 2);
     });
-    assert.equal(out.length, 2);
-  });
 
-  it("OpenAI 剔除空 tool_turn_bridge", () => {
-    const bridge = msg("assistant", "", {
-      id: "bridge",
-      raw: { metadata: { kind: "tool_turn_bridge", synthetic: true } },
+    it("OpenAI 剔除空 tool_turn_bridge", () => {
+        const bridge = msg("assistant", "", {
+            id: "bridge",
+            raw: { metadata: { kind: "tool_turn_bridge", synthetic: true } },
+        });
+        const chat = msg("user", "hi", { id: "c1" });
+        const out = LlmExport.normalize([chat, bridge], "openai", {
+            persistCount: 0,
+            dynamicCount: 0,
+        });
+        assert.equal(out.length, 1);
+        assert.equal(out[0]!.id, "c1");
     });
-    const chat = msg("user", "hi", { id: "c1" });
-    const out = LlmExport.normalize([chat, bridge], "openai", {
-      persistCount: 0,
-      dynamicCount: 0,
-    });
-    assert.equal(out.length, 1);
-    assert.equal(out[0]!.id, "c1");
-  });
 
-  it("T-WT9: worktree 双消息 persistCount=2 与 chat 跨区不 merge", () => {
-    const messages = [
-      msg("user", "tree", { id: "prompt:workplace" }),
-      msg("assistant", "【done】", {
-        id: "prompt:workplace:done",
-      }),
-      msg("user", "chat", { id: "c1" }),
-    ];
-    const out = LlmExport.normalize(messages, "anthropic", {
-      persistCount: 2,
-      dynamicCount: 0,
+    it("T-WT9: worktree 双消息 persistCount=2 与 chat 跨区不 merge", () => {
+        const messages = [
+            msg("user", "tree", { id: "prompt:workplace" }),
+            msg("assistant", "【done】", {
+                id: "prompt:workplace:done",
+            }),
+            msg("user", "chat", { id: "c1" }),
+        ];
+        const out = LlmExport.normalize(messages, "anthropic", {
+            persistCount: 2,
+            dynamicCount: 0,
+        });
+        assert.equal(out.length, 3);
+        assert.equal(MessageBodyText.fromBlocks(out[0]!.content.blocks), "tree");
+        assert.equal(MessageBodyText.fromBlocks(out[1]!.content.blocks), "【done】");
+        assert.equal(MessageBodyText.fromBlocks(out[2]!.content.blocks), "chat");
     });
-    assert.equal(out.length, 3);
-    assert.equal(MessageBodyText.fromBlocks(out[0]!.content.blocks), "tree");
-    assert.equal(MessageBodyText.fromBlocks(out[1]!.content.blocks), "【done】");
-    assert.equal(MessageBodyText.fromBlocks(out[2]!.content.blocks), "chat");
-  });
 
-  it("T-PR1: 已 wrap 的带 attachments user 不与相邻 plain user merge", () => {
-    const withAtt: ChatMessageData = {
-      ...msg("user", "<attachment>\n  <attach></attach>\n</attachment>\n<user-input>\nhi\n</user-input>", {
-        id: "u-att",
-      }),
-      attachments: [
-        {
-          name: "/a.md",
-          source: "attach",
-          type: "text",
-          content: null,
-          path: "/a.md",
-        },
-      ],
-    };
-    const plain = msg("user", "next", { id: "u-plain" });
-    const out = LlmExport.normalize([withAtt, plain], "anthropic", {
-      persistCount: 0,
-      dynamicCount: 0,
+    it("T-PR1: 已 wrap 的带 attachments user 不与相邻 plain user merge", () => {
+        const withAtt: ChatMessageData = {
+            ...msg("user", "<attachment>\n  <attach></attach>\n</attachment>\n<user-input>\nhi\n</user-input>", {
+                id: "u-att",
+            }),
+            attachments: [
+                {
+                    name: "/a.md",
+                    source: "attach",
+                    type: "text",
+                    content: null,
+                    path: "/a.md",
+                },
+            ],
+        };
+        const plain = msg("user", "next", { id: "u-plain" });
+        const out = LlmExport.normalize([withAtt, plain], "anthropic", {
+            persistCount: 0,
+            dynamicCount: 0,
+        });
+        assert.equal(out.length, 2);
+        assert.equal(out[0]!.id, "u-att");
+        assert.equal(out[1]!.id, "u-plain");
     });
-    assert.equal(out.length, 2);
-    assert.equal(out[0]!.id, "u-att");
-    assert.equal(out[1]!.id, "u-plain");
-  });
 
-  it("T-PR2: LlmExport.normalize 仍为 sync（无 Promise / 无 async）", () => {
-    const result = LlmExport.normalize(
-      [msg("user", "a"), msg("user", "b")],
-      "anthropic",
-    );
-    assert.equal(typeof (result as { then?: unknown }).then, "undefined");
-    assert.ok(Array.isArray(result));
-    assert.equal(
-      LlmExport.normalize.constructor.name,
-      "Function",
-      "须为普通 sync function，而非 AsyncFunction",
-    );
-  });
+    it("T-PR2: LlmExport.normalize 仍为 sync（无 Promise / 无 async）", () => {
+        const result = LlmExport.normalize(
+            [msg("user", "a"), msg("user", "b")],
+            "anthropic",
+        );
+        assert.equal(typeof (result as { then?: unknown }).then, "undefined");
+        assert.ok(Array.isArray(result));
+        assert.equal(
+            LlmExport.normalize.constructor.name,
+            "Function",
+            "须为普通 sync function，而非 AsyncFunction",
+        );
+    });
 });

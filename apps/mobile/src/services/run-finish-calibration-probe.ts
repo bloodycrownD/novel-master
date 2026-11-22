@@ -32,29 +32,29 @@ export const RUN_FINISH_CALIBRATION_INTERVAL_MS = 30_000;
 export const RUN_FINISH_CALIBRATION_RECONFIRM_DELAY_MS = 800;
 
 interface RunFinishCalibrationProbeParams {
-  /** 待校准的活跃会话列举（调用方过滤——manager 只给 runId 已回填的 running 单元）。 */
-  readonly activeSessionIds: () => readonly string[];
-  /** 查 core abortRegistry 是否仍注册了该会话的 in-flight run。 */
-  readonly isRunRegistered: (sessionId: string) => boolean;
-  /** 校准收尾：走与事件丢失的 FINISHED/FAILED 等效的收尾路径。 */
-  readonly onRunLost: (sessionId: string) => void;
-  /** 轮询周期（测试覆盖用；缺省 RUN_FINISH_CALIBRATION_INTERVAL_MS）。 */
-  readonly intervalMs?: number;
-  /** 复询防抖延迟（测试覆盖用；缺省 RUN_FINISH_CALIBRATION_RECONFIRM_DELAY_MS）。 */
-  readonly reconfirmDelayMs?: number;
+    /** 待校准的活跃会话列举（调用方过滤——manager 只给 runId 已回填的 running 单元）。 */
+    readonly activeSessionIds: () => readonly string[];
+    /** 查 core abortRegistry 是否仍注册了该会话的 in-flight run。 */
+    readonly isRunRegistered: (sessionId: string) => boolean;
+    /** 校准收尾：走与事件丢失的 FINISHED/FAILED 等效的收尾路径。 */
+    readonly onRunLost: (sessionId: string) => void;
+    /** 轮询周期（测试覆盖用；缺省 RUN_FINISH_CALIBRATION_INTERVAL_MS）。 */
+    readonly intervalMs?: number;
+    /** 复询防抖延迟（测试覆盖用；缺省 RUN_FINISH_CALIBRATION_RECONFIRM_DELAY_MS）。 */
+    readonly reconfirmDelayMs?: number;
 }
 
 export interface RunFinishCalibrationProbe {
-  /** 触发一次校准（轮询周期到 / 前台回焦等外部触发点共用）。 */
-  calibrate(): void;
-  /**
+    /** 触发一次校准（轮询周期到 / 前台回焦等外部触发点共用）。 */
+    calibrate(): void;
+    /**
    * 启停轮询（幂等）：存在待校准会话时开启、全部收尾后关闭——空闲期
    * 不留常驻 interval（测试/析构场景零残留）。手动 calibrate() 不受
    * 轮询开关影响。
    */
-  setPollingEnabled(enabled: boolean): void;
-  /** 全量清理：停轮询、清掉全部未决的复询定时器（之后不再触发 onRunLost）。 */
-  dispose(): void;
+    setPollingEnabled(enabled: boolean): void;
+    /** 全量清理：停轮询、清掉全部未决的复询定时器（之后不再触发 onRunLost）。 */
+    dispose(): void;
 }
 
 /**
@@ -63,64 +63,64 @@ export interface RunFinishCalibrationProbe {
  * 同一会话在复询未决期间不重复排入。
  */
 export namespace RunFinishCalibrationProbe {
-  /** 一轮校准：未注册的活跃会话排一次防抖复询，复询仍查无注册即走 onRunLost。 */
-  function runCalibration(params: RunFinishCalibrationProbeParams, reconfirmTimers: Map<string, ReturnType<typeof setTimeout>>, reconfirmDelayMs: number): void {
-    for (const sessionId of params.activeSessionIds()) {
-      if (params.isRunRegistered(sessionId)) {
-        continue;
-      }
-      // 第一次查到未注册：已排复询则等待，否则排入。
-      if (reconfirmTimers.has(sessionId)) {
-        continue;
-      }
-      const timer = setTimeout(() => {
-        reconfirmTimers.delete(sessionId);
-        // 复询仍要过活跃 + 注册两道关：期间 run 可能正常结束（事件路径
-        // 已收尾、activeSessionIds 不再包含）或 registry 已补注册。
-        if (!params.activeSessionIds().includes(sessionId)) {
-          return;
+    /** 一轮校准：未注册的活跃会话排一次防抖复询，复询仍查无注册即走 onRunLost。 */
+    function runCalibration(params: RunFinishCalibrationProbeParams, reconfirmTimers: Map<string, ReturnType<typeof setTimeout>>, reconfirmDelayMs: number): void {
+        for (const sessionId of params.activeSessionIds()) {
+            if (params.isRunRegistered(sessionId)) {
+                continue;
+            }
+            // 第一次查到未注册：已排复询则等待，否则排入。
+            if (reconfirmTimers.has(sessionId)) {
+                continue;
+            }
+            const timer = setTimeout(() => {
+                reconfirmTimers.delete(sessionId);
+                // 复询仍要过活跃 + 注册两道关：期间 run 可能正常结束（事件路径
+                // 已收尾、activeSessionIds 不再包含）或 registry 已补注册。
+                if (!params.activeSessionIds().includes(sessionId)) {
+                    return;
+                }
+                if (params.isRunRegistered(sessionId)) {
+                    return;
+                }
+                params.onRunLost(sessionId);
+            }, reconfirmDelayMs);
+            reconfirmTimers.set(sessionId, timer);
         }
-        if (params.isRunRegistered(sessionId)) {
-          return;
-        }
-        params.onRunLost(sessionId);
-      }, reconfirmDelayMs);
-      reconfirmTimers.set(sessionId, timer);
     }
-  }
 
-  /**
+    /**
    * 创建收尾校准探针。轮询 interval 惰性启停（setPollingEnabled）——
    * 无待校准会话时不占任何常驻定时器；per-session 复询定时器去重排程，
    * 同一会话在复询未决期间不重复排入。
    */
-  export function create(params: RunFinishCalibrationProbeParams): RunFinishCalibrationProbe {
-    const intervalMs = params.intervalMs ?? RUN_FINISH_CALIBRATION_INTERVAL_MS;
-    const reconfirmDelayMs = params.reconfirmDelayMs ?? RUN_FINISH_CALIBRATION_RECONFIRM_DELAY_MS;
-    /** per-session 复询定时器（未决期间防重复排程）。 */
-    const reconfirmTimers = new Map<string, ReturnType<typeof setTimeout>>();
-    let pollingInterval: ReturnType<typeof setInterval> | null = null;
+    export function create(params: RunFinishCalibrationProbeParams): RunFinishCalibrationProbe {
+        const intervalMs = params.intervalMs ?? RUN_FINISH_CALIBRATION_INTERVAL_MS;
+        const reconfirmDelayMs = params.reconfirmDelayMs ?? RUN_FINISH_CALIBRATION_RECONFIRM_DELAY_MS;
+        /** per-session 复询定时器（未决期间防重复排程）。 */
+        const reconfirmTimers = new Map<string, ReturnType<typeof setTimeout>>();
+        let pollingInterval: ReturnType<typeof setInterval> | null = null;
 
-    return {
-      calibrate: () => runCalibration(params, reconfirmTimers, reconfirmDelayMs),
-      setPollingEnabled(enabled: boolean): void {
-        if (enabled && pollingInterval == null) {
-          pollingInterval = setInterval(() => runCalibration(params, reconfirmTimers, reconfirmDelayMs), intervalMs);
-        } else if (!enabled && pollingInterval != null) {
-          clearInterval(pollingInterval);
-          pollingInterval = null;
-        }
-      },
-      dispose(): void {
-        if (pollingInterval != null) {
-          clearInterval(pollingInterval);
-          pollingInterval = null;
-        }
-        for (const timer of reconfirmTimers.values()) {
-          clearTimeout(timer);
-        }
-        reconfirmTimers.clear();
-      },
-    };
-  }
+        return {
+            calibrate: () => runCalibration(params, reconfirmTimers, reconfirmDelayMs),
+            setPollingEnabled(enabled: boolean): void {
+                if (enabled && pollingInterval == null) {
+                    pollingInterval = setInterval(() => runCalibration(params, reconfirmTimers, reconfirmDelayMs), intervalMs);
+                } else if (!enabled && pollingInterval != null) {
+                    clearInterval(pollingInterval);
+                    pollingInterval = null;
+                }
+            },
+            dispose(): void {
+                if (pollingInterval != null) {
+                    clearInterval(pollingInterval);
+                    pollingInterval = null;
+                }
+                for (const timer of reconfirmTimers.values()) {
+                    clearTimeout(timer);
+                }
+                reconfirmTimers.clear();
+            },
+        };
+    }
 }

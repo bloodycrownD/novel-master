@@ -5,22 +5,22 @@
 import { AttachmentXmlCodec, type MessageAttachment } from "@shared/logic/chat";
 import type { MessageAttachmentDto } from "@shared/ipc-types";
 import {
-  chatAnnotateDraftStore,
-  unionComposerStatusWithAnnotate,
+    chatAnnotateDraftStore,
+    unionComposerStatusWithAnnotate,
 } from "./chat-annotate-draft";
 
 type AttachmentDtos = readonly MessageAttachmentDto[];
 type MaybeAttachments = AttachmentDtos | null | undefined;
 
 function toMessageAttachment(a: MessageAttachmentDto): MessageAttachment {
-  return {
-    name: a.name,
-    source: a.source,
-    type: a.type,
-    content: a.content,
-    path: a.path,
-    action: a.action,
-  };
+    return {
+        name: a.name,
+        source: a.source,
+        type: a.type,
+        content: a.content,
+        path: a.path,
+        action: a.action,
+    };
 }
 
 /**
@@ -39,22 +39,22 @@ function toMessageAttachment(a: MessageAttachmentDto): MessageAttachment {
  * @param existingStatus main suggest 已推的状态条（Undo 时通常为空 ops）
  */
 export function applyUndoAnnotateRestore(sessionId: string, anchorRole: "user" | "assistant", attachments: MaybeAttachments, existingStatus: AttachmentDtos = []): MessageAttachmentDto[] {
-  if (anchorRole === "assistant") {
-    // 锚点为 assistant：清空 renderer 侧全部批注草稿，且没有附件可反投影。
-    chatAnnotateDraftStore.clear(sessionId);
-  } else {
-    // 锚点为 user：保留未发送草稿，仅把附件里的 annotate 反投影进来（新 mint id），
-    // 与未发送草稿并存——不清 store。
-    if (attachments != null && attachments.length > 0) {
-      const restored = AttachmentXmlCodec.decodeAnnotateDrafts(attachments.map(toMessageAttachment));
-      for (const draft of restored) {
-        chatAnnotateDraftStore.add(sessionId, draft);
-      }
+    if (anchorRole === "assistant") {
+        // 锚点为 assistant：清空 renderer 侧全部批注草稿，且没有附件可反投影。
+        chatAnnotateDraftStore.clear(sessionId);
+    } else {
+        // 锚点为 user：保留未发送草稿，仅把附件里的 annotate 反投影进来（新 mint id），
+        // 与未发送草稿并存——不清 store。
+        if (attachments != null && attachments.length > 0) {
+            const restored = AttachmentXmlCodec.decodeAnnotateDrafts(attachments.map(toMessageAttachment));
+            for (const draft of restored) {
+                chatAnnotateDraftStore.add(sessionId, draft);
+            }
+        }
     }
-  }
-  // Undo 时 main 已推空状态条；仅 ∪ annotate（D8）
-  const opsHalf = existingStatus.filter(
-    (a) => a.action !== "annotate",
-  );
-  return unionComposerStatusWithAnnotate(opsHalf, sessionId);
+    // Undo 时 main 已推空状态条；仅 ∪ annotate（D8）
+    const opsHalf = existingStatus.filter(
+        (a) => a.action !== "annotate",
+    );
+    return unionComposerStatusWithAnnotate(opsHalf, sessionId);
 }

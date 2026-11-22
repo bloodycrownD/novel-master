@@ -12,8 +12,8 @@ import { Result } from "@/errors/either.js";
 
 /** Depth interval parameters (at least one bound required). */
 export interface DepthSlice {
-  readonly startDepth?: number;
-  readonly endDepth?: number;
+    readonly startDepth?: number;
+    readonly endDepth?: number;
 }
 
 /** 本模块的领域失败：depth 区间不合法。 */
@@ -22,51 +22,51 @@ type DepthLogicError = AppError<"DEPTH_INVALID_SLICE">;
 const INFINITY = Number.POSITIVE_INFINITY;
 
 export const DepthSlice = {
-  /** True when depth falls inside the slice (inclusive bounds; missing bound = infinity). */
-  match(depth: number, slice: DepthSlice): boolean {
-    const start = slice.startDepth ?? 0;
-    const end = slice.endDepth ?? INFINITY;
-    if (slice.startDepth == null && slice.endDepth != null) {
-      return depth <= end;
-    }
-    if (slice.startDepth != null && slice.endDepth == null) {
-      return depth >= start;
-    }
-    return depth >= start && depth <= end;
-  },
+    /** True when depth falls inside the slice (inclusive bounds; missing bound = infinity). */
+    match(depth: number, slice: DepthSlice): boolean {
+        const start = slice.startDepth ?? 0;
+        const end = slice.endDepth ?? INFINITY;
+        if (slice.startDepth == null && slice.endDepth != null) {
+            return depth <= end;
+        }
+        if (slice.startDepth != null && slice.endDepth == null) {
+            return depth >= start;
+        }
+        return depth >= start && depth <= end;
+    },
 
-  /** Validates non-negative integers and start <= end when both set. */
-  validate(slice: DepthSlice): Result<void, DepthLogicError> {
-    const details = { startDepth: slice.startDepth, endDepth: slice.endDepth };
-    if (slice.startDepth == null && slice.endDepth == null) {
-      return Result.err(new AppError("DEPTH_INVALID_SLICE", { detail: "depth slice requires at least startDepth or endDepth", ...details }));
-    }
-    if (slice.startDepth != null && (!Number.isInteger(slice.startDepth) || slice.startDepth < 0)) {
-      return Result.err(new AppError("DEPTH_INVALID_SLICE", { detail: "startDepth must be a non-negative integer", ...details }));
-    }
-    if (slice.endDepth != null && (!Number.isInteger(slice.endDepth) || slice.endDepth < 0)) {
-      return Result.err(new AppError("DEPTH_INVALID_SLICE", { detail: "endDepth must be a non-negative integer", ...details }));
-    }
-    if (slice.startDepth != null && slice.endDepth != null && slice.startDepth > slice.endDepth) {
-      return Result.err(new AppError("DEPTH_INVALID_SLICE", { detail: "startDepth must be <= endDepth", ...details }));
-    }
-    return Result.ok(undefined);
-  },
+    /** Validates non-negative integers and start <= end when both set. */
+    validate(slice: DepthSlice): Result<void, DepthLogicError> {
+        const details = { startDepth: slice.startDepth, endDepth: slice.endDepth };
+        if (slice.startDepth == null && slice.endDepth == null) {
+            return Result.err(new AppError("DEPTH_INVALID_SLICE", { detail: "depth slice requires at least startDepth or endDepth", ...details }));
+        }
+        if (slice.startDepth != null && (!Number.isInteger(slice.startDepth) || slice.startDepth < 0)) {
+            return Result.err(new AppError("DEPTH_INVALID_SLICE", { detail: "startDepth must be a non-negative integer", ...details }));
+        }
+        if (slice.endDepth != null && (!Number.isInteger(slice.endDepth) || slice.endDepth < 0)) {
+            return Result.err(new AppError("DEPTH_INVALID_SLICE", { detail: "endDepth must be a non-negative integer", ...details }));
+        }
+        if (slice.startDepth != null && slice.endDepth != null && slice.startDepth > slice.endDepth) {
+            return Result.err(new AppError("DEPTH_INVALID_SLICE", { detail: "startDepth must be <= endDepth", ...details }));
+        }
+        return Result.ok(undefined);
+    },
 
-  /** Message ids whose tail depth matches the slice; invalid slice → `Err`. */
-  messageIds(visibleMessages: readonly { readonly id: string }[], slice: DepthSlice): Result<string[], DepthLogicError> {
-    const validated = DepthSlice.validate(slice);
-    if (!validated.ok) {
-      return Result.err(validated.error);
-    }
-    const n = visibleMessages.length;
-    const ids: string[] = [];
-    for (let i = 0; i < n; i++) {
-      const depth = n - 1 - i;
-      if (DepthSlice.match(depth, slice)) {
-        ids.push(visibleMessages[i]!.id);
-      }
-    }
-    return Result.ok(ids);
-  },
+    /** Message ids whose tail depth matches the slice; invalid slice → `Err`. */
+    messageIds(visibleMessages: readonly { readonly id: string }[], slice: DepthSlice): Result<string[], DepthLogicError> {
+        const validated = DepthSlice.validate(slice);
+        if (!validated.ok) {
+            return Result.err(validated.error);
+        }
+        const n = visibleMessages.length;
+        const ids: string[] = [];
+        for (let i = 0; i < n; i++) {
+            const depth = n - 1 - i;
+            if (DepthSlice.match(depth, slice)) {
+                ids.push(visibleMessages[i]!.id);
+            }
+        }
+        return Result.ok(ids);
+    },
 } as const;

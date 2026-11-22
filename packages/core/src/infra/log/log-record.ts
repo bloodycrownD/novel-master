@@ -15,18 +15,18 @@ export type LogDetail = Readonly<Record<string, unknown>>;
 
 /** 一条日志记录（emit 出口的统一形态）。 */
 export interface LogRecord {
-  /** epoch ms。 */
-  readonly ts: number;
-  readonly level: LogLevel;
-  /** `"agent.runner"` / `"vfs.zip-io"` 这类点分段标识。 */
-  readonly scope: string;
-  /** 已截断（500 字符）。 */
-  readonly message: string;
-  /** 已脱敏（key 黑名单 + 正文摘要 + 三重截断）。 */
-  readonly detail?: LogDetail;
+    /** epoch ms。 */
+    readonly ts: number;
+    readonly level: LogLevel;
+    /** `"agent.runner"` / `"vfs.zip-io"` 这类点分段标识。 */
+    readonly scope: string;
+    /** 已截断（500 字符）。 */
+    readonly message: string;
+    /** 已脱敏（key 黑名单 + 正文摘要 + 三重截断）。 */
+    readonly detail?: LogDetail;
 }
 
 /** 落盘/转发端口的唯一约定：write 不得抛。 */
 export interface LogSink {
-  write(record: LogRecord): void;
+    write(record: LogRecord): void;
 }

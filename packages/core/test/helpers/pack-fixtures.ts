@@ -13,8 +13,8 @@ import {  Result  } from "../../src/errors/either.js";
 
 /** 编码产物：pack 流字节 + 各成员区间（pack 为明文切片区间；fossil 为段区间）。 */
 export interface VfsPackEncodeResult {
-  readonly bytes: Uint8Array;
-  readonly spans: ReadonlyArray<VfsPackSpan>;
+    readonly bytes: Uint8Array;
+    readonly spans: ReadonlyArray<VfsPackSpan>;
 }
 
 type VfsContentError = AppError<"VFS_CONTENT_CORRUPT">;
@@ -27,18 +27,18 @@ type VfsContentError = AppError<"VFS_CONTENT_CORRUPT">;
  * @returns 流字节 + 各成员在解压后明文里的切片区间；空组成员返回 `VFS_CONTENT_CORRUPT`
  */
 export function encodeZlibConcatPack(memberPlains: ReadonlyArray<Uint8Array>): Result<VfsPackEncodeResult, VfsContentError> {
-  if (memberPlains.length === 0) {
-    return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: "zlib-concat-v1 组至少需要 1 个成员", format: VFS_PACK_FORMAT_ZLIB_CONCAT_V1, memberCount: 0 }));
-  }
-  // 拼接顺序即成员顺序，区间 offset 按各成员明文长顺序累计。
-  const concat = concatBytes(memberPlains);
-  const spans: Array<{ offset: number; length: number }> = [];
-  let cursor = 0;
-  for (const plain of memberPlains) {
-    spans.push({ offset: cursor, length: plain.byteLength });
-    cursor += plain.byteLength;
-  }
-  return Result.ok({ bytes: ZlibCodec.compress(concat), spans });
+    if (memberPlains.length === 0) {
+        return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: "zlib-concat-v1 组至少需要 1 个成员", format: VFS_PACK_FORMAT_ZLIB_CONCAT_V1, memberCount: 0 }));
+    }
+    // 拼接顺序即成员顺序，区间 offset 按各成员明文长顺序累计。
+    const concat = concatBytes(memberPlains);
+    const spans: Array<{ offset: number; length: number }> = [];
+    let cursor = 0;
+    for (const plain of memberPlains) {
+        spans.push({ offset: cursor, length: plain.byteLength });
+        cursor += plain.byteLength;
+    }
+    return Result.ok({ bytes: ZlibCodec.compress(concat), spans });
 }
 
 /**
@@ -49,38 +49,38 @@ export function encodeZlibConcatPack(memberPlains: ReadonlyArray<Uint8Array>): R
  *   空组成员返回 `VFS_CONTENT_CORRUPT`
  */
 export function encodeFossilChainPack(memberPlains: ReadonlyArray<Uint8Array>): Result<VfsPackEncodeResult, VfsContentError> {
-  if (memberPlains.length === 0) {
-    return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: "fossil-chain-v1 组至少需要 1 个成员", format: VFS_PACK_FORMAT_FOSSIL_CHAIN_V1, memberCount: 0 }));
-  }
-  const segmentBytes = memberPlains.map((plain, index) => (index === 0 ? ZlibCodec.compress(plain) : ZlibCodec.compress(createDelta(memberPlains[index - 1]!, plain))));
-  const header = new Uint8Array(4 + 4 * segmentBytes.length);
-  const headerView = new DataView(header.buffer);
-  headerView.setUint32(0, segmentBytes.length, true);
-  const parts: Uint8Array[] = [header];
-  segmentBytes.forEach((segment, index) => {
-    headerView.setUint32(4 + 4 * index, segment.byteLength, true);
-    parts.push(segment);
-  });
-  const bytes = concatBytes(parts);
-  const spans: VfsPackSpan[] = [];
-  let cursor = header.byteLength;
-  for (const segment of segmentBytes) {
-    spans.push({ offset: cursor, length: segment.byteLength });
-    cursor += segment.byteLength;
-  }
-  return Result.ok({ bytes, spans });
+    if (memberPlains.length === 0) {
+        return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: "fossil-chain-v1 组至少需要 1 个成员", format: VFS_PACK_FORMAT_FOSSIL_CHAIN_V1, memberCount: 0 }));
+    }
+    const segmentBytes = memberPlains.map((plain, index) => (index === 0 ? ZlibCodec.compress(plain) : ZlibCodec.compress(createDelta(memberPlains[index - 1]!, plain))));
+    const header = new Uint8Array(4 + 4 * segmentBytes.length);
+    const headerView = new DataView(header.buffer);
+    headerView.setUint32(0, segmentBytes.length, true);
+    const parts: Uint8Array[] = [header];
+    segmentBytes.forEach((segment, index) => {
+        headerView.setUint32(4 + 4 * index, segment.byteLength, true);
+        parts.push(segment);
+    });
+    const bytes = concatBytes(parts);
+    const spans: VfsPackSpan[] = [];
+    let cursor = header.byteLength;
+    for (const segment of segmentBytes) {
+        spans.push({ offset: cursor, length: segment.byteLength });
+        cursor += segment.byteLength;
+    }
+    return Result.ok({ bytes, spans });
 }
 
 function concatBytes(parts: ReadonlyArray<Uint8Array>): Uint8Array {
-  let total = 0;
-  for (const part of parts) {
-    total += part.byteLength;
-  }
-  const out = new Uint8Array(total);
-  let cursor = 0;
-  for (const part of parts) {
-    out.set(part, cursor);
-    cursor += part.byteLength;
-  }
-  return out;
+    let total = 0;
+    for (const part of parts) {
+        total += part.byteLength;
+    }
+    const out = new Uint8Array(total);
+    let cursor = 0;
+    for (const part of parts) {
+        out.set(part, cursor);
+        cursor += part.byteLength;
+    }
+    return out;
 }

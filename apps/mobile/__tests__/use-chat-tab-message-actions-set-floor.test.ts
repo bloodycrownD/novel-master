@@ -16,118 +16,118 @@ const mockRefreshChatTokenLabel = jest.fn();
 const mockShowToast = jest.fn();
 
 jest.mock('@react-native-clipboard/clipboard', () => ({
-  __esModule: true,
-  default: {setString: jest.fn()},
+    __esModule: true,
+    default: {setString: jest.fn()},
 }));
 
 jest.mock('@/services/project-composer-status.service', () => {
-  const legacy = {
-  refreshComposerStatusAfterFloorOrCompaction: jest.fn(async () => undefined),
-  refreshComposerStatusAfterSessionKkvCleared: jest.fn(async () => undefined),
+    const legacy = {
+    refreshComposerStatusAfterFloorOrCompaction: jest.fn(async () => undefined),
+    refreshComposerStatusAfterSessionKkvCleared: jest.fn(async () => undefined),
 };
-  return {...legacy, ProjectComposerStatusService: {refreshAfterFloorOrCompaction: legacy.refreshComposerStatusAfterFloorOrCompaction, refreshAfterSessionKkvCleared: legacy.refreshComposerStatusAfterSessionKkvCleared}};
+    return {...legacy, ProjectComposerStatusService: {refreshAfterFloorOrCompaction: legacy.refreshComposerStatusAfterFloorOrCompaction, refreshAfterSessionKkvCleared: legacy.refreshComposerStatusAfterSessionKkvCleared}};
 });
 
 jest.mock('@/services/message-rollback.service', () => {
-  const legacy = {
-  rollbackToMessage: jest.fn(),
+    const legacy = {
+    rollbackToMessage: jest.fn(),
 };
-  return {...legacy, MessageRollbackService: {rollback: legacy.rollbackToMessage}};
+    return {...legacy, MessageRollbackService: {rollback: legacy.rollbackToMessage}};
 });
 
 jest.mock('react-native', () => ({
-  Alert: {
-    alert: jest.fn(
-      (
-        _title: string,
-        _message: string,
-        buttons: {text: string; onPress?: () => void}[],
-      ) => {
-        buttons.find(b => b.text === '置位')?.onPress?.();
-      },
-    ),
-  },
+    Alert: {
+        alert: jest.fn(
+            (
+                _title: string,
+                _message: string,
+                buttons: {text: string; onPress?: () => void}[],
+            ) => {
+                buttons.find(b => b.text === '置位')?.onPress?.();
+            },
+        ),
+    },
 }));
 
 const mockRuntime = {
-  messageTranscriptEffects: {
-    setMessageFloorAtMessage: mockSetMessageFloorAtMessage,
-  },
+    messageTranscriptEffects: {
+        setMessageFloorAtMessage: mockSetMessageFloorAtMessage,
+    },
 };
 
 function mountActions() {
-  let api: ReturnType<typeof useChatTabMessageActions> | undefined;
-  function Harness() {
-    api = useChatTabMessageActions({
-      runtime: mockRuntime as any,
-      projectId: 'p1',
-      sessionId: 's1',
-      chatMessages: [],
-      reloadMessages: mockReloadMessages,
-      setDraftRestoreToken: jest.fn(),
-      agentRunning: false,
-      resetStreamingDisplay: jest.fn(),
-      showToast: mockShowToast,
-      refreshChatTokenLabel: mockRefreshChatTokenLabel,
-      bumpWorktreeUiToken: mockBumpWorktreeUiToken,
-      reloadLists: jest.fn(),
-      setCurrentSession: jest.fn(),
-      setChatSubview: jest.fn(),
-      setConversationPanel: jest.fn(),
-      setMessageEditPrompt: jest.fn(),
+    let api: ReturnType<typeof useChatTabMessageActions> | undefined;
+    function Harness() {
+        api = useChatTabMessageActions({
+            runtime: mockRuntime as any,
+            projectId: 'p1',
+            sessionId: 's1',
+            chatMessages: [],
+            reloadMessages: mockReloadMessages,
+            setDraftRestoreToken: jest.fn(),
+            agentRunning: false,
+            resetStreamingDisplay: jest.fn(),
+            showToast: mockShowToast,
+            refreshChatTokenLabel: mockRefreshChatTokenLabel,
+            bumpWorktreeUiToken: mockBumpWorktreeUiToken,
+            reloadLists: jest.fn(),
+            setCurrentSession: jest.fn(),
+            setChatSubview: jest.fn(),
+            setConversationPanel: jest.fn(),
+            setMessageEditPrompt: jest.fn(),
+        });
+        return null;
+    }
+    act(() => {
+        TestRenderer.create(React.createElement(Harness));
     });
-    return null;
-  }
-  act(() => {
-    TestRenderer.create(React.createElement(Harness));
-  });
-  return api!;
+    return api!;
 }
 
 const sampleMessage = (): ChatMessageData => ({
-  id: 'm1',
-  sessionId: 's1',
-  seq: 2,
-  role: 'user',
-  content: {blocks: [{type: 'text', text: 'hi'}]},
-  provider: null,
-  raw: null,
-  createdAtMs: 1,
-  hidden: false,
+    id: 'm1',
+    sessionId: 's1',
+    seq: 2,
+    role: 'user',
+    content: {blocks: [{type: 'text', text: 'hi'}]},
+    provider: null,
+    raw: null,
+    createdAtMs: 1,
+    hidden: false,
 });
 
 describe('useChatTabMessageActions set-floor', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    // 错误通道迁移二期后走 Result（hook 侧 `!ok` 即 throw）。
-    mockSetMessageFloorAtMessage.mockResolvedValue({
-      ok: true,
-      value: {hiddenCount: 1, shownCount: 1},
-    });
-    mockReloadMessages.mockResolvedValue(undefined);
-    mockRefreshChatTokenLabel.mockResolvedValue(undefined);
-  });
-
-  it('T-SF1: runSetFloor 链 setMessageFloor → reload → bump（kkv 由 Core clearDomain）', async () => {
-    const api = mountActions();
-
-    await act(async () => {
-      api.handleMessageMenuAction(sampleMessage(), 'set-floor');
-      await Promise.resolve();
-      await Promise.resolve();
+    beforeEach(() => {
+        jest.clearAllMocks();
+        // 错误通道迁移二期后走 Result（hook 侧 `!ok` 即 throw）。
+        mockSetMessageFloorAtMessage.mockResolvedValue({
+            ok: true,
+            value: {hiddenCount: 1, shownCount: 1},
+        });
+        mockReloadMessages.mockResolvedValue(undefined);
+        mockRefreshChatTokenLabel.mockResolvedValue(undefined);
     });
 
-    expect(mockSetMessageFloorAtMessage).toHaveBeenCalledWith('p1', 's1', 'm1');
-    expect(mockReloadMessages).toHaveBeenCalledWith(true);
-    expect(mockBumpWorktreeUiToken).toHaveBeenCalled();
-    expect(mockShowToast).toHaveBeenCalledWith('已置位');
+    it('T-SF1: runSetFloor 链 setMessageFloor → reload → bump（kkv 由 Core clearDomain）', async () => {
+        const api = mountActions();
 
-    const order = [
-      mockSetMessageFloorAtMessage.mock.invocationCallOrder[0],
-      mockReloadMessages.mock.invocationCallOrder[0],
-      mockBumpWorktreeUiToken.mock.invocationCallOrder[0],
-    ];
-    expect(order[0]).toBeLessThan(order[1]!);
-    expect(order[1]).toBeLessThan(order[2]!);
-  });
+        await act(async () => {
+            api.handleMessageMenuAction(sampleMessage(), 'set-floor');
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+
+        expect(mockSetMessageFloorAtMessage).toHaveBeenCalledWith('p1', 's1', 'm1');
+        expect(mockReloadMessages).toHaveBeenCalledWith(true);
+        expect(mockBumpWorktreeUiToken).toHaveBeenCalled();
+        expect(mockShowToast).toHaveBeenCalledWith('已置位');
+
+        const order = [
+            mockSetMessageFloorAtMessage.mock.invocationCallOrder[0],
+            mockReloadMessages.mock.invocationCallOrder[0],
+            mockBumpWorktreeUiToken.mock.invocationCallOrder[0],
+        ];
+        expect(order[0]).toBeLessThan(order[1]!);
+        expect(order[1]).toBeLessThan(order[2]!);
+    });
 });

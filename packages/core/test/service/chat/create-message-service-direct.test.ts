@@ -19,25 +19,25 @@ let projectCtorCalls = 0;
 let sessionCtorCalls = 0;
 
 mock.module("../../../src/service/chat/impl/project.service.js", {
-  namedExports: {
-    DefaultProjectService: class {
-      constructor() {
-        projectCtorCalls += 1;
-        throw new Error("DefaultProjectService 不应被 ChatServiceFactory.createMessage 构造");
-      }
+    namedExports: {
+        DefaultProjectService: class {
+            constructor() {
+                projectCtorCalls += 1;
+                throw new Error("DefaultProjectService 不应被 ChatServiceFactory.createMessage 构造");
+            }
+        },
     },
-  },
 });
 
 mock.module("../../../src/service/chat/impl/session.service.js", {
-  namedExports: {
-    DefaultSessionService: class {
-      constructor() {
-        sessionCtorCalls += 1;
-        throw new Error("DefaultSessionService 不应被 ChatServiceFactory.createMessage 构造");
-      }
+    namedExports: {
+        DefaultSessionService: class {
+            constructor() {
+                sessionCtorCalls += 1;
+                throw new Error("DefaultSessionService 不应被 ChatServiceFactory.createMessage 构造");
+            }
+        },
     },
-  },
 });
 
 const { ChatServiceFactory } = await import("../../../src/service/chat/chat-service-factory.js");
@@ -45,10 +45,10 @@ const { ChatServiceFactory } = await import("../../../src/service/chat/chat-serv
 const { DefaultMessageService } = await import("../../../src/service/chat/impl/message.service.js");
 
 describe("ChatServiceFactory.createMessage 直构（不经 bundle）", () => {
-  it("返回 DefaultMessageService 实例，且全程不构造 Project/Session service", () => {
-    const svc = ChatServiceFactory.createMessage({} as TdbcConnection);
-    assert.ok(svc instanceof DefaultMessageService, "应直接构造 DefaultMessageService");
-    assert.equal(projectCtorCalls, 0, "DefaultProjectService 构造计数应为 0");
-    assert.equal(sessionCtorCalls, 0, "DefaultSessionService 构造计数应为 0");
-  });
+    it("返回 DefaultMessageService 实例，且全程不构造 Project/Session service", () => {
+        const svc = ChatServiceFactory.createMessage({} as TdbcConnection);
+        assert.ok(svc instanceof DefaultMessageService, "应直接构造 DefaultMessageService");
+        assert.equal(projectCtorCalls, 0, "DefaultProjectService 构造计数应为 0");
+        assert.equal(sessionCtorCalls, 0, "DefaultSessionService 构造计数应为 0");
+    });
 });

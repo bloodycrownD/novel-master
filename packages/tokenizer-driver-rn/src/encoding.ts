@@ -10,7 +10,7 @@
  */
 
 export {
-  EncodingCache,
-  type RnEncodingName,
-  type RnTokenEncoding,
+    EncodingCache,
+    type RnEncodingName,
+    type RnTokenEncoding,
 } from "./impl/encoding-cache.js";

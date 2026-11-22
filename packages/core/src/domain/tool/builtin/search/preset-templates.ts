@@ -28,81 +28,81 @@ import type { SearchEngineTemplate } from "./types.js";
 
 /** 出厂预置模板（键即引擎 id；对象顺序即出厂序，DDG 另在 meta 中、恒排其后）。 */
 export const PRESET_ENGINE_TEMPLATES = {
-  bocha: {
-    name: "博查搜索",
-    method: "POST",
-    url: "https://api.bochaai.com/v1/web-search",
-    headers: {
-      Authorization: "Bearer {{apiKey}}",
-      "Content-Type": "application/json",
-      Accept: "application/json",
+    bocha: {
+        name: "博查搜索",
+        method: "POST",
+        url: "https://api.bochaai.com/v1/web-search",
+        headers: {
+            Authorization: "Bearer {{apiKey}}",
+            "Content-Type": "application/json",
+            Accept: "application/json",
+        },
+        defaultBody: '{"query":"{{query}}","count":"{{count}}","summary":true}',
+        paramHint:
+            '博查（POST）：搜索词字段 query（必传，字符串）；可选 count（1..50）、freshness（noLimit/oneDay/oneWeek/oneMonth/oneYear，或日期区间 2024-01-01..2024-12-31）、summary（true 返回摘要）、include/exclude（域名列表）。示例 {"query":"国产大模型","count":10,"freshness":"oneWeek"}',
     },
-    defaultBody: '{"query":"{{query}}","count":"{{count}}","summary":true}',
-    paramHint:
-      '博查（POST）：搜索词字段 query（必传，字符串）；可选 count（1..50）、freshness（noLimit/oneDay/oneWeek/oneMonth/oneYear，或日期区间 2024-01-01..2024-12-31）、summary（true 返回摘要）、include/exclude（域名列表）。示例 {"query":"国产大模型","count":10,"freshness":"oneWeek"}',
-  },
-  tavily: {
-    name: "Tavily 搜索",
-    method: "POST",
-    url: "https://api.tavily.com/search",
-    headers: {
-      Authorization: "Bearer {{apiKey}}",
-      "Content-Type": "application/json",
-      Accept: "application/json",
+    tavily: {
+        name: "Tavily 搜索",
+        method: "POST",
+        url: "https://api.tavily.com/search",
+        headers: {
+            Authorization: "Bearer {{apiKey}}",
+            "Content-Type": "application/json",
+            Accept: "application/json",
+        },
+        defaultBody: '{"query":"{{query}}","search_depth":"basic","max_results":"{{count}}","include_answer":"basic","include_raw_content":false}',
+        paramHint:
+            'Tavily（POST）：搜索词字段 query（必传）；可选 max_results（1..20）、search_depth（basic/advanced）、time_range（day/week/month/year）、include_domains / exclude_domains（字符串数组）、include_answer（bool）、include_raw_content（bool）。示例 {"query":"quantum computing","max_results":8,"search_depth":"advanced"}',
     },
-    defaultBody: '{"query":"{{query}}","search_depth":"basic","max_results":"{{count}}","include_answer":"basic","include_raw_content":false}',
-    paramHint:
-      'Tavily（POST）：搜索词字段 query（必传）；可选 max_results（1..20）、search_depth（basic/advanced）、time_range（day/week/month/year）、include_domains / exclude_domains（字符串数组）、include_answer（bool）、include_raw_content（bool）。示例 {"query":"quantum computing","max_results":8,"search_depth":"advanced"}',
-  },
-  brave: {
-    name: "Brave 搜索",
-    method: "GET",
-    url: "https://api.search.brave.com/res/v1/web/search",
-    headers: {
-      "X-Subscription-Token": "{{apiKey}}",
-      Accept: "application/json",
+    brave: {
+        name: "Brave 搜索",
+        method: "GET",
+        url: "https://api.search.brave.com/res/v1/web/search",
+        headers: {
+            "X-Subscription-Token": "{{apiKey}}",
+            Accept: "application/json",
+        },
+        paramHint:
+            'Brave（GET）：搜索词字段 q（必传）；可选 count（1..20）、freshness（pd/pw/pm/py = 日/周/月/年）、safesearch（off/moderate/strict）、extra_snippets（bool）、country（如 CN）、search_lang（如 zh-hans）。示例 {"q":"低代码平台","count":10,"freshness":"pw"}',
     },
-    paramHint:
-      'Brave（GET）：搜索词字段 q（必传）；可选 count（1..20）、freshness（pd/pw/pm/py = 日/周/月/年）、safesearch（off/moderate/strict）、extra_snippets（bool）、country（如 CN）、search_lang（如 zh-hans）。示例 {"q":"低代码平台","count":10,"freshness":"pw"}',
-  },
-  searxng: {
-    name: "SearXNG",
-    method: "GET",
-    url: "https://searx.example.com/search?format=json",
-    headers: { Accept: "application/json" },
-    paramHint:
-      'SearXNG（GET）：先把请求 URL 改成你自己的实例地址（保留 ?format=json）。搜索词字段 q（必传）；可选 language（zh-CN / en 等）、time_range（day/month/year）、safesearch（0/1/2）、categories（general/news/it/science 等）、pageno（页码）。示例 {"q":"rust 异步","language":"zh-CN","categories":"general"}',
-  },
-  deepseek: {
-    name: "DeepSeek 搜索",
-    method: "POST",
-    url: "https://api.deepseek.com/v1/tools/search",
-    headers: {
-      Authorization: "Bearer {{apiKey}}",
-      "Content-Type": "application/json",
-      Accept: "application/json",
+    searxng: {
+        name: "SearXNG",
+        method: "GET",
+        url: "https://searx.example.com/search?format=json",
+        headers: { Accept: "application/json" },
+        paramHint:
+            'SearXNG（GET）：先把请求 URL 改成你自己的实例地址（保留 ?format=json）。搜索词字段 q（必传）；可选 language（zh-CN / en 等）、time_range（day/month/year）、safesearch（0/1/2）、categories（general/news/it/science 等）、pageno（页码）。示例 {"q":"rust 异步","language":"zh-CN","categories":"general"}',
     },
-    defaultBody: '{"query":"{{query}}","count":"{{count}}"}',
-    paramHint:
-      'DeepSeek（POST）：搜索词字段 query（必传，支持 site:… / -site:… / "短语" / lang:… / after:… / before:… 检索语法）；可选 count（1..50）、need_content（bool）、ori_question、localization。示例 {"query":"site:github.com rust async runtime","count":10,"need_content":true}',
-  },
-  zhipu: {
-    name: "智谱搜索",
-    method: "POST",
-    url: "https://open.bigmodel.cn/api/paas/v4/web_search",
-    headers: {
-      Authorization: "Bearer {{apiKey}}",
-      "Content-Type": "application/json",
-      Accept: "application/json",
+    deepseek: {
+        name: "DeepSeek 搜索",
+        method: "POST",
+        url: "https://api.deepseek.com/v1/tools/search",
+        headers: {
+            Authorization: "Bearer {{apiKey}}",
+            "Content-Type": "application/json",
+            Accept: "application/json",
+        },
+        defaultBody: '{"query":"{{query}}","count":"{{count}}"}',
+        paramHint:
+            'DeepSeek（POST）：搜索词字段 query（必传，支持 site:… / -site:… / "短语" / lang:… / after:… / before:… 检索语法）；可选 count（1..50）、need_content（bool）、ori_question、localization。示例 {"query":"site:github.com rust async runtime","count":10,"need_content":true}',
     },
-    defaultBody: '{"search_query":"{{query}}","search_engine":"search_std","search_intent":false,"count":"{{count}}"}',
-    paramHint:
-      '智谱（POST）：搜索词字段 search_query（必传）；可选 count（1..50）、search_engine（search_std/search_pro 等）、search_intent（bool）、content_size（medium/high）、search_recency_filter（oneDay/oneWeek/oneMonth/oneYear）、search_domain_filter（域名）。示例 {"search_query":"2024 新能源车销量","count":10,"search_engine":"search_std"}',
-  },
+    zhipu: {
+        name: "智谱搜索",
+        method: "POST",
+        url: "https://open.bigmodel.cn/api/paas/v4/web_search",
+        headers: {
+            Authorization: "Bearer {{apiKey}}",
+            "Content-Type": "application/json",
+            Accept: "application/json",
+        },
+        defaultBody: '{"search_query":"{{query}}","search_engine":"search_std","search_intent":false,"count":"{{count}}"}',
+        paramHint:
+            '智谱（POST）：搜索词字段 search_query（必传）；可选 count（1..50）、search_engine（search_std/search_pro 等）、search_intent（bool）、content_size（medium/high）、search_recency_filter（oneDay/oneWeek/oneMonth/oneYear）、search_domain_filter（域名）。示例 {"search_query":"2024 新能源车销量","count":10,"search_engine":"search_std"}',
+    },
 } as const satisfies Record<string, SearchEngineTemplate>;
 
 /** DDG 出厂展示常量（无模板；描述快照与设置页共用 name / paramHint）。 */
 export const DUCKDUCKGO_ENGINE_META = {
-  name: "DuckDuckGo",
-  paramHint: 'DuckDuckGo（兜底，无需 API key）：搜索词字段 q 或 query（必传）；可选 count（1..20）。忽略其余未知参数；不支持 site: 等高级检索语法。示例 {"q":"web search api","count":5}',
+    name: "DuckDuckGo",
+    paramHint: 'DuckDuckGo（兜底，无需 API key）：搜索词字段 q 或 query（必传）；可选 count（1..20）。忽略其余未知参数；不支持 site: 等高级检索语法。示例 {"q":"web search api","count":5}',
 } as const satisfies Pick<SearchEngineTemplate, "name" | "paramHint">;

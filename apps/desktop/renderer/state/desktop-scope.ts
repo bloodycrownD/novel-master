@@ -4,33 +4,33 @@
  * @module state/desktop-scope
  */
 import {
-  ipcScopeGet,
-  ipcScopeSetProject,
-  ipcScopeSetSession,
+    ipcScopeGet,
+    ipcScopeSetProject,
+    ipcScopeSetSession,
 } from "../ipc/client";
 import type { ScopeSnapshotDto } from "@shared/ipc-types";
 
 type DesktopScopeSnapshot = ScopeSnapshotDto;
 
 function unwrap<T>(result: { ok: boolean; data?: T; error?: { message: string } }): T {
-  if (!result.ok) {
-    // nm-throw: keep — unwrap 是 renderer 侧 IpcResult 解包边界，与 toIpcResult 互为反向
-    throw new Error(result.error?.message ?? "IPC request failed");
-  }
-  return result.data as T;
+    if (!result.ok) {
+        // nm-throw: keep — unwrap 是 renderer 侧 IpcResult 解包边界，与 toIpcResult 互为反向
+        throw new Error(result.error?.message ?? "IPC request failed");
+    }
+    return result.data as T;
 }
 
 /** Loads persisted pointers and reconciles against project/session lists. */
 export async function loadDesktopScope(): Promise<DesktopScopeSnapshot> {
-  return unwrap(await ipcScopeGet());
+    return unwrap(await ipcScopeGet());
 }
 
 /** Persists project scope (clears or picks first session when project changes). */
 export async function setDesktopProject( projectId: string ): Promise<DesktopScopeSnapshot> {
-  return unwrap(await ipcScopeSetProject({ projectId }));
+    return unwrap(await ipcScopeSetProject({ projectId }));
 }
 
 /** Persists session pointer for the current project. */
 export async function setDesktopSession( projectId: string, sessionId: string ): Promise<DesktopScopeSnapshot> {
-  return unwrap(await ipcScopeSetSession({ projectId, sessionId }));
+    return unwrap(await ipcScopeSetSession({ projectId, sessionId }));
 }

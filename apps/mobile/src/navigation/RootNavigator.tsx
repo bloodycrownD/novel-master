@@ -51,58 +51,58 @@ const Tab = createBottomTabNavigator<MainTabParamList>();
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 function tabIcon(Icon: React.ComponentType<{color: string; size?: number}>) {
-  return ({color, size}: {color: string; size: number}) => <Icon color={color} size={size} />;
+    return ({color, size}: {color: string; size: number}) => <Icon color={color} size={size} />;
 }
 
 function MainTabs() {
-  const {tokens} = useTheme();
-  const insets = useSafeAreaInsets();
+    const {tokens} = useTheme();
+    const insets = useSafeAreaInsets();
 
-  return (
-    <Tab.Navigator
-      initialRouteName="Chat"
-      /* 切 tab 白屏防线（2026-10-01）：默认在 Android 上 detach 非活跃页
+    return (
+        <Tab.Navigator
+            initialRouteName="Chat"
+            /* 切 tab 白屏防线（2026-10-01）：默认在 Android 上 detach 非活跃页
          （react-native-screens 把非活跃 tab 的 view 从窗口移除），聊天页的
          WebView 画面层随之销毁，切回来那拍就是白屏一闪。关掉 detach 后非活跃
          页由容器本来的 absoluteFill + zIndex 压底 + pointerEvents 隔离（web
          端即此方案），WebView 常驻可见树，切 tab 零重建。 */
-      detachInactiveScreens={false}
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: tokens.tabBarActive,
-        tabBarInactiveTintColor: tokens.tabBarInactive,
-        tabBarLabelStyle: styles.tabLabel,
-        tabBarStyle: MainTabBarStyle.build(tokens, insets),
-      }}
-    >
-      <Tab.Screen
-        name="Chat"
-        component={ChatTabScreen}
-        options={{
-          tabBarLabel: coreT({key: "ui.nav.tab_chat"}),
-          tabBarIcon: tabIcon(ChatTabIcon),
-        }}
-      />
-      <Tab.Screen
-        name="Profile"
-        component={ProfileTabScreen}
-        options={{
-          tabBarLabel: coreT({key: "ui.nav.tab_profile"}),
-          tabBarIcon: tabIcon(ProfileTabIcon),
-        }}
-      />
-    </Tab.Navigator>
-  );
+            detachInactiveScreens={false}
+            screenOptions={{
+                headerShown: false,
+                tabBarActiveTintColor: tokens.tabBarActive,
+                tabBarInactiveTintColor: tokens.tabBarInactive,
+                tabBarLabelStyle: styles.tabLabel,
+                tabBarStyle: MainTabBarStyle.build(tokens, insets),
+            }}
+        >
+            <Tab.Screen
+                name="Chat"
+                component={ChatTabScreen}
+                options={{
+                    tabBarLabel: coreT({key: "ui.nav.tab_chat"}),
+                    tabBarIcon: tabIcon(ChatTabIcon),
+                }}
+            />
+            <Tab.Screen
+                name="Profile"
+                component={ProfileTabScreen}
+                options={{
+                    tabBarLabel: coreT({key: "ui.nav.tab_profile"}),
+                    tabBarIcon: tabIcon(ProfileTabIcon),
+                }}
+            />
+        </Tab.Navigator>
+    );
 }
 
 function withStackLayout(pageKey: keyof RootStackParamList, Screen: React.ComponentType) {
-  return function Wrapped() {
-    return (
-      <StackScreenLayout pageKey={pageKey}>
-        <Screen />
-      </StackScreenLayout>
-    );
-  };
+    return function Wrapped() {
+        return (
+            <StackScreenLayout pageKey={pageKey}>
+                <Screen />
+            </StackScreenLayout>
+        );
+    };
 }
 
 /** 模块级稳定引用：避免 RootNavigator 重渲染时 inline withStackLayout 导致 Stack 屏幕反复卸载/挂载。 */
@@ -136,20 +136,20 @@ const TokenUsageStatsStackScreen = withStackLayout('TokenUsageStats', TokenUsage
 const AboutStackScreen = withStackLayout('About', AboutScreen);
 
 export function RootNavigator() {
-  const {tokens, mode} = useTheme();
-  /**
+    const {tokens, mode} = useTheme();
+    /**
    * 导航主题对齐（fix-E 次修）：NavigationContainer 的 theme 决定导航容器
    * colors.background（缺省 DefaultTheme 是浅色 #fff 系），转场剥开的底不得
    * 是浅色——按当前 mode 取 Dark/Default 基础主题、覆写 background 为
    * tokens.background（与 A 层底色同口径，RULE #17）。
    */
-  const navigationTheme = useMemo(() => {
-    const base = mode === 'dark' ? DarkTheme : DefaultTheme;
-    return {...base, colors: {...base.colors, background: tokens.background}};
-  }, [mode, tokens.background]);
+    const navigationTheme = useMemo(() => {
+        const base = mode === 'dark' ? DarkTheme : DefaultTheme;
+        return {...base, colors: {...base.colors, background: tokens.background}};
+    }, [mode, tokens.background]);
 
-  return (
-    /* 转场白闪（fix-E 主修）：native-stack 转场对新屏做 alpha 过渡，混合底层
+    return (
+        /* 转场白闪（fix-E 主修）：native-stack 转场对新屏做 alpha 过渡，混合底层
        是 ScreenStack 容器——它只有 flex:1（透明），往下透过 RN 根直到窗口
        DayNight 背景（系统浅色=白）；深色屏对白底 alpha 混合 = 均匀灰白帧
        （2026-10-18 三轮取证：进预览 3-4 帧全屏均匀抬亮）。react-native-screens
@@ -158,57 +158,57 @@ export function RootNavigator() {
        @react-navigation 未透传该 style，故在 NavigationContainer 外衬一层
        主题色 View 作稳定混合底。只包 NavigationContainer（HeaderProvider 在其
        内、不动）；导航外的透明层不受影响。 */
-    <View style={[styles.navHost, {backgroundColor: tokens.background}]}>
-      {/* 通知点按等 React 外路径经 navigationContainerRef 编程式导航 */}
-      <NavigationContainer ref={navigationContainerRef} theme={navigationTheme}>
-        <HeaderProvider>
-          <Stack.Navigator
-            screenOptions={{
-              headerShown: false,
-              contentStyle: {backgroundColor: tokens.background},
-            }}
-          >
-            <Stack.Screen name="MainTabs" component={MainTabs} />
-            <Stack.Screen name="AgentsSettings" component={AgentsSettingsStackScreen} />
-            <Stack.Screen name="AgentEditor" component={AgentEditorStackScreen} />
-            <Stack.Screen name="RealPrompt" component={RealPromptStackScreen} options={{animation: 'none'}} />
-            <Stack.Screen name="PromptTurnDetail" component={PromptTurnDetailStackScreen} />
-            <Stack.Screen name="Providers" component={ProvidersStackScreen} />
-            <Stack.Screen name="ProviderCreate" component={ProviderCreateStackScreen} />
-            <Stack.Screen name="ProviderDetail" component={ProviderDetailStackScreen} />
-            <Stack.Screen name="ModelSampling" component={ModelSamplingStackScreen} />
+        <View style={[styles.navHost, {backgroundColor: tokens.background}]}>
+            {/* 通知点按等 React 外路径经 navigationContainerRef 编程式导航 */}
+            <NavigationContainer ref={navigationContainerRef} theme={navigationTheme}>
+                <HeaderProvider>
+                    <Stack.Navigator
+                        screenOptions={{
+                            headerShown: false,
+                            contentStyle: {backgroundColor: tokens.background},
+                        }}
+                    >
+                        <Stack.Screen name="MainTabs" component={MainTabs} />
+                        <Stack.Screen name="AgentsSettings" component={AgentsSettingsStackScreen} />
+                        <Stack.Screen name="AgentEditor" component={AgentEditorStackScreen} />
+                        <Stack.Screen name="RealPrompt" component={RealPromptStackScreen} options={{animation: 'none'}} />
+                        <Stack.Screen name="PromptTurnDetail" component={PromptTurnDetailStackScreen} />
+                        <Stack.Screen name="Providers" component={ProvidersStackScreen} />
+                        <Stack.Screen name="ProviderCreate" component={ProviderCreateStackScreen} />
+                        <Stack.Screen name="ProviderDetail" component={ProviderDetailStackScreen} />
+                        <Stack.Screen name="ModelSampling" component={ModelSamplingStackScreen} />
 
-            <Stack.Screen name="StorageConfig" component={StorageConfigStackScreen} />
-            <Stack.Screen name="CloudSyncProgress" component={CloudSyncProgressStackScreen} options={{gestureEnabled: false}} />
-            <Stack.Screen name="ChatConfig" component={ChatConfigStackScreen} />
-            <Stack.Screen name="CloudSyncConfig" component={CloudSyncConfigStackScreen} />
-            <Stack.Screen name="CloudSyncStorage" component={CloudSyncStorageStackScreen} />
-            <Stack.Screen name="SearchEngines" component={SearchEnginesStackScreen} />
-            <Stack.Screen name="SearchEngineDetail" component={SearchEngineDetailStackScreen} />
-            <Stack.Screen name="GlobalTemplate" component={GlobalTemplateStackScreen} />
-            <Stack.Screen name="SmartSortRules" component={SmartSortRulesStackScreen} />
-            <Stack.Screen name="SmartSortRuleEditor" component={SmartSortRuleEditorStackScreen} />
-            <Stack.Screen name="FileEditor" component={FileEditorStackScreen} />
-            <Stack.Screen name="SessionDetail" component={SessionDetailStackScreen} />
-            <Stack.Screen name="SubagentSessionView" component={SubagentSessionStackScreen} />
-            <Stack.Screen name="SkillPanel" component={SkillPanelStackScreen} />
-            <Stack.Screen name="PromptEditor" component={PromptEditorStackScreen} />
-            <Stack.Screen name="SkillsSettings" component={SkillsSettingsStackScreen} />
-            <Stack.Screen name="SkillDetail" component={SkillDetailStackScreen} />
-            <Stack.Screen name="TokenUsageStats" component={TokenUsageStatsStackScreen} />
-            <Stack.Screen name="About" component={AboutStackScreen} />
-          </Stack.Navigator>
-        </HeaderProvider>
-      </NavigationContainer>
-    </View>
-  );
+                        <Stack.Screen name="StorageConfig" component={StorageConfigStackScreen} />
+                        <Stack.Screen name="CloudSyncProgress" component={CloudSyncProgressStackScreen} options={{gestureEnabled: false}} />
+                        <Stack.Screen name="ChatConfig" component={ChatConfigStackScreen} />
+                        <Stack.Screen name="CloudSyncConfig" component={CloudSyncConfigStackScreen} />
+                        <Stack.Screen name="CloudSyncStorage" component={CloudSyncStorageStackScreen} />
+                        <Stack.Screen name="SearchEngines" component={SearchEnginesStackScreen} />
+                        <Stack.Screen name="SearchEngineDetail" component={SearchEngineDetailStackScreen} />
+                        <Stack.Screen name="GlobalTemplate" component={GlobalTemplateStackScreen} />
+                        <Stack.Screen name="SmartSortRules" component={SmartSortRulesStackScreen} />
+                        <Stack.Screen name="SmartSortRuleEditor" component={SmartSortRuleEditorStackScreen} />
+                        <Stack.Screen name="FileEditor" component={FileEditorStackScreen} />
+                        <Stack.Screen name="SessionDetail" component={SessionDetailStackScreen} />
+                        <Stack.Screen name="SubagentSessionView" component={SubagentSessionStackScreen} />
+                        <Stack.Screen name="SkillPanel" component={SkillPanelStackScreen} />
+                        <Stack.Screen name="PromptEditor" component={PromptEditorStackScreen} />
+                        <Stack.Screen name="SkillsSettings" component={SkillsSettingsStackScreen} />
+                        <Stack.Screen name="SkillDetail" component={SkillDetailStackScreen} />
+                        <Stack.Screen name="TokenUsageStats" component={TokenUsageStatsStackScreen} />
+                        <Stack.Screen name="About" component={AboutStackScreen} />
+                    </Stack.Navigator>
+                </HeaderProvider>
+            </NavigationContainer>
+        </View>
+    );
 }
 
 const styles = StyleSheet.create({
-  navHost: {flex: 1},
-  tabLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    marginTop: 2,
-  },
+    navHost: {flex: 1},
+    tabLabel: {
+        fontSize: 11,
+        fontWeight: '600',
+        marginTop: 2,
+    },
 });

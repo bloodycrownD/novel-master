@@ -20,10 +20,10 @@
 
 /** 单个 sessionId 对应的流式 partial 快照。 */
 interface AgentStreamPartial {
-  /** 文本 delta 累积。 */
-  readonly text: string;
-  /** 思考链 delta 累积。 */
-  readonly thinking: string;
+    /** 文本 delta 累积。 */
+    readonly text: string;
+    /** 思考链 delta 累积。 */
+    readonly thinking: string;
 }
 
 /**
@@ -43,16 +43,16 @@ export type AgentStreamRegistryHandle = string;
  * 所有方法对未注册的 sessionId 静默 no-op。
  */
 export interface AgentStreamRegistry {
-  /**
+    /**
    * 注册某个 sessionId，初始化空 partial 并签发新的所有权句柄。
    *
    * 仅在 run 边界调用（run-agent-turn 入口 / runChildAgent 入口）。
    * 同一 sessionId 再次 register 会覆盖旧记录（旧 run 应已走完 finally），
    * 返回新的句柄——旧句柄随即失效。
    */
-  register(sessionId: string): AgentStreamRegistryHandle;
+    register(sessionId: string): AgentStreamRegistryHandle;
 
-  /**
+    /**
    * 重置某个 sessionId 的累积文本（清空 text / thinking），但保留当前句柄。
    *
    * 用于单个 run 内每 step 的 assistant commit 之后，让下一步从空累积开始，
@@ -63,25 +63,25 @@ export interface AgentStreamRegistry {
    * （step 边界），这样 finally 的 {@link unregister} 句柄比对仍能正确
    * 识别 run 所有权。未注册的 sessionId 静默 no-op。
    */
-  reset(sessionId: string): void;
+    reset(sessionId: string): void;
 
-  /**
+    /**
    * 追加 delta：传 text / thinking 的增量，已存在的值会拼接保留。
    * 传空字符串等价于不修改对应字段。
    * 未注册的 sessionId 静默 no-op。
    */
-  append(sessionId: string, delta: Partial<AgentStreamPartial>): void;
+    append(sessionId: string, delta: Partial<AgentStreamPartial>): void;
 
-  /**
+    /**
    * 查询某个 sessionId 的当前流式累积文本。
    * 未注册返回 undefined。
    */
-  get(sessionId: string): AgentStreamPartial | undefined;
+    get(sessionId: string): AgentStreamPartial | undefined;
 
-  /** 该 sessionId 当前是否注册了 in-flight partial。 */
-  has(sessionId: string): boolean;
+    /** 该 sessionId 当前是否注册了 in-flight partial。 */
+    has(sessionId: string): boolean;
 
-  /**
+    /**
    * 反注册：移除某个 sessionId 的 partial（run 结束时调用）。
    *
    * 带所有权比对——传入 handle 与当前 map 里记录的 handle 一致才删。
@@ -90,5 +90,5 @@ export interface AgentStreamRegistry {
    * 的 controller 引用比对对称）。handle 省略时不比对直接删，兼容不关心
    * 所有权的调用方。
    */
-  unregister(sessionId: string, handle?: AgentStreamRegistryHandle): void;
+    unregister(sessionId: string, handle?: AgentStreamRegistryHandle): void;
 }

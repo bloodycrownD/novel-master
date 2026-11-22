@@ -21,23 +21,23 @@ import { TdbcTransaction } from "@/infra/tdbc/logic/transaction-helper.js";
 import type { CoreMessageDescriptor } from "@/i18n/keys.js";
 import { LogFactory } from "@/infra/log/logger.js";
 import {
-  AGENT_SCHEMA_STATEMENTS,
-  CHAT_SCHEMA_STATEMENTS,
-  FILE_CACHE_SCHEMA_STATEMENTS,
-  KKV_SCHEMA_STATEMENTS,
-  MESSAGE_CHECKPOINT_SCHEMA_STATEMENTS,
-  PROVIDER_SCHEMA_STATEMENTS,
-  SESSION_KKV_SCHEMA_STATEMENTS,
-  SESSION_RUN_STATE_SCHEMA_STATEMENTS,
-  SKILLS_SCHEMA_STATEMENTS,
-  SKSP_SCHEMA_STATEMENTS,
-  SMART_SORT_RULE_SCHEMA_STATEMENTS,
-  USAGE_RECORD_SCHEMA_STATEMENTS,
-  VFS_CONTENT_BLOB_SCHEMA_STATEMENTS,
-  VFS_CONTENT_PACK_SCHEMA_STATEMENTS,
-  VFS_REVISION_SCHEMA_STATEMENTS,
-  VFS_SCHEMA_STATEMENTS,
-  WORKPLACE_SCHEMA_STATEMENTS,
+    AGENT_SCHEMA_STATEMENTS,
+    CHAT_SCHEMA_STATEMENTS,
+    FILE_CACHE_SCHEMA_STATEMENTS,
+    KKV_SCHEMA_STATEMENTS,
+    MESSAGE_CHECKPOINT_SCHEMA_STATEMENTS,
+    PROVIDER_SCHEMA_STATEMENTS,
+    SESSION_KKV_SCHEMA_STATEMENTS,
+    SESSION_RUN_STATE_SCHEMA_STATEMENTS,
+    SKILLS_SCHEMA_STATEMENTS,
+    SKSP_SCHEMA_STATEMENTS,
+    SMART_SORT_RULE_SCHEMA_STATEMENTS,
+    USAGE_RECORD_SCHEMA_STATEMENTS,
+    VFS_CONTENT_BLOB_SCHEMA_STATEMENTS,
+    VFS_CONTENT_PACK_SCHEMA_STATEMENTS,
+    VFS_REVISION_SCHEMA_STATEMENTS,
+    VFS_SCHEMA_STATEMENTS,
+    WORKPLACE_SCHEMA_STATEMENTS,
 } from "@/infra/sql-template/generated/schema.generated.js";
 import { BuiltinProviders } from "./provider/seed-builtin-providers.js";
 import { BuiltinSmartSortRules } from "./smart-sort-rule/builtin-smart-sort-rules.js";
@@ -157,27 +157,27 @@ export const SCHEMA_BOOT_VERSION = 20;
 
 /** 各模块 DDL 语句，按依赖安全顺序排列。 */
 export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
-  ...VFS_SCHEMA_STATEMENTS,
-  ...VFS_REVISION_SCHEMA_STATEMENTS,
-  ...VFS_CONTENT_BLOB_SCHEMA_STATEMENTS,
-  ...VFS_CONTENT_PACK_SCHEMA_STATEMENTS,
-  ...MESSAGE_CHECKPOINT_SCHEMA_STATEMENTS,
-  ...KKV_SCHEMA_STATEMENTS,
-  ...SESSION_KKV_SCHEMA_STATEMENTS,
-  ...FILE_CACHE_SCHEMA_STATEMENTS,
-  ...SESSION_RUN_STATE_SCHEMA_STATEMENTS,
-  ...USAGE_RECORD_SCHEMA_STATEMENTS,
-  ...CHAT_SCHEMA_STATEMENTS,
-  ...WORKPLACE_SCHEMA_STATEMENTS,
-  ...SMART_SORT_RULE_SCHEMA_STATEMENTS,
-  ...SKILLS_SCHEMA_STATEMENTS,
-  ...SKSP_SCHEMA_STATEMENTS,
-  ...PROVIDER_SCHEMA_STATEMENTS,
-  ...AGENT_SCHEMA_STATEMENTS,
-  // v11：正则系统移除，幂等清理两表（idx_regex_rule_group_sort 随表消亡）；
-  // 先子表后父表，避免未来开启 FK 约束时 DROP 顺序问题。
-  "DROP TABLE IF EXISTS regex_rule;",
-  "DROP TABLE IF EXISTS regex_group;",
+    ...VFS_SCHEMA_STATEMENTS,
+    ...VFS_REVISION_SCHEMA_STATEMENTS,
+    ...VFS_CONTENT_BLOB_SCHEMA_STATEMENTS,
+    ...VFS_CONTENT_PACK_SCHEMA_STATEMENTS,
+    ...MESSAGE_CHECKPOINT_SCHEMA_STATEMENTS,
+    ...KKV_SCHEMA_STATEMENTS,
+    ...SESSION_KKV_SCHEMA_STATEMENTS,
+    ...FILE_CACHE_SCHEMA_STATEMENTS,
+    ...SESSION_RUN_STATE_SCHEMA_STATEMENTS,
+    ...USAGE_RECORD_SCHEMA_STATEMENTS,
+    ...CHAT_SCHEMA_STATEMENTS,
+    ...WORKPLACE_SCHEMA_STATEMENTS,
+    ...SMART_SORT_RULE_SCHEMA_STATEMENTS,
+    ...SKILLS_SCHEMA_STATEMENTS,
+    ...SKSP_SCHEMA_STATEMENTS,
+    ...PROVIDER_SCHEMA_STATEMENTS,
+    ...AGENT_SCHEMA_STATEMENTS,
+    // v11：正则系统移除，幂等清理两表（idx_regex_rule_group_sort 随表消亡）；
+    // 先子表后父表，避免未来开启 FK 约束时 DROP 顺序问题。
+    "DROP TABLE IF EXISTS regex_rule;",
+    "DROP TABLE IF EXISTS regex_group;",
 ];
 
 /**
@@ -202,24 +202,24 @@ export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
  * 最低支持版本随之升至 v1.5.23（基线算法＝最晚退役条目首发 tag + 1）。
  */
 export const BASELINE_MIGRATION_IDS: readonly string[] = [
-  "saved-model-identity-v1",
-  "provider-identity-v1",
-  "drop-chat-session-user-vfs-pending-v1",
-  "rename-worktree-tables-to-workplace-v1",
-  "vfs-content-blob-zlib-v1",
-  "vfs-revision-ref-count-v1",
-  "vfs-entry-id-redesign-v1",
-  "session-agent-config-v2",
-  "project-agent-config-cleanup-v1",
-  "orphan-revision-gc-v1",
-  "table-constraints-v1b",
-  "usage-cache-model-backfill-v1",
-  "retire-pref-session-fs-version-check-v1",
-  "workplace-dir-rule-smart-field-v1",
-  "rename-smart-sort-rule-example-v1",
-  "add-smart-sort-capture-kind-v1",
-  "add-mcp-file-path-snapshot-v1",
-  "dedup-file-cache-storage-v1",
+    "saved-model-identity-v1",
+    "provider-identity-v1",
+    "drop-chat-session-user-vfs-pending-v1",
+    "rename-worktree-tables-to-workplace-v1",
+    "vfs-content-blob-zlib-v1",
+    "vfs-revision-ref-count-v1",
+    "vfs-entry-id-redesign-v1",
+    "session-agent-config-v2",
+    "project-agent-config-cleanup-v1",
+    "orphan-revision-gc-v1",
+    "table-constraints-v1b",
+    "usage-cache-model-backfill-v1",
+    "retire-pref-session-fs-version-check-v1",
+    "workplace-dir-rule-smart-field-v1",
+    "rename-smart-sort-rule-example-v1",
+    "add-smart-sort-capture-kind-v1",
+    "add-mcp-file-path-snapshot-v1",
+    "dedup-file-cache-storage-v1",
 ];
 
 /**
@@ -232,15 +232,15 @@ const BASELINE_MINIMUM_VERSION = "v1.5.23";
 
 /** 老库升级失败提示（descriptor）：指引用户先升到最低支持版本，文案在 core catalog。 */
 const BASELINE_TOO_OLD_MESSAGE: CoreMessageDescriptor = {
-  key: "error.infra.baseline_too_old",
-  params: { minimum_version: BASELINE_MINIMUM_VERSION },
+    key: "error.infra.baseline_too_old",
+    params: { minimum_version: BASELINE_MINIMUM_VERSION },
 };
 
 /**
  * Novel Master bootstrap 操作族（DDL 编排 + 基线检查 + 内置数据 seed）。
  */
 export const NovelMasterBootstrap = {
-  /**
+    /**
    * 版本基线检查：migration runner 之前 fail-fast。
    *
    * 判断逻辑：`schema_migrations` 表里必须至少有一条 baseline id 被登记；
@@ -251,88 +251,88 @@ export const NovelMasterBootstrap = {
    * 短路之内）：见下方前置探测的注释——v1.3.10~v1.4.06 库已被 baseline 登记
    * 命中提前 return，漏判就会拿裸 `no such column` 顶掉升级提示。`some()` 语义不动。
    */
-  async assertMinimumBaseline(tx: TdbcConnection): Promise<Result<void, AppError>> {
-    await SchemaMigrationsTable.ensure(tx);
-    const applied = await SchemaMigrationsTable.listAppliedIds(tx);
+    async assertMinimumBaseline(tx: TdbcConnection): Promise<Result<void, AppError>> {
+        await SchemaMigrationsTable.ensure(tx);
+        const applied = await SchemaMigrationsTable.listAppliedIds(tx);
 
-  // `vfs_entry` 存在但缺 `content_hash` 列 → vfs-entry-id-redesign-v1 之前的老库形态。
-  // 与 hasBaseline 是否命中无关：`saved-model-identity-v1` 自 v1.3.10 起就登记，
-  // v1.3.10~v1.4.06 这段库的 `BASELINE_MIGRATION_IDS.some()` 必命中并提前 return，
-  // 若只依赖它来判老库形态，这类库会一路走到慢路径 DDL 的
-  // `CREATE INDEX idx_vfs_entry_content_hash ON vfs_entry(content_hash)` 裸炸
-  // `no such column`，把本应给出的升级提示顶掉。故单列此探测。
-  const contentHashProbeTables = await tx.query<{ name: string }>(`SELECT name
+    // `vfs_entry` 存在但缺 `content_hash` 列 → vfs-entry-id-redesign-v1 之前的老库形态。
+    // 与 hasBaseline 是否命中无关：`saved-model-identity-v1` 自 v1.3.10 起就登记，
+    // v1.3.10~v1.4.06 这段库的 `BASELINE_MIGRATION_IDS.some()` 必命中并提前 return，
+    // 若只依赖它来判老库形态，这类库会一路走到慢路径 DDL 的
+    // `CREATE INDEX idx_vfs_entry_content_hash ON vfs_entry(content_hash)` 裸炸
+    // `no such column`，把本应给出的升级提示顶掉。故单列此探测。
+    const contentHashProbeTables = await tx.query<{ name: string }>(`SELECT name
     FROM sqlite_master
     WHERE type = 'table' AND name = 'vfs_entry'`);
-  if (contentHashProbeTables.length > 0) {
-    const contentHashProbeCols = await tx.query<{ name: string }>(`SELECT name FROM pragma_table_info('vfs_entry')`);
-    if (!contentHashProbeCols.some((c) => c.name === "content_hash")) return Result.err(new AppError("INFRA_BASELINE_TOO_OLD", { descriptor: BASELINE_TOO_OLD_MESSAGE }));
-  }
+    if (contentHashProbeTables.length > 0) {
+        const contentHashProbeCols = await tx.query<{ name: string }>(`SELECT name FROM pragma_table_info('vfs_entry')`);
+        if (!contentHashProbeCols.some((c) => c.name === "content_hash")) return Result.err(new AppError("INFRA_BASELINE_TOO_OLD", { descriptor: BASELINE_TOO_OLD_MESSAGE }));
+    }
 
-  if (BASELINE_MIGRATION_IDS.some((id) => applied.has(id))) return Result.ok(undefined);
+    if (BASELINE_MIGRATION_IDS.some((id) => applied.has(id))) return Result.ok(undefined);
 
-  // 任一 legacy 形态命中即视为未升级到最低支持版本。
-  // `llm_saved_model` 无 `id` 列 → 常见老库尚未走 saved-model-identity-v1。
-  const savedModelTables = await tx.query<{ name: string }>(`SELECT name
+    // 任一 legacy 形态命中即视为未升级到最低支持版本。
+    // `llm_saved_model` 无 `id` 列 → 常见老库尚未走 saved-model-identity-v1。
+    const savedModelTables = await tx.query<{ name: string }>(`SELECT name
     FROM sqlite_master
     WHERE type = 'table' AND name = 'llm_saved_model'`);
-  if (savedModelTables.length > 0) {
-    const savedModelCols = await tx.query<{ name: string }>(`SELECT name FROM pragma_table_info('llm_saved_model')`);
-    if (!new Set(savedModelCols.map((c) => c.name)).has("id")) return Result.err(new AppError("INFRA_BASELINE_TOO_OLD", { descriptor: BASELINE_TOO_OLD_MESSAGE }));
-  }
+    if (savedModelTables.length > 0) {
+        const savedModelCols = await tx.query<{ name: string }>(`SELECT name FROM pragma_table_info('llm_saved_model')`);
+        if (!new Set(savedModelCols.map((c) => c.name)).has("id")) return Result.err(new AppError("INFRA_BASELINE_TOO_OLD", { descriptor: BASELINE_TOO_OLD_MESSAGE }));
+    }
 
-  // 存在 `worktree_*` 规则表 → 未走 rename-worktree-tables-to-workplace-v1。
-  const worktreeRuleRows = await tx.query<{ name: string }>(`SELECT name
+    // 存在 `worktree_*` 规则表 → 未走 rename-worktree-tables-to-workplace-v1。
+    const worktreeRuleRows = await tx.query<{ name: string }>(`SELECT name
     FROM sqlite_master
     WHERE type = 'table' AND (name = 'worktree_dir_rule' OR name = 'worktree_file_rule')`);
-  if (worktreeRuleRows.length > 0) return Result.err(new AppError("INFRA_BASELINE_TOO_OLD", { descriptor: BASELINE_TOO_OLD_MESSAGE }));
+    if (worktreeRuleRows.length > 0) return Result.err(new AppError("INFRA_BASELINE_TOO_OLD", { descriptor: BASELINE_TOO_OLD_MESSAGE }));
 
-  // `vfs_entry` 存在但 `entry_id` 不是主键（旧形态 pk 是 `path`）→ 未走 vfs-entry-id-redesign-v1。判据与原迁移自身的探测一致。
-  const vfsEntryTables = await tx.query<{ name: string }>(`SELECT name
+    // `vfs_entry` 存在但 `entry_id` 不是主键（旧形态 pk 是 `path`）→ 未走 vfs-entry-id-redesign-v1。判据与原迁移自身的探测一致。
+    const vfsEntryTables = await tx.query<{ name: string }>(`SELECT name
     FROM sqlite_master
     WHERE type = 'table' AND name = 'vfs_entry'`);
-  if (vfsEntryTables.length > 0) {
-    const vfsEntryCols = await tx.query<{ name: string; pk: number }>(`SELECT name, pk
+    if (vfsEntryTables.length > 0) {
+        const vfsEntryCols = await tx.query<{ name: string; pk: number }>(`SELECT name, pk
     FROM pragma_table_info('vfs_entry')`);
-    const entryId = vfsEntryCols.find((c) => c.name === "entry_id");
-    if (!(entryId != null && entryId.pk > 0)) return Result.err(new AppError("INFRA_BASELINE_TOO_OLD", { descriptor: BASELINE_TOO_OLD_MESSAGE }));
-  }
+        const entryId = vfsEntryCols.find((c) => c.name === "entry_id");
+        if (!(entryId != null && entryId.pk > 0)) return Result.err(new AppError("INFRA_BASELINE_TOO_OLD", { descriptor: BASELINE_TOO_OLD_MESSAGE }));
+    }
 
-  // `chat_session` 存在但缺 `agent_config_json` 列 → 未走 session-agent-config-v2（该迁移/DDL 在 v1.4.21 前后引入此列）。
-  const chatSessionTables = await tx.query<{ name: string }>(`SELECT name
+    // `chat_session` 存在但缺 `agent_config_json` 列 → 未走 session-agent-config-v2（该迁移/DDL 在 v1.4.21 前后引入此列）。
+    const chatSessionTables = await tx.query<{ name: string }>(`SELECT name
     FROM sqlite_master
     WHERE type = 'table' AND name = 'chat_session'`);
-  if (chatSessionTables.length > 0) {
-    const chatSessionCols = await tx.query<{ name: string }>(`SELECT name FROM pragma_table_info('chat_session')`);
-    if (!chatSessionCols.some((c) => c.name === "agent_config_json")) return Result.err(new AppError("INFRA_BASELINE_TOO_OLD", { descriptor: BASELINE_TOO_OLD_MESSAGE }));
-  }
+    if (chatSessionTables.length > 0) {
+        const chatSessionCols = await tx.query<{ name: string }>(`SELECT name FROM pragma_table_info('chat_session')`);
+        if (!chatSessionCols.some((c) => c.name === "agent_config_json")) return Result.err(new AppError("INFRA_BASELINE_TOO_OLD", { descriptor: BASELINE_TOO_OLD_MESSAGE }));
+    }
 
-  // `vfs_revision` 存在但未切 WITHOUT ROWID（table-constraints-v1b 的独有形态变化，canonical DDL 之外没有别处会改它）
-  // → 未走 table-constraints-v1b（< v1.4.28）。判据与原迁移自身的探测一致；查询异常/空结果的保守方向是 false（新装路径不触发）。
-  const vfsRevisionRows = await tx.query<{ sql: string | null }>(`SELECT sql
+    // `vfs_revision` 存在但未切 WITHOUT ROWID（table-constraints-v1b 的独有形态变化，canonical DDL 之外没有别处会改它）
+    // → 未走 table-constraints-v1b（< v1.4.28）。判据与原迁移自身的探测一致；查询异常/空结果的保守方向是 false（新装路径不触发）。
+    const vfsRevisionRows = await tx.query<{ sql: string | null }>(`SELECT sql
     FROM sqlite_master
     WHERE type = 'table' AND name = 'vfs_revision'`);
-  if (vfsRevisionRows.length > 0 && vfsRevisionRows[0]?.sql != null && !/WITHOUT\s+ROWID/i.test(String(vfsRevisionRows[0]?.sql ?? ""))) {
-    return Result.err(new AppError("INFRA_BASELINE_TOO_OLD", { descriptor: BASELINE_TOO_OLD_MESSAGE }));
-  }
+    if (vfsRevisionRows.length > 0 && vfsRevisionRows[0]?.sql != null && !/WITHOUT\s+ROWID/i.test(String(vfsRevisionRows[0]?.sql ?? ""))) {
+        return Result.err(new AppError("INFRA_BASELINE_TOO_OLD", { descriptor: BASELINE_TOO_OLD_MESSAGE }));
+    }
 
-  // `chat_project` 存在且 `agent_config_json` 有非 NULL 残留 → 未走 project-agent-config-cleanup-v1（该功能已下线，新库不会再写入非 NULL）。
-  const chatProjectTables = await tx.query<{ name: string }>(`SELECT name
+    // `chat_project` 存在且 `agent_config_json` 有非 NULL 残留 → 未走 project-agent-config-cleanup-v1（该功能已下线，新库不会再写入非 NULL）。
+    const chatProjectTables = await tx.query<{ name: string }>(`SELECT name
     FROM sqlite_master
     WHERE type = 'table' AND name = 'chat_project'`);
-  if (chatProjectTables.length > 0) {
-    const chatProjectCols = await tx.query<{ name: string }>(`SELECT name FROM pragma_table_info('chat_project')`);
-    if (chatProjectCols.some((c) => c.name === "agent_config_json")) {
-      const chatProjectRows = await tx.query<{ cnt: number }>(`SELECT COUNT(*) AS cnt
+    if (chatProjectTables.length > 0) {
+        const chatProjectCols = await tx.query<{ name: string }>(`SELECT name FROM pragma_table_info('chat_project')`);
+        if (chatProjectCols.some((c) => c.name === "agent_config_json")) {
+            const chatProjectRows = await tx.query<{ cnt: number }>(`SELECT COUNT(*) AS cnt
     FROM chat_project
     WHERE agent_config_json IS NOT NULL`);
-      if (Number(chatProjectRows[0]?.cnt ?? 0) > 0) return Result.err(new AppError("INFRA_BASELINE_TOO_OLD", { descriptor: BASELINE_TOO_OLD_MESSAGE }));
+            if (Number(chatProjectRows[0]?.cnt ?? 0) > 0) return Result.err(new AppError("INFRA_BASELINE_TOO_OLD", { descriptor: BASELINE_TOO_OLD_MESSAGE }));
+        }
     }
-  }
-    return Result.ok(undefined);
-  },
+        return Result.ok(undefined);
+    },
 
-  /**
+    /**
    * 确保所有实体表存在并写入内置 provider。可安全重复调用。
    *
    * **入口清进程内派生缓存（2026-09-30）**：bootstrap 是双端「拿到库句柄」的
@@ -346,79 +346,79 @@ export const NovelMasterBootstrap = {
    *
    * @param conn - 已打开的 TDBC 连接
    */
-  async bootstrap(conn: TdbcConnection): Promise<void> {
-    decodedContentCache.clear();
-    await conn.transaction(async (tx) => {
-      const bootRows = await tx.query<{ user_version: number }>("PRAGMA user_version");
-      if (Number(bootRows[0]?.user_version ?? 0) >= SCHEMA_BOOT_VERSION) {
-        // 快路径：表结构已与当前 DDL/列对齐合同一致，跳过数十次 CREATE/PRAGMA。
-        TdbcTransaction.unwrapOrRollback(await NovelMasterBootstrap.assertMinimumBaseline(tx));
-        await SchemaMigrations.runPending(tx);
-        await BuiltinProviders.seed(tx);
-        await BuiltinSmartSortRules.seed(tx);
-        return;
-      }
+    async bootstrap(conn: TdbcConnection): Promise<void> {
+        decodedContentCache.clear();
+        await conn.transaction(async (tx) => {
+            const bootRows = await tx.query<{ user_version: number }>("PRAGMA user_version");
+            if (Number(bootRows[0]?.user_version ?? 0) >= SCHEMA_BOOT_VERSION) {
+                // 快路径：表结构已与当前 DDL/列对齐合同一致，跳过数十次 CREATE/PRAGMA。
+                TdbcTransaction.unwrapOrRollback(await NovelMasterBootstrap.assertMinimumBaseline(tx));
+                await SchemaMigrations.runPending(tx);
+                await BuiltinProviders.seed(tx);
+                await BuiltinSmartSortRules.seed(tx);
+                return;
+            }
 
-      // 基线检查先于 DDL：低版本老库的表形态可能与 canonical DDL 不兼容
-      //（如 legacy vfs_entry（path 主键）没有 content_hash 列，索引 DDL 会以
-      //「no such column」炸掉、顶掉本应给出的升级提示）。事务内抛错整体回滚，
-      // 先后顺序对非 legacy 库无持久影响。
-      TdbcTransaction.unwrapOrRollback(await NovelMasterBootstrap.assertMinimumBaseline(tx));
-      for (const sql of NOVEL_MASTER_SCHEMA_STATEMENTS) {
-        await tx.execute(sql);
-      }
-      await SchemaMigrations.runPending(tx);
-      await SchemaColumnAlign.align(tx);
-      // parent_session_id 索引不能放在 DDL 里——老库升级路径下 DDL 阶段该列还没被
-      // ALIGN 加上，CREATE INDEX 会炸。这里在 ALIGN 之后幂等建一次，保证新老库都有。
-      await tx.execute("CREATE INDEX IF NOT EXISTS idx_chat_session_parent ON chat_session(parent_session_id)");
-      await BuiltinProviders.seed(tx);
-      await BuiltinSmartSortRules.seed(tx);
-      // user_version 为整数 pragma，不能参数绑定。
-      await tx.execute(`PRAGMA user_version = ${SCHEMA_BOOT_VERSION}`);
-    });
+            // 基线检查先于 DDL：低版本老库的表形态可能与 canonical DDL 不兼容
+            //（如 legacy vfs_entry（path 主键）没有 content_hash 列，索引 DDL 会以
+            //「no such column」炸掉、顶掉本应给出的升级提示）。事务内抛错整体回滚，
+            // 先后顺序对非 legacy 库无持久影响。
+            TdbcTransaction.unwrapOrRollback(await NovelMasterBootstrap.assertMinimumBaseline(tx));
+            for (const sql of NOVEL_MASTER_SCHEMA_STATEMENTS) {
+                await tx.execute(sql);
+            }
+            await SchemaMigrations.runPending(tx);
+            await SchemaColumnAlign.align(tx);
+            // parent_session_id 索引不能放在 DDL 里——老库升级路径下 DDL 阶段该列还没被
+            // ALIGN 加上，CREATE INDEX 会炸。这里在 ALIGN 之后幂等建一次，保证新老库都有。
+            await tx.execute("CREATE INDEX IF NOT EXISTS idx_chat_session_parent ON chat_session(parent_session_id)");
+            await BuiltinProviders.seed(tx);
+            await BuiltinSmartSortRules.seed(tx);
+            // user_version 为整数 pragma，不能参数绑定。
+            await tx.execute(`PRAGMA user_version = ${SCHEMA_BOOT_VERSION}`);
+        });
 
-    // pbm-7 方案 A：pack 两表 + member 索引在**事务外无条件幂等补建**（快/慢两
-    // 分支共用本出口）。理由：`user_version=18` 的库若来自「曾占 18 后撤回」的形态
-    //（tool_use_count 撤回版的测试机残留），`SCHEMA_BOOT_VERSION=18` 的快路径
-    //（18 >= 18）不会重跑 DDL——pack 两表永不建出，打包任务每轮以
-    // `no such table: vfs_content_pack` 报错（荣耀真机 2026-10-01 实锤）。慢路径
-    // 库由事务内语句集建出后此处为幂等 no-op；放进语句集对快路径无效果（快路径
-    // 不执行 DDL 循环）。全部语句带 IF NOT EXISTS、不 bump、不挂 migration——与
-    // `idx_chat_message_pending_blob` 先例（V1' 退役第六轮已删）同款落点纪律。**失败语义 fail
-    // loud**：静默吞掉建表失败会让任务持续报 no such table 且无任何痕迹。V1'
-    // 退役 Part B 时随迭代一并评估删除。
-    for (const sql of VFS_CONTENT_PACK_SCHEMA_STATEMENTS) {
-      await conn.execute(sql);
-    }
-
-    // D1：内置技能 seed 挂事务之后的公共路径（快/慢两分支共用本出口；放事务内
-    // 会与 createSkillsService 内部基于外层 conn 的 VfsService 装配嵌套冲突）。
-    // 种入属可选内容——失败仅记日志不阻断启动，下次启动幂等重试。两条失败通道
-    // 都要记：`Result.err` 是域内已知失败（技能读/写），throw 是 SQL 级未知异常。
-    try {
-      const seeded = await BuiltinSkills.seed(conn);
-      if (!seeded.ok) log.warn("内置技能种入失败（不阻断启动，下次启动重试）", { error: seeded.error });
-    } catch (error) {
-      log.warn("内置技能种入失败（不阻断启动，下次启动重试）", { error });
-    }
-
-    // W3：发号器安全网（无条件，await 保证先于任何业务写入）：孤儿 revision 占号
-    // + sqlite_sequence 回退时，新建文件会撞 vfs_revision(entry_id, version)
-    // 唯一键（导入旧备份库实测）。两条聚合查询成本可忽。
-    // 历史：这里曾另有 entry-id migration 刚跑完时的 ref_count / provider 身份键
-    // 兜底修复分支，随 vfs-entry-id-redesign-v1 退役（最低支持 v1.4.27）一并移除。
-    try {
-      const reports = await new IntegrityRepairRegistry().register(EntrySequenceRepair.create(conn)).runAll();
-      for (const report of reports) {
-        if (report.error != null) {
-          log.warn(`发号器完整性修复失败（${report.name}，不阻断启动，下次启动重试）`, { error: report.error });
+        // pbm-7 方案 A：pack 两表 + member 索引在**事务外无条件幂等补建**（快/慢两
+        // 分支共用本出口）。理由：`user_version=18` 的库若来自「曾占 18 后撤回」的形态
+        //（tool_use_count 撤回版的测试机残留），`SCHEMA_BOOT_VERSION=18` 的快路径
+        //（18 >= 18）不会重跑 DDL——pack 两表永不建出，打包任务每轮以
+        // `no such table: vfs_content_pack` 报错（荣耀真机 2026-10-01 实锤）。慢路径
+        // 库由事务内语句集建出后此处为幂等 no-op；放进语句集对快路径无效果（快路径
+        // 不执行 DDL 循环）。全部语句带 IF NOT EXISTS、不 bump、不挂 migration——与
+        // `idx_chat_message_pending_blob` 先例（V1' 退役第六轮已删）同款落点纪律。**失败语义 fail
+        // loud**：静默吞掉建表失败会让任务持续报 no such table 且无任何痕迹。V1'
+        // 退役 Part B 时随迭代一并评估删除。
+        for (const sql of VFS_CONTENT_PACK_SCHEMA_STATEMENTS) {
+            await conn.execute(sql);
         }
-      }
-    } catch (error) {
-      // runAll 对单步失败已兜底挂报告，这里是 registry 编排层异常的保险：
-      // 同样只记日志不阻断启动（可重试）。
-      log.warn("发号器完整性修复运行异常（不阻断启动，下次启动重试）", { error });
-    }
-  },
+
+        // D1：内置技能 seed 挂事务之后的公共路径（快/慢两分支共用本出口；放事务内
+        // 会与 createSkillsService 内部基于外层 conn 的 VfsService 装配嵌套冲突）。
+        // 种入属可选内容——失败仅记日志不阻断启动，下次启动幂等重试。两条失败通道
+        // 都要记：`Result.err` 是域内已知失败（技能读/写），throw 是 SQL 级未知异常。
+        try {
+            const seeded = await BuiltinSkills.seed(conn);
+            if (!seeded.ok) log.warn("内置技能种入失败（不阻断启动，下次启动重试）", { error: seeded.error });
+        } catch (error) {
+            log.warn("内置技能种入失败（不阻断启动，下次启动重试）", { error });
+        }
+
+        // W3：发号器安全网（无条件，await 保证先于任何业务写入）：孤儿 revision 占号
+        // + sqlite_sequence 回退时，新建文件会撞 vfs_revision(entry_id, version)
+        // 唯一键（导入旧备份库实测）。两条聚合查询成本可忽。
+        // 历史：这里曾另有 entry-id migration 刚跑完时的 ref_count / provider 身份键
+        // 兜底修复分支，随 vfs-entry-id-redesign-v1 退役（最低支持 v1.4.27）一并移除。
+        try {
+            const reports = await new IntegrityRepairRegistry().register(EntrySequenceRepair.create(conn)).runAll();
+            for (const report of reports) {
+                if (report.error != null) {
+                    log.warn(`发号器完整性修复失败（${report.name}，不阻断启动，下次启动重试）`, { error: report.error });
+                }
+            }
+        } catch (error) {
+            // runAll 对单步失败已兜底挂报告，这里是 registry 编排层异常的保险：
+            // 同样只记日志不阻断启动（可重试）。
+            log.warn("发号器完整性修复运行异常（不阻断启动，下次启动重试）", { error });
+        }
+    },
 } as const;

@@ -44,21 +44,21 @@ const LEGACY_BODY = `# Novel Master v1.0.3
 **Desktop note:** installers are unsigned.`;
 
 describe("excerptReleaseNotes", () => {
-  it("prefers 更新说明 over platform sections", () => {
-    const text = Release.excerptNotes(WORKFLOW_BODY, "desktop");
-    assert.match(text, /保留已生成内容/);
-    assert.doesNotMatch(text, /universal\.apk/);
-    assert.doesNotMatch(text, /未签名/);
-  });
+    it("prefers 更新说明 over platform sections", () => {
+        const text = Release.excerptNotes(WORKFLOW_BODY, "desktop");
+        assert.match(text, /保留已生成内容/);
+        assert.doesNotMatch(text, /universal\.apk/);
+        assert.doesNotMatch(text, /未签名/);
+    });
 
-  it("prefers 更新说明 for mobile focus too", () => {
-    const text = Release.excerptNotes(WORKFLOW_BODY, "mobile");
-    assert.match(text, /保留已生成内容/);
-    assert.doesNotMatch(text, /windows-setup/);
-  });
+    it("prefers 更新说明 for mobile focus too", () => {
+        const text = Release.excerptNotes(WORKFLOW_BODY, "mobile");
+        assert.match(text, /保留已生成内容/);
+        assert.doesNotMatch(text, /windows-setup/);
+    });
 
-  it("falls back to 下载 · Desktop section without tables", () => {
-    const body = `# v1.0.3
+    it("falls back to 下载 · Desktop section without tables", () => {
+        const body = `# v1.0.3
 
 ## 下载 · Desktop
 
@@ -67,27 +67,27 @@ describe("excerptReleaseNotes", () => {
 | Windows | setup.exe |
 
 **安装提示：** 安装包未签名。`;
-    const text = Release.excerptNotes(body, "desktop");
-    assert.ok(!text.includes("|"));
-    assert.match(text, /未签名/);
-  });
+        const text = Release.excerptNotes(body, "desktop");
+        assert.ok(!text.includes("|"));
+        assert.match(text, /未签名/);
+    });
 
-  it("falls back to legacy Desktop section", () => {
-    const text = Release.excerptNotes(LEGACY_BODY, "desktop");
-    assert.ok(!text.includes("|"));
-    assert.match(text, /unsigned/i);
-    assert.doesNotMatch(text, /universal\.apk/);
-  });
+    it("falls back to legacy Desktop section", () => {
+        const text = Release.excerptNotes(LEGACY_BODY, "desktop");
+        assert.ok(!text.includes("|"));
+        assert.match(text, /unsigned/i);
+        assert.doesNotMatch(text, /universal\.apk/);
+    });
 
-  it("falls back to legacy Android section for mobile focus", () => {
-    const text = Release.excerptNotes(LEGACY_BODY, "mobile");
-    assert.ok(!text.includes("|"));
-    assert.match(text, /universal/i);
-    assert.doesNotMatch(text, /windows-setup/);
-  });
+    it("falls back to legacy Android section for mobile focus", () => {
+        const text = Release.excerptNotes(LEGACY_BODY, "mobile");
+        assert.ok(!text.includes("|"));
+        assert.match(text, /universal/i);
+        assert.doesNotMatch(text, /windows-setup/);
+    });
 
-  it("returns fallback when body is empty", () => {
-    const text = Release.excerptNotes("", "desktop");
-    assert.match(text, /GitHub Releases/);
-  });
+    it("returns fallback when body is empty", () => {
+        const text = Release.excerptNotes("", "desktop");
+        assert.match(text, /GitHub Releases/);
+    });
 });

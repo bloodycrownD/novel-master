@@ -10,43 +10,43 @@ import type { ContentBlock } from "@/domain/chat/model/content-block.js";
 import type { ChatMessageData } from "@/domain/chat/model/message.js";
 
 export const TextOnlyContent = {
-  // nm-style note: 三个成员名剥 TextOnly 主体后不成词（blocksTo / chatMessagesTo / isHistory 丢语义），整体保留原名。
+    // nm-style note: 三个成员名剥 TextOnly 主体后不成词（blocksTo / chatMessagesTo / isHistory 丢语义），整体保留原名。
 
-  /** Join text blocks; reject image/tool/thinking in outbound requests. */
-  blocksToTextOnly(blocks: readonly ContentBlock[]): Result<string, AppError> {
-    const parts: string[] = [];
-    for (const block of blocks) {
-      if (block.type === "text") {
-        parts.push(block.text);
-        continue;
-      }
-      return Result.err(new AppError("PROVIDER_UNSUPPORTED_CONTENT", { detail: `Provider does not support ${block.type} content blocks; use Anthropic or send text only` }));
-    }
-    return Result.ok(parts.join("\n\n"));
-  },
-
-  /** True when every block in history is `text` (legacy `nm model request` shortcut). */
-  isTextOnlyHistory(messages: readonly ChatMessageData[]): boolean {
-    for (const msg of messages) {
-      for (const block of msg.content.blocks) {
-        if (block.type !== "text") {
-          return false;
+    /** Join text blocks; reject image/tool/thinking in outbound requests. */
+    blocksToTextOnly(blocks: readonly ContentBlock[]): Result<string, AppError> {
+        const parts: string[] = [];
+        for (const block of blocks) {
+            if (block.type === "text") {
+                parts.push(block.text);
+                continue;
+            }
+            return Result.err(new AppError("PROVIDER_UNSUPPORTED_CONTENT", { detail: `Provider does not support ${block.type} content blocks; use Anthropic or send text only` }));
         }
-      }
-    }
-    return true;
-  },
+        return Result.ok(parts.join("\n\n"));
+    },
 
-  /** Flatten chat history to a single user string (text blocks only). */
-  chatMessagesToTextOnly(messages: readonly ChatMessageData[]): Result<string, AppError> {
-    const parts: string[] = [];
-    for (const msg of messages) {
-      const body = TextOnlyContent.blocksToTextOnly(msg.content.blocks);
-      if (!body.ok) return body;
-      if (body.value !== "") {
-        parts.push(`${msg.role}: ${body.value}`);
-      }
-    }
-    return Result.ok(parts.join("\n\n"));
-  },
+    /** True when every block in history is `text` (legacy `nm model request` shortcut). */
+    isTextOnlyHistory(messages: readonly ChatMessageData[]): boolean {
+        for (const msg of messages) {
+            for (const block of msg.content.blocks) {
+                if (block.type !== "text") {
+                    return false;
+                }
+            }
+        }
+        return true;
+    },
+
+    /** Flatten chat history to a single user string (text blocks only). */
+    chatMessagesToTextOnly(messages: readonly ChatMessageData[]): Result<string, AppError> {
+        const parts: string[] = [];
+        for (const msg of messages) {
+            const body = TextOnlyContent.blocksToTextOnly(msg.content.blocks);
+            if (!body.ok) return body;
+            if (body.value !== "") {
+                parts.push(`${msg.role}: ${body.value}`);
+            }
+        }
+        return Result.ok(parts.join("\n\n"));
+    },
 } as const;

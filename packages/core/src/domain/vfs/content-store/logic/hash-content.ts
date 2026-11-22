@@ -8,13 +8,13 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 
 export const ContentHash = {
-  /**
+    /**
    * 对 UTF-8 明文计算 SHA-256，返回小写 hex。
    *
    * @remarks noble v2 的 sha256 从 `sha2.js` 导出（与 mobile 对齐）；禁止以 node:crypto 作唯一实现。
    */
-  hash(plain: string): string {
-    const utf8 = new TextEncoder().encode(plain);
-    return bytesToHex(sha256(utf8));
-  },
+    hash(plain: string): string {
+        const utf8 = new TextEncoder().encode(plain);
+        return bytesToHex(sha256(utf8));
+    },
 } as const;

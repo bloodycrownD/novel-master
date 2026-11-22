@@ -16,11 +16,11 @@ import {  PromptAssembler  } from "../../src/domain/chat/logic/prompt/prompt-ass
 import type { ChatMessageData } from "../../src/domain/chat/model/message.js";
 import type { MessageAttachment } from "../../src/domain/chat/model/message-attachment.schema.js";
 import type {
-  EffectiveSkill,
+    EffectiveSkill,
 } from "../../src/domain/skills/logic/effective-skills.js";
 import type {
-  SkillFileContent,
-  SkillService,
+    SkillFileContent,
+    SkillService,
 } from "../../src/service/skills/skills.port.js";
 import {  SessionKkvServiceFactory  } from "../../src/service/session-kkv/create-session-kkv-service.js";
 import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix  } from "../helpers/novel-master-fixture.js";
@@ -28,522 +28,522 @@ import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix
 novelMasterTestFixture();
 
 function userMsg(
-  text: string,
-  options?: {
-    readonly attachments?: readonly MessageAttachment[];
-    readonly id?: string;
-    readonly sessionId?: string;
-  },
+    text: string,
+    options?: {
+        readonly attachments?: readonly MessageAttachment[];
+        readonly id?: string;
+        readonly sessionId?: string;
+    },
 ): ChatMessageData {
-  return {
-    id: options?.id ?? "u1",
-    sessionId: options?.sessionId ?? "s1",
-    seq: 1,
-    role: "user",
-    content: TextBlocks.of(text),
-    provider: null,
-    raw: null,
-    createdAtMs: 0,
-    hidden: false,
-    ...(options?.attachments != null
-      ? { attachments: options.attachments }
-      : {}),
-  };
+    return {
+        id: options?.id ?? "u1",
+        sessionId: options?.sessionId ?? "s1",
+        seq: 1,
+        role: "user",
+        content: TextBlocks.of(text),
+        provider: null,
+        raw: null,
+        createdAtMs: 0,
+        hidden: false,
+        ...(options?.attachments != null
+            ? { attachments: options.attachments }
+            : {}),
+    };
 }
 
 function skillAttach(name: string): MessageAttachment {
-  return {
-    name,
-    source: "attach",
-    type: "text",
-    content: null,
-    skillName: name,
-    action: "skillAttach",
-  };
+    return {
+        name,
+        source: "attach",
+        type: "text",
+        content: null,
+        skillName: name,
+        action: "skillAttach",
+    };
 }
 
 /** 可见历史里的 assistant 消息（带 skill 工具 tool_use 块，方向 B 扫描用）。 */
 function assistantSkillLoadMsg(
-  action: string,
-  skillName: string,
-  id = "a1",
+    action: string,
+    skillName: string,
+    id = "a1",
 ): ChatMessageData {
-  return {
-    id,
-    sessionId: "s1",
-    seq: 2,
-    role: "assistant",
-    content: {
-      blocks: [
-        {
-          type: "tool_use",
-          id: "tu1",
-          name: "skill",
-          input: { action, name: skillName },
+    return {
+        id,
+        sessionId: "s1",
+        seq: 2,
+        role: "assistant",
+        content: {
+            blocks: [
+                {
+                    type: "tool_use",
+                    id: "tu1",
+                    name: "skill",
+                    input: { action, name: skillName },
+                },
+            ],
         },
-      ],
-    },
-    provider: null,
-    raw: null,
-    createdAtMs: 0,
-    hidden: false,
-  };
+        provider: null,
+        raw: null,
+        createdAtMs: 0,
+        hidden: false,
+    };
 }
 
 const SKILL_MD = "---\nname: demo\ndescription: 演示\n---\n# 演示技能\n正文内容";
 
 /** fake SkillService：只实现 skillAttach hydrate 用到的两个方法，状态可变供自愈用例。 */
 function fakeSkillService(state: {
-  names: string[];
-  content?: string;
-  readError?: boolean;
+    names: string[];
+    content?: string;
+    readError?: boolean;
 }): SkillService & { readonly state: typeof state } {
-  const service = {
-    // 错误通道迁移四期：effectiveSkills 走 Result 通道。
-    effectiveSkills: async (): Promise<SkillService["effectiveSkills"] extends (...args: never[]) => Promise<infer R> ? R : never> =>
-      Result.ok(state.names.map((name) => ({
-        name,
-        description: null,
-        domain: "project",
-        overridden: false,
-        disabled: false,
-        valid: true,
-        effective: true,
-      })) as never),
-    // 错误通道迁移二期：readSkillFile 走 Result 通道——fake 在这里统一包 Ok。
-    readSkillFile: async (): Promise<SkillService["readSkillFile"] extends (...args: never[]) => Promise<infer R> ? R : never> => {
-      if (state.readError) {
-        throw new Error("skill file gone");
-      }
-      return Result.ok({
-        domain: "project",
-        name: "demo",
-        path: "SKILL.md",
-        content: state.content ?? SKILL_MD,
-        version: 1,
-      }) as never;
-    },
-  } as unknown as SkillService;
-  return Object.assign(service, { state });
+    const service = {
+        // 错误通道迁移四期：effectiveSkills 走 Result 通道。
+        effectiveSkills: async (): Promise<SkillService["effectiveSkills"] extends (...args: never[]) => Promise<infer R> ? R : never> =>
+            Result.ok(state.names.map((name) => ({
+                name,
+                description: null,
+                domain: "project",
+                overridden: false,
+                disabled: false,
+                valid: true,
+                effective: true,
+            })) as never),
+        // 错误通道迁移二期：readSkillFile 走 Result 通道——fake 在这里统一包 Ok。
+        readSkillFile: async (): Promise<SkillService["readSkillFile"] extends (...args: never[]) => Promise<infer R> ? R : never> => {
+            if (state.readError) {
+                throw new Error("skill file gone");
+            }
+            return Result.ok({
+                domain: "project",
+                name: "demo",
+                path: "SKILL.md",
+                content: state.content ?? SKILL_MD,
+                version: 1,
+            }) as never;
+        },
+    } as unknown as SkillService;
+    return Object.assign(service, { state });
 }
 
 describe("promptAssembler skillAttach (T-SK12)", () => {
-  it("首次出现：读生效副本 SKILL.md 全文附 skillAttach；正文 token 原样保留", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    const skills = fakeSkillService({ names: ["demo"] });
+    it("首次出现：读生效副本 SKILL.md 全文附 skillAttach；正文 token 原样保留", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        const skills = fakeSkillService({ names: ["demo"] });
 
-    const prepared = unwrap(await PromptAssembler.prepare(
-      [userMsg("用 $demo 改一下", { sessionId: session.id, attachments: [skillAttach("demo")] })],
-      {
-        sessionId: session.id,
-        sessionKkv: sk,
-        vfs: ctx.sessionVfs(project.id, session.id),
-        skills,
-        projectId: project.id,
-      },
-    ));
-    const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
-    assert.match(body, /<action name="skillAttach">/);
-    assert.match(body, /"name": "demo"/);
-    // SKILL.md 全文（含 front matter 原样）
-    assert.match(body, /---\\nname: demo/);
-    assert.match(body, /# 演示技能/);
-    // 正文 token 不剥离
-    assert.match(body, /<user-input>\n用 \$demo 改一下\n<\/user-input>/);
-  });
-
-  it("第二条可见消息同技能 → alreadyReferenced 短标记，无全文（镜像 T-PD2）", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    const skills = fakeSkillService({ names: ["demo"] });
-
-    const prepared = unwrap(await PromptAssembler.prepare(
-      [
-        userMsg("m1", { id: "u1", sessionId: session.id, attachments: [skillAttach("demo")] }),
-        userMsg("m2", { id: "u2", sessionId: session.id, attachments: [skillAttach("demo")] }),
-      ],
-      {
-        sessionId: session.id,
-        sessionKkv: sk,
-        vfs: ctx.sessionVfs(project.id, session.id),
-        skills,
-        projectId: project.id,
-      },
-    ));
-    const body2 = MessageBodyText.fromBlocks(prepared[1]!.content.blocks);
-    assert.match(body2, /<action name="skillAttach">/);
-    assert.match(body2, /"alreadyReferenced": true/);
-    assert.equal(body2.includes("# 演示技能"), false);
-    assert.equal(body2.includes('"content"'), false);
-  });
-
-  it("不存在技能名：一行提示而非全文，且不写 seen（同轮再引仍是提示行，非 alreadyReferenced）", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    const skills = fakeSkillService({ names: ["other"] });
-
-    const prepared = unwrap(await PromptAssembler.prepare(
-      [
-        userMsg("m1", { id: "u1", sessionId: session.id, attachments: [skillAttach("ghost")] }),
-        userMsg("m2", { id: "u2", sessionId: session.id, attachments: [skillAttach("ghost")] }),
-      ],
-      {
-        sessionId: session.id,
-        sessionKkv: sk,
-        vfs: ctx.sessionVfs(project.id, session.id),
-        skills,
-        projectId: project.id,
-      },
-    ));
-    for (const m of prepared) {
-      const body = MessageBodyText.fromBlocks(m!.content.blocks);
-      assert.match(body, /<action name="skillAttach">/);
-      assert.match(body, /"missing": true/);
-      assert.match(body, /技能不存在或已删除/);
-      assert.equal(body.includes('"alreadyReferenced"'), false);
-    }
-  });
-
-  it("自愈：上轮不存在（不写 seen），技能创建后再次引用重新附全文", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    const skills = fakeSkillService({ names: [] });
-
-    const runtimeBase = {
-      sessionId: session.id,
-      sessionKkv: sk,
-      vfs: ctx.sessionVfs(project.id, session.id),
-      skills,
-      projectId: project.id,
-    };
-    const before = unwrap(await PromptAssembler.prepare(
-      [userMsg("m1", { sessionId: session.id, attachments: [skillAttach("demo")] })],
-      runtimeBase,
-    ));
-    assert.match(MessageBodyText.fromBlocks(before[0]!.content.blocks), /技能不存在或已删除/);
-
-    // 技能被创建：同一条消息再次 prepare → 重新附全文（seen 不残留）
-    skills.state.names.push("demo");
-    const after = unwrap(await PromptAssembler.prepare(
-      [userMsg("m1", { sessionId: session.id, attachments: [skillAttach("demo")] })],
-      runtimeBase,
-    ));
-    const body = MessageBodyText.fromBlocks(after[0]!.content.blocks);
-    assert.match(body, /# 演示技能/);
-    assert.equal(body.includes("技能不存在或已删除"), false);
-  });
-
-  it("存在但无效（front matter 缺失）与禁用技能：仍附 SKILL.md 原文，不视为不存在", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    const entries: EffectiveSkill[] = [
-      {
-        name: "broken",
-        description: null,
-        domain: "project",
-        overridden: false,
-        disabled: false,
-        valid: false,
-        invalidReason: "front matter 不可解析",
-        effective: false,
-      },
-      {
-        name: "off",
-        description: null,
-        domain: "global",
-        overridden: false,
-        disabled: true,
-        valid: true,
-        effective: false,
-      },
-    ];
-    const service = {
-      // 错误通道迁移四期：effectiveSkills 走 Result 通道。
-      effectiveSkills: async () => Result.ok(entries),
-      // 错误通道迁移二期：readSkillFile 走 Result 通道。
-      readSkillFile: async (): Promise<SkillFileContent> =>
-        Result.ok({
-          domain: "project",
-          name: "x",
-          path: "SKILL.md",
-          content: SKILL_MD,
-          version: 1,
-        }) as unknown as SkillFileContent,
-    } as unknown as SkillService;
-
-    const prepared = unwrap(await PromptAssembler.prepare(
-      [
-        userMsg("m1", {
-          sessionId: session.id,
-          attachments: [skillAttach("broken"), skillAttach("off")],
-        }),
-      ],
-      {
-        sessionId: session.id,
-        sessionKkv: sk,
-        vfs: ctx.sessionVfs(project.id, session.id),
-        skills: service,
-        projectId: project.id,
-      },
-    ));
-    const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
-    assert.equal((body.match(/# 演示技能/g) ?? []).length, 2);
-    assert.equal(body.includes("技能不存在或已删除"), false);
-  });
-
-  it("读盘竞态失败（判定存在但读取抛错）→ 按不存在提示，不写 seen", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    const skills = fakeSkillService({ names: ["demo"], readError: true });
-
-    const prepared = unwrap(await PromptAssembler.prepare(
-      [
-        userMsg("m1", { sessionId: session.id, attachments: [skillAttach("demo")] }),
-        userMsg("m2", { id: "u2", sessionId: session.id, attachments: [skillAttach("demo")] }),
-      ],
-      {
-        sessionId: session.id,
-        sessionKkv: sk,
-        vfs: ctx.sessionVfs(project.id, session.id),
-        skills,
-        projectId: project.id,
-      },
-    ));
-    for (const m of prepared) {
-      assert.match(MessageBodyText.fromBlocks(m!.content.blocks), /技能不存在或已删除/);
-      assert.equal(MessageBodyText.fromBlocks(m!.content.blocks).includes('"alreadyReferenced"'), false);
-    }
-  });
-
-  it("置位/压缩重置：可见窗口只剩后一条消息时 seen 重新开始 → 再次全文（镜像 T-PD3 可见窗口语义）", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    const skills = fakeSkillService({ names: ["demo"] });
-    const runtimeBase = {
-      sessionId: session.id,
-      sessionKkv: sk,
-      vfs: ctx.sessionVfs(project.id, session.id),
-      skills,
-      projectId: project.id,
-    };
-
-    // 全窗口：m1 全文、m2 短标记
-    const full = unwrap(await PromptAssembler.prepare(
-      [
-        userMsg("m1", { id: "u1", sessionId: session.id, attachments: [skillAttach("demo")] }),
-        userMsg("m2", { id: "u2", sessionId: session.id, attachments: [skillAttach("demo")] }),
-      ],
-      runtimeBase,
-    ));
-    assert.match(MessageBodyText.fromBlocks(full[0]!.content.blocks), /# 演示技能/);
-    assert.match(MessageBodyText.fromBlocks(full[1]!.content.blocks), /"alreadyReferenced": true/);
-
-    // 压缩/置位后可见窗口只剩 m2：skill seen 随窗口重置 → 再次全文
-    const compacted = unwrap(await PromptAssembler.prepare(
-      [userMsg("m2", { id: "u2", sessionId: session.id, attachments: [skillAttach("demo")] })],
-      runtimeBase,
-    ));
-    assert.match(MessageBodyText.fromBlocks(compacted[0]!.content.blocks), /# 演示技能/);
-  });
-
-  it("S0 前缀集不预填技能 key：常驻路径 seen 与 skill: 命名空间隔离", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    const skills = fakeSkillService({ names: ["demo"] });
-
-    const prepared = unwrap(await PromptAssembler.prepare(
-      [userMsg("m1", { sessionId: session.id, attachments: [skillAttach("demo")] })],
-      {
-        sessionId: session.id,
-        sessionKkv: sk,
-        vfs: ctx.sessionVfs(project.id, session.id),
-        skills,
-        projectId: project.id,
-        // 同名路径进 S0 不影响技能首次全文（skill:demo ≠ /demo）
-        seenPaths: ["/demo"],
-      },
-    ));
-    const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
-    assert.match(body, /# 演示技能/);
-    assert.equal(body.includes('"alreadyReferenced"'), false);
-  });
-
-  it("方向 B：可见历史 assistant 已 load 过的技能 → 后续 $ 引用 alreadyReferenced，不重复附全文", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    const skills = fakeSkillService({ names: ["demo"] });
-
-    const prepared = unwrap(await PromptAssembler.prepare(
-      [
-        // load 的全文以 tool_result 形式留在可见历史，无需再附
-        assistantSkillLoadMsg("load", "demo"),
-        userMsg("再用 $demo 检查", {
-          id: "u1",
-          sessionId: session.id,
-          attachments: [skillAttach("demo")],
-        }),
-      ],
-      {
-        sessionId: session.id,
-        sessionKkv: sk,
-        vfs: ctx.sessionVfs(project.id, session.id),
-        skills,
-        projectId: project.id,
-      },
-    ));
-    const body = MessageBodyText.fromBlocks(prepared.at(-1)!.content.blocks);
-    assert.match(body, /"alreadyReferenced": true/);
-    assert.equal(body.includes("# 演示技能"), false);
-  });
-
-  it("方向 B 边界：assistant 的 read tool_use 不预填 seen（read 可能截断，与 load 不同语义）", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    const skills = fakeSkillService({ names: ["demo"] });
-
-    const prepared = unwrap(await PromptAssembler.prepare(
-      [
-        assistantSkillLoadMsg("read", "demo"),
-        userMsg("用 $demo", {
-          id: "u1",
-          sessionId: session.id,
-          attachments: [skillAttach("demo")],
-        }),
-      ],
-      {
-        sessionId: session.id,
-        sessionKkv: sk,
-        vfs: ctx.sessionVfs(project.id, session.id),
-        skills,
-        projectId: project.id,
-      },
-    ));
-    const body = MessageBodyText.fromBlocks(prepared.at(-1)!.content.blocks);
-    assert.match(body, /# 演示技能/);
-    assert.equal(body.includes('"alreadyReferenced"'), false);
-  });
-
-  it("skills 未接线：skillAttach 附件原样带过（不读盘、不写 seen、不炸）", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-
-    const att = skillAttach("demo");
-    const prepared = unwrap(await PromptAssembler.prepare(
-      [userMsg("m1", { sessionId: session.id, attachments: [att] })],
-      {
-        sessionId: session.id,
-        sessionKkv: sk,
-        vfs: ctx.sessionVfs(project.id, session.id),
-      },
-    ));
-    assert.deepEqual(prepared[0]!.attachments, [att]);
-    // 无可拼 body → wrap 恒等原文
-    assert.equal(MessageBodyText.fromBlocks(prepared[0]!.content.blocks), "m1");
-  });
-
-  it("T-A2: skill 全文超附件预算 → skillAttach 降级 display:\"filename\" + 分段读取引导；恰好等于预算不降级", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    const runtimeBase = {
-      sessionId: session.id,
-      sessionKkv: sk,
-      vfs: ctx.sessionVfs(project.id, session.id),
-      projectId: project.id,
-    };
-
-    // 恰好等于预算：全文照旧（边界不降级）
-    const exact = fakeSkillService({
-      names: ["demo"],
-      content: "x".repeat(ATTACH_PROMPT_CHAR_BUDGET),
-    });
-    const exactBody = MessageBodyText.fromBlocks((
-        unwrap(await PromptAssembler.prepare(
-          [
-            userMsg("m1", {
-              sessionId: session.id,
-              attachments: [skillAttach("demo")],
-            }),
-          ],
-          { ...runtimeBase, skills: exact },
-        ))
-      )[0]!.content.blocks);
-    assert.match(exactBody, /<action name="skillAttach">/);
-    assert.equal(exactBody.includes('"display"'), false);
-    assert.equal(exactBody.includes("文件过长"), false);
-
-    // 超过预算一个字符：降级
-    const over = fakeSkillService({
-      names: ["demo"],
-      content: "x".repeat(ATTACH_PROMPT_CHAR_BUDGET + 1),
-    });
-    const overBody = MessageBodyText.fromBlocks((
-        unwrap(await PromptAssembler.prepare(
-          [
-            userMsg("m1", {
-              sessionId: session.id,
-              attachments: [skillAttach("demo")],
-            }),
-          ],
-          { ...runtimeBase, skills: over },
-        ))
-      )[0]!.content.blocks);
-    assert.match(overBody, /<action name="skillAttach">/);
-    assert.match(overBody, /"display": "filename"/);
-    assert.match(overBody, /文件过长，可用 read 配合 offset\/limit 分段读取/);
-    assert.equal((overBody.match(/xxxx/g) ?? []).length, 0);
-  });
-
-  it("T-A5: skill 超限降级后仍写 seen → 同会话后续同技能走 alreadyReferenced", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
-    const session = unwrap(await ctx.sessions.create(project.id));
-    const sk = SessionKkvServiceFactory.create(ctx.conn);
-    const skills = fakeSkillService({
-      names: ["demo"],
-      content: "x".repeat(ATTACH_PROMPT_CHAR_BUDGET + 1),
+        const prepared = unwrap(await PromptAssembler.prepare(
+            [userMsg("用 $demo 改一下", { sessionId: session.id, attachments: [skillAttach("demo")] })],
+            {
+                sessionId: session.id,
+                sessionKkv: sk,
+                vfs: ctx.sessionVfs(project.id, session.id),
+                skills,
+                projectId: project.id,
+            },
+        ));
+        const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
+        assert.match(body, /<action name="skillAttach">/);
+        assert.match(body, /"name": "demo"/);
+        // SKILL.md 全文（含 front matter 原样）
+        assert.match(body, /---\\nname: demo/);
+        assert.match(body, /# 演示技能/);
+        // 正文 token 不剥离
+        assert.match(body, /<user-input>\n用 \$demo 改一下\n<\/user-input>/);
     });
 
-    const prepared = unwrap(await PromptAssembler.prepare(
-      [
-        userMsg("m1", { id: "u1", sessionId: session.id, attachments: [skillAttach("demo")] }),
-        userMsg("m2", { id: "u2", sessionId: session.id, attachments: [skillAttach("demo")] }),
-      ],
-      {
-        sessionId: session.id,
-        sessionKkv: sk,
-        vfs: ctx.sessionVfs(project.id, session.id),
-        skills,
-        projectId: project.id,
-      },
-    ));
-    assert.match(MessageBodyText.fromBlocks(prepared[0]!.content.blocks), /"display": "filename"/);
-    const body2 = MessageBodyText.fromBlocks(prepared[1]!.content.blocks);
-    assert.match(body2, /"alreadyReferenced": true/);
-    assert.equal(body2.includes("文件过长"), false);
-  });
+    it("第二条可见消息同技能 → alreadyReferenced 短标记，无全文（镜像 T-PD2）", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        const skills = fakeSkillService({ names: ["demo"] });
+
+        const prepared = unwrap(await PromptAssembler.prepare(
+            [
+                userMsg("m1", { id: "u1", sessionId: session.id, attachments: [skillAttach("demo")] }),
+                userMsg("m2", { id: "u2", sessionId: session.id, attachments: [skillAttach("demo")] }),
+            ],
+            {
+                sessionId: session.id,
+                sessionKkv: sk,
+                vfs: ctx.sessionVfs(project.id, session.id),
+                skills,
+                projectId: project.id,
+            },
+        ));
+        const body2 = MessageBodyText.fromBlocks(prepared[1]!.content.blocks);
+        assert.match(body2, /<action name="skillAttach">/);
+        assert.match(body2, /"alreadyReferenced": true/);
+        assert.equal(body2.includes("# 演示技能"), false);
+        assert.equal(body2.includes('"content"'), false);
+    });
+
+    it("不存在技能名：一行提示而非全文，且不写 seen（同轮再引仍是提示行，非 alreadyReferenced）", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        const skills = fakeSkillService({ names: ["other"] });
+
+        const prepared = unwrap(await PromptAssembler.prepare(
+            [
+                userMsg("m1", { id: "u1", sessionId: session.id, attachments: [skillAttach("ghost")] }),
+                userMsg("m2", { id: "u2", sessionId: session.id, attachments: [skillAttach("ghost")] }),
+            ],
+            {
+                sessionId: session.id,
+                sessionKkv: sk,
+                vfs: ctx.sessionVfs(project.id, session.id),
+                skills,
+                projectId: project.id,
+            },
+        ));
+        for (const m of prepared) {
+            const body = MessageBodyText.fromBlocks(m!.content.blocks);
+            assert.match(body, /<action name="skillAttach">/);
+            assert.match(body, /"missing": true/);
+            assert.match(body, /技能不存在或已删除/);
+            assert.equal(body.includes('"alreadyReferenced"'), false);
+        }
+    });
+
+    it("自愈：上轮不存在（不写 seen），技能创建后再次引用重新附全文", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        const skills = fakeSkillService({ names: [] });
+
+        const runtimeBase = {
+            sessionId: session.id,
+            sessionKkv: sk,
+            vfs: ctx.sessionVfs(project.id, session.id),
+            skills,
+            projectId: project.id,
+        };
+        const before = unwrap(await PromptAssembler.prepare(
+            [userMsg("m1", { sessionId: session.id, attachments: [skillAttach("demo")] })],
+            runtimeBase,
+        ));
+        assert.match(MessageBodyText.fromBlocks(before[0]!.content.blocks), /技能不存在或已删除/);
+
+        // 技能被创建：同一条消息再次 prepare → 重新附全文（seen 不残留）
+        skills.state.names.push("demo");
+        const after = unwrap(await PromptAssembler.prepare(
+            [userMsg("m1", { sessionId: session.id, attachments: [skillAttach("demo")] })],
+            runtimeBase,
+        ));
+        const body = MessageBodyText.fromBlocks(after[0]!.content.blocks);
+        assert.match(body, /# 演示技能/);
+        assert.equal(body.includes("技能不存在或已删除"), false);
+    });
+
+    it("存在但无效（front matter 缺失）与禁用技能：仍附 SKILL.md 原文，不视为不存在", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        const entries: EffectiveSkill[] = [
+            {
+                name: "broken",
+                description: null,
+                domain: "project",
+                overridden: false,
+                disabled: false,
+                valid: false,
+                invalidReason: "front matter 不可解析",
+                effective: false,
+            },
+            {
+                name: "off",
+                description: null,
+                domain: "global",
+                overridden: false,
+                disabled: true,
+                valid: true,
+                effective: false,
+            },
+        ];
+        const service = {
+            // 错误通道迁移四期：effectiveSkills 走 Result 通道。
+            effectiveSkills: async () => Result.ok(entries),
+            // 错误通道迁移二期：readSkillFile 走 Result 通道。
+            readSkillFile: async (): Promise<SkillFileContent> =>
+                Result.ok({
+                    domain: "project",
+                    name: "x",
+                    path: "SKILL.md",
+                    content: SKILL_MD,
+                    version: 1,
+                }) as unknown as SkillFileContent,
+        } as unknown as SkillService;
+
+        const prepared = unwrap(await PromptAssembler.prepare(
+            [
+                userMsg("m1", {
+                    sessionId: session.id,
+                    attachments: [skillAttach("broken"), skillAttach("off")],
+                }),
+            ],
+            {
+                sessionId: session.id,
+                sessionKkv: sk,
+                vfs: ctx.sessionVfs(project.id, session.id),
+                skills: service,
+                projectId: project.id,
+            },
+        ));
+        const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
+        assert.equal((body.match(/# 演示技能/g) ?? []).length, 2);
+        assert.equal(body.includes("技能不存在或已删除"), false);
+    });
+
+    it("读盘竞态失败（判定存在但读取抛错）→ 按不存在提示，不写 seen", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        const skills = fakeSkillService({ names: ["demo"], readError: true });
+
+        const prepared = unwrap(await PromptAssembler.prepare(
+            [
+                userMsg("m1", { sessionId: session.id, attachments: [skillAttach("demo")] }),
+                userMsg("m2", { id: "u2", sessionId: session.id, attachments: [skillAttach("demo")] }),
+            ],
+            {
+                sessionId: session.id,
+                sessionKkv: sk,
+                vfs: ctx.sessionVfs(project.id, session.id),
+                skills,
+                projectId: project.id,
+            },
+        ));
+        for (const m of prepared) {
+            assert.match(MessageBodyText.fromBlocks(m!.content.blocks), /技能不存在或已删除/);
+            assert.equal(MessageBodyText.fromBlocks(m!.content.blocks).includes('"alreadyReferenced"'), false);
+        }
+    });
+
+    it("置位/压缩重置：可见窗口只剩后一条消息时 seen 重新开始 → 再次全文（镜像 T-PD3 可见窗口语义）", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        const skills = fakeSkillService({ names: ["demo"] });
+        const runtimeBase = {
+            sessionId: session.id,
+            sessionKkv: sk,
+            vfs: ctx.sessionVfs(project.id, session.id),
+            skills,
+            projectId: project.id,
+        };
+
+        // 全窗口：m1 全文、m2 短标记
+        const full = unwrap(await PromptAssembler.prepare(
+            [
+                userMsg("m1", { id: "u1", sessionId: session.id, attachments: [skillAttach("demo")] }),
+                userMsg("m2", { id: "u2", sessionId: session.id, attachments: [skillAttach("demo")] }),
+            ],
+            runtimeBase,
+        ));
+        assert.match(MessageBodyText.fromBlocks(full[0]!.content.blocks), /# 演示技能/);
+        assert.match(MessageBodyText.fromBlocks(full[1]!.content.blocks), /"alreadyReferenced": true/);
+
+        // 压缩/置位后可见窗口只剩 m2：skill seen 随窗口重置 → 再次全文
+        const compacted = unwrap(await PromptAssembler.prepare(
+            [userMsg("m2", { id: "u2", sessionId: session.id, attachments: [skillAttach("demo")] })],
+            runtimeBase,
+        ));
+        assert.match(MessageBodyText.fromBlocks(compacted[0]!.content.blocks), /# 演示技能/);
+    });
+
+    it("S0 前缀集不预填技能 key：常驻路径 seen 与 skill: 命名空间隔离", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        const skills = fakeSkillService({ names: ["demo"] });
+
+        const prepared = unwrap(await PromptAssembler.prepare(
+            [userMsg("m1", { sessionId: session.id, attachments: [skillAttach("demo")] })],
+            {
+                sessionId: session.id,
+                sessionKkv: sk,
+                vfs: ctx.sessionVfs(project.id, session.id),
+                skills,
+                projectId: project.id,
+                // 同名路径进 S0 不影响技能首次全文（skill:demo ≠ /demo）
+                seenPaths: ["/demo"],
+            },
+        ));
+        const body = MessageBodyText.fromBlocks(prepared[0]!.content.blocks);
+        assert.match(body, /# 演示技能/);
+        assert.equal(body.includes('"alreadyReferenced"'), false);
+    });
+
+    it("方向 B：可见历史 assistant 已 load 过的技能 → 后续 $ 引用 alreadyReferenced，不重复附全文", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        const skills = fakeSkillService({ names: ["demo"] });
+
+        const prepared = unwrap(await PromptAssembler.prepare(
+            [
+                // load 的全文以 tool_result 形式留在可见历史，无需再附
+                assistantSkillLoadMsg("load", "demo"),
+                userMsg("再用 $demo 检查", {
+                    id: "u1",
+                    sessionId: session.id,
+                    attachments: [skillAttach("demo")],
+                }),
+            ],
+            {
+                sessionId: session.id,
+                sessionKkv: sk,
+                vfs: ctx.sessionVfs(project.id, session.id),
+                skills,
+                projectId: project.id,
+            },
+        ));
+        const body = MessageBodyText.fromBlocks(prepared.at(-1)!.content.blocks);
+        assert.match(body, /"alreadyReferenced": true/);
+        assert.equal(body.includes("# 演示技能"), false);
+    });
+
+    it("方向 B 边界：assistant 的 read tool_use 不预填 seen（read 可能截断，与 load 不同语义）", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        const skills = fakeSkillService({ names: ["demo"] });
+
+        const prepared = unwrap(await PromptAssembler.prepare(
+            [
+                assistantSkillLoadMsg("read", "demo"),
+                userMsg("用 $demo", {
+                    id: "u1",
+                    sessionId: session.id,
+                    attachments: [skillAttach("demo")],
+                }),
+            ],
+            {
+                sessionId: session.id,
+                sessionKkv: sk,
+                vfs: ctx.sessionVfs(project.id, session.id),
+                skills,
+                projectId: project.id,
+            },
+        ));
+        const body = MessageBodyText.fromBlocks(prepared.at(-1)!.content.blocks);
+        assert.match(body, /# 演示技能/);
+        assert.equal(body.includes('"alreadyReferenced"'), false);
+    });
+
+    it("skills 未接线：skillAttach 附件原样带过（不读盘、不写 seen、不炸）", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+
+        const att = skillAttach("demo");
+        const prepared = unwrap(await PromptAssembler.prepare(
+            [userMsg("m1", { sessionId: session.id, attachments: [att] })],
+            {
+                sessionId: session.id,
+                sessionKkv: sk,
+                vfs: ctx.sessionVfs(project.id, session.id),
+            },
+        ));
+        assert.deepEqual(prepared[0]!.attachments, [att]);
+        // 无可拼 body → wrap 恒等原文
+        assert.equal(MessageBodyText.fromBlocks(prepared[0]!.content.blocks), "m1");
+    });
+
+    it("T-A2: skill 全文超附件预算 → skillAttach 降级 display:\"filename\" + 分段读取引导；恰好等于预算不降级", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        const runtimeBase = {
+            sessionId: session.id,
+            sessionKkv: sk,
+            vfs: ctx.sessionVfs(project.id, session.id),
+            projectId: project.id,
+        };
+
+        // 恰好等于预算：全文照旧（边界不降级）
+        const exact = fakeSkillService({
+            names: ["demo"],
+            content: "x".repeat(ATTACH_PROMPT_CHAR_BUDGET),
+        });
+        const exactBody = MessageBodyText.fromBlocks((
+                unwrap(await PromptAssembler.prepare(
+                    [
+                        userMsg("m1", {
+                            sessionId: session.id,
+                            attachments: [skillAttach("demo")],
+                        }),
+                    ],
+                    { ...runtimeBase, skills: exact },
+                ))
+            )[0]!.content.blocks);
+        assert.match(exactBody, /<action name="skillAttach">/);
+        assert.equal(exactBody.includes('"display"'), false);
+        assert.equal(exactBody.includes("文件过长"), false);
+
+        // 超过预算一个字符：降级
+        const over = fakeSkillService({
+            names: ["demo"],
+            content: "x".repeat(ATTACH_PROMPT_CHAR_BUDGET + 1),
+        });
+        const overBody = MessageBodyText.fromBlocks((
+                unwrap(await PromptAssembler.prepare(
+                    [
+                        userMsg("m1", {
+                            sessionId: session.id,
+                            attachments: [skillAttach("demo")],
+                        }),
+                    ],
+                    { ...runtimeBase, skills: over },
+                ))
+            )[0]!.content.blocks);
+        assert.match(overBody, /<action name="skillAttach">/);
+        assert.match(overBody, /"display": "filename"/);
+        assert.match(overBody, /文件过长，可用 read 配合 offset\/limit 分段读取/);
+        assert.equal((overBody.match(/xxxx/g) ?? []).length, 0);
+    });
+
+    it("T-A5: skill 超限降级后仍写 seen → 同会话后续同技能走 alreadyReferenced", async () => {
+        const ctx = getNovelMasterTestContext();
+        const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+        const session = unwrap(await ctx.sessions.create(project.id));
+        const sk = SessionKkvServiceFactory.create(ctx.conn);
+        const skills = fakeSkillService({
+            names: ["demo"],
+            content: "x".repeat(ATTACH_PROMPT_CHAR_BUDGET + 1),
+        });
+
+        const prepared = unwrap(await PromptAssembler.prepare(
+            [
+                userMsg("m1", { id: "u1", sessionId: session.id, attachments: [skillAttach("demo")] }),
+                userMsg("m2", { id: "u2", sessionId: session.id, attachments: [skillAttach("demo")] }),
+            ],
+            {
+                sessionId: session.id,
+                sessionKkv: sk,
+                vfs: ctx.sessionVfs(project.id, session.id),
+                skills,
+                projectId: project.id,
+            },
+        ));
+        assert.match(MessageBodyText.fromBlocks(prepared[0]!.content.blocks), /"display": "filename"/);
+        const body2 = MessageBodyText.fromBlocks(prepared[1]!.content.blocks);
+        assert.match(body2, /"alreadyReferenced": true/);
+        assert.equal(body2.includes("文件过长"), false);
+    });
 });

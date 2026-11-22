@@ -21,22 +21,22 @@
  * 需要引入「原文→归一化字符位置映射数组」做 index 回查，复杂度跳一档。
  */
 const QUOTE_MAP: ReadonlyMap<string, string> = new Map<string, string>([
-  // 弯引号 → 直引号
-  ["\u2018", "'"], // ‘ LEFT SINGLE QUOTATION MARK
-  ["\u2019", "'"], // ’ RIGHT SINGLE QUOTATION MARK
-  ["\u201C", '"'], // “ LEFT DOUBLE QUOTATION MARK
-  ["\u201D", '"'], // ” RIGHT DOUBLE QUOTATION MARK
-  // 日式引号 → 直引号
-  ["\u300C", '"'], // 「 LEFT CORNER BRACKET
-  ["\u300D", '"'], // 」 RIGHT CORNER BRACKET
-  ["\u300E", "'"], // 『 LEFT WHITE CORNER BRACKET
-  ["\u300F", "'"], // 』 RIGHT WHITE CORNER BRACKET
-  // 全角空格 → 半角空格
-  ["\u3000", " "], // IDEOGRAPHIC SPACE
+    // 弯引号 → 直引号
+    ["\u2018", "'"], // ‘ LEFT SINGLE QUOTATION MARK
+    ["\u2019", "'"], // ’ RIGHT SINGLE QUOTATION MARK
+    ["\u201C", '"'], // “ LEFT DOUBLE QUOTATION MARK
+    ["\u201D", '"'], // ” RIGHT DOUBLE QUOTATION MARK
+    // 日式引号 → 直引号
+    ["\u300C", '"'], // 「 LEFT CORNER BRACKET
+    ["\u300D", '"'], // 」 RIGHT CORNER BRACKET
+    ["\u300E", "'"], // 『 LEFT WHITE CORNER BRACKET
+    ["\u300F", "'"], // 』 RIGHT WHITE CORNER BRACKET
+    // 全角空格 → 半角空格
+    ["\u3000", " "], // IDEOGRAPHIC SPACE
 ]);
 
 export const MatchNormalizer = {
-  /**
+    /**
    * 对字符串做「引号族 + 全角空格」归一化，供替换匹配定位用。
    *
    * @remarks
@@ -48,11 +48,11 @@ export const MatchNormalizer = {
    * 落盘内容绝不能用归一化后的串——归一化只用于定位命中位置，
    * 切片和拼接必须走原文，否则未替换段的引号会被悄悄改写。
    */
-  normalize(input: string): string {
-    let result = "";
-    for (const ch of Array.from(input)) {
-      result += QUOTE_MAP.get(ch) ?? ch;
-    }
-    return result;
-  },
+    normalize(input: string): string {
+        let result = "";
+        for (const ch of Array.from(input)) {
+            result += QUOTE_MAP.get(ch) ?? ch;
+        }
+        return result;
+    },
 } as const;

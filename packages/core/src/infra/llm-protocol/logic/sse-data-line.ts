@@ -5,7 +5,7 @@
  */
 
 export const SseDataLine = {
-  /**
+    /**
    * 解析一行 SSE 的 `data:` 前缀，返回 payload；非 `data:` 行或空 payload 返回 `null`。
    *
    * ⚠️ **为什么不能用 `line.startsWith("data: ")`**：真实网关存在**无空格**形态
@@ -22,11 +22,11 @@ export const SseDataLine = {
    * @param line 单行（已由 `feedSseLines` 切分，不含换行符）
    * @returns payload 字符串；非 `data:` 行、空行、空 payload 返回 `null`
    */
-  parse(line: string): string | null {
-    if (!line.startsWith("data:")) {
-      return null;
-    }
-    const payload = line.slice(5).trim();
-    return payload === "" ? null : payload;
-  },
+    parse(line: string): string | null {
+        if (!line.startsWith("data:")) {
+            return null;
+        }
+        const payload = line.slice(5).trim();
+        return payload === "" ? null : payload;
+    },
 } as const;

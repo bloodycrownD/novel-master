@@ -14,11 +14,11 @@ const DEFAULT_ENGINE: VfsMarkdownPreviewEngine = 'webview';
 const ALLOWED_ENGINES: readonly VfsMarkdownPreviewEngine[] = ['rn', 'webview'];
 
 export const VfsMarkdownPreviewEngine = {
-  default: (): VfsMarkdownPreviewEngine => {
-    return DEFAULT_ENGINE;
-  },
+    default: (): VfsMarkdownPreviewEngine => {
+        return DEFAULT_ENGINE;
+    },
 
-  read: async (appUi: AppUiPreferences | null | undefined): Promise<VfsMarkdownPreviewEngine> => {
-    return AppUiPrefIo.readEnumPref(appUi, APP_UI_KEY_VFS_MARKDOWN_PREVIEW_ENGINE, ALLOWED_ENGINES, DEFAULT_ENGINE);
-  },
+    read: async (appUi: AppUiPreferences | null | undefined): Promise<VfsMarkdownPreviewEngine> => {
+        return AppUiPrefIo.readEnumPref(appUi, APP_UI_KEY_VFS_MARKDOWN_PREVIEW_ENGINE, ALLOWED_ENGINES, DEFAULT_ENGINE);
+    },
 } as const;

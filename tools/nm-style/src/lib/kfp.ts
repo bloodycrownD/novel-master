@@ -19,88 +19,88 @@ export type KfpRule = Extract<RuleName, "signatures" | "hygiene" | "oop">;
 const KFP_RULES: ReadonlySet<string> = new Set(["signatures", "hygiene", "oop"]);
 
 export interface KfpEntry {
-  rule: KfpRule;
-  file: string;
-  /** null = 整文件命中。 */
-  symbol: string | null;
-  /** 0/缺省 = 不比行。 */
-  line?: number;
-  category?: string;
-  reason: string;
-  basis?: string;
+    rule: KfpRule;
+    file: string;
+    /** null = 整文件命中。 */
+    symbol: string | null;
+    /** 0/缺省 = 不比行。 */
+    line?: number;
+    category?: string;
+    reason: string;
+    basis?: string;
 }
 
 export interface KfpManifest {
-  entries: KfpEntry[];
-  /** 已归一为带尾斜杠的 posix 前缀。 */
-  suppressPrefixes: string[];
+    entries: KfpEntry[];
+    /** 已归一为带尾斜杠的 posix 前缀。 */
+    suppressPrefixes: string[];
 }
 
 /** 缺省取包根的 known-false-positives.json：dist/lib/kfp.js 按自身位置回指包根，禁用 cwd 定位自己的资产。 */
 const DEFAULT_KFP_PATH = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "known-false-positives.json");
 
 function emptyManifest(): KfpManifest {
-  return { entries: [], suppressPrefixes: [] };
+    return { entries: [], suppressPrefixes: [] };
 }
 
 /** 加载 KFP：值域外或缺 file/reason 的条目打 console.error 后剔除，其余原样保留。 */
 export function loadKfp(file: string = DEFAULT_KFP_PATH): KfpManifest {
-  if (!fs.existsSync(file)) return emptyManifest();
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(fs.readFileSync(file, "utf8"));
-  } catch (error) {
-    console.error(`nm-style: ${path.basename(file)} 解析失败，按无豁免运行 —— ${error instanceof Error ? error.message : String(error)}`);
-    return emptyManifest();
-  }
-  const record = (parsed ?? {}) as Record<string, unknown>;
-  const entries: KfpEntry[] = [];
-  for (const raw of Array.isArray(record.entries) ? record.entries : []) {
-    const entry = (raw ?? {}) as Record<string, unknown>;
-    if (typeof entry.rule !== "string" || !KFP_RULES.has(entry.rule)) {
-      console.error(`nm-style: KFP 条目 rule「${String(entry.rule)}」不在值域 signatures|hygiene|oop，已忽略（file=${String(entry.file)}）`);
-      continue;
+    if (!fs.existsSync(file)) return emptyManifest();
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(fs.readFileSync(file, "utf8"));
+    } catch (error) {
+        console.error(`nm-style: ${path.basename(file)} 解析失败，按无豁免运行 —— ${error instanceof Error ? error.message : String(error)}`);
+        return emptyManifest();
     }
-    if (typeof entry.file !== "string" || entry.file.length === 0 || typeof entry.reason !== "string") {
-      console.error(`nm-style: KFP 条目缺 file/reason，已忽略（rule=${String(entry.rule)}）`);
-      continue;
+    const record = (parsed ?? {}) as Record<string, unknown>;
+    const entries: KfpEntry[] = [];
+    for (const raw of Array.isArray(record.entries) ? record.entries : []) {
+        const entry = (raw ?? {}) as Record<string, unknown>;
+        if (typeof entry.rule !== "string" || !KFP_RULES.has(entry.rule)) {
+            console.error(`nm-style: KFP 条目 rule「${String(entry.rule)}」不在值域 signatures|hygiene|oop，已忽略（file=${String(entry.file)}）`);
+            continue;
+        }
+        if (typeof entry.file !== "string" || entry.file.length === 0 || typeof entry.reason !== "string") {
+            console.error(`nm-style: KFP 条目缺 file/reason，已忽略（rule=${String(entry.rule)}）`);
+            continue;
+        }
+        entries.push({
+            rule: entry.rule as KfpRule,
+            file: entry.file,
+            symbol: typeof entry.symbol === "string" && entry.symbol.length > 0 ? entry.symbol : null,
+            line: typeof entry.line === "number" && Number.isFinite(entry.line) ? entry.line : undefined,
+            category: typeof entry.category === "string" ? entry.category : undefined,
+            reason: entry.reason,
+            basis: typeof entry.basis === "string" ? entry.basis : undefined,
+        });
     }
-    entries.push({
-      rule: entry.rule as KfpRule,
-      file: entry.file,
-      symbol: typeof entry.symbol === "string" && entry.symbol.length > 0 ? entry.symbol : null,
-      line: typeof entry.line === "number" && Number.isFinite(entry.line) ? entry.line : undefined,
-      category: typeof entry.category === "string" ? entry.category : undefined,
-      reason: entry.reason,
-      basis: typeof entry.basis === "string" ? entry.basis : undefined,
+    const suppressPrefixes = (Array.isArray(record.suppressPrefixes) ? record.suppressPrefixes : []).filter((value): value is string => typeof value === "string" && value.length > 0).map((value) => {
+        const posix = toPosix(value);
+        return posix.endsWith("/") ? posix : `${posix}/`;
     });
-  }
-  const suppressPrefixes = (Array.isArray(record.suppressPrefixes) ? record.suppressPrefixes : []).filter((value): value is string => typeof value === "string" && value.length > 0).map((value) => {
-    const posix = toPosix(value);
-    return posix.endsWith("/") ? posix : `${posix}/`;
-  });
-  return { entries, suppressPrefixes };
+    return { entries, suppressPrefixes };
 }
 
 export type KfpFinding = Pick<Finding, "rule" | "file" | "line" | "symbol" | "detail">;
 
 /** 单条 finding 是否命中清单：命中返回条目（供降级 INFO），未命中返回 null。 */
 export function matchEntry(finding: KfpFinding, kfp: KfpManifest): KfpEntry | null {
-  const file = toPosix(finding.file);
-  for (const entry of kfp.entries) {
-    if (entry.rule !== finding.rule) continue;
-    if (toPosix(entry.file) !== file) continue;
-    if (entry.line != null && entry.line !== 0 && entry.line !== finding.line) continue;
-    if (entry.symbol == null) return entry;
-    const target = finding.rule === "signatures" ? finding.detail ?? finding.symbol : finding.symbol;
-    const hit = finding.rule === "signatures" ? target.includes(entry.symbol) : target === entry.symbol || target.endsWith(`.${entry.symbol}`);
-    if (hit) return entry;
-  }
-  return null;
+    const file = toPosix(finding.file);
+    for (const entry of kfp.entries) {
+        if (entry.rule !== finding.rule) continue;
+        if (toPosix(entry.file) !== file) continue;
+        if (entry.line != null && entry.line !== 0 && entry.line !== finding.line) continue;
+        if (entry.symbol == null) return entry;
+        const target = finding.rule === "signatures" ? finding.detail ?? finding.symbol : finding.symbol;
+        const hit = finding.rule === "signatures" ? target.includes(entry.symbol) : target === entry.symbol || target.endsWith(`.${entry.symbol}`);
+        if (hit) return entry;
+    }
+    return null;
 }
 
 /** suppressPrefixes 命中（前缀开头，或恰好等于目录本身）→ 该 finding 不进报告。 */
 export function isSuppressed(file: string, kfp: KfpManifest): boolean {
-  const rel = toPosix(file);
-  return kfp.suppressPrefixes.some((prefix) => rel.startsWith(prefix) || rel === prefix.slice(0, -1));
+    const rel = toPosix(file);
+    return kfp.suppressPrefixes.some((prefix) => rel.startsWith(prefix) || rel === prefix.slice(0, -1));
 }

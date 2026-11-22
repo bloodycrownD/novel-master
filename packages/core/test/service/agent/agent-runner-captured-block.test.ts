@@ -22,151 +22,151 @@ const MOCK_SESSION_ID = "test-session";
 const RUN_MODEL_ID = "anthropic/claude";
 
 function minimalDefinition(): AgentDefinition {
-  return {
-    name: "test",
-    prompts: { persist: [], dynamic: [] },
-  };
+    return {
+        name: "test",
+        prompts: { persist: [], dynamic: [] },
+    };
 }
 
 function mockVfs(): VfsService {
-  const files = new Map<string, string>();
-  return {
-    async read(path: string) {
-      const content = files.get(path) ?? "";
-      return Result.ok({ path, content, version: 1, mtimeMs: 0 });
-    },
-    async write(path: string, content: string) {
-      files.set(path, content);
-      return Result.ok({ version: 1 });
-    },
-    async replace(path: string, oldString: string, newString: string) {
-      const c = files.get(path) ?? "";
-      files.set(path, c.replace(oldString, newString));
-      return Result.ok({ version: 1, replacements: 1 });
-    },
-    async list() {
-      return Result.ok([...files.keys()]);
-    },
-    async glob() {
-      return Result.ok([]);
-    },
-    async grep() {
-      return Result.ok([]);
-    },
-    async delete() {
-      return Result.ok(undefined);
-    },
-  } as unknown as VfsService;
+    const files = new Map<string, string>();
+    return {
+        async read(path: string) {
+            const content = files.get(path) ?? "";
+            return Result.ok({ path, content, version: 1, mtimeMs: 0 });
+        },
+        async write(path: string, content: string) {
+            files.set(path, content);
+            return Result.ok({ version: 1 });
+        },
+        async replace(path: string, oldString: string, newString: string) {
+            const c = files.get(path) ?? "";
+            files.set(path, c.replace(oldString, newString));
+            return Result.ok({ version: 1, replacements: 1 });
+        },
+        async list() {
+            return Result.ok([...files.keys()]);
+        },
+        async glob() {
+            return Result.ok([]);
+        },
+        async grep() {
+            return Result.ok([]);
+        },
+        async delete() {
+            return Result.ok(undefined);
+        },
+    } as unknown as VfsService;
 }
 
 function mockToolCtx(
-  vfs: VfsService,
-  sessionKkv: ReturnType<typeof createMemorySessionKkv>,
+    vfs: VfsService,
+    sessionKkv: ReturnType<typeof createMemorySessionKkv>,
 ): BuiltinToolContext {
-  return {
-    vfs,
-    projectId: MOCK_PROJECT_ID,
-    sessionId: MOCK_SESSION_ID,
-    sessionKkv,
-  };
+    return {
+        vfs,
+        projectId: MOCK_PROJECT_ID,
+        sessionId: MOCK_SESSION_ID,
+        sessionKkv,
+    };
 }
 
 function createMockModel(
-  responses: LlmChatResult[],
+    responses: LlmChatResult[],
 ): ModelRequestService & { callCount: () => number } {
-  let calls = 0;
-  return {
-    callCount: () => calls,
-    request: mock.fn(async () => {
-      const r = responses[calls];
-      calls += 1;
-      if (r == null) {
-        throw new Error("Unexpected extra model request");
-      }
-      return Result.ok(r);
-    }),
-  };
+    let calls = 0;
+    return {
+        callCount: () => calls,
+        request: mock.fn(async () => {
+            const r = responses[calls];
+            calls += 1;
+            if (r == null) {
+                throw new Error("Unexpected extra model request");
+            }
+            return Result.ok(r);
+        }),
+    };
 }
 
 describe("AgentRunner workplace assemble (retire capture)", () => {
-  it("T-WEC9: Agent run 内 VFS write 不调 materialize；可 upsert file_cache", async () => {
-    const session = new InMemoryAgentSession();
-    await session.append("user", TextBlocks.of("write file"));
+    it("T-WEC9: Agent run 内 VFS write 不调 materialize；可 upsert file_cache", async () => {
+        const session = new InMemoryAgentSession();
+        await session.append("user", TextBlocks.of("write file"));
 
-    const sessionKkv = createMemorySessionKkv();
-    await sessionKkv.set(
-      MOCK_SESSION_ID,
-      SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
-      "canon",
-      "[]",
-    );
+        const sessionKkv = createMemorySessionKkv();
+        await sessionKkv.set(
+            MOCK_SESSION_ID,
+            SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+            "canon",
+            "[]",
+        );
 
-    const vfs = mockVfs();
-    const materializePersistBlock = mock.fn(async () => ({
-      workplaceDisplay: "would-change-if-recaptured",
-    }));
+        const vfs = mockVfs();
+        const materializePersistBlock = mock.fn(async () => ({
+            workplaceDisplay: "would-change-if-recaptured",
+        }));
 
-    const model = createMockModel([
-      {
-        assistantText: "",
-        blocks: [
-          {
-            type: "tool_use",
-            id: "w1",
-            name: "write",
-            input: { path: "/out.txt", content: "mutated" },
-          },
-        ],
-        raw: {},
-      },
-      {
-        assistantText: "done",
-        blocks: [{ type: "text", text: "done" }],
-        raw: {},
-      },
-    ]);
+        const model = createMockModel([
+            {
+                assistantText: "",
+                blocks: [
+                    {
+                        type: "tool_use",
+                        id: "w1",
+                        name: "write",
+                        input: { path: "/out.txt", content: "mutated" },
+                    },
+                ],
+                raw: {},
+            },
+            {
+                assistantText: "done",
+                blocks: [{ type: "text", text: "done" }],
+                raw: {},
+            },
+        ]);
 
-    const registry = new ToolRegistry();
-    BuiltinTools.register(registry);
-    const runner = AgentServiceFactory.createRunner({
-      session,
-      modelRequests: model,
-      registry,
-      toolCtx: mockToolCtx(vfs, sessionKkv),
-      eventBus: new SimpleEventBus(),
-      sessionKkv,
-      savedModels: noopSavedModelRepository(),
-      workplace: () =>
-        ({
-          scope: {
-            kind: "session",
-            projectId: MOCK_PROJECT_ID,
+        const registry = new ToolRegistry();
+        BuiltinTools.register(registry);
+        const runner = AgentServiceFactory.createRunner({
+            session,
+            modelRequests: model,
+            registry,
+            toolCtx: mockToolCtx(vfs, sessionKkv),
+            eventBus: new SimpleEventBus(),
+            sessionKkv,
+            savedModels: noopSavedModelRepository(),
+            workplace: () =>
+                ({
+                    scope: {
+                        kind: "session",
+                        projectId: MOCK_PROJECT_ID,
+                        sessionId: MOCK_SESSION_ID,
+                    },
+                    renderDisplay: async () => "WT",
+                    buildListRows: async () => [],
+                    materializePersistBlock,
+                }) as never,
+        });
+
+        unwrap(await runner.run({
+            maxSteps: 3,
+            definition: minimalDefinition(),
             sessionId: MOCK_SESSION_ID,
-          },
-          renderDisplay: async () => "WT",
-          buildListRows: async () => [],
-          materializePersistBlock,
-        }) as never,
+            projectId: MOCK_PROJECT_ID,
+            savedModelId: RUN_MODEL_ID,
+            workspaceModelId: RUN_MODEL_ID,
+        }));
+
+        assert.equal(materializePersistBlock.mock.callCount(), 0);
+        assert.equal(unwrap(await vfs.read("/out.txt")).content, "mutated");
+        const cacheKeys = await sessionKkv.listKeys(
+            MOCK_SESSION_ID,
+            SESSION_KKV_DOMAIN_FILE_CACHE,
+        );
+        assert.ok(
+            cacheKeys.some((k) => k.includes("/out.txt")),
+            `write 应 upsert file_cache，实际 keys=${JSON.stringify(cacheKeys)}`,
+        );
     });
-
-    unwrap(await runner.run({
-      maxSteps: 3,
-      definition: minimalDefinition(),
-      sessionId: MOCK_SESSION_ID,
-      projectId: MOCK_PROJECT_ID,
-      savedModelId: RUN_MODEL_ID,
-      workspaceModelId: RUN_MODEL_ID,
-    }));
-
-    assert.equal(materializePersistBlock.mock.callCount(), 0);
-    assert.equal(unwrap(await vfs.read("/out.txt")).content, "mutated");
-    const cacheKeys = await sessionKkv.listKeys(
-      MOCK_SESSION_ID,
-      SESSION_KKV_DOMAIN_FILE_CACHE,
-    );
-    assert.ok(
-      cacheKeys.some((k) => k.includes("/out.txt")),
-      `write 应 upsert file_cache，实际 keys=${JSON.stringify(cacheKeys)}`,
-    );
-  });
 });

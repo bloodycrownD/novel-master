@@ -17,6 +17,6 @@ export { NewSkillDoc } from "@novel-master/core/skills";
 
 // nm-style: keep-public — shared/logic 是 core-descriptor→string 的翻译边界，且 skill-zip-import.test 以源码正则锁死 SkillInfoEditModal `import { …, validateSkillName } from "@shared/logic/skills"` 的消费契约；内联会破坏测试锁名。
 export function validateSkillName(name: string): string | null {
-  const reason = SkillName.validate(name);
-  return reason == null ? null : coreT(reason);
+    const reason = SkillName.validate(name);
+    return reason == null ? null : coreT(reason);
 }

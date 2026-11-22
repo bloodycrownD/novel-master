@@ -10,11 +10,11 @@ import type { KkvEntry } from "../model/kkv-entry.js";
  * Persistence contract for `kkv_entry` rows.
  */
 export interface KkvRepository {
-  listKeys(module: string): Promise<string[]>;
+    listKeys(module: string): Promise<string[]>;
 
-  get(module: string, key: string): Promise<KkvEntry | null>;
+    get(module: string, key: string): Promise<KkvEntry | null>;
 
-  set(module: string, key: string, value: string): Promise<void>;
+    set(module: string, key: string, value: string): Promise<void>;
 
-  delete(module: string, key: string): Promise<boolean>;
+    delete(module: string, key: string): Promise<boolean>;
 }

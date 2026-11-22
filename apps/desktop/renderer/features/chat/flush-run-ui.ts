@@ -3,8 +3,8 @@
  */
 
 export async function flushRunUi( onMessagesChanged: () => void | Promise<void>, onStreamReset: () => void ): Promise<void> {
-  await onMessagesChanged();
-  onStreamReset();
+    await onMessagesChanged();
+    onStreamReset();
 }
 
 /**
@@ -12,8 +12,8 @@ export async function flushRunUi( onMessagesChanged: () => void | Promise<void>,
  * Reload first, then drop the stream overlay when assistant text is in DB.
  */
 export async function flushAgentStepUi( phase: "assistant" | "tool_results", onMessagesChanged: () => void | Promise<void>, onStreamReset: () => void ): Promise<void> {
-  await onMessagesChanged();
-  if (phase === "assistant") {
-    onStreamReset();
-  }
+    await onMessagesChanged();
+    if (phase === "assistant") {
+        onStreamReset();
+    }
 }

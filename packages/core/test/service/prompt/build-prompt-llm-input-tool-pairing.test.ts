@@ -7,63 +7,63 @@ import {  PromptBuilder  } from "@novel-master/core/prompt";
 import {  OrphanToolResults  } from "../../../src/service/prompt/normalize-orphan-tool-results-for-llm.js";
 
 describe("buildPromptLlmInputFromLayout tool pairing", () => {
-  it("T6: synthetic template messages do not break tool_result pairing", async () => {
-    const messages: ChatMessageData[] = [
-      {
-        id: "m1",
-        sessionId: "s1",
-        seq: 1,
-        role: "assistant",
-        content: {
-          blocks: [
+    it("T6: synthetic template messages do not break tool_result pairing", async () => {
+        const messages: ChatMessageData[] = [
             {
-              type: "tool_use",
-              id: "call_1",
-              name: "read",
-              input: { path: "/a" },
+                id: "m1",
+                sessionId: "s1",
+                seq: 1,
+                role: "assistant",
+                content: {
+                    blocks: [
+                        {
+                            type: "tool_use",
+                            id: "call_1",
+                            name: "read",
+                            input: { path: "/a" },
+                        },
+                    ],
+                },
+                provider: null,
+                raw: null,
+                createdAtMs: 1,
+                hidden: false,
             },
-          ],
-        },
-        provider: null,
-        raw: null,
-        createdAtMs: 1,
-        hidden: false,
-      },
-      {
-        id: "m2",
-        sessionId: "s1",
-        seq: 2,
-        role: "user",
-        content: {
-          blocks: [
             {
-              type: "tool_result",
-              toolUseId: "call_1",
-              content: "file body",
+                id: "m2",
+                sessionId: "s1",
+                seq: 2,
+                role: "user",
+                content: {
+                    blocks: [
+                        {
+                            type: "tool_result",
+                            toolUseId: "call_1",
+                            content: "file body",
+                        },
+                    ],
+                },
+                provider: null,
+                raw: null,
+                createdAtMs: 2,
+                hidden: false,
             },
-          ],
-        },
-        provider: null,
-        raw: null,
-        createdAtMs: 2,
-        hidden: false,
-      },
-    ];
+        ];
 
-    const input = unwrap(await PromptBuilder.llmInput(
-      {
-        persistEnabled: true,
-        persist: [{ name: "ctx", type: "text", role: "user", content: "context" }],
-        dynamic: [],
-      },
-      {
-        workplaceDisplay: "",
-        messages,
-      },
-    ));
-    const normalized = OrphanToolResults.normalizeForLlm(input.messages);
-    assert.equal(normalized.length, 3);
-    assert.equal(normalized[0]!.id, "prompt:ctx");
-    assert.equal(normalized[2]!.content.blocks[0]?.type, "tool_result");
-  });
+        const input = unwrap(await PromptBuilder.llmInput(
+            {
+                persistEnabled: true,
+                persist: [{ name: "ctx", type: "text", role: "user", content: "context" }],
+                dynamic: [],
+            },
+            {
+                workplaceDisplay: "",
+                messages,
+            },
+        ));
+        const normalized = OrphanToolResults.normalizeForLlm(input.messages);
+        assert.equal(normalized.length, 3);
+        assert.equal(normalized[0]!.id, "prompt:ctx");
+        assert.equal(normalized[2]!.content.blocks[0]?.type, "tool_result");
+    });
 });

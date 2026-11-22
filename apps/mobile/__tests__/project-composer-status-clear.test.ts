@@ -7,54 +7,54 @@ import { chatAnnotateDraftStore } from '@novel-master/core/chat';
 const mockReplace = jest.fn();
 
 jest.mock('@/storage/chat-composer-draft', () => ({
-  ChatComposerDraft: {
-    applyComposerStatusAttachmentsReplace: (...args: unknown[]) =>
-      mockReplace(...args),
-  },
+    ChatComposerDraft: {
+        applyComposerStatusAttachmentsReplace: (...args: unknown[]) =>
+            mockReplace(...args),
+    },
 }));
 
 import {ProjectComposerStatusService} from '@/services/project-composer-status.service'
 
 describe('composer status after kkv clear (T-CR5)', () => {
-  beforeEach(() => {
-    mockReplace.mockClear();
-    chatAnnotateDraftStore.resetForTests();
-  });
+    beforeEach(() => {
+        mockReplace.mockClear();
+        chatAnnotateDraftStore.resetForTests();
+    });
 
-  it('Undo/手动：refreshComposerStatusAfterSessionKkvCleared 以空 attachments 替换', async () => {
-    await ProjectComposerStatusService.refreshAfterSessionKkvCleared({
-      projectId: 'p',
-      sessionId: 's1',
+    it('Undo/手动：refreshComposerStatusAfterSessionKkvCleared 以空 attachments 替换', async () => {
+        await ProjectComposerStatusService.refreshAfterSessionKkvCleared({
+            projectId: 'p',
+            sessionId: 's1',
+        });
+        expect(mockReplace).toHaveBeenCalledWith({
+            sessionId: 's1',
+            attachments: [],
+        });
     });
-    expect(mockReplace).toHaveBeenCalledWith({
-      sessionId: 's1',
-      attachments: [],
-    });
-  });
 
-  it('T-CR5: 置位/压缩 refreshComposerStatusAfterFloorOrCompaction 推仅 annotate 投影（非强制 []）', async () => {
-    chatAnnotateDraftStore.add('s1', {
-      id: 'a-keep',
-      path: '/keep.md',
-      originalText: 'k',
-      userAnnotation: '批注',
+    it('T-CR5: 置位/压缩 refreshComposerStatusAfterFloorOrCompaction 推仅 annotate 投影（非强制 []）', async () => {
+        chatAnnotateDraftStore.add('s1', {
+            id: 'a-keep',
+            path: '/keep.md',
+            originalText: 'k',
+            userAnnotation: '批注',
+        });
+        await ProjectComposerStatusService.refreshAfterFloorOrCompaction({
+            projectId: 'p',
+            sessionId: 's1',
+        });
+        expect(mockReplace).toHaveBeenCalledWith({
+            sessionId: 's1',
+            attachments: [
+                {
+                    name: '/keep.md',
+                    source: 'user_ops',
+                    type: 'text',
+                    content: null,
+                    path: '/keep.md',
+                    action: 'annotate',
+                },
+            ],
+        });
     });
-    await ProjectComposerStatusService.refreshAfterFloorOrCompaction({
-      projectId: 'p',
-      sessionId: 's1',
-    });
-    expect(mockReplace).toHaveBeenCalledWith({
-      sessionId: 's1',
-      attachments: [
-        {
-          name: '/keep.md',
-          source: 'user_ops',
-          type: 'text',
-          content: null,
-          path: '/keep.md',
-          action: 'annotate',
-        },
-      ],
-    });
-  });
 });

@@ -10,8 +10,8 @@ import {MermaidCore} from '@web/shared/mermaid-core';
 const mermaidCache = MermaidCore.createSourceCache();
 
 export namespace Mermaid {
-  /** 扫描并渲染 root 下未处理的 mermaid 块（文档刷新整树重建，缓存按源码去重）。 */
-  export async function render(root: ParentNode): Promise<void> {
-    await MermaidCore.renderCodeBlocks(root, mermaidCache);
-  }
+    /** 扫描并渲染 root 下未处理的 mermaid 块（文档刷新整树重建，缓存按源码去重）。 */
+    export async function render(root: ParentNode): Promise<void> {
+        await MermaidCore.renderCodeBlocks(root, mermaidCache);
+    }
 }

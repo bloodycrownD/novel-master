@@ -17,9 +17,9 @@ import type { AgentRegistryService } from "../agent-registry.port.js";
 import type { AgentPromptLayout } from "@/domain/prompt/model/agent-prompt-layout.js";
 
 interface DefaultAgentRegistryServiceDeps {
-  readonly repository: AgentDefinitionRepository;
-  /** 注入时，删除当前 Agent 会清空工作区指针。 */
-  readonly state?: PersistentState;
+    readonly repository: AgentDefinitionRepository;
+    /** 注入时，删除当前 Agent 会清空工作区指针。 */
+    readonly state?: PersistentState;
 }
 
 /**
@@ -31,129 +31,129 @@ interface DefaultAgentRegistryServiceDeps {
  */
 // nm-style: keep-local — prompts 缺省补空布局是 create 前独立的四段形状归一化（undefined/null/对象/半缺省），内联会让 upsert 同时承担归一化与校验。
 function withDefaultPromptLayouts(def: AgentDefinition): AgentDefinition {
-  const prompts = def.prompts as AgentPromptLayout | undefined;
-  // 仅 undefined（真缺省）补空布局；null 与非对象形状（字符串 / 数字 /
-  // 数组）都是显式脏输入，原样透传给校验层拒绝，不在此兜底。
-  if (prompts === undefined) {
-    return { ...def, prompts: { persist: [], dynamic: [] } };
-  }
-  if (
-    prompts === null ||
-    typeof prompts !== "object" ||
-    Array.isArray(prompts)
-  ) {
+    const prompts = def.prompts as AgentPromptLayout | undefined;
+    // 仅 undefined（真缺省）补空布局；null 与非对象形状（字符串 / 数字 /
+    // 数组）都是显式脏输入，原样透传给校验层拒绝，不在此兜底。
+    if (prompts === undefined) {
+        return { ...def, prompts: { persist: [], dynamic: [] } };
+    }
+    if (
+        prompts === null ||
+        typeof prompts !== "object" ||
+        Array.isArray(prompts)
+    ) {
+        return def;
+    }
+    const persist = prompts.persist as AgentPromptLayout["persist"] | undefined;
+    const dynamic = prompts.dynamic as AgentPromptLayout["dynamic"] | undefined;
+    if (persist == null || dynamic == null) {
+        return {
+            ...def,
+            prompts: {
+                ...prompts,
+                ...(persist == null ? { persist: [] } : {}),
+                ...(dynamic == null ? { dynamic: [] } : {}),
+            },
+        };
+    }
     return def;
-  }
-  const persist = prompts.persist as AgentPromptLayout["persist"] | undefined;
-  const dynamic = prompts.dynamic as AgentPromptLayout["dynamic"] | undefined;
-  if (persist == null || dynamic == null) {
-    return {
-      ...def,
-      prompts: {
-        ...prompts,
-        ...(persist == null ? { persist: [] } : {}),
-        ...(dynamic == null ? { dynamic: [] } : {}),
-      },
-    };
-  }
-  return def;
 }
 
 export class DefaultAgentRegistryService implements AgentRegistryService {
-  constructor(private readonly deps: DefaultAgentRegistryServiceDeps) {}
+    constructor(private readonly deps: DefaultAgentRegistryServiceDeps) {}
 
-  async listAgentIds(): Promise<readonly string[]> {
-    return this.deps.repository.listIds();
-  }
-
-  async list(): Promise<Result<readonly AgentDefinition[], AppError>> {
-    const dbDefs = await this.deps.repository.list();
-    if (!dbDefs.ok) return Result.err(dbDefs.error);
-    // 内置 general 为虚拟 agent 且禁止用户同名覆盖（upsert 拒绝同名），
-    // 因此 DB 不可能含同名项；防御性保留同名检查以免未来放开 upsert 限制时行为分叉。
-    if (dbDefs.value.some((def) => def.name === DEFAULT_SUBAGENT_DEFINITION.name)) {
-      return Result.ok(dbDefs.value);
-    }
-    return Result.ok([...dbDefs.value, DEFAULT_SUBAGENT_DEFINITION]);
-  }
-
-  async getRawWire(agentId: string): Promise<unknown | null> {
-    return this.deps.repository.getRawWire(agentId);
-  }
-
-  async get(agentId: string): Promise<Result<AgentDefinition, AppError>> {
-    const def = await this.deps.repository.get(agentId);
-    if (!def.ok) return Result.err(def.error);
-    if (def.value == null) {
-      return Result.err(new AppError("AGENT_NOT_FOUND", {detail: `agent not found: ${agentId}`, agentId}));
-    }
-    return Result.ok(def.value);
-  }
-
-  async upsert(agentId: string, def: AgentDefinition, options: ValidateAgentDefinitionOptions = {}): Promise<Result<void, AppError>> {
-    const defaulted = withDefaultPromptLayouts(def);
-    const validation = await AgentDefinitionValidator.validate(defaulted, options);
-    if (!validation.ok) return validation;
-    const trimmedName = defaulted.name.trim();
-    if (trimmedName.length === 0) {
-      return Result.err(new AppError("AGENT_INVALID_SCHEMA", {detail: "agent name must not be empty"}));
-    }
-    // 内置 general 是虚拟 agent，禁止用户创建同名
-    if (trimmedName === DEFAULT_SUBAGENT_DEFINITION.name) {
-      return Result.err(new AppError("AGENT_INVALID_SCHEMA", {descriptor: {key: "error.agent.invalid_schema.builtin_name_reserved", params: {name: DEFAULT_SUBAGENT_DEFINITION.name}}}));
-    }
-    const ids = await this.deps.repository.listIds();
-    for (const otherId of ids) {
-      if (otherId === agentId) {
-        continue;
-      }
-      let otherName: string;
-      try {
-        const otherDef = await this.deps.repository.get(otherId);
-        otherName = !otherDef.ok || otherDef.value == null ? otherId.trim() : otherDef.value.name.trim();
-      } catch {
-        // DB 层未知异常仍可能抛（port 注），降级为 id 参与比对（与旧 catch 一致）。
-        otherName = otherId.trim();
-      }
-      if (otherName.length > 0 && otherName === trimmedName) {
-        return Result.err(new AppError("AGENT_DUPLICATE_NAME", {descriptor: {key: "error.agent.duplicate_name"}}));
-      }
+    async listAgentIds(): Promise<readonly string[]> {
+        return this.deps.repository.listIds();
     }
 
-    const normalized: AgentDefinition = { ...defaulted, name: trimmedName };
-    const saved = await this.deps.repository.upsert(agentId, normalized);
-    if (!saved.ok) return Result.err(saved.error);
-    return Result.ok(undefined);
-  }
+    async list(): Promise<Result<readonly AgentDefinition[], AppError>> {
+        const dbDefs = await this.deps.repository.list();
+        if (!dbDefs.ok) return Result.err(dbDefs.error);
+        // 内置 general 为虚拟 agent 且禁止用户同名覆盖（upsert 拒绝同名），
+        // 因此 DB 不可能含同名项；防御性保留同名检查以免未来放开 upsert 限制时行为分叉。
+        if (dbDefs.value.some((def) => def.name === DEFAULT_SUBAGENT_DEFINITION.name)) {
+            return Result.ok(dbDefs.value);
+        }
+        return Result.ok([...dbDefs.value, DEFAULT_SUBAGENT_DEFINITION]);
+    }
 
-  async update(agentId: string, patch: AgentDefinitionPatch, options: ValidateAgentDefinitionOptions = {}): Promise<Result<AgentDefinition, AppError>> {
-    const current = await this.get(agentId);
-    if (!current.ok) return Result.err(current.error);
-    const merged = Json.mergePatch(current.value, patch);
-    const saved = await this.upsert(agentId, merged, options);
-    if (!saved.ok) return Result.err(saved.error);
-    return Result.ok(merged);
-  }
+    async getRawWire(agentId: string): Promise<unknown | null> {
+        return this.deps.repository.getRawWire(agentId);
+    }
 
-  async delete(agentId: string): Promise<Result<void, AppError>> {
-    if (!(await this.deps.repository.exists(agentId))) {
-      return Result.err(new AppError("AGENT_NOT_FOUND", {detail: `agent not found: ${agentId}`, agentId}));
+    async get(agentId: string): Promise<Result<AgentDefinition, AppError>> {
+        const def = await this.deps.repository.get(agentId);
+        if (!def.ok) return Result.err(def.error);
+        if (def.value == null) {
+            return Result.err(new AppError("AGENT_NOT_FOUND", {detail: `agent not found: ${agentId}`, agentId}));
+        }
+        return Result.ok(def.value);
     }
-    // built-in general 不可删除（运行时虚拟注入的递归基线）。
-    // 用 getRawWire 取 name 而非 get（解码）：坏数据（decode 失败的行）也必须能删，
-    // 否则非法 prompts_json 的 agent 永远卡在库里删不掉。
-    const wire = await this.deps.repository.getRawWire(agentId);
-    const wireName = wire != null && typeof wire === "object" && !Array.isArray(wire) ? (wire as { name?: unknown }).name : undefined;
-    if (wireName === DEFAULT_SUBAGENT_DEFINITION.name) {
-      return Result.err(new AppError("AGENT_INVALID_SCHEMA", {descriptor: {key: "error.agent.invalid_schema.builtin_not_deletable", params: {name: DEFAULT_SUBAGENT_DEFINITION.name}}}));
+
+    async upsert(agentId: string, def: AgentDefinition, options: ValidateAgentDefinitionOptions = {}): Promise<Result<void, AppError>> {
+        const defaulted = withDefaultPromptLayouts(def);
+        const validation = await AgentDefinitionValidator.validate(defaulted, options);
+        if (!validation.ok) return validation;
+        const trimmedName = defaulted.name.trim();
+        if (trimmedName.length === 0) {
+            return Result.err(new AppError("AGENT_INVALID_SCHEMA", {detail: "agent name must not be empty"}));
+        }
+        // 内置 general 是虚拟 agent，禁止用户创建同名
+        if (trimmedName === DEFAULT_SUBAGENT_DEFINITION.name) {
+            return Result.err(new AppError("AGENT_INVALID_SCHEMA", {descriptor: {key: "error.agent.invalid_schema.builtin_name_reserved", params: {name: DEFAULT_SUBAGENT_DEFINITION.name}}}));
+        }
+        const ids = await this.deps.repository.listIds();
+        for (const otherId of ids) {
+            if (otherId === agentId) {
+                continue;
+            }
+            let otherName: string;
+            try {
+                const otherDef = await this.deps.repository.get(otherId);
+                otherName = !otherDef.ok || otherDef.value == null ? otherId.trim() : otherDef.value.name.trim();
+            } catch {
+                // DB 层未知异常仍可能抛（port 注），降级为 id 参与比对（与旧 catch 一致）。
+                otherName = otherId.trim();
+            }
+            if (otherName.length > 0 && otherName === trimmedName) {
+                return Result.err(new AppError("AGENT_DUPLICATE_NAME", {descriptor: {key: "error.agent.duplicate_name"}}));
+            }
+        }
+
+        const normalized: AgentDefinition = { ...defaulted, name: trimmedName };
+        const saved = await this.deps.repository.upsert(agentId, normalized);
+        if (!saved.ok) return Result.err(saved.error);
+        return Result.ok(undefined);
     }
-    await this.deps.repository.delete(agentId);
-    if (this.deps.state) {
-      const current = await this.deps.state.getCurrentAgentId();
-      if (current.ok && current.value === agentId) {
-        await this.deps.state.resetCurrentAgentId();
-      }
+
+    async update(agentId: string, patch: AgentDefinitionPatch, options: ValidateAgentDefinitionOptions = {}): Promise<Result<AgentDefinition, AppError>> {
+        const current = await this.get(agentId);
+        if (!current.ok) return Result.err(current.error);
+        const merged = Json.mergePatch(current.value, patch);
+        const saved = await this.upsert(agentId, merged, options);
+        if (!saved.ok) return Result.err(saved.error);
+        return Result.ok(merged);
     }
-    return Result.ok(undefined);
-  }
+
+    async delete(agentId: string): Promise<Result<void, AppError>> {
+        if (!(await this.deps.repository.exists(agentId))) {
+            return Result.err(new AppError("AGENT_NOT_FOUND", {detail: `agent not found: ${agentId}`, agentId}));
+        }
+        // built-in general 不可删除（运行时虚拟注入的递归基线）。
+        // 用 getRawWire 取 name 而非 get（解码）：坏数据（decode 失败的行）也必须能删，
+        // 否则非法 prompts_json 的 agent 永远卡在库里删不掉。
+        const wire = await this.deps.repository.getRawWire(agentId);
+        const wireName = wire != null && typeof wire === "object" && !Array.isArray(wire) ? (wire as { name?: unknown }).name : undefined;
+        if (wireName === DEFAULT_SUBAGENT_DEFINITION.name) {
+            return Result.err(new AppError("AGENT_INVALID_SCHEMA", {descriptor: {key: "error.agent.invalid_schema.builtin_not_deletable", params: {name: DEFAULT_SUBAGENT_DEFINITION.name}}}));
+        }
+        await this.deps.repository.delete(agentId);
+        if (this.deps.state) {
+            const current = await this.deps.state.getCurrentAgentId();
+            if (current.ok && current.value === agentId) {
+                await this.deps.state.resetCurrentAgentId();
+            }
+        }
+        return Result.ok(undefined);
+    }
 }

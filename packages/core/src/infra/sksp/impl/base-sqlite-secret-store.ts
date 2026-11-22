@@ -25,40 +25,40 @@ import type { SkspCryptoStrategy } from "./sksp-strategy.port.js";
  * 子类只要传一个 {@link SkspCryptoStrategy} 进来，就拿到了完整的 SecretStore。
  */
 export abstract class BaseSqliteSecretStore implements SecretStore {
-  private readonly parser = new SqlTemplateParser();
+    private readonly parser = new SqlTemplateParser();
 
-  constructor(protected readonly conn: TdbcConnection, protected readonly strategy: SkspCryptoStrategy) {}
+    constructor(protected readonly conn: TdbcConnection, protected readonly strategy: SkspCryptoStrategy) {}
 
-  async get(ref: string): Promise<string | null> {
-    SkspRefAssert.validRef(ref);
-    const rows = await TdbcTemplate.query(this.conn, this.parser, SkspSql.get, { ref });
-    if (rows.length === 0) {
-      return null;
+    async get(ref: string): Promise<string | null> {
+        SkspRefAssert.validRef(ref);
+        const rows = await TdbcTemplate.query(this.conn, this.parser, SkspSql.get, { ref });
+        if (rows.length === 0) {
+            return null;
+        }
+        const row = rows[0]!;
+        if (String(row.algo) !== this.strategy.algo) {
+            throw new SkspError("DECRYPT_FAILED", `Unsupported algo for ${ref}. Re-run: nm provider edit --apiKey`, { ref });
+        }
+        return this.strategy.decrypt(ref, row);
     }
-    const row = rows[0]!;
-    if (String(row.algo) !== this.strategy.algo) {
-      throw new SkspError("DECRYPT_FAILED", `Unsupported algo for ${ref}. Re-run: nm provider edit --apiKey`, { ref });
+
+    async has(ref: string): Promise<boolean> {
+        SkspRefAssert.validRef(ref);
+        const rows = await TdbcTemplate.query(this.conn, this.parser, SkspSql.has, { ref });
+        return rows.length > 0;
     }
-    return this.strategy.decrypt(ref, row);
-  }
 
-  async has(ref: string): Promise<boolean> {
-    SkspRefAssert.validRef(ref);
-    const rows = await TdbcTemplate.query(this.conn, this.parser, SkspSql.has, { ref });
-    return rows.length > 0;
-  }
+    async set(ref: string, plain: string): Promise<void> {
+        SkspRefAssert.validRef(ref);
+        // strategy 返回的 iv 允许为 null（Windows DPAPI），模板 `#{iv}` 原样绑定。
+        const { ciphertext, iv } = await this.strategy.encrypt(ref, plain);
+        const now = Date.now();
+        await TdbcTemplate.execute(this.conn, this.parser, SkspSql.set, { ref, ciphertext, iv, algo: this.strategy.algo, updatedAtMs: now });
+    }
 
-  async set(ref: string, plain: string): Promise<void> {
-    SkspRefAssert.validRef(ref);
-    // strategy 返回的 iv 允许为 null（Windows DPAPI），模板 `#{iv}` 原样绑定。
-    const { ciphertext, iv } = await this.strategy.encrypt(ref, plain);
-    const now = Date.now();
-    await TdbcTemplate.execute(this.conn, this.parser, SkspSql.set, { ref, ciphertext, iv, algo: this.strategy.algo, updatedAtMs: now });
-  }
-
-  async delete(ref: string): Promise<boolean> {
-    SkspRefAssert.validRef(ref);
-    const result = await TdbcTemplate.execute(this.conn, this.parser, SkspSql.delete, { ref });
-    return result.changes > 0;
-  }
+    async delete(ref: string): Promise<boolean> {
+        SkspRefAssert.validRef(ref);
+        const result = await TdbcTemplate.execute(this.conn, this.parser, SkspSql.delete, { ref });
+        return result.changes > 0;
+    }
 }

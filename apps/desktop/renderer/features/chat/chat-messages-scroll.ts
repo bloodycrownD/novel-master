@@ -2,13 +2,13 @@
 export const NEAR_BOTTOM_THRESHOLD_PX = 80;
 
 export function offsetFromBottom( scrollTop: number, scrollHeight: number, clientHeight: number ): number {
-  return Math.max(0, scrollHeight - scrollTop - clientHeight);
+    return Math.max(0, scrollHeight - scrollTop - clientHeight);
 }
 
 export function nearBottom( scrollTop: number, scrollHeight: number, clientHeight: number, threshold = NEAR_BOTTOM_THRESHOLD_PX ): boolean {
-  return offsetFromBottom(scrollTop, scrollHeight, clientHeight) <= threshold;
+    return offsetFromBottom(scrollTop, scrollHeight, clientHeight) <= threshold;
 }
 
 export function scrollTopForBottom( scrollHeight: number, clientHeight: number ): number {
-  return Math.max(0, scrollHeight - clientHeight);
+    return Math.max(0, scrollHeight - clientHeight);
 }

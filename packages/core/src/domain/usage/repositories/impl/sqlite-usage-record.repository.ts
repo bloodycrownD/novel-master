@@ -19,11 +19,11 @@ import { UsageRecordSql } from "@/infra/sql-template/generated/usage_record.mapp
  * 传入事务句柄（`conn.transaction` 的 tx）。
  */
 export class SqliteUsageRecordRepository implements UsageRecordRepository {
-  private readonly parser = new SqlTemplateParser();
+    private readonly parser = new SqlTemplateParser();
 
-  constructor(private readonly conn: TdbcConnection) {}
+    constructor(private readonly conn: TdbcConnection) {}
 
-  async insert(record: UsageRecordInsert): Promise<void> {
-    await TdbcTemplate.execute(this.conn, this.parser, UsageRecordSql.insert, { ...record });
-  }
+    async insert(record: UsageRecordInsert): Promise<void> {
+        await TdbcTemplate.execute(this.conn, this.parser, UsageRecordSql.insert, { ...record });
+    }
 }

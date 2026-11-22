@@ -21,97 +21,97 @@ import {  AGENT_CONFIG_SKILL_MD, BuiltinSkills  } from "../../src/bootstrap/skil
 import {  BETTER_SQLITE3_DRIVER_NAME, BetterSqlite3Register  } from "@novel-master/tdbc-driver-better-sqlite3";
 
 async function openMemory() {
-  BetterSqlite3Register.register();
-  return TdbcOpen.open("tdbc:sqlite:file::memory:", {
-    driver: BETTER_SQLITE3_DRIVER_NAME,
-    filename: ":memory:",
-  });
+    BetterSqlite3Register.register();
+    return TdbcOpen.open("tdbc:sqlite:file::memory:", {
+        driver: BETTER_SQLITE3_DRIVER_NAME,
+        filename: ":memory:",
+    });
 }
 
 /** 用户编辑后的版本（front matter 保持 name 与目录一致，维持有效态）。 */
 const USER_EDITED_HEADING = "用户改过的指南";
 
 describe("内置 agent-config 技能 seed（T-AS1）", () => {
-  it("全新库 bootstrap 后 global 域可见 agent-config 且内容与常量一致", async () => {
-    const conn = await openMemory();
-    await NovelMasterBootstrap.bootstrap(conn);
+    it("全新库 bootstrap 后 global 域可见 agent-config 且内容与常量一致", async () => {
+        const conn = await openMemory();
+        await NovelMasterBootstrap.bootstrap(conn);
 
-    const skills = SkillsServiceFactory.create(conn);
-    const list = outcomeValue(await skills.listSkills("global"));
-    const item = list.find((s) => s.name === "agent-config");
-    assert.ok(item != null, "bootstrap 后 global 清单应含 agent-config");
-    assert.equal(item.valid, true, "front matter 应过 strict 校验");
+        const skills = SkillsServiceFactory.create(conn);
+        const list = outcomeValue(await skills.listSkills("global"));
+        const item = list.find((s) => s.name === "agent-config");
+        assert.ok(item != null, "bootstrap 后 global 清单应含 agent-config");
+        assert.equal(item.valid, true, "front matter 应过 strict 校验");
 
-    const read = unwrap(await skills.readSkillFile("global", "agent-config"));
-    assert.equal(read.content, AGENT_CONFIG_SKILL_MD);
+        const read = unwrap(await skills.readSkillFile("global", "agent-config"));
+        assert.equal(read.content, AGENT_CONFIG_SKILL_MD);
 
-    await conn.close();
-  });
+        await conn.close();
+    });
 
-  it("预置用户改动后再跑 seedBuiltinSkills：内容保持用户版不变（幂等跳过）", async () => {
-    const conn = await openMemory();
-    await NovelMasterBootstrap.bootstrap(conn);
+    it("预置用户改动后再跑 seedBuiltinSkills：内容保持用户版不变（幂等跳过）", async () => {
+        const conn = await openMemory();
+        await NovelMasterBootstrap.bootstrap(conn);
 
-    const skills = SkillsServiceFactory.create(conn);
-    // 用户在种入版之上编辑（目录已存在，编辑路径放行；整文件覆盖有乐观锁墙，
-    // 走 editSkillFile 的 replace 语义）
-    unwrap(await skills.editSkillFile("global", "agent-config", undefined, {
-      oldString: "agent 配置指南",
-      newString: USER_EDITED_HEADING,
-    }));
+        const skills = SkillsServiceFactory.create(conn);
+        // 用户在种入版之上编辑（目录已存在，编辑路径放行；整文件覆盖有乐观锁墙，
+        // 走 editSkillFile 的 replace 语义）
+        unwrap(await skills.editSkillFile("global", "agent-config", undefined, {
+            oldString: "agent 配置指南",
+            newString: USER_EDITED_HEADING,
+        }));
 
-    // 模拟下次启动重跑 seed：已存在即跳过，不得覆盖用户改动
-    await BuiltinSkills.seed(conn);
+        // 模拟下次启动重跑 seed：已存在即跳过，不得覆盖用户改动
+        await BuiltinSkills.seed(conn);
 
-    const read = unwrap(await skills.readSkillFile("global", "agent-config"));
-    assert.match(read.content, /用户改过的指南/);
-    assert.doesNotMatch(read.content, /agent 配置指南/);
+        const read = unwrap(await skills.readSkillFile("global", "agent-config"));
+        assert.match(read.content, /用户改过的指南/);
+        assert.doesNotMatch(read.content, /agent 配置指南/);
 
-    await conn.close();
-  });
+        await conn.close();
+    });
 });
 
 /** 清空 seed 台账（模拟从未应用过版本化 seed 的存量库）。 */
 async function clearSeedLedger(
-  conn: Parameters<typeof BuiltinSkills.seed>[0],
+    conn: Parameters<typeof BuiltinSkills.seed>[0],
 ): Promise<void> {
-  await conn.execute(
-    "DELETE FROM kkv_entry WHERE module = 'nm-seeds' AND key = 'agent-config'",
-  );
+    await conn.execute(
+        "DELETE FROM kkv_entry WHERE module = 'nm-seeds' AND key = 'agent-config'",
+    );
 }
 
 describe("内置 agent-config 技能 seed 版本化升级（T-AS4）", () => {
-  it("台账落后的库：无条件重种——任意旧内容（含用户改过）都升级到当前版", async () => {
-    const conn = await openMemory();
-    await NovelMasterBootstrap.bootstrap(conn);
-    const skills = SkillsServiceFactory.create(conn);
+    it("台账落后的库：无条件重种——任意旧内容（含用户改过）都升级到当前版", async () => {
+        const conn = await openMemory();
+        await NovelMasterBootstrap.bootstrap(conn);
+        const skills = SkillsServiceFactory.create(conn);
 
-    // 模拟版本落后的存量库：内容回写成任意旧态（v1 文案 / 用户改过版均同语义）
-    unwrap(await skills.editSkillFile("global", "agent-config", undefined, {
-      oldString: "agent 配置指南",
-      newString: USER_EDITED_HEADING,
-    }));
-    await clearSeedLedger(conn);
+        // 模拟版本落后的存量库：内容回写成任意旧态（v1 文案 / 用户改过版均同语义）
+        unwrap(await skills.editSkillFile("global", "agent-config", undefined, {
+            oldString: "agent 配置指南",
+            newString: USER_EDITED_HEADING,
+        }));
+        await clearSeedLedger(conn);
 
-    await BuiltinSkills.seed(conn);
+        await BuiltinSkills.seed(conn);
 
-    const read = unwrap(await skills.readSkillFile("global", "agent-config"));
-    assert.equal(read.content, AGENT_CONFIG_SKILL_MD);
-    await conn.close();
-  });
+        const read = unwrap(await skills.readSkillFile("global", "agent-config"));
+        assert.equal(read.content, AGENT_CONFIG_SKILL_MD);
+        await conn.close();
+    });
 
-  it("稳态台账（已应用当前版）：seed 直接早退，内容原样不被碰", async () => {
-    const conn = await openMemory();
-    await NovelMasterBootstrap.bootstrap(conn);
-    const skills = SkillsServiceFactory.create(conn);
+    it("稳态台账（已应用当前版）：seed 直接早退，内容原样不被碰", async () => {
+        const conn = await openMemory();
+        await NovelMasterBootstrap.bootstrap(conn);
+        const skills = SkillsServiceFactory.create(conn);
 
-    // 台账已=当前版（bootstrap 首种即写入）：篡改内容后 seed 不得回写。
-    unwrap(await skills.writeSkillFile(
-      "global", "agent-config", undefined, "稳态脏文本", undefined,
-    ));
-    await BuiltinSkills.seed(conn);
-    const read = unwrap(await skills.readSkillFile("global", "agent-config"));
-    assert.equal(read.content, "稳态脏文本");
-    await conn.close();
-  });
+        // 台账已=当前版（bootstrap 首种即写入）：篡改内容后 seed 不得回写。
+        unwrap(await skills.writeSkillFile(
+            "global", "agent-config", undefined, "稳态脏文本", undefined,
+        ));
+        await BuiltinSkills.seed(conn);
+        const read = unwrap(await skills.readSkillFile("global", "agent-config"));
+        assert.equal(read.content, "稳态脏文本");
+        await conn.close();
+    });
 });

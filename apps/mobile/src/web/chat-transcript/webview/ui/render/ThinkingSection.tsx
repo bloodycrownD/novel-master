@@ -13,54 +13,54 @@ import {TrustedHtml} from '@web/shared/ui/TrustedHtml';
 import {CollapsibleHeader} from './CollapsibleSection';
 
 type ThinkingSectionProps = {
-  text: unknown;
-  /** 折叠标题（读 state.labels.thinking，普通行/流式行同源）。 */
-  title: string;
-  thinkingKey: string;
-  expanded: boolean;
-  thinkingHtml: string | null | undefined;
-  showDividerBelow: boolean;
-  richText: boolean;
-  /** 流式行用：body 交给 StreamBodyHost 保护增量 DOM；缺省走 TrustedHtml/纯文本。 */
-  renderBody?: (bodyClass: string, useRich: boolean) => ComponentChildren;
+    text: unknown;
+    /** 折叠标题（读 state.labels.thinking，普通行/流式行同源）。 */
+    title: string;
+    thinkingKey: string;
+    expanded: boolean;
+    thinkingHtml: string | null | undefined;
+    showDividerBelow: boolean;
+    richText: boolean;
+    /** 流式行用：body 交给 StreamBodyHost 保护增量 DOM；缺省走 TrustedHtml/纯文本。 */
+    renderBody?: (bodyClass: string, useRich: boolean) => ComponentChildren;
 };
 
 export function ThinkingSection({
-  text,
-  title,
-  thinkingKey,
-  expanded,
-  thinkingHtml,
-  showDividerBelow,
-  richText,
-  renderBody,
+    text,
+    title,
+    thinkingKey,
+    expanded,
+    thinkingHtml,
+    showDividerBelow,
+    richText,
+    renderBody,
 }: ThinkingSectionProps) {
-  const trimmed = String(text || '').trim();
-  if (!trimmed) return null;
-  const useRich = !!(richText && thinkingHtml);
-  let bodyClass = 'thinking-body' + (useRich ? ' rich' : '');
-  if (expanded && showDividerBelow) {
-    bodyClass += ' thinking-body-divided';
-  }
-  return (
-    <div className="thinking-section" data-thinking-key={thinkingKey}>
-      <CollapsibleHeader
-        headerClass="thinking-header"
-        title={title}
-        action="toggle-thinking"
-        dataKey="thinking-key"
-        dataValue={thinkingKey}
-        expanded={expanded}
-      />
-      {expanded ? (
-        renderBody != null ? (
-          renderBody(bodyClass, useRich)
-        ) : useRich ? (
-          <TrustedHtml html={thinkingHtml!} className={bodyClass} />
-        ) : (
-          <div className={bodyClass}>{trimmed}</div>
-        )
-      ) : null}
-    </div>
-  );
+    const trimmed = String(text || '').trim();
+    if (!trimmed) return null;
+    const useRich = !!(richText && thinkingHtml);
+    let bodyClass = 'thinking-body' + (useRich ? ' rich' : '');
+    if (expanded && showDividerBelow) {
+        bodyClass += ' thinking-body-divided';
+    }
+    return (
+        <div className="thinking-section" data-thinking-key={thinkingKey}>
+            <CollapsibleHeader
+                headerClass="thinking-header"
+                title={title}
+                action="toggle-thinking"
+                dataKey="thinking-key"
+                dataValue={thinkingKey}
+                expanded={expanded}
+            />
+            {expanded ? (
+                renderBody != null ? (
+                    renderBody(bodyClass, useRich)
+                ) : useRich ? (
+                    <TrustedHtml html={thinkingHtml!} className={bodyClass} />
+                ) : (
+                    <div className={bodyClass}>{trimmed}</div>
+                )
+            ) : null}
+        </div>
+    );
 }

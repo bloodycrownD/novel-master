@@ -11,307 +11,307 @@ import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
 novelMasterTestFixture();
 
 describe("AgentRegistryService", () => {
-  it("upsert preserves display name separate from agentId", async () => {
-    const ctx = getNovelMasterTestContext();
-    const registry = AgentServiceFactory.createRegistry(ctx.conn);
-    const def = unwrap(SerializationDecode.decode(
-      {
-        schemaVersion: 1,
-        name: "写作助手",
-        prompts: { persist: {}, dynamic: {} },
-      },
-      agentDefinitionSchema
-    ));
-    await registry.upsert("writer", def);
-    const loaded = unwrap(await registry.get("writer"));
-    assert.equal(loaded.name, "写作助手");
-  });
-
-  it("update 按 patch 合并：未提供的键保留、null 清除、嵌套对象深合并", async () => {
-    const ctx = getNovelMasterTestContext();
-    const registry = AgentServiceFactory.createRegistry(ctx.conn);
-    const id = `agent-patch-${testIsolationSuffix()}`;
-    await registry.upsert(id, {
-      name: "patch",
-      description: "旧描述",
-      model: "11111111-1111-4111-8111-111111111111",
-      prompts: { persist: [], dynamic: [] },
-      runtime: { maxSteps: 3, doomLoopThreshold: 2 },
-    } as unknown as AgentDefinition);
-    const merged = unwrap(await registry.update(id, {
-      description: "新描述",
-      model: null,
-      runtime: { maxSteps: 9 },
-    }));
-    assert.equal(merged.description, "新描述");
-    assert.ok(!("model" in merged));
-    assert.deepEqual(merged.runtime, { maxSteps: 9, doomLoopThreshold: 2 });
-    const loaded = unwrap(await registry.get(id));
-    assert.equal(loaded.description, "新描述");
-    assert.equal(loaded.model, undefined);
-    assert.deepEqual(loaded.runtime, { maxSteps: 9, doomLoopThreshold: 2 });
-  });
-
-  it("update 对不存在的 agent 报 AGENT_NOT_FOUND 且不落盘", async () => {
-    const ctx = getNovelMasterTestContext();
-    const registry = AgentServiceFactory.createRegistry(ctx.conn);
-    const id = `agent-missing-${testIsolationSuffix()}`;
-    await rejectsErr(
-      registry.update(id, { description: "x" }),
-      (e: unknown) => assert.ok(e instanceof AppError && AppErrorOps.is(e, "AGENT_NOT_FOUND"))
-    );
-  });
-
-  it("写入门禁：upsert 拒绝缺 name 的 definition 且不落盘（毒行防护）", async () => {
-    const ctx = getNovelMasterTestContext();
-    const registry = AgentServiceFactory.createRegistry(ctx.conn);
-    const bad = {
-      description: "文笔顶尖的执笔者",
-      mode: "subagent",
-      runtime: { maxSteps: 20 },
-      prompts: { persist: [], dynamic: [] },
-    } as unknown as AgentDefinition;
-    await rejectsErr(
-      () => registry.upsert(`agent-poison-${testIsolationSuffix()}`, bad),
-      (e) => {
-        assert.ok(AppErrorOps.is(e, "AGENT_INVALID_SCHEMA") && e.messageKey === "error.agent.invalid_schema.name_required");
-      }
-    );
-    // 拒绝后未落盘：注册表仍可完整 list/get（不会被毒行拖垮）。
-    const defs = unwrap(await registry.list());
-    assert.ok(defs.every((d) => typeof d.name === "string" && d.name.length > 0));
-  });
-
-  it("prompts 缺省补空布局：仅 name 的最小 create 落盘成功且可读回", async () => {
-    const ctx = getNovelMasterTestContext();
-    const registry = AgentServiceFactory.createRegistry(ctx.conn);
-    const id = `agent-min-${testIsolationSuffix()}`;
-    await registry.upsert(id, { name: "minimal" } as unknown as AgentDefinition);
-    const loaded = unwrap(await registry.get(id));
-    assert.deepEqual(loaded.prompts.persist, []);
-    assert.deepEqual(loaded.prompts.dynamic, []);
-  });
-
-  it("prompts 在但 persist / dynamic 数组缺省：各自补空数组，其余字段保留", async () => {
-    const ctx = getNovelMasterTestContext();
-    const registry = AgentServiceFactory.createRegistry(ctx.conn);
-    const id = `agent-partial-${testIsolationSuffix()}`;
-    await registry.upsert(id, {
-      name: "partial",
-      prompts: { system: "你是翻译" },
-    } as unknown as AgentDefinition);
-    const loaded = unwrap(await registry.get(id));
-    assert.equal(loaded.prompts.system, "你是翻译");
-    assert.deepEqual(loaded.prompts.persist, []);
-    assert.deepEqual(loaded.prompts.dynamic, []);
-  });
-
-  // 非对象形状不兜底：字符串 / 数组 / 数字都是脏输入，交 AgentDefinitionValidator.validate
-  // 报 INVALID_SCHEMA，禁止静默洗白成畸形对象后落盘空布局。
-  it("prompts 为字符串时 upsert 拒绝且不落盘（不兜底）", async () => {
-    const ctx = getNovelMasterTestContext();
-    const registry = AgentServiceFactory.createRegistry(ctx.conn);
-    const id = `agent-bad-str-${testIsolationSuffix()}`;
-    await rejectsErr(
-      () =>
-        registry.upsert(id, {
-          name: "坏形状-字符串",
-          prompts: "你是翻译",
-        } as unknown as AgentDefinition),
-      (e) => {
-        assert.ok(AppErrorOps.is(e, "AGENT_INVALID_SCHEMA") && e.messageKey === "error.agent.invalid_schema.prompts_shape");
-      }
-    );
-    await rejectsErr(
-      registry.get(id),
-      (e: unknown) => assert.ok(e instanceof AppError && AppErrorOps.is(e, "AGENT_NOT_FOUND"))
-    );
-  });
-
-  it("prompts 为数组时 upsert 拒绝且不落盘（不兜底）", async () => {
-    const ctx = getNovelMasterTestContext();
-    const registry = AgentServiceFactory.createRegistry(ctx.conn);
-    const id = `agent-bad-arr-${testIsolationSuffix()}`;
-    await rejectsErr(
-      () =>
-        registry.upsert(id, {
-          name: "坏形状-数组",
-          prompts: [{ persist: [], dynamic: [] }],
-        } as unknown as AgentDefinition),
-      (e) => {
-        assert.ok(AppErrorOps.is(e, "AGENT_INVALID_SCHEMA") && e.messageKey === "error.agent.invalid_schema.prompts_shape");
-      }
-    );
-    await rejectsErr(
-      registry.get(id),
-      (e: unknown) => assert.ok(e instanceof AppError && AppErrorOps.is(e, "AGENT_NOT_FOUND"))
-    );
-  });
-
-  it("prompts 为数字时 upsert 拒绝且不落盘（不兜底）", async () => {
-    const ctx = getNovelMasterTestContext();
-    const registry = AgentServiceFactory.createRegistry(ctx.conn);
-    const id = `agent-bad-num-${testIsolationSuffix()}`;
-    await rejectsErr(
-      () =>
-        registry.upsert(id, {
-          name: "坏形状-数字",
-          prompts: 42,
-        } as unknown as AgentDefinition),
-      (e) => {
-        assert.ok(AppErrorOps.is(e, "AGENT_INVALID_SCHEMA") && e.messageKey === "error.agent.invalid_schema.prompts_shape");
-      }
-    );
-    await rejectsErr(
-      registry.get(id),
-      (e: unknown) => assert.ok(e instanceof AppError && AppErrorOps.is(e, "AGENT_NOT_FOUND"))
-    );
-  });
-
-  it("AG4: delete removes existing agent", async () => {
-    const ctx = getNovelMasterTestContext();
-    const registry = AgentServiceFactory.createRegistry(ctx.conn);
-    await registry.upsert(
-      "summarizer",
-      unwrap(SerializationDecode.decode(
-        {
-          schemaVersion: 1,
-          name: "summarizer",
-          prompts: { persist: {}, dynamic: {} },
-        },
-        agentDefinitionSchema
-      ))
-    );
-    await registry.delete("summarizer");
-    await rejectsErr(
-      registry.get("summarizer"),
-      (e: unknown) => assert.ok(e instanceof AppError && AppErrorOps.is(e, "AGENT_NOT_FOUND"))
-    );
-  });
-
-  it("upsert 拒绝与其他 Agent 重名的显示名", async () => {
-    const ctx = getNovelMasterTestContext();
-    const registry = AgentServiceFactory.createRegistry(ctx.conn);
-    const displayName = `写作助手-${testIsolationSuffix()}`;
-    const def = unwrap(SerializationDecode.decode(
-      {
-        schemaVersion: 1,
-        name: displayName,
-        prompts: { persist: {}, dynamic: {} },
-      },
-      agentDefinitionSchema
-    ));
-    await registry.upsert("writer-a", def);
-    await rejectsErr(
-      () => registry.upsert("writer-b", def),
-      (e) => {
-        assert.ok(e instanceof AppError && AppErrorOps.is(e, "AGENT_DUPLICATE_NAME") && e.messageKey === "error.agent.duplicate_name");
-      }
-    );
-  });
-
-  it("upsert 允许同一 Agent 保存原显示名", async () => {
-    const ctx = getNovelMasterTestContext();
-    const registry = AgentServiceFactory.createRegistry(ctx.conn);
-    const def = unwrap(SerializationDecode.decode(
-      {
-        schemaVersion: 1,
-        name: "写作助手",
-        prompts: { persist: {}, dynamic: {} },
-      },
-      agentDefinitionSchema
-    ));
-    await registry.upsert("writer", def);
-    await registry.upsert("writer", { ...def, runtime: { maxSteps: 10 } });
-    const loaded = unwrap(await registry.get("writer"));
-    assert.equal(loaded.name, "写作助手");
-    assert.equal(loaded.runtime?.maxSteps, 10);
-  });
-
-  it("upsert 保存前 trim 显示名并参与重名校验", async () => {
-    const ctx = getNovelMasterTestContext();
-    const registry = AgentServiceFactory.createRegistry(ctx.conn);
-    const displayName = `写作助手-${testIsolationSuffix()}`;
-    await registry.upsert(
-      "writer-a",
-      unwrap(SerializationDecode.decode(
-        {
-          schemaVersion: 1,
-          name: `  ${displayName}  `,
-          prompts: { persist: {}, dynamic: {} },
-        },
-        agentDefinitionSchema
-      ))
-    );
-    await rejectsErr(
-      () =>
-        registry.upsert(
-          "writer-b",
-          unwrap(SerializationDecode.decode(
+    it("upsert preserves display name separate from agentId", async () => {
+        const ctx = getNovelMasterTestContext();
+        const registry = AgentServiceFactory.createRegistry(ctx.conn);
+        const def = unwrap(SerializationDecode.decode(
             {
-              schemaVersion: 1,
-              name: displayName,
-              prompts: { persist: {}, dynamic: {} },
+                schemaVersion: 1,
+                name: "写作助手",
+                prompts: { persist: {}, dynamic: {} },
             },
             agentDefinitionSchema
-          ))
-        ),
-      (e) => {
-        assert.ok(e instanceof AppError && AppErrorOps.is(e, "AGENT_DUPLICATE_NAME"));
-      }
-    );
-  });
+        ));
+        await registry.upsert("writer", def);
+        const loaded = unwrap(await registry.get("writer"));
+        assert.equal(loaded.name, "写作助手");
+    });
 
-  it("AG5a: delete 当前 Agent 时重置指针（注入 state）", async () => {
-    const ctx = getNovelMasterTestContext();
-    const registry = AgentServiceFactory.createRegistry(ctx.conn, ctx.state);
-    const def = unwrap(SerializationDecode.decode(
-      {
-        schemaVersion: 1,
-        name: "a",
-        prompts: { persist: {}, dynamic: {} },
-      },
-      agentDefinitionSchema
-    ));
-    await registry.upsert("agent-a", def);
-    await registry.upsert("agent-b", { ...def, name: "b" });
-    await ctx.state.setCurrentAgentId("agent-a");
-    await registry.delete("agent-a");
-    assert.equal(unwrap(await ctx.state.getCurrentAgentId()), undefined);
-  });
+    it("update 按 patch 合并：未提供的键保留、null 清除、嵌套对象深合并", async () => {
+        const ctx = getNovelMasterTestContext();
+        const registry = AgentServiceFactory.createRegistry(ctx.conn);
+        const id = `agent-patch-${testIsolationSuffix()}`;
+        await registry.upsert(id, {
+            name: "patch",
+            description: "旧描述",
+            model: "11111111-1111-4111-8111-111111111111",
+            prompts: { persist: [], dynamic: [] },
+            runtime: { maxSteps: 3, doomLoopThreshold: 2 },
+        } as unknown as AgentDefinition);
+        const merged = unwrap(await registry.update(id, {
+            description: "新描述",
+            model: null,
+            runtime: { maxSteps: 9 },
+        }));
+        assert.equal(merged.description, "新描述");
+        assert.ok(!("model" in merged));
+        assert.deepEqual(merged.runtime, { maxSteps: 9, doomLoopThreshold: 2 });
+        const loaded = unwrap(await registry.get(id));
+        assert.equal(loaded.description, "新描述");
+        assert.equal(loaded.model, undefined);
+        assert.deepEqual(loaded.runtime, { maxSteps: 9, doomLoopThreshold: 2 });
+    });
 
-  it("AG5b: delete 非当前 Agent 时保留指针", async () => {
-    const ctx = getNovelMasterTestContext();
-    const registry = AgentServiceFactory.createRegistry(ctx.conn, ctx.state);
-    const def = unwrap(SerializationDecode.decode(
-      {
-        schemaVersion: 1,
-        name: "a",
-        prompts: { persist: {}, dynamic: {} },
-      },
-      agentDefinitionSchema
-    ));
-    await registry.upsert("agent-a", def);
-    await registry.upsert("agent-b", { ...def, name: "b" });
-    await ctx.state.setCurrentAgentId("agent-a");
-    await registry.delete("agent-b");
-    assert.equal(unwrap(await ctx.state.getCurrentAgentId()), "agent-a");
-  });
+    it("update 对不存在的 agent 报 AGENT_NOT_FOUND 且不落盘", async () => {
+        const ctx = getNovelMasterTestContext();
+        const registry = AgentServiceFactory.createRegistry(ctx.conn);
+        const id = `agent-missing-${testIsolationSuffix()}`;
+        await rejectsErr(
+            registry.update(id, { description: "x" }),
+            (e: unknown) => assert.ok(e instanceof AppError && AppErrorOps.is(e, "AGENT_NOT_FOUND"))
+        );
+    });
 
-  it("AG5c: 未注入 state 时 delete 不清指针", async () => {
-    const ctx = getNovelMasterTestContext();
-    const registry = AgentServiceFactory.createRegistry(ctx.conn);
-    const def = unwrap(SerializationDecode.decode(
-      {
-        schemaVersion: 1,
-        name: "a",
-        prompts: { persist: {}, dynamic: {} },
-      },
-      agentDefinitionSchema
-    ));
-    await registry.upsert("agent-a", def);
-    await ctx.state.setCurrentAgentId("agent-a");
-    await registry.delete("agent-a");
-    assert.equal(unwrap(await ctx.state.getCurrentAgentId()), "agent-a");
-  });
+    it("写入门禁：upsert 拒绝缺 name 的 definition 且不落盘（毒行防护）", async () => {
+        const ctx = getNovelMasterTestContext();
+        const registry = AgentServiceFactory.createRegistry(ctx.conn);
+        const bad = {
+            description: "文笔顶尖的执笔者",
+            mode: "subagent",
+            runtime: { maxSteps: 20 },
+            prompts: { persist: [], dynamic: [] },
+        } as unknown as AgentDefinition;
+        await rejectsErr(
+            () => registry.upsert(`agent-poison-${testIsolationSuffix()}`, bad),
+            (e) => {
+                assert.ok(AppErrorOps.is(e, "AGENT_INVALID_SCHEMA") && e.messageKey === "error.agent.invalid_schema.name_required");
+            }
+        );
+        // 拒绝后未落盘：注册表仍可完整 list/get（不会被毒行拖垮）。
+        const defs = unwrap(await registry.list());
+        assert.ok(defs.every((d) => typeof d.name === "string" && d.name.length > 0));
+    });
+
+    it("prompts 缺省补空布局：仅 name 的最小 create 落盘成功且可读回", async () => {
+        const ctx = getNovelMasterTestContext();
+        const registry = AgentServiceFactory.createRegistry(ctx.conn);
+        const id = `agent-min-${testIsolationSuffix()}`;
+        await registry.upsert(id, { name: "minimal" } as unknown as AgentDefinition);
+        const loaded = unwrap(await registry.get(id));
+        assert.deepEqual(loaded.prompts.persist, []);
+        assert.deepEqual(loaded.prompts.dynamic, []);
+    });
+
+    it("prompts 在但 persist / dynamic 数组缺省：各自补空数组，其余字段保留", async () => {
+        const ctx = getNovelMasterTestContext();
+        const registry = AgentServiceFactory.createRegistry(ctx.conn);
+        const id = `agent-partial-${testIsolationSuffix()}`;
+        await registry.upsert(id, {
+            name: "partial",
+            prompts: { system: "你是翻译" },
+        } as unknown as AgentDefinition);
+        const loaded = unwrap(await registry.get(id));
+        assert.equal(loaded.prompts.system, "你是翻译");
+        assert.deepEqual(loaded.prompts.persist, []);
+        assert.deepEqual(loaded.prompts.dynamic, []);
+    });
+
+    // 非对象形状不兜底：字符串 / 数组 / 数字都是脏输入，交 AgentDefinitionValidator.validate
+    // 报 INVALID_SCHEMA，禁止静默洗白成畸形对象后落盘空布局。
+    it("prompts 为字符串时 upsert 拒绝且不落盘（不兜底）", async () => {
+        const ctx = getNovelMasterTestContext();
+        const registry = AgentServiceFactory.createRegistry(ctx.conn);
+        const id = `agent-bad-str-${testIsolationSuffix()}`;
+        await rejectsErr(
+            () =>
+                registry.upsert(id, {
+                    name: "坏形状-字符串",
+                    prompts: "你是翻译",
+                } as unknown as AgentDefinition),
+            (e) => {
+                assert.ok(AppErrorOps.is(e, "AGENT_INVALID_SCHEMA") && e.messageKey === "error.agent.invalid_schema.prompts_shape");
+            }
+        );
+        await rejectsErr(
+            registry.get(id),
+            (e: unknown) => assert.ok(e instanceof AppError && AppErrorOps.is(e, "AGENT_NOT_FOUND"))
+        );
+    });
+
+    it("prompts 为数组时 upsert 拒绝且不落盘（不兜底）", async () => {
+        const ctx = getNovelMasterTestContext();
+        const registry = AgentServiceFactory.createRegistry(ctx.conn);
+        const id = `agent-bad-arr-${testIsolationSuffix()}`;
+        await rejectsErr(
+            () =>
+                registry.upsert(id, {
+                    name: "坏形状-数组",
+                    prompts: [{ persist: [], dynamic: [] }],
+                } as unknown as AgentDefinition),
+            (e) => {
+                assert.ok(AppErrorOps.is(e, "AGENT_INVALID_SCHEMA") && e.messageKey === "error.agent.invalid_schema.prompts_shape");
+            }
+        );
+        await rejectsErr(
+            registry.get(id),
+            (e: unknown) => assert.ok(e instanceof AppError && AppErrorOps.is(e, "AGENT_NOT_FOUND"))
+        );
+    });
+
+    it("prompts 为数字时 upsert 拒绝且不落盘（不兜底）", async () => {
+        const ctx = getNovelMasterTestContext();
+        const registry = AgentServiceFactory.createRegistry(ctx.conn);
+        const id = `agent-bad-num-${testIsolationSuffix()}`;
+        await rejectsErr(
+            () =>
+                registry.upsert(id, {
+                    name: "坏形状-数字",
+                    prompts: 42,
+                } as unknown as AgentDefinition),
+            (e) => {
+                assert.ok(AppErrorOps.is(e, "AGENT_INVALID_SCHEMA") && e.messageKey === "error.agent.invalid_schema.prompts_shape");
+            }
+        );
+        await rejectsErr(
+            registry.get(id),
+            (e: unknown) => assert.ok(e instanceof AppError && AppErrorOps.is(e, "AGENT_NOT_FOUND"))
+        );
+    });
+
+    it("AG4: delete removes existing agent", async () => {
+        const ctx = getNovelMasterTestContext();
+        const registry = AgentServiceFactory.createRegistry(ctx.conn);
+        await registry.upsert(
+            "summarizer",
+            unwrap(SerializationDecode.decode(
+                {
+                    schemaVersion: 1,
+                    name: "summarizer",
+                    prompts: { persist: {}, dynamic: {} },
+                },
+                agentDefinitionSchema
+            ))
+        );
+        await registry.delete("summarizer");
+        await rejectsErr(
+            registry.get("summarizer"),
+            (e: unknown) => assert.ok(e instanceof AppError && AppErrorOps.is(e, "AGENT_NOT_FOUND"))
+        );
+    });
+
+    it("upsert 拒绝与其他 Agent 重名的显示名", async () => {
+        const ctx = getNovelMasterTestContext();
+        const registry = AgentServiceFactory.createRegistry(ctx.conn);
+        const displayName = `写作助手-${testIsolationSuffix()}`;
+        const def = unwrap(SerializationDecode.decode(
+            {
+                schemaVersion: 1,
+                name: displayName,
+                prompts: { persist: {}, dynamic: {} },
+            },
+            agentDefinitionSchema
+        ));
+        await registry.upsert("writer-a", def);
+        await rejectsErr(
+            () => registry.upsert("writer-b", def),
+            (e) => {
+                assert.ok(e instanceof AppError && AppErrorOps.is(e, "AGENT_DUPLICATE_NAME") && e.messageKey === "error.agent.duplicate_name");
+            }
+        );
+    });
+
+    it("upsert 允许同一 Agent 保存原显示名", async () => {
+        const ctx = getNovelMasterTestContext();
+        const registry = AgentServiceFactory.createRegistry(ctx.conn);
+        const def = unwrap(SerializationDecode.decode(
+            {
+                schemaVersion: 1,
+                name: "写作助手",
+                prompts: { persist: {}, dynamic: {} },
+            },
+            agentDefinitionSchema
+        ));
+        await registry.upsert("writer", def);
+        await registry.upsert("writer", { ...def, runtime: { maxSteps: 10 } });
+        const loaded = unwrap(await registry.get("writer"));
+        assert.equal(loaded.name, "写作助手");
+        assert.equal(loaded.runtime?.maxSteps, 10);
+    });
+
+    it("upsert 保存前 trim 显示名并参与重名校验", async () => {
+        const ctx = getNovelMasterTestContext();
+        const registry = AgentServiceFactory.createRegistry(ctx.conn);
+        const displayName = `写作助手-${testIsolationSuffix()}`;
+        await registry.upsert(
+            "writer-a",
+            unwrap(SerializationDecode.decode(
+                {
+                    schemaVersion: 1,
+                    name: `  ${displayName}  `,
+                    prompts: { persist: {}, dynamic: {} },
+                },
+                agentDefinitionSchema
+            ))
+        );
+        await rejectsErr(
+            () =>
+                registry.upsert(
+                    "writer-b",
+                    unwrap(SerializationDecode.decode(
+                        {
+                            schemaVersion: 1,
+                            name: displayName,
+                            prompts: { persist: {}, dynamic: {} },
+                        },
+                        agentDefinitionSchema
+                    ))
+                ),
+            (e) => {
+                assert.ok(e instanceof AppError && AppErrorOps.is(e, "AGENT_DUPLICATE_NAME"));
+            }
+        );
+    });
+
+    it("AG5a: delete 当前 Agent 时重置指针（注入 state）", async () => {
+        const ctx = getNovelMasterTestContext();
+        const registry = AgentServiceFactory.createRegistry(ctx.conn, ctx.state);
+        const def = unwrap(SerializationDecode.decode(
+            {
+                schemaVersion: 1,
+                name: "a",
+                prompts: { persist: {}, dynamic: {} },
+            },
+            agentDefinitionSchema
+        ));
+        await registry.upsert("agent-a", def);
+        await registry.upsert("agent-b", { ...def, name: "b" });
+        await ctx.state.setCurrentAgentId("agent-a");
+        await registry.delete("agent-a");
+        assert.equal(unwrap(await ctx.state.getCurrentAgentId()), undefined);
+    });
+
+    it("AG5b: delete 非当前 Agent 时保留指针", async () => {
+        const ctx = getNovelMasterTestContext();
+        const registry = AgentServiceFactory.createRegistry(ctx.conn, ctx.state);
+        const def = unwrap(SerializationDecode.decode(
+            {
+                schemaVersion: 1,
+                name: "a",
+                prompts: { persist: {}, dynamic: {} },
+            },
+            agentDefinitionSchema
+        ));
+        await registry.upsert("agent-a", def);
+        await registry.upsert("agent-b", { ...def, name: "b" });
+        await ctx.state.setCurrentAgentId("agent-a");
+        await registry.delete("agent-b");
+        assert.equal(unwrap(await ctx.state.getCurrentAgentId()), "agent-a");
+    });
+
+    it("AG5c: 未注入 state 时 delete 不清指针", async () => {
+        const ctx = getNovelMasterTestContext();
+        const registry = AgentServiceFactory.createRegistry(ctx.conn);
+        const def = unwrap(SerializationDecode.decode(
+            {
+                schemaVersion: 1,
+                name: "a",
+                prompts: { persist: {}, dynamic: {} },
+            },
+            agentDefinitionSchema
+        ));
+        await registry.upsert("agent-a", def);
+        await ctx.state.setCurrentAgentId("agent-a");
+        await registry.delete("agent-a");
+        assert.equal(unwrap(await ctx.state.getCurrentAgentId()), "agent-a");
+    });
 });

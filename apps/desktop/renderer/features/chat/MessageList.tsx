@@ -7,59 +7,59 @@ import { ToolCallGroupCard } from './ToolCallGroupCard';
 import { MessageAttachmentGroupCard } from './MessageAttachmentGroupCard';
 
 const ROLE_LABELS: Record<string, string> = {
-  user: coreT({key: "ui.transcript.role.user"}),
-  assistant: coreT({key: "ui.transcript.role.assistant"}),
-  system: coreT({key: "ui.chat.role_system"}),
+    user: coreT({key: "ui.transcript.role.user"}),
+    assistant: coreT({key: "ui.transcript.role.assistant"}),
+    system: coreT({key: "ui.chat.role_system"}),
 };
 
 interface MessageListProps {
-  messages: readonly ChatMessageDto[];
-  /** 当前会话项目 id；skill 卡片跳设置详情需要。 */
-  projectId?: string;
-  uiRunning?: boolean;
-  streamingText?: string;
-  streamingThinking?: string;
-  streamTailGenerating?: boolean;
-  agentRunning?: boolean;
-  chatRichText?: boolean;
-  onOpenMessageMenu?: (
-    message: ChatMessageDto,
-    position: { x: number; y: number },
-  ) => void;
-  /** 点击文件类工具卡片时在聊天工作区 Preview 打开路径。 */
-  onOpenToolFile?: (path: string) => void;
-  /** markdown 链接点击（正文与流式尾巴）：识别与路由由调用方单源完成。 */
-  onLinkClick?: (href: string) => void;
-  /** 点击 task 工具卡片时跳转只读子会话面板。 */
-  onOpenSubagentSession?: (sessionId: string) => void;
-  /** 搜索结果等场景：长文本消息默认折叠（line-clamp 4 行），点击切换展开；默认关闭。 */
-  collapsibleMessageBody?: boolean;
+    messages: readonly ChatMessageDto[];
+    /** 当前会话项目 id；skill 卡片跳设置详情需要。 */
+    projectId?: string;
+    uiRunning?: boolean;
+    streamingText?: string;
+    streamingThinking?: string;
+    streamTailGenerating?: boolean;
+    agentRunning?: boolean;
+    chatRichText?: boolean;
+    onOpenMessageMenu?: (
+        message: ChatMessageDto,
+        position: { x: number; y: number },
+    ) => void;
+    /** 点击文件类工具卡片时在聊天工作区 Preview 打开路径。 */
+    onOpenToolFile?: (path: string) => void;
+    /** markdown 链接点击（正文与流式尾巴）：识别与路由由调用方单源完成。 */
+    onLinkClick?: (href: string) => void;
+    /** 点击 task 工具卡片时跳转只读子会话面板。 */
+    onOpenSubagentSession?: (sessionId: string) => void;
+    /** 搜索结果等场景：长文本消息默认折叠（line-clamp 4 行），点击切换展开；默认关闭。 */
+    collapsibleMessageBody?: boolean;
 }
 
 function MessageBody({
-  text,
-  richText,
-  alwaysRichText = false,
-  onLinkClick,
+    text,
+    richText,
+    alwaysRichText = false,
+    onLinkClick,
 }: {
-  text: string;
-  richText: boolean;
-  alwaysRichText?: boolean;
-  onLinkClick?: (href: string) => void;
+    text: string;
+    richText: boolean;
+    alwaysRichText?: boolean;
+    onLinkClick?: (href: string) => void;
 }) {
-  if (richText || alwaysRichText) {
-    return (
-      <div className="chat-message__markdown">
-        <MermaidMarkdown content={text} onLinkClick={onLinkClick} />
-      </div>
-    );
-  }
-  return <p>{text}</p>;
+    if (richText || alwaysRichText) {
+        return (
+            <div className="chat-message__markdown">
+                <MermaidMarkdown content={text} onLinkClick={onLinkClick} />
+            </div>
+        );
+    }
+    return <p>{text}</p>;
 }
 
 /** 与 mobile MessageResultCard 一致的静态溢出规则：超 200 字符或含换行即可折叠。 */
 function isCollapsibleText(text: string): boolean {
-  return text.length > 200 || text.includes('\n');
+    return text.length > 200 || text.includes('\n');
 }
 
 /**
@@ -72,173 +72,173 @@ function isCollapsibleText(text: string): boolean {
  * isCollapsibleText 静态溢出规则的折叠行为不变。
  */
 function CollapsibleMessageBody({
-  text,
-  richText,
-  alwaysRichText = false,
-  onLinkClick,
+    text,
+    richText,
+    alwaysRichText = false,
+    onLinkClick,
 }: {
-  text: string;
-  richText: boolean;
-  alwaysRichText?: boolean;
-  onLinkClick?: (href: string) => void;
+    text: string;
+    richText: boolean;
+    alwaysRichText?: boolean;
+    onLinkClick?: (href: string) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  if (richText || alwaysRichText) {
+    const [expanded, setExpanded] = useState(false);
+    if (richText || alwaysRichText) {
+        return (
+            <MessageBody text={text} richText={richText} alwaysRichText={alwaysRichText} onLinkClick={onLinkClick} />
+        );
+    }
+    if (!isCollapsibleText(text)) {
+        return (
+            <MessageBody text={text} richText={richText} alwaysRichText={alwaysRichText} onLinkClick={onLinkClick} />
+        );
+    }
     return (
-      <MessageBody text={text} richText={richText} alwaysRichText={alwaysRichText} onLinkClick={onLinkClick} />
-    );
-  }
-  if (!isCollapsibleText(text)) {
-    return (
-      <MessageBody text={text} richText={richText} alwaysRichText={alwaysRichText} onLinkClick={onLinkClick} />
-    );
-  }
-  return (
-    <div
-      className={`chat-message__body-clamp${
+        <div
+            className={`chat-message__body-clamp${
         expanded ? ' chat-message__body-clamp--expanded' : ''
       }`}
-      onClick={() => setExpanded(v => !v)}
-    >
-      <MessageBody text={text} richText={richText} alwaysRichText={alwaysRichText} />
-    </div>
-  );
+            onClick={() => setExpanded(v => !v)}
+        >
+            <MessageBody text={text} richText={richText} alwaysRichText={alwaysRichText} />
+        </div>
+    );
 }
 
 export function MessageList({
-  messages,
-  projectId,
-  uiRunning = false,
-  streamingText,
-  streamingThinking,
-  streamTailGenerating: _streamTailGenerating = false,
-  agentRunning = false,
-  chatRichText = false,
-  onOpenMessageMenu,
-  onOpenToolFile,
-  onLinkClick,
-  onOpenSubagentSession,
-  collapsibleMessageBody = false,
+    messages,
+    projectId,
+    uiRunning = false,
+    streamingText,
+    streamingThinking,
+    streamTailGenerating: _streamTailGenerating = false,
+    agentRunning = false,
+    chatRichText = false,
+    onOpenMessageMenu,
+    onOpenToolFile,
+    onLinkClick,
+    onOpenSubagentSession,
+    collapsibleMessageBody = false,
 }: MessageListProps) {
-  const hasStreaming = uiRunning;
+    const hasStreaming = uiRunning;
 
-  if (messages.length === 0 && !hasStreaming) {
-    return <p className="chat-messages__empty">{coreT({key: "label.transcript.empty"})}</p>;
-  }
+    if (messages.length === 0 && !hasStreaming) {
+        return <p className="chat-messages__empty">{coreT({key: "label.transcript.empty"})}</p>;
+    }
 
-  const openMenu = (message: ChatMessageDto, event: React.MouseEvent | MouseEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
-    onOpenMessageMenu?.(message, { x: event.clientX, y: event.clientY });
-  };
+    const openMenu = (message: ChatMessageDto, event: React.MouseEvent | MouseEvent) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onOpenMessageMenu?.(message, { x: event.clientX, y: event.clientY });
+    };
 
-  const listItems = buildChatListItems(messages, {
-    agentRunning,
-    runUiStopped: !uiRunning,
-  });
+    const listItems = buildChatListItems(messages, {
+        agentRunning,
+        runUiStopped: !uiRunning,
+    });
 
-  return (
-    <>
-      {listItems.map(item => {
-        const msg = item.message;
-        const text = item.textParts.join('\n');
+    return (
+        <>
+            {listItems.map(item => {
+                const msg = item.message;
+                const text = item.textParts.join('\n');
 
-        return (
-          <div
-            key={msg.id}
-            className={`chat-message chat-message--${msg.role}${
+                return (
+                    <div
+                        key={msg.id}
+                        className={`chat-message chat-message--${msg.role}${
               msg.hidden ? ' chat-message--hidden' : ''
             }`}
-            data-message-id={msg.id}
-            onContextMenu={e => {
-              if (!onOpenMessageMenu) {
-                return;
-              }
-              openMenu(msg, e);
-            }}
-          >
-            <div className="chat-message__body">
-              <span className="chat-message__role">
-                {ROLE_LABELS[msg.role] ?? msg.role}
-                {msg.hidden ? (
-                  <span className="chat-message__hidden-tag">{coreT({key: "ui.chat.hidden_tag"})}</span>
-                ) : null}
-                {onOpenMessageMenu ? (
-                  <button
-                    type="button"
-                    className="chat-message__menu-btn"
-                    aria-label={coreT({key: "ui.transcript.message_actions"})}
-                    aria-haspopup="menu"
-                    onClick={e => openMenu(msg, e)}
-                  >
-                    ⋯
-                  </button>
-                ) : null}
-              </span>
-              {item.thinkingParts.length > 0 ? (
-                <details className="chat-message__thinking">
-                  <summary>{coreT({key: "label.transcript.thinking_header"})}</summary>
-                  <p>{item.thinkingParts.join('\n')}</p>
-                </details>
-              ) : null}
-              {text ? (
-                collapsibleMessageBody ? (
-                  <CollapsibleMessageBody
-                    text={text}
-                    richText={chatRichText}
-                    alwaysRichText={msg.role === 'assistant'}
-                    onLinkClick={onLinkClick}
-                  />
-                ) : (
-                  <MessageBody
-                    text={text}
-                    richText={chatRichText}
-                    alwaysRichText={msg.role === 'assistant'}
-                    onLinkClick={onLinkClick}
-                  />
-                )
-              ) : null}
-              {msg.role === "user" &&
-              (msg.attachments?.length ?? 0) > 0 ? (
-                <MessageAttachmentGroupCard
-                  attachments={msg.attachments!}
-                  dimmed={msg.hidden}
-                />
-              ) : null}
-              {item.tools.length > 0 ? (
-                <ToolCallGroupCard
-                  tools={item.tools}
-                  dimmed={msg.hidden}
-                  projectId={projectId}
-                  onOpenFile={onOpenToolFile}
-                  onOpenSubagentSession={onOpenSubagentSession}
-                />
-              ) : null}
-            </div>
-          </div>
-        );
-      })}
-      {hasStreaming ? (
-        <div className="chat-message chat-message--assistant chat-message--streaming">
-          <div className="chat-message__body">
-            <span className="chat-message__role">{coreT({key: "ui.transcript.role.assistant"})}</span>
-            {streamingThinking ? (
-              <details className="chat-message__thinking" open>
-                <summary>{coreT({key: "label.transcript.thinking_header"})}</summary>
-                <p>{streamingThinking}</p>
-              </details>
+                        data-message-id={msg.id}
+                        onContextMenu={e => {
+                            if (!onOpenMessageMenu) {
+                                return;
+                            }
+                            openMenu(msg, e);
+                        }}
+                    >
+                        <div className="chat-message__body">
+                            <span className="chat-message__role">
+                                {ROLE_LABELS[msg.role] ?? msg.role}
+                                {msg.hidden ? (
+                                    <span className="chat-message__hidden-tag">{coreT({key: "ui.chat.hidden_tag"})}</span>
+                                ) : null}
+                                {onOpenMessageMenu ? (
+                                    <button
+                                        type="button"
+                                        className="chat-message__menu-btn"
+                                        aria-label={coreT({key: "ui.transcript.message_actions"})}
+                                        aria-haspopup="menu"
+                                        onClick={e => openMenu(msg, e)}
+                                    >
+                                        ⋯
+                                    </button>
+                                ) : null}
+                            </span>
+                            {item.thinkingParts.length > 0 ? (
+                                <details className="chat-message__thinking">
+                                    <summary>{coreT({key: "label.transcript.thinking_header"})}</summary>
+                                    <p>{item.thinkingParts.join('\n')}</p>
+                                </details>
+                            ) : null}
+                            {text ? (
+                                collapsibleMessageBody ? (
+                                    <CollapsibleMessageBody
+                                        text={text}
+                                        richText={chatRichText}
+                                        alwaysRichText={msg.role === 'assistant'}
+                                        onLinkClick={onLinkClick}
+                                    />
+                                ) : (
+                                    <MessageBody
+                                        text={text}
+                                        richText={chatRichText}
+                                        alwaysRichText={msg.role === 'assistant'}
+                                        onLinkClick={onLinkClick}
+                                    />
+                                )
+                            ) : null}
+                            {msg.role === "user" &&
+                            (msg.attachments?.length ?? 0) > 0 ? (
+                                <MessageAttachmentGroupCard
+                                    attachments={msg.attachments!}
+                                    dimmed={msg.hidden}
+                                />
+                            ) : null}
+                            {item.tools.length > 0 ? (
+                                <ToolCallGroupCard
+                                    tools={item.tools}
+                                    dimmed={msg.hidden}
+                                    projectId={projectId}
+                                    onOpenFile={onOpenToolFile}
+                                    onOpenSubagentSession={onOpenSubagentSession}
+                                />
+                            ) : null}
+                        </div>
+                    </div>
+                );
+            })}
+            {hasStreaming ? (
+                <div className="chat-message chat-message--assistant chat-message--streaming">
+                    <div className="chat-message__body">
+                        <span className="chat-message__role">{coreT({key: "ui.transcript.role.assistant"})}</span>
+                        {streamingThinking ? (
+                            <details className="chat-message__thinking" open>
+                                <summary>{coreT({key: "label.transcript.thinking_header"})}</summary>
+                                <p>{streamingThinking}</p>
+                            </details>
+                        ) : null}
+                        {streamingText ? (
+                            <div className="chat-message__markdown">
+                                <MermaidMarkdown content={streamingText} onLinkClick={onLinkClick} />
+                            </div>
+                        ) : null}
+                        {uiRunning ? (
+                            <p className="chat-message__stream-tail">{coreT({key: "label.transcript.generating"})}</p>
+                        ) : null}
+                    </div>
+                </div>
             ) : null}
-            {streamingText ? (
-              <div className="chat-message__markdown">
-                <MermaidMarkdown content={streamingText} onLinkClick={onLinkClick} />
-              </div>
-            ) : null}
-            {uiRunning ? (
-              <p className="chat-message__stream-tail">{coreT({key: "label.transcript.generating"})}</p>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
-    </>
-  );
+        </>
+    );
 }

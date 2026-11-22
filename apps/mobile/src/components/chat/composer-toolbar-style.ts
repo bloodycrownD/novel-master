@@ -14,13 +14,13 @@ import {StyleSheet} from 'react-native';
 
 /** 引用类工具按钮（@ / $ / ⛶ 共用）：36 见方圆钮 + hairline 描边 + 内容居中。 */
 const composerToolStyles = StyleSheet.create({
-  toolBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: StyleSheet.hairlineWidth,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+    toolBtn: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        borderWidth: StyleSheet.hairlineWidth,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
 });
 export const composerToolBtnStyle = composerToolStyles.toolBtn;

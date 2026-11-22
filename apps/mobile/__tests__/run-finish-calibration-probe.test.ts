@@ -13,234 +13,234 @@ import {AppState} from 'react-native';
 import {EVENT_AGENT_RUN_STARTED, SimpleEventBus} from '@novel-master/core/events';
 import {RUN_FINISH_CALIBRATION_INTERVAL_MS, RUN_FINISH_CALIBRATION_RECONFIRM_DELAY_MS, RunFinishCalibrationProbe} from '@/services/run-finish-calibration-probe'
 import {
-  SessionStreamUnitManager,
+    SessionStreamUnitManager,
 } from '@/services/session-stream-unit-manager.service';
 import {agentActivity} from '@/runtime/agent-activity';
 
 function flushTimers(ms: number): Promise<void> {
-  return new Promise<void>(resolve => {
-    setTimeout(resolve, ms);
-    jest.advanceTimersByTime(ms);
-  });
+    return new Promise<void>(resolve => {
+        setTimeout(resolve, ms);
+        jest.advanceTimersByTime(ms);
+    });
 }
 
 describe('run-finish-calibration-probe — 纯逻辑', () => {
-  beforeEach(() => {
-    jest.useFakeTimers();
-  });
-  afterEach(() => {
-    jest.useRealTimers();
-  });
-
-  it('calibrate：活跃会话未注册 → 复询后仍 false 触发 onRunLost', async () => {
-    const onRunLost = jest.fn();
-    const probe = RunFinishCalibrationProbe.create({
-      activeSessionIds: () => ['s1'],
-      isRunRegistered: () => false,
-      onRunLost,
+    beforeEach(() => {
+        jest.useFakeTimers();
     });
-    probe.calibrate();
-    // 复询防抖延迟前不触发
-    expect(onRunLost).not.toHaveBeenCalled();
-    await flushTimers(RUN_FINISH_CALIBRATION_RECONFIRM_DELAY_MS + 50);
-    expect(onRunLost).toHaveBeenCalledTimes(1);
-    expect(onRunLost).toHaveBeenCalledWith('s1');
-    probe.dispose();
-  });
-
-  it('第一次 false、复询时变 true 则不收尾（防抖避免误判）', async () => {
-    const onRunLost = jest.fn();
-    let registered = false;
-    const probe = RunFinishCalibrationProbe.create({
-      activeSessionIds: () => ['s1'],
-      isRunRegistered: () => {
-        const v = registered;
-        registered = true;
-        return v;
-      },
-      onRunLost,
+    afterEach(() => {
+        jest.useRealTimers();
     });
-    probe.calibrate();
-    await flushTimers(RUN_FINISH_CALIBRATION_RECONFIRM_DELAY_MS + 50);
-    expect(onRunLost).not.toHaveBeenCalled();
-    probe.dispose();
-  });
 
-  it('已注册的会话不排复询（主路径健康时校准零动作）', async () => {
-    const onRunLost = jest.fn();
-    const isRunRegistered = jest.fn(() => true);
-    const probe = RunFinishCalibrationProbe.create({
-      activeSessionIds: () => ['s1'],
-      isRunRegistered,
-      onRunLost,
+    it('calibrate：活跃会话未注册 → 复询后仍 false 触发 onRunLost', async () => {
+        const onRunLost = jest.fn();
+        const probe = RunFinishCalibrationProbe.create({
+            activeSessionIds: () => ['s1'],
+            isRunRegistered: () => false,
+            onRunLost,
+        });
+        probe.calibrate();
+        // 复询防抖延迟前不触发
+        expect(onRunLost).not.toHaveBeenCalled();
+        await flushTimers(RUN_FINISH_CALIBRATION_RECONFIRM_DELAY_MS + 50);
+        expect(onRunLost).toHaveBeenCalledTimes(1);
+        expect(onRunLost).toHaveBeenCalledWith('s1');
+        probe.dispose();
     });
-    probe.calibrate();
-    await flushTimers(RUN_FINISH_CALIBRATION_RECONFIRM_DELAY_MS + 50);
-    expect(onRunLost).not.toHaveBeenCalled();
-    probe.dispose();
-  });
 
-  it('复询前会话已正常收尾（activeSessionIds 不再包含）则不触发', async () => {
-    const onRunLost = jest.fn();
-    let active = true;
-    const probe = RunFinishCalibrationProbe.create({
-      activeSessionIds: () => (active ? ['s1'] : []),
-      isRunRegistered: () => false,
-      onRunLost,
+    it('第一次 false、复询时变 true 则不收尾（防抖避免误判）', async () => {
+        const onRunLost = jest.fn();
+        let registered = false;
+        const probe = RunFinishCalibrationProbe.create({
+            activeSessionIds: () => ['s1'],
+            isRunRegistered: () => {
+                const v = registered;
+                registered = true;
+                return v;
+            },
+            onRunLost,
+        });
+        probe.calibrate();
+        await flushTimers(RUN_FINISH_CALIBRATION_RECONFIRM_DELAY_MS + 50);
+        expect(onRunLost).not.toHaveBeenCalled();
+        probe.dispose();
     });
-    probe.calibrate();
-    active = false; // 复询前事件路径已收尾
-    await flushTimers(RUN_FINISH_CALIBRATION_RECONFIRM_DELAY_MS + 50);
-    expect(onRunLost).not.toHaveBeenCalled();
-    probe.dispose();
-  });
 
-  it('轮询路径：setPollingEnabled(true) 后按周期触发校准', async () => {
-    const onRunLost = jest.fn();
-    const probe = RunFinishCalibrationProbe.create({
-      activeSessionIds: () => ['s1'],
-      isRunRegistered: () => false,
-      onRunLost,
+    it('已注册的会话不排复询（主路径健康时校准零动作）', async () => {
+        const onRunLost = jest.fn();
+        const isRunRegistered = jest.fn(() => true);
+        const probe = RunFinishCalibrationProbe.create({
+            activeSessionIds: () => ['s1'],
+            isRunRegistered,
+            onRunLost,
+        });
+        probe.calibrate();
+        await flushTimers(RUN_FINISH_CALIBRATION_RECONFIRM_DELAY_MS + 50);
+        expect(onRunLost).not.toHaveBeenCalled();
+        probe.dispose();
     });
-    probe.setPollingEnabled(true);
-    // 轮询周期刻度：interval 触发校准、排入复询，但复询未到不收尾
-    jest.advanceTimersByTime(RUN_FINISH_CALIBRATION_INTERVAL_MS);
-    expect(onRunLost).not.toHaveBeenCalled();
-    jest.advanceTimersByTime(RUN_FINISH_CALIBRATION_RECONFIRM_DELAY_MS + 50);
-    expect(onRunLost).toHaveBeenCalledTimes(1);
-    probe.dispose();
-  });
 
-  it('dispose 后复询不再触发 onRunLost（定时器随 dispose 清理）', async () => {
-    const onRunLost = jest.fn();
-    const probe = RunFinishCalibrationProbe.create({
-      activeSessionIds: () => ['s1'],
-      isRunRegistered: () => false,
-      onRunLost,
+    it('复询前会话已正常收尾（activeSessionIds 不再包含）则不触发', async () => {
+        const onRunLost = jest.fn();
+        let active = true;
+        const probe = RunFinishCalibrationProbe.create({
+            activeSessionIds: () => (active ? ['s1'] : []),
+            isRunRegistered: () => false,
+            onRunLost,
+        });
+        probe.calibrate();
+        active = false; // 复询前事件路径已收尾
+        await flushTimers(RUN_FINISH_CALIBRATION_RECONFIRM_DELAY_MS + 50);
+        expect(onRunLost).not.toHaveBeenCalled();
+        probe.dispose();
     });
-    probe.calibrate();
-    // 排入 800ms 复询后、到期前销毁
-    probe.dispose();
-    await flushTimers(RUN_FINISH_CALIBRATION_RECONFIRM_DELAY_MS + 50);
-    expect(onRunLost).not.toHaveBeenCalled();
-  });
 
-  it('轮询关闭（默认/setPollingEnabled(false)）时不触发周期校准', async () => {
-    const onRunLost = jest.fn();
-    const probe = RunFinishCalibrationProbe.create({
-      activeSessionIds: () => ['s1'],
-      isRunRegistered: () => false,
-      onRunLost,
+    it('轮询路径：setPollingEnabled(true) 后按周期触发校准', async () => {
+        const onRunLost = jest.fn();
+        const probe = RunFinishCalibrationProbe.create({
+            activeSessionIds: () => ['s1'],
+            isRunRegistered: () => false,
+            onRunLost,
+        });
+        probe.setPollingEnabled(true);
+        // 轮询周期刻度：interval 触发校准、排入复询，但复询未到不收尾
+        jest.advanceTimersByTime(RUN_FINISH_CALIBRATION_INTERVAL_MS);
+        expect(onRunLost).not.toHaveBeenCalled();
+        jest.advanceTimersByTime(RUN_FINISH_CALIBRATION_RECONFIRM_DELAY_MS + 50);
+        expect(onRunLost).toHaveBeenCalledTimes(1);
+        probe.dispose();
     });
-    await flushTimers(RUN_FINISH_CALIBRATION_INTERVAL_MS * 3);
-    expect(onRunLost).not.toHaveBeenCalled();
-    probe.dispose();
-  });
+
+    it('dispose 后复询不再触发 onRunLost（定时器随 dispose 清理）', async () => {
+        const onRunLost = jest.fn();
+        const probe = RunFinishCalibrationProbe.create({
+            activeSessionIds: () => ['s1'],
+            isRunRegistered: () => false,
+            onRunLost,
+        });
+        probe.calibrate();
+        // 排入 800ms 复询后、到期前销毁
+        probe.dispose();
+        await flushTimers(RUN_FINISH_CALIBRATION_RECONFIRM_DELAY_MS + 50);
+        expect(onRunLost).not.toHaveBeenCalled();
+    });
+
+    it('轮询关闭（默认/setPollingEnabled(false)）时不触发周期校准', async () => {
+        const onRunLost = jest.fn();
+        const probe = RunFinishCalibrationProbe.create({
+            activeSessionIds: () => ['s1'],
+            isRunRegistered: () => false,
+            onRunLost,
+        });
+        await flushTimers(RUN_FINISH_CALIBRATION_INTERVAL_MS * 3);
+        expect(onRunLost).not.toHaveBeenCalled();
+        probe.dispose();
+    });
 });
 
 describe('run-finish-calibration-probe — manager 级集成', () => {
-  /** AppState mock：取走 listener 供测试主动触发前台回焦。 */
-  let appStateListener: (state: string) => void = () => undefined;
-  let appStateSpy: ReturnType<typeof jest.spyOn>;
-  const liveManagers: SessionStreamUnitManager[] = [];
+    /** AppState mock：取走 listener 供测试主动触发前台回焦。 */
+    let appStateListener: (state: string) => void = () => undefined;
+    let appStateSpy: ReturnType<typeof jest.spyOn>;
+    const liveManagers: SessionStreamUnitManager[] = [];
 
-  beforeEach(() => {
-    jest.useFakeTimers();
-    agentActivity.setActive(false);
-    appStateListener = () => undefined;
-    appStateSpy = jest.spyOn(AppState, 'addEventListener');
-    appStateSpy.mockImplementation(
-      (_event: unknown, cb: (state: string) => void) => {
-        appStateListener = cb;
-        return {remove: () => undefined} as unknown as {remove: () => void};
-      },
-    );
-  });
-  afterEach(() => {
-    for (const manager of liveManagers.splice(0)) {
-      manager.dispose();
+    beforeEach(() => {
+        jest.useFakeTimers();
+        agentActivity.setActive(false);
+        appStateListener = () => undefined;
+        appStateSpy = jest.spyOn(AppState, 'addEventListener');
+        appStateSpy.mockImplementation(
+            (_event: unknown, cb: (state: string) => void) => {
+                appStateListener = cb;
+                return {remove: () => undefined} as unknown as {remove: () => void};
+            },
+        );
+    });
+    afterEach(() => {
+        for (const manager of liveManagers.splice(0)) {
+            manager.dispose();
+        }
+        agentActivity.setActive(false);
+        appStateSpy.mockRestore();
+        jest.useRealTimers();
+    });
+
+    function createManagerHarness(abortHas: (sessionId: string) => boolean) {
+        const eventBus = new SimpleEventBus();
+        const abortRegistry = {
+            has: jest.fn((sessionId: string) => abortHas(sessionId)),
+            abort: jest.fn(),
+            register: jest.fn(),
+            unregister: jest.fn(),
+        };
+        const sessions = {
+            get: jest.fn(async (sessionId: string) => ({
+                id: sessionId,
+                title: `会话-${sessionId}`,
+            })),
+        };
+        const projects = {
+            get: jest.fn(async (projectId: string) => ({
+                id: projectId,
+                name: `项目-${projectId}`,
+            })),
+        };
+        const runAgentTurn = jest.fn(
+            () => new Promise<void>(() => undefined), // 挂起：终态只由校准兜底驱动
+        );
+        const manager = new SessionStreamUnitManager({
+            runtime: {eventBus, abortRegistry, sessions, projects} as never,
+            runAgentTurn: runAgentTurn as never,
+        });
+        manager.markHydrated();
+        liveManagers.push(manager);
+        return {eventBus, manager};
     }
-    agentActivity.setActive(false);
-    appStateSpy.mockRestore();
-    jest.useRealTimers();
-  });
 
-  function createManagerHarness(abortHas: (sessionId: string) => boolean) {
-    const eventBus = new SimpleEventBus();
-    const abortRegistry = {
-      has: jest.fn((sessionId: string) => abortHas(sessionId)),
-      abort: jest.fn(),
-      register: jest.fn(),
-      unregister: jest.fn(),
-    };
-    const sessions = {
-      get: jest.fn(async (sessionId: string) => ({
-        id: sessionId,
-        title: `会话-${sessionId}`,
-      })),
-    };
-    const projects = {
-      get: jest.fn(async (projectId: string) => ({
-        id: projectId,
-        name: `项目-${projectId}`,
-      })),
-    };
-    const runAgentTurn = jest.fn(
-      () => new Promise<void>(() => undefined), // 挂起：终态只由校准兜底驱动
-    );
-    const manager = new SessionStreamUnitManager({
-      runtime: {eventBus, abortRegistry, sessions, projects} as never,
-      runAgentTurn: runAgentTurn as never,
-    });
-    manager.markHydrated();
-    liveManagers.push(manager);
-    return {eventBus, manager};
-  }
+    it('事件丢失（registry 已无注册）→ 轮询校准 settle(failed) 且 refcount 归零', async () => {
+        // runAgentTurn 挂起 + FINISHED 永不到达 = 终态事件丢失现场。
+        const h = createManagerHarness(() => false);
+        h.manager.startRun('a', 'p', 'hi');
+        h.eventBus.publish(EVENT_AGENT_RUN_STARTED, {
+            sessionId: 'a',
+            projectId: 'p',
+            runId: 'r1',
+        });
+        expect(h.manager.snapshot('a')?.status).toBe('running');
+        expect(agentActivity.isActive()).toBe(true);
 
-  it('事件丢失（registry 已无注册）→ 轮询校准 settle(failed) 且 refcount 归零', async () => {
-    // runAgentTurn 挂起 + FINISHED 永不到达 = 终态事件丢失现场。
-    const h = createManagerHarness(() => false);
-    h.manager.startRun('a', 'p', 'hi');
-    h.eventBus.publish(EVENT_AGENT_RUN_STARTED, {
-      sessionId: 'a',
-      projectId: 'p',
-      runId: 'r1',
-    });
-    expect(h.manager.snapshot('a')?.status).toBe('running');
-    expect(agentActivity.isActive()).toBe(true);
+        // 推进轮询周期 + 复询防抖：校准收尾生效
+        await flushTimers(RUN_FINISH_CALIBRATION_INTERVAL_MS + 1);
+        await flushTimers(RUN_FINISH_CALIBRATION_RECONFIRM_DELAY_MS + 50);
 
-    // 推进轮询周期 + 复询防抖：校准收尾生效
-    await flushTimers(RUN_FINISH_CALIBRATION_INTERVAL_MS + 1);
-    await flushTimers(RUN_FINISH_CALIBRATION_RECONFIRM_DELAY_MS + 50);
-
-    expect(h.manager.snapshot('a')?.status).toBe('failed');
-    expect(agentActivity.isActive()).toBe(false);
-  });
-
-  it('前台回焦触发校准（AppState → active 走 calibrate 路径）', async () => {
-    const h = createManagerHarness(() => false);
-    h.manager.startRun('a', 'p', 'hi');
-    h.eventBus.publish(EVENT_AGENT_RUN_STARTED, {
-      sessionId: 'a',
-      projectId: 'p',
-      runId: 'r1',
+        expect(h.manager.snapshot('a')?.status).toBe('failed');
+        expect(agentActivity.isActive()).toBe(false);
     });
 
-    // 不推进轮询周期，仅模拟回前台
-    appStateListener('active');
-    await flushTimers(RUN_FINISH_CALIBRATION_RECONFIRM_DELAY_MS + 50);
-    expect(h.manager.snapshot('a')?.status).toBe('failed');
-    expect(agentActivity.isActive()).toBe(false);
-  });
+    it('前台回焦触发校准（AppState → active 走 calibrate 路径）', async () => {
+        const h = createManagerHarness(() => false);
+        h.manager.startRun('a', 'p', 'hi');
+        h.eventBus.publish(EVENT_AGENT_RUN_STARTED, {
+            sessionId: 'a',
+            projectId: 'p',
+            runId: 'r1',
+        });
 
-  it('starting 单元（RUN_STARTED 未达、runId 未回填）不参与校准——受理空窗防误杀', async () => {
-    const h = createManagerHarness(() => false);
-    h.manager.startRun('a', 'p', 'hi');
-    expect(h.manager.snapshot('a')?.status).toBe('starting');
+        // 不推进轮询周期，仅模拟回前台
+        appStateListener('active');
+        await flushTimers(RUN_FINISH_CALIBRATION_RECONFIRM_DELAY_MS + 50);
+        expect(h.manager.snapshot('a')?.status).toBe('failed');
+        expect(agentActivity.isActive()).toBe(false);
+    });
 
-    appStateListener('active');
-    await flushTimers(RUN_FINISH_CALIBRATION_RECONFIRM_DELAY_MS + 50);
-    // starting 不被校准收尾（死 starting 由 startRun 的 finally 兜底）
-    expect(h.manager.snapshot('a')?.status).toBe('starting');
-  });
+    it('starting 单元（RUN_STARTED 未达、runId 未回填）不参与校准——受理空窗防误杀', async () => {
+        const h = createManagerHarness(() => false);
+        h.manager.startRun('a', 'p', 'hi');
+        expect(h.manager.snapshot('a')?.status).toBe('starting');
+
+        appStateListener('active');
+        await flushTimers(RUN_FINISH_CALIBRATION_RECONFIRM_DELAY_MS + 50);
+        // starting 不被校准收尾（死 starting 由 startRun 的 finally 兜底）
+        expect(h.manager.snapshot('a')?.status).toBe('starting');
+    });
 });

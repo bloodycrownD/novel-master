@@ -2,151 +2,151 @@ import {type MappedVfsRow, VfsRowMapper} from '@/components/vfs/vfs-row-mapper'
 import {type WorkplaceListRow} from '@novel-master/core/workplace';
 
 describe('vfs-row-mapper', () => {
-  describe('pathWithLabels（面包屑逐段替换）', () => {
-    it('项目/会话段用缓存名替换，未命中的段回退原文', () => {
-      const cache = new Map([
-        ['/projects/p1', '我的小说'],
-        ['/projects/p1/sessions/s9', '第三章草稿'],
-      ]);
-      expect(VfsRowMapper.pathWithLabels('/projects/p1/sessions/s9/chapter.md', cache)).toBe(
-        '/projects/我的小说/sessions/第三章草稿/chapter.md',
-      );
+    describe('pathWithLabels（面包屑逐段替换）', () => {
+        it('项目/会话段用缓存名替换，未命中的段回退原文', () => {
+            const cache = new Map([
+                ['/projects/p1', '我的小说'],
+                ['/projects/p1/sessions/s9', '第三章草稿'],
+            ]);
+            expect(VfsRowMapper.pathWithLabels('/projects/p1/sessions/s9/chapter.md', cache)).toBe(
+                '/projects/我的小说/sessions/第三章草稿/chapter.md',
+            );
+        });
+
+        it('无缓存时原样返回；根路径返回 /', () => {
+            expect(VfsRowMapper.pathWithLabels('/projects/p1/sessions', new Map())).toBe(
+                '/projects/p1/sessions',
+            );
+            expect(VfsRowMapper.pathWithLabels('/', new Map())).toBe('/');
+        });
     });
-
-    it('无缓存时原样返回；根路径返回 /', () => {
-      expect(VfsRowMapper.pathWithLabels('/projects/p1/sessions', new Map())).toBe(
-        '/projects/p1/sessions',
-      );
-      expect(VfsRowMapper.pathWithLabels('/', new Map())).toBe('/');
-    });
-  });
-  const dirRow: WorkplaceListRow = {
-    kind: 'dir',
-    path: '/shared',
-    ruleState: 'rule_on',
-  };
-
-  const fileRowAuto: WorkplaceListRow = {
-    kind: 'file',
-    path: '/readme.md',
-    inclusionMode: 'auto',
-    displayState: 'full',
-  };
-
-  const fileRowShow: WorkplaceListRow = {
-    kind: 'file',
-    path: '/visible.md',
-    inclusionMode: 'show',
-    displayState: 'full',
-  };
-
-  const fileRowHide: WorkplaceListRow = {
-    kind: 'file',
-    path: '/hidden.md',
-    inclusionMode: 'hide',
-    displayState: 'hidden',
-  };
-
-  it('maps directory badge and file count subtitle', () => {
-    const mapped = VfsRowMapper.mapWorktreeRow(dirRow, 3);
-    expect(mapped.subtitle).toBe('3个文件');
-    expect(mapped.badge).toEqual({label: '开启', tone: 'in'});
-    expect(mapped.ruleEnabled).toBe(true);
-  });
-
-  it('remaps direct child file rows after inclusion change', () => {
-    const fileInShared: WorkplaceListRow = {
-      kind: 'file',
-      path: '/shared/readme.md',
-      inclusionMode: 'auto',
-      displayState: 'full',
+    const dirRow: WorkplaceListRow = {
+        kind: 'dir',
+        path: '/shared',
+        ruleState: 'rule_on',
     };
-    const siblingAuto: WorkplaceListRow = {
-      kind: 'file',
-      path: '/shared/other.md',
-      inclusionMode: 'auto',
-      displayState: 'filename',
-    };
-    const visible: MappedVfsRow[] = [
-      VfsRowMapper.mapWorktreeRow(fileInShared),
-      VfsRowMapper.mapWorktreeRow(siblingAuto),
-      VfsRowMapper.mapWorktreeRow(fileRowAuto),
-    ];
-    const updatedMeta: WorkplaceListRow[] = [
-      {...fileInShared, inclusionMode: 'show', displayState: 'full'},
-      {...siblingAuto, displayState: 'full'},
-    ];
-    const remapped = VfsRowMapper.remapDirectChildRows(visible, '/shared', updatedMeta);
-    expect(remapped[0].badge).toEqual({label: '展示', tone: 'in'});
-    expect(remapped[0].subtitle).toBe('展示·全内容');
-    expect(remapped[1].subtitle).toBe('跟随·全内容');
-    expect(remapped[2]).toBe(visible[2]);
-  });
 
-  it('patches directory rule badge without remapping the whole row', () => {
-    const mapped = VfsRowMapper.mapWorktreeRow(dirRow, 2);
-    const patched = VfsRowMapper.patchDirRuleRow(mapped, false);
-    expect(patched.subtitle).toBe('2个文件');
-    expect(patched.badge).toEqual({label: '关闭', tone: 'muted'});
-    expect(patched.ruleEnabled).toBe(false);
-  });
-
-  it('maps directory rule off badge without count subtitle when zero files', () => {
-    const off: WorkplaceListRow = {...dirRow, ruleState: 'rule_off'};
-    const mapped = VfsRowMapper.mapWorktreeRow(off, 0);
-    expect(mapped.subtitle).toBe('');
-    expect(mapped.badge).toEqual({label: '关闭', tone: 'muted'});
-    expect(mapped.ruleEnabled).toBe(false);
-  });
-
-  it('maps inherit file badge as follow tone without expanding display', () => {
-    const mapped = VfsRowMapper.mapWorktreeRow(fileRowAuto);
-    expect(mapped.subtitle).toBe('跟随·全内容');
-    expect(mapped.badge).toEqual({label: '跟随', tone: 'follow'});
-  });
-
-  it('maps show file badge as in tone', () => {
-    const mapped = VfsRowMapper.mapWorktreeRow(fileRowShow);
-    expect(mapped.badge).toEqual({label: '展示', tone: 'in'});
-  });
-
-  it('maps hide file badge as muted tone', () => {
-    const mapped = VfsRowMapper.mapWorktreeRow(fileRowHide);
-    expect(mapped.badge).toEqual({label: '隐藏', tone: 'muted'});
-  });
-
-  it('counts direct child files only', () => {
-    const rows: WorkplaceListRow[] = [
-      dirRow,
-      fileRowAuto,
-      {
+    const fileRowAuto: WorkplaceListRow = {
         kind: 'file',
-        path: '/shared/nested.md',
+        path: '/readme.md',
         inclusionMode: 'auto',
-        displayState: 'filename',
-      },
-    ];
-    expect(VfsRowMapper.countFilesInDir(rows, '/')).toBe(1);
-    expect(VfsRowMapper.countFilesInDir(rows, '/shared')).toBe(1);
-  });
+        displayState: 'full',
+    };
 
-  it('detects direct children', () => {
-    expect(VfsRowMapper.isDirectChild('/', '/a.md')).toBe(true);
-    expect(VfsRowMapper.isDirectChild('/', '/sub/a.md')).toBe(false);
-  });
+    const fileRowShow: WorkplaceListRow = {
+        kind: 'file',
+        path: '/visible.md',
+        inclusionMode: 'show',
+        displayState: 'full',
+    };
 
-  it('fallback vfs file path mapping', () => {
-    const mapped: MappedVfsRow = VfsRowMapper.mapVfsFilePath('/new.md');
-    expect(mapped.name).toBe('new.md');
-    expect(mapped.subtitle).toBe('跟随·全内容');
-  });
+    const fileRowHide: WorkplaceListRow = {
+        kind: 'file',
+        path: '/hidden.md',
+        inclusionMode: 'hide',
+        displayState: 'hidden',
+    };
 
-  it('maps vfs list directory entry', () => {
-    const mapped = VfsRowMapper.mapVfsListEntry({path: '/drafts', kind: 'directory'});
-    expect(mapped.kind).toBe('dir');
-    expect(mapped.name).toBe('drafts');
-    expect(mapped.subtitle).toBe('');
-    expect(mapped.badge).toEqual({label: '关闭', tone: 'muted'});
-    expect(mapped.badge?.label).not.toBe('跟随');
-  });
+    it('maps directory badge and file count subtitle', () => {
+        const mapped = VfsRowMapper.mapWorktreeRow(dirRow, 3);
+        expect(mapped.subtitle).toBe('3个文件');
+        expect(mapped.badge).toEqual({label: '开启', tone: 'in'});
+        expect(mapped.ruleEnabled).toBe(true);
+    });
+
+    it('remaps direct child file rows after inclusion change', () => {
+        const fileInShared: WorkplaceListRow = {
+            kind: 'file',
+            path: '/shared/readme.md',
+            inclusionMode: 'auto',
+            displayState: 'full',
+        };
+        const siblingAuto: WorkplaceListRow = {
+            kind: 'file',
+            path: '/shared/other.md',
+            inclusionMode: 'auto',
+            displayState: 'filename',
+        };
+        const visible: MappedVfsRow[] = [
+            VfsRowMapper.mapWorktreeRow(fileInShared),
+            VfsRowMapper.mapWorktreeRow(siblingAuto),
+            VfsRowMapper.mapWorktreeRow(fileRowAuto),
+        ];
+        const updatedMeta: WorkplaceListRow[] = [
+            {...fileInShared, inclusionMode: 'show', displayState: 'full'},
+            {...siblingAuto, displayState: 'full'},
+        ];
+        const remapped = VfsRowMapper.remapDirectChildRows(visible, '/shared', updatedMeta);
+        expect(remapped[0].badge).toEqual({label: '展示', tone: 'in'});
+        expect(remapped[0].subtitle).toBe('展示·全内容');
+        expect(remapped[1].subtitle).toBe('跟随·全内容');
+        expect(remapped[2]).toBe(visible[2]);
+    });
+
+    it('patches directory rule badge without remapping the whole row', () => {
+        const mapped = VfsRowMapper.mapWorktreeRow(dirRow, 2);
+        const patched = VfsRowMapper.patchDirRuleRow(mapped, false);
+        expect(patched.subtitle).toBe('2个文件');
+        expect(patched.badge).toEqual({label: '关闭', tone: 'muted'});
+        expect(patched.ruleEnabled).toBe(false);
+    });
+
+    it('maps directory rule off badge without count subtitle when zero files', () => {
+        const off: WorkplaceListRow = {...dirRow, ruleState: 'rule_off'};
+        const mapped = VfsRowMapper.mapWorktreeRow(off, 0);
+        expect(mapped.subtitle).toBe('');
+        expect(mapped.badge).toEqual({label: '关闭', tone: 'muted'});
+        expect(mapped.ruleEnabled).toBe(false);
+    });
+
+    it('maps inherit file badge as follow tone without expanding display', () => {
+        const mapped = VfsRowMapper.mapWorktreeRow(fileRowAuto);
+        expect(mapped.subtitle).toBe('跟随·全内容');
+        expect(mapped.badge).toEqual({label: '跟随', tone: 'follow'});
+    });
+
+    it('maps show file badge as in tone', () => {
+        const mapped = VfsRowMapper.mapWorktreeRow(fileRowShow);
+        expect(mapped.badge).toEqual({label: '展示', tone: 'in'});
+    });
+
+    it('maps hide file badge as muted tone', () => {
+        const mapped = VfsRowMapper.mapWorktreeRow(fileRowHide);
+        expect(mapped.badge).toEqual({label: '隐藏', tone: 'muted'});
+    });
+
+    it('counts direct child files only', () => {
+        const rows: WorkplaceListRow[] = [
+            dirRow,
+            fileRowAuto,
+            {
+                kind: 'file',
+                path: '/shared/nested.md',
+                inclusionMode: 'auto',
+                displayState: 'filename',
+            },
+        ];
+        expect(VfsRowMapper.countFilesInDir(rows, '/')).toBe(1);
+        expect(VfsRowMapper.countFilesInDir(rows, '/shared')).toBe(1);
+    });
+
+    it('detects direct children', () => {
+        expect(VfsRowMapper.isDirectChild('/', '/a.md')).toBe(true);
+        expect(VfsRowMapper.isDirectChild('/', '/sub/a.md')).toBe(false);
+    });
+
+    it('fallback vfs file path mapping', () => {
+        const mapped: MappedVfsRow = VfsRowMapper.mapVfsFilePath('/new.md');
+        expect(mapped.name).toBe('new.md');
+        expect(mapped.subtitle).toBe('跟随·全内容');
+    });
+
+    it('maps vfs list directory entry', () => {
+        const mapped = VfsRowMapper.mapVfsListEntry({path: '/drafts', kind: 'directory'});
+        expect(mapped.kind).toBe('dir');
+        expect(mapped.name).toBe('drafts');
+        expect(mapped.subtitle).toBe('');
+        expect(mapped.badge).toEqual({label: '关闭', tone: 'muted'});
+        expect(mapped.badge?.label).not.toBe('跟随');
+    });
 });

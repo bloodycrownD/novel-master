@@ -10,13 +10,13 @@
  * 单行请求可能无 cache 列）时返回 null。
  */
 export function hitRate(cacheRead: number | null, billed: number): number | null {
-  if (cacheRead == null || billed <= 0) {
-    return null;
-  }
-  return cacheRead / billed;
+    if (cacheRead == null || billed <= 0) {
+        return null;
+    }
+    return cacheRead / billed;
 }
 
 /** 命中率展示：null →「—」，否则四舍五入到整百分比（如 `67%`）。 */
 export function formatHitRate(rate: number | null): string {
-  return rate == null ? "—" : `${Math.round(rate * 100)}%`;
+    return rate == null ? "—" : `${Math.round(rate * 100)}%`;
 }

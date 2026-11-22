@@ -38,8 +38,8 @@ type MermaidTheme = "dark" | "default";
 
 /** 围栏扫描结果：mermaid 围栏总数 + 文末是否存在未闭合 mermaid 围栏。 */
 interface MermaidFenceScan {
-  mermaidCount: number;
-  unclosedMermaid: boolean;
+    mermaidCount: number;
+    unclosedMermaid: boolean;
 }
 
 /**
@@ -47,14 +47,14 @@ interface MermaidFenceScan {
  * 仅用于流式占位判定，与 remark 的解析偶有边界差异时最多影响占位块的选择，无崩溃风险。
  */
 export function scanMermaidFences(content: string): MermaidFenceScan {
-  let openChar = "";
-  let openLen = 0;
-  let openInfo = "";
-  let mermaidCount = 0;
-  let unclosedMermaid = false;
-  const lines = content.split("\n");
-  for (const line of lines) {
-    const m = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+    let openChar = "";
+    let openLen = 0;
+    let openInfo = "";
+    let mermaidCount = 0;
+    let unclosedMermaid = false;
+    const lines = content.split("\n");
+    for (const line of lines) {
+        const m = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
     if (!m) {
       continue;
     }

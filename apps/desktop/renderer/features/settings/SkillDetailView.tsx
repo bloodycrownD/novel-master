@@ -21,385 +21,385 @@ import { SettingsPanel } from "./settings-ui";
 
 /** SKILL.md 置顶，其余按路径字典序。 */
 function sortSkillFiles(files: readonly string[]): string[] {
-  return [...files].sort((a, b) => {
-    if (a === "SKILL.md") {
-      return -1;
-    }
-    if (b === "SKILL.md") {
-      return 1;
-    }
-    return a.localeCompare(b);
-  });
+    return [...files].sort((a, b) => {
+        if (a === "SKILL.md") {
+            return -1;
+        }
+        if (b === "SKILL.md") {
+            return 1;
+        }
+        return a.localeCompare(b);
+    });
 }
 
 const SKILL_ENTRY_FILE = "SKILL.md";
 
 export function SkillDetailView({ nav }: { nav: SettingsNavHandle }) {
-  const ref = nav.navState.viewingSkillRef;
-  const [files, setFiles] = useState<string[]>([]);
-  const [projectName, setProjectName] = useState<string | undefined>();
-  const [selected, setSelected] = useState<string>(SKILL_ENTRY_FILE);
-  const [mode, setMode] = useState<"read" | "edit">("read");
-  const [content, setContent] = useState("");
-  const [savedContent, setSavedContent] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [missing, setMissing] = useState(false);
-  const [createFileOpen, setCreateFileOpen] = useState(false);
-  const [deleteFileConfirm, setDeleteFileConfirm] = useState<string | null>(
-    null,
-  );
-  const [leaveConfirm, setLeaveConfirm] = useState<null | (() => void)>(null);
+    const ref = nav.navState.viewingSkillRef;
+    const [files, setFiles] = useState<string[]>([]);
+    const [projectName, setProjectName] = useState<string | undefined>();
+    const [selected, setSelected] = useState<string>(SKILL_ENTRY_FILE);
+    const [mode, setMode] = useState<"read" | "edit">("read");
+    const [content, setContent] = useState("");
+    const [savedContent, setSavedContent] = useState("");
+    const [loading, setLoading] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [missing, setMissing] = useState(false);
+    const [createFileOpen, setCreateFileOpen] = useState(false);
+    const [deleteFileConfirm, setDeleteFileConfirm] = useState<string | null>(
+        null,
+    );
+    const [leaveConfirm, setLeaveConfirm] = useState<null | (() => void)>(null);
 
-  const domain = ref?.domain ?? "global";
-  const listRequest = domain === "global" ? { domain: "global" as const } : { domain: "project" as const, projectId: ref?.projectId };
+    const domain = ref?.domain ?? "global";
+    const listRequest = domain === "global" ? { domain: "global" as const } : { domain: "project" as const, projectId: ref?.projectId };
 
-  const reloadFiles = useCallback(async () => {
-    if (ref == null) {
-      return;
-    }
-    const res = await ipcSkillsList(listRequest);
-    if (!res.ok) {
-      showToast(res.error.message);
-      return;
-    }
-    const entry = res.data.find((s) => s.name === ref.name);
-    if (entry == null) {
-      // 技能已被删除（或正被覆盖复制途中）→ 安全踢回
-      setMissing(true);
-      return;
-    }
-    setFiles(sortSkillFiles(entry.files));
-  }, [ref, listRequest]);
+    const reloadFiles = useCallback(async () => {
+        if (ref == null) {
+            return;
+        }
+        const res = await ipcSkillsList(listRequest);
+        if (!res.ok) {
+            showToast(res.error.message);
+            return;
+        }
+        const entry = res.data.find((s) => s.name === ref.name);
+        if (entry == null) {
+            // 技能已被删除（或正被覆盖复制途中）→ 安全踢回
+            setMissing(true);
+            return;
+        }
+        setFiles(sortSkillFiles(entry.files));
+    }, [ref, listRequest]);
 
-  const loadFile = useCallback(
-    async (path: string) => {
-      if (ref == null) {
-        return;
-      }
-      setLoading(true);
-      try {
-        const res = await ipcSkillsRead({
-          domain: ref.domain,
-          ...(ref.domain === "project" ? { projectId: ref.projectId } : {}),
-          name: ref.name,
-          path,
+    const loadFile = useCallback(
+        async (path: string) => {
+            if (ref == null) {
+                return;
+            }
+            setLoading(true);
+            try {
+                const res = await ipcSkillsRead({
+                    domain: ref.domain,
+                    ...(ref.domain === "project" ? { projectId: ref.projectId } : {}),
+                    name: ref.name,
+                    path,
+                });
+                if (!res.ok) {
+                    showToast(res.error.message);
+                    return;
+                }
+                setContent(res.data.content);
+                setSavedContent(res.data.content);
+            } finally {
+                setLoading(false);
+            }
+        },
+        [ref],
+    );
+
+    useEffect(() => {
+        if (ref == null) {
+            return;
+        }
+        setSelected(SKILL_ENTRY_FILE);
+        setMode("read");
+        setMissing(false);
+        void reloadFiles();
+        if (ref.domain === "project") {
+            void ipcProjectsList().then((res) => {
+                if (res.ok) {
+                    const project = res.data.find((p) => p.id === ref.projectId);
+                    setProjectName(project?.name);
+                }
+            });
+        } else {
+            setProjectName(undefined);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅随 ref 变化重载
+    }, [ref?.domain, ref?.projectId, ref?.name]);
+
+    useEffect(() => {
+        if (ref != null && !missing) {
+            void loadFile(selected);
+            setMode("read");
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- 选中文件或技能变化时重载：
+        // 同页覆写 viewingSkillRef（导航守卫确认后切技能）时 selected 可能已是 SKILL.md
+        // 而不触发重跑，上一技能的脏内容会挂到新技能名下（保存即写错目标），
+        // 故 deps 必须含技能三元组，强制随新技能重载。
+    }, [selected, missing, ref?.domain, ref?.projectId, ref?.name]);
+
+    const isDirty = content !== savedContent;
+
+    // dirty 上报（通用通道 nav.dirtyViews）：isDirty 变化持续同步；挂载首跑即写入
+    // 当前值，清掉异常卸载残留的脏标记（自愈）；卸载时清标记（守卫确认导航切走后
+    // 不留死 view，下次进入由首跑重新写入）。SettingsOverlay 的导航守卫读同一集合。
+    useEffect(() => {
+        if (isDirty) {
+            nav.dirtyViews.add("skillDetail");
+        } else {
+            nav.dirtyViews.delete("skillDetail");
+        }
+        return () => {
+            nav.dirtyViews.delete("skillDetail");
+        };
+    }, [isDirty, nav]);
+
+    /** dirty 时先弹确认再执行动作（isDirty 单独判定：编辑后切「查看」模式 content
+   * 不清、dirty 仍在，同样须拦截——mode 条件会漏掉这条路径）。 */
+    const guarded = (action: () => void) => {
+        if (isDirty) {
+            setLeaveConfirm(() => action);
+            return;
+        }
+        action();
+    };
+
+    const save = useCallback(async () => {
+        if (ref == null || !isDirty) {
+            return;
+        }
+        setSaving(true);
+        try {
+            const res = await ipcSkillsWrite({
+                domain: ref.domain,
+                ...(ref.domain === "project" ? { projectId: ref.projectId } : {}),
+                name: ref.name,
+                path: selected,
+                content,
+            });
+            if (!res.ok) {
+                showToast(`${coreT({key: "ui.common.save_failed"})}：${res.error.message}`);
+                return;
+            }
+            setSavedContent(content);
+            showToast(coreT({key: "ui.skills.file_saved"}));
+        } finally {
+            setSaving(false);
+        }
+    }, [ref, isDirty, selected, content]);
+
+    const createFile = async (rawPath: string) => {
+        const path = rawPath.trim().replace(/^\/+/, "");
+        if (path.length === 0) {
+            showToast(coreT({key: "ui.skills.path_relative_required"}));
+            return;
+        }
+        if (path.includes("..")) {
+            showToast(coreT({key: "ui.skills.path_no_dotdot"}));
+            return;
+        }
+        if (path === SKILL_ENTRY_FILE) {
+            showToast(coreT({key: "ui.skills.file_entry_protected"}));
+            return;
+        }
+        if (files.includes(path)) {
+            showToast(coreT({key: "ui.skills.file_exists"}));
+            return;
+        }
+        const res = await ipcSkillsWrite({
+            domain,
+            ...(domain === "project" ? { projectId: ref?.projectId } : {}),
+            name: ref?.name ?? "",
+            path,
+            content: "",
         });
         if (!res.ok) {
-          showToast(res.error.message);
-          return;
+            showToast(res.error.message);
+            return;
         }
-        setContent(res.data.content);
-        setSavedContent(res.data.content);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [ref],
-  );
-
-  useEffect(() => {
-    if (ref == null) {
-      return;
-    }
-    setSelected(SKILL_ENTRY_FILE);
-    setMode("read");
-    setMissing(false);
-    void reloadFiles();
-    if (ref.domain === "project") {
-      void ipcProjectsList().then((res) => {
-        if (res.ok) {
-          const project = res.data.find((p) => p.id === ref.projectId);
-          setProjectName(project?.name);
-        }
-      });
-    } else {
-      setProjectName(undefined);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅随 ref 变化重载
-  }, [ref?.domain, ref?.projectId, ref?.name]);
-
-  useEffect(() => {
-    if (ref != null && !missing) {
-      void loadFile(selected);
-      setMode("read");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 选中文件或技能变化时重载：
-    // 同页覆写 viewingSkillRef（导航守卫确认后切技能）时 selected 可能已是 SKILL.md
-    // 而不触发重跑，上一技能的脏内容会挂到新技能名下（保存即写错目标），
-    // 故 deps 必须含技能三元组，强制随新技能重载。
-  }, [selected, missing, ref?.domain, ref?.projectId, ref?.name]);
-
-  const isDirty = content !== savedContent;
-
-  // dirty 上报（通用通道 nav.dirtyViews）：isDirty 变化持续同步；挂载首跑即写入
-  // 当前值，清掉异常卸载残留的脏标记（自愈）；卸载时清标记（守卫确认导航切走后
-  // 不留死 view，下次进入由首跑重新写入）。SettingsOverlay 的导航守卫读同一集合。
-  useEffect(() => {
-    if (isDirty) {
-      nav.dirtyViews.add("skillDetail");
-    } else {
-      nav.dirtyViews.delete("skillDetail");
-    }
-    return () => {
-      nav.dirtyViews.delete("skillDetail");
+        await reloadFiles();
+        setSelected(path);
+        setMode("edit");
     };
-  }, [isDirty, nav]);
 
-  /** dirty 时先弹确认再执行动作（isDirty 单独判定：编辑后切「查看」模式 content
-   * 不清、dirty 仍在，同样须拦截——mode 条件会漏掉这条路径）。 */
-  const guarded = (action: () => void) => {
-    if (isDirty) {
-      setLeaveConfirm(() => action);
-      return;
-    }
-    action();
-  };
+    const deleteFile = async (path: string) => {
+        // SKILL.md 为保留入口，列表行不提供删除；此处仅兜底
+        if (path === SKILL_ENTRY_FILE) {
+            showToast(coreT({key: "ui.skills.file_entry_delete_protected"}));
+            return;
+        }
+        // 技能文件 = VFS 文件（逻辑路径 /meta/skills/{name}/{rel}，已重定位到 meta 域）；
+        // core SkillService 暂无单文件删除端口，这里复用 VFS delete（与技能写入同存储）。
+        const res = await ipcVfsDelete({
+            workspaceScope: domain === "global" ? "global-meta" : "project-meta",
+            ...(domain === "project" ? { projectId: ref?.projectId } : {}),
+            path: `/meta/skills/${ref?.name ?? ""}/${path}`,
+        });
+        if (!res.ok) {
+            showToast(res.error.message);
+            return;
+        }
+        await reloadFiles();
+        if (selected === path) {
+            setSelected(SKILL_ENTRY_FILE);
+        }
+        showToast(coreT({key: "ui.skills.aux_deleted"}));
+    };
 
-  const save = useCallback(async () => {
-    if (ref == null || !isDirty) {
-      return;
-    }
-    setSaving(true);
-    try {
-      const res = await ipcSkillsWrite({
-        domain: ref.domain,
-        ...(ref.domain === "project" ? { projectId: ref.projectId } : {}),
-        name: ref.name,
-        path: selected,
-        content,
-      });
-      if (!res.ok) {
-        showToast(`${coreT({key: "ui.common.save_failed"})}：${res.error.message}`);
-        return;
-      }
-      setSavedContent(content);
-      showToast(coreT({key: "ui.skills.file_saved"}));
-    } finally {
-      setSaving(false);
-    }
-  }, [ref, isDirty, selected, content]);
-
-  const createFile = async (rawPath: string) => {
-    const path = rawPath.trim().replace(/^\/+/, "");
-    if (path.length === 0) {
-      showToast(coreT({key: "ui.skills.path_relative_required"}));
-      return;
-    }
-    if (path.includes("..")) {
-      showToast(coreT({key: "ui.skills.path_no_dotdot"}));
-      return;
-    }
-    if (path === SKILL_ENTRY_FILE) {
-      showToast(coreT({key: "ui.skills.file_entry_protected"}));
-      return;
-    }
-    if (files.includes(path)) {
-      showToast(coreT({key: "ui.skills.file_exists"}));
-      return;
-    }
-    const res = await ipcSkillsWrite({
-      domain,
-      ...(domain === "project" ? { projectId: ref?.projectId } : {}),
-      name: ref?.name ?? "",
-      path,
-      content: "",
-    });
-    if (!res.ok) {
-      showToast(res.error.message);
-      return;
-    }
-    await reloadFiles();
-    setSelected(path);
-    setMode("edit");
-  };
-
-  const deleteFile = async (path: string) => {
-    // SKILL.md 为保留入口，列表行不提供删除；此处仅兜底
-    if (path === SKILL_ENTRY_FILE) {
-      showToast(coreT({key: "ui.skills.file_entry_delete_protected"}));
-      return;
-    }
-    // 技能文件 = VFS 文件（逻辑路径 /meta/skills/{name}/{rel}，已重定位到 meta 域）；
-    // core SkillService 暂无单文件删除端口，这里复用 VFS delete（与技能写入同存储）。
-    const res = await ipcVfsDelete({
-      workspaceScope: domain === "global" ? "global-meta" : "project-meta",
-      ...(domain === "project" ? { projectId: ref?.projectId } : {}),
-      path: `/meta/skills/${ref?.name ?? ""}/${path}`,
-    });
-    if (!res.ok) {
-      showToast(res.error.message);
-      return;
-    }
-    await reloadFiles();
-    if (selected === path) {
-      setSelected(SKILL_ENTRY_FILE);
-    }
-    showToast(coreT({key: "ui.skills.aux_deleted"}));
-  };
-
-  const visiblePath = useMemo(
-    () => `/meta/skills/${ref?.name ?? ""}/${selected}`,
-    [ref?.name, selected],
-  );
-
-  if (ref == null) {
-    return (
-      <SettingsPanel>
-        <p className="settings-error">{coreT({key: "ui.skills.unspecified"})}</p>
-      </SettingsPanel>
+    const visiblePath = useMemo(
+        () => `/meta/skills/${ref?.name ?? ""}/${selected}`,
+        [ref?.name, selected],
     );
-  }
 
-  if (missing) {
+    if (ref == null) {
+        return (
+            <SettingsPanel>
+                <p className="settings-error">{coreT({key: "ui.skills.unspecified"})}</p>
+            </SettingsPanel>
+        );
+    }
+
+    if (missing) {
+        return (
+            <SettingsPanel>
+                <p className="settings-error">{coreT({key: "ui.skills.missing_panel"})}</p>
+                <Button variant="primary" onClick={() => nav.pop()}>
+                    {coreT({key: "ui.skills.back_to_manage"})}
+                </Button>
+            </SettingsPanel>
+        );
+    }
+
     return (
-      <SettingsPanel>
-        <p className="settings-error">{coreT({key: "ui.skills.missing_panel"})}</p>
-        <Button variant="primary" onClick={() => nav.pop()}>
-          {coreT({key: "ui.skills.back_to_manage"})}
-        </Button>
-      </SettingsPanel>
-    );
-  }
-
-  return (
-    <SettingsPanel>
-      <div className="skill-detail__head">
-        <span className="skill-detail__name">{ref.name}</span>
-        <span className="skill-domain-badge">
-          {domain === "project"
-            ? coreT({key: "ui.skills.domain_project_line", params: {project: projectName ?? ref.projectId ?? ""}})
-            : coreT({key: "ui.skills.domain_global_line"})}
-        </span>
-      </div>
-      <div className="skill-detail__body">
-        <aside className="skill-detail__files">
-          <div className="skill-detail__files-head">
-            <span>{coreT({key: "ui.common.file"})}</span>
-            <button
-              type="button"
-              className="skill-detail__file-add"
-              aria-label={coreT({key: "ui.skills.new_aux_file"})}
-              onClick={() => setCreateFileOpen(true)}
-            >
-              ＋
-            </button>
-          </div>
-          {files.map((path) => (
-            <div
-              key={path}
-              className={`skill-detail__file-row${
+        <SettingsPanel>
+            <div className="skill-detail__head">
+                <span className="skill-detail__name">{ref.name}</span>
+                <span className="skill-domain-badge">
+                    {domain === "project"
+                        ? coreT({key: "ui.skills.domain_project_line", params: {project: projectName ?? ref.projectId ?? ""}})
+                        : coreT({key: "ui.skills.domain_global_line"})}
+                </span>
+            </div>
+            <div className="skill-detail__body">
+                <aside className="skill-detail__files">
+                    <div className="skill-detail__files-head">
+                        <span>{coreT({key: "ui.common.file"})}</span>
+                        <button
+                            type="button"
+                            className="skill-detail__file-add"
+                            aria-label={coreT({key: "ui.skills.new_aux_file"})}
+                            onClick={() => setCreateFileOpen(true)}
+                        >
+                            ＋
+                        </button>
+                    </div>
+                    {files.map((path) => (
+                        <div
+                            key={path}
+                            className={`skill-detail__file-row${
                 path === selected ? " is-active" : ""
               }`}
-            >
-              <button
-                type="button"
-                className="skill-detail__file-open"
-                onClick={() => guarded(() => setSelected(path))}
-              >
-                <span aria-hidden>{path === SKILL_ENTRY_FILE ? "⚡" : "📄"}</span>
-                <span>{path}</span>
-                {path === SKILL_ENTRY_FILE ? (
-                  <span className="skill-detail__entry-tag">{coreT({key: "ui.skills.entry_file_tag"})}</span>
-                ) : null}
-              </button>
-              {path !== SKILL_ENTRY_FILE ? (
-                <button
-                  type="button"
-                  className="skill-detail__file-delete"
-                  aria-label={coreT({key: "ui.skills.delete_file_aria", params: {path}})}
-                  onClick={() => setDeleteFileConfirm(path)}
-                >
-                  ×
-                </button>
-              ) : null}
+                        >
+                            <button
+                                type="button"
+                                className="skill-detail__file-open"
+                                onClick={() => guarded(() => setSelected(path))}
+                            >
+                                <span aria-hidden>{path === SKILL_ENTRY_FILE ? "⚡" : "📄"}</span>
+                                <span>{path}</span>
+                                {path === SKILL_ENTRY_FILE ? (
+                                    <span className="skill-detail__entry-tag">{coreT({key: "ui.skills.entry_file_tag"})}</span>
+                                ) : null}
+                            </button>
+                            {path !== SKILL_ENTRY_FILE ? (
+                                <button
+                                    type="button"
+                                    className="skill-detail__file-delete"
+                                    aria-label={coreT({key: "ui.skills.delete_file_aria", params: {path}})}
+                                    onClick={() => setDeleteFileConfirm(path)}
+                                >
+                                    ×
+                                </button>
+                            ) : null}
+                        </div>
+                    ))}
+                </aside>
+                <div className="skill-detail__editor">
+                    <div className="skill-detail__editor-head">
+                        <span className="skill-detail__path-chip" title={visiblePath}>
+                            {visiblePath}
+                        </span>
+                        <SegmentedControl
+                            aria-label={coreT({key: "ui.skills.file_mode_label"})}
+                            value={mode}
+                            options={[
+                                { value: "read", label: coreT({key: "ui.common.view"}) },
+                                { value: "edit", label: coreT({key: "ui.common.edit"}) },
+                            ]}
+                            onChange={setMode}
+                        />
+                        {mode === "edit" ? (
+                            <Button
+                                variant="primary"
+                                disabled={!isDirty || saving}
+                                onClick={() => void save()}
+                            >
+                                {saving ? coreT({key: "ui.common.saving"}) : coreT({key: "ui.common.save"})}
+                            </Button>
+                        ) : null}
+                        <Button onClick={() => guarded(() => nav.pop())}>{coreT({key: "ui.common.back"})}</Button>
+                    </div>
+                    {loading ? (
+                        <p className="skill-detail__empty">{coreT({key: "ui.common.loading"})}</p>
+                    ) : mode === "read" ? (
+                        <pre className="skill-detail__content">{content || coreT({key: "ui.common.empty_file"})}</pre>
+                    ) : (
+                        <>
+                            <CodeEditor
+                                id="skill-editor"
+                                aria-label={coreT({key: "ui.skills.editor_title"})}
+                                value={content}
+                                languagePath={selected}
+                                onChange={setContent}
+                                onSave={() => void save()}
+                            />
+                            <div className="skill-detail__status">
+                                <span>{isDirty ? coreT({key: "ui.skills.unsaved_hint"}) : coreT({key: "ui.common.saved"})}</span>
+                            </div>
+                        </>
+                    )}
+                </div>
             </div>
-          ))}
-        </aside>
-        <div className="skill-detail__editor">
-          <div className="skill-detail__editor-head">
-            <span className="skill-detail__path-chip" title={visiblePath}>
-              {visiblePath}
-            </span>
-            <SegmentedControl
-              aria-label={coreT({key: "ui.skills.file_mode_label"})}
-              value={mode}
-              options={[
-                { value: "read", label: coreT({key: "ui.common.view"}) },
-                { value: "edit", label: coreT({key: "ui.common.edit"}) },
-              ]}
-              onChange={setMode}
+
+            <TextPromptModal
+                open={createFileOpen}
+                title={coreT({key: "ui.skills.new_aux_file"})}
+                label={coreT({key: "ui.skills.path_relative_label"})}
+                placeholder="references/x.md"
+                confirmLabel={coreT({key: "ui.skills.create_and_edit"})}
+                onClose={() => setCreateFileOpen(false)}
+                onConfirm={createFile}
             />
-            {mode === "edit" ? (
-              <Button
-                variant="primary"
-                disabled={!isDirty || saving}
-                onClick={() => void save()}
-              >
-                {saving ? coreT({key: "ui.common.saving"}) : coreT({key: "ui.common.save"})}
-              </Button>
-            ) : null}
-            <Button onClick={() => guarded(() => nav.pop())}>{coreT({key: "ui.common.back"})}</Button>
-          </div>
-          {loading ? (
-            <p className="skill-detail__empty">{coreT({key: "ui.common.loading"})}</p>
-          ) : mode === "read" ? (
-            <pre className="skill-detail__content">{content || coreT({key: "ui.common.empty_file"})}</pre>
-          ) : (
-            <>
-              <CodeEditor
-                id="skill-editor"
-                aria-label={coreT({key: "ui.skills.editor_title"})}
-                value={content}
-                languagePath={selected}
-                onChange={setContent}
-                onSave={() => void save()}
-              />
-              <div className="skill-detail__status">
-                <span>{isDirty ? coreT({key: "ui.skills.unsaved_hint"}) : coreT({key: "ui.common.saved"})}</span>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
 
-      <TextPromptModal
-        open={createFileOpen}
-        title={coreT({key: "ui.skills.new_aux_file"})}
-        label={coreT({key: "ui.skills.path_relative_label"})}
-        placeholder="references/x.md"
-        confirmLabel={coreT({key: "ui.skills.create_and_edit"})}
-        onClose={() => setCreateFileOpen(false)}
-        onConfirm={createFile}
-      />
+            <ConfirmModal
+                open={deleteFileConfirm != null}
+                title={coreT({key: "ui.skills.delete_aux_title"})}
+                message={coreT({key: "ui.skills.delete_confirm_named", params: {name: deleteFileConfirm ?? "", scope: ""}})}
+                danger
+                onConfirm={() => {
+                    const path = deleteFileConfirm;
+                    setDeleteFileConfirm(null);
+                    if (path != null) {
+                        void deleteFile(path);
+                    }
+                }}
+                onCancel={() => setDeleteFileConfirm(null)}
+            />
 
-      <ConfirmModal
-        open={deleteFileConfirm != null}
-        title={coreT({key: "ui.skills.delete_aux_title"})}
-        message={coreT({key: "ui.skills.delete_confirm_named", params: {name: deleteFileConfirm ?? "", scope: ""}})}
-        danger
-        onConfirm={() => {
-          const path = deleteFileConfirm;
-          setDeleteFileConfirm(null);
-          if (path != null) {
-            void deleteFile(path);
-          }
-        }}
-        onCancel={() => setDeleteFileConfirm(null)}
-      />
-
-      <ConfirmModal
-        open={leaveConfirm != null}
-        title={coreT({key: "ui.common.unsaved_changes"})}
-        message={coreT({key: "ui.common.unsaved_discard_msg"})}
-        danger
-        onConfirm={() => {
-          const action = leaveConfirm;
-          setLeaveConfirm(null);
-          action?.();
-        }}
-        onCancel={() => setLeaveConfirm(null)}
-      />
-    </SettingsPanel>
-  );
+            <ConfirmModal
+                open={leaveConfirm != null}
+                title={coreT({key: "ui.common.unsaved_changes"})}
+                message={coreT({key: "ui.common.unsaved_discard_msg"})}
+                danger
+                onConfirm={() => {
+                    const action = leaveConfirm;
+                    setLeaveConfirm(null);
+                    action?.();
+                }}
+                onCancel={() => setLeaveConfirm(null)}
+            />
+        </SettingsPanel>
+    );
 }

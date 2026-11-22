@@ -16,18 +16,18 @@ export const CHARACTERS_PER_TOKEN_RATIO = 3.35;
 
 /** `Math.ceil(charLength / 3.35)` for text and message bodies. */
 export class HeuristicTokenCounter implements TokenCounter {
-  readonly kind = "heuristic" as const;
+    readonly kind = "heuristic" as const;
 
-  countText(text: string): number {
-    return Math.ceil(text.length / CHARACTERS_PER_TOKEN_RATIO);
-  }
-
-  /** nm-style: keep-public — TokenCounter 端口实现。 */
-  countMessages(messages: readonly ChatMessageData[]): number {
-    let chars = 0;
-    for (const m of messages) {
-      chars += MessageBodyText.fromBlocks(m.content.blocks).length;
+    countText(text: string): number {
+        return Math.ceil(text.length / CHARACTERS_PER_TOKEN_RATIO);
     }
-    return Math.ceil(chars / CHARACTERS_PER_TOKEN_RATIO);
-  }
+
+    /** nm-style: keep-public — TokenCounter 端口实现。 */
+    countMessages(messages: readonly ChatMessageData[]): number {
+        let chars = 0;
+        for (const m of messages) {
+            chars += MessageBodyText.fromBlocks(m.content.blocks).length;
+        }
+        return Math.ceil(chars / CHARACTERS_PER_TOKEN_RATIO);
+    }
 }

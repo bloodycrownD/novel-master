@@ -32,7 +32,7 @@ const log = LogFactory.create("message-checkpoint.revision-gc");
 const orphanGcBusy = Concurrency.createBusyFlag();
 
 export const DeferredRevisionOrphanGc = {
-  /**
+    /**
    * 事务提交后 fire-and-forget 调度全局孤儿清扫（回滚链挂点）。
    *
    * 不 await、不抛错（失败吞掉并打日志，收敛式语义下一轮回滚会再补）；
@@ -44,25 +44,25 @@ export const DeferredRevisionOrphanGc = {
    * toast/快照先行，全表 DELETE 最后；并发安全由驱动层 AsyncMutex 串行
    * 化保证（不会与后续事务并发踩踏）。
    */
-  schedule(conn: TdbcConnection): void {
-    if (orphanGcBusy.isBusy()) {
-      return;
-    }
-    orphanGcBusy.set(true);
-    setImmediate(() => {
-      void new SqliteVfsRevisionRepository(conn)
-        .deleteGlobalOrphans()
-        .then((deleted) => {
-          orphanGcBusy.set(false);
-          if (deleted > 0) {
-            // 收敛式 GC 的轻量痕迹日志：仅在实际清到孤儿时输出。
-            log.info(`deferred orphan sweep deleted ${deleted} revision row(s)`);
-          }
-        })
-        .catch((error: unknown) => {
-          orphanGcBusy.set(false);
-          log.warn("deferred orphan sweep failed", { error });
+    schedule(conn: TdbcConnection): void {
+        if (orphanGcBusy.isBusy()) {
+            return;
+        }
+        orphanGcBusy.set(true);
+        setImmediate(() => {
+            void new SqliteVfsRevisionRepository(conn)
+                .deleteGlobalOrphans()
+                .then((deleted) => {
+                    orphanGcBusy.set(false);
+                    if (deleted > 0) {
+                        // 收敛式 GC 的轻量痕迹日志：仅在实际清到孤儿时输出。
+                        log.info(`deferred orphan sweep deleted ${deleted} revision row(s)`);
+                    }
+                })
+                .catch((error: unknown) => {
+                    orphanGcBusy.set(false);
+                    log.warn("deferred orphan sweep failed", { error });
+                });
         });
-    });
-  },
+    },
 } as const;

@@ -28,35 +28,35 @@ const UNKNOWN_TURN_ID = 'unknown';
 type PromptTurnDetailRoute = RouteProp<RootStackParamList, 'PromptTurnDetail'>;
 
 export function PromptTurnDetailScreen() {
-  const {tokens} = useTheme();
-  const route = useRoute<PromptTurnDetailRoute>();
-  const title = route.params?.title;
-  const turnId = route.params?.turnId ?? UNKNOWN_TURN_ID;
-  // 屏级 override：自动带 ownerRouteKey，转场期间不泄漏到相邻屏 header。
-  const setStackOverride = useStackOverrideSetter();
-  // 挂载时消费一次（useRef 初值只跑一次）：读后即清，未消费即离开则丢弃。
-  const detailRef = useRef<PromptTurnDetail | null>(promptTurnDetailSlot.take());
-  const body = detailRef.current?.body ?? '';
-  const leafId = detailRef.current?.leafId;
-  // 伪 path：叶子形态稳定。防御性——若将来详情页支持页内切换内容，key 让组件
-  // 重挂载；当前页是终态、挂载后不再换内容。
-  const path = leafId === undefined ? `turn-${turnId}` : `turn-${turnId}-leaf-${leafId}`;
+    const {tokens} = useTheme();
+    const route = useRoute<PromptTurnDetailRoute>();
+    const title = route.params?.title;
+    const turnId = route.params?.turnId ?? UNKNOWN_TURN_ID;
+    // 屏级 override：自动带 ownerRouteKey，转场期间不泄漏到相邻屏 header。
+    const setStackOverride = useStackOverrideSetter();
+    // 挂载时消费一次（useRef 初值只跑一次）：读后即清，未消费即离开则丢弃。
+    const detailRef = useRef<PromptTurnDetail | null>(promptTurnDetailSlot.take());
+    const body = detailRef.current?.body ?? '';
+    const leafId = detailRef.current?.leafId;
+    // 伪 path：叶子形态稳定。防御性——若将来详情页支持页内切换内容，key 让组件
+    // 重挂载；当前页是终态、挂载后不再换内容。
+    const path = leafId === undefined ? `turn-${turnId}` : `turn-${turnId}-leaf-${leafId}`;
 
-  useEffect(() => {
-    if (!title) {
-      return;
-    }
-    setStackOverride({title});
-    return () => setStackOverride(undefined);
-  }, [title, setStackOverride]);
+    useEffect(() => {
+        if (!title) {
+            return;
+        }
+        setStackOverride({title});
+        return () => setStackOverride(undefined);
+    }, [title, setStackOverride]);
 
-  return (
-    <EditorScreenShell
-      tokens={tokens}
-      toolbarBorderColor={tokens.borderLight}
-      previewMode
-      preview={<FileMarkdownPreview path={path} content={body} tokens={tokens} previewFill renderKind="txt" />}
-      editor={null}
-    />
-  );
+    return (
+        <EditorScreenShell
+            tokens={tokens}
+            toolbarBorderColor={tokens.borderLight}
+            previewMode
+            preview={<FileMarkdownPreview path={path} content={body} tokens={tokens} previewFill renderKind="txt" />}
+            editor={null}
+        />
+    );
 }

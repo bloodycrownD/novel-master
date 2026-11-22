@@ -15,109 +15,109 @@ import {StreamingMessageRow} from '../stream/StreamingMessageRow';
 import {RefTokenSpans, RefTokenText} from './RefTokenText';
 
 type MessageRowProps = {
-  row: MessageRowModel;
+    row: MessageRowModel;
 };
 
 export function MessageRow({row}: MessageRowProps) {
-  // 流式起源的行（streaming / finished）统一走流式壳：同 id 同组件类型 → Preact
-  // 复用 DOM 岛屿，status 翻转只重渲 props（bar/菜单/折叠键）。纯历史行不写
-  // status 字段，保持普通行渲染。
-  if (row.status != null) {
-    return <StreamingMessageRow row={row} />;
-  }
-  const role = row.role === 'user' ? 'user' : 'assistant';
-  const hidden = row.hidden ? ' hidden' : '';
-  const thinkingKey = 'msg:' + row.id;
-  const thinkingExpanded = !!state.thinkingExpanded[thinkingKey];
-  const roleLabel = Labels.uiText(state.labels, role === 'user' ? 'ui.transcript.role.user' : 'ui.transcript.role.assistant');
-
-  const menuRow = (
-    <div className="message-menu-row">
-      <span className="message-role-label">{roleLabel}</span>
-      {/* ⋯ 菜单入口：与角色标签同一顶行（对齐 Desktop，不占右列）。 */}
-      <button
-        type="button"
-        className="message-menu-btn"
-        aria-label={Labels.uiText(state.labels, "ui.transcript.message_actions")}
-        onClick={event => {
-          event.preventDefault();
-          event.stopPropagation();
-          const btn = event.currentTarget as HTMLButtonElement | null;
-          if (!btn || typeof btn.getBoundingClientRect !== 'function') return;
-          Menu.openFromAnchor(row.id, btn.getBoundingClientRect(), btn);
-        }}
-      >
-        ⋯
-      </button>
-    </div>
-  );
-
-  let bubble = null;
-  if (role === 'user') {
-    const attachments = row.attachments || [];
-    const hasAttach = attachments.length > 0;
-    const hasText = !!(row.text && String(row.text).length > 0);
-    // 胶囊边界真源 = 附件（skillName/path 与正文精确匹配），RefTokenText 据此切分
-    const attached = RefTokenSpans.fromAttachments(attachments);
-    if (hasAttach || hasText) {
-      if (hasAttach) {
-        const attachKey = 'attach:' + row.id;
-        const attachExpanded = !!state.attachGroupExpanded[attachKey];
-        bubble = (
-          <div className="bubble bubble--fill-width bubble--user-compose">
-            {menuRow}
-            {hasText ? (
-              <div className="bubble-body">
-                <RefTokenText text={String(row.text)} attached={attached} />
-              </div>
-            ) : null}
-            <AttachGroup
-              labels={state.labels}
-              attachments={attachments}
-              groupKey={attachKey}
-              expanded={attachExpanded}
-              showDividerAbove={hasText}
-            />
-          </div>
-        );
-      } else {
-        bubble = (
-          <div className="bubble">
-            {menuRow}
-            <div className="bubble-body">
-              <RefTokenText text={String(row.text)} attached={attached} />
-            </div>
-          </div>
-        );
-      }
+    // 流式起源的行（streaming / finished）统一走流式壳：同 id 同组件类型 → Preact
+    // 复用 DOM 岛屿，status 翻转只重渲 props（bar/菜单/折叠键）。纯历史行不写
+    // status 字段，保持普通行渲染。
+    if (row.status != null) {
+        return <StreamingMessageRow row={row} />;
     }
-  } else if (row.thinking || row.text || (row.tools && row.tools.length > 0)) {
-    const toolGroupKey = 'msg:' + row.id;
-    const toolGroupExpanded = !!state.toolGroupExpanded[toolGroupKey];
-    bubble = (
-      <div className={'bubble' + Stream.assistantBubbleExtraClasses(row)}>
-        {menuRow}
-        <AssistantBubbleInner
-          text={row.text}
-          textHtml={row.textHtml}
-          thinking={row.thinking}
-          thinkingTitle={state.labels.thinking}
-          labels={state.labels}
-          thinkingKey={thinkingKey}
-          thinkingExpanded={thinkingExpanded}
-          thinkingHtml={row.thinkingHtml}
-          tools={row.tools}
-          toolGroupKey={toolGroupKey}
-          toolGroupExpanded={toolGroupExpanded}
-          richText={state.flags.richText}
-        />
-      </div>
-    );
-  }
+    const role = row.role === 'user' ? 'user' : 'assistant';
+    const hidden = row.hidden ? ' hidden' : '';
+    const thinkingKey = 'msg:' + row.id;
+    const thinkingExpanded = !!state.thinkingExpanded[thinkingKey];
+    const roleLabel = Labels.uiText(state.labels, role === 'user' ? 'ui.transcript.role.user' : 'ui.transcript.role.assistant');
 
-  return (
-    <div className={'row message ' + role + hidden} data-id={row.id}>
-      {bubble}
-    </div>
-  );
+    const menuRow = (
+        <div className="message-menu-row">
+            <span className="message-role-label">{roleLabel}</span>
+            {/* ⋯ 菜单入口：与角色标签同一顶行（对齐 Desktop，不占右列）。 */}
+            <button
+                type="button"
+                className="message-menu-btn"
+                aria-label={Labels.uiText(state.labels, "ui.transcript.message_actions")}
+                onClick={event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const btn = event.currentTarget as HTMLButtonElement | null;
+                    if (!btn || typeof btn.getBoundingClientRect !== 'function') return;
+                    Menu.openFromAnchor(row.id, btn.getBoundingClientRect(), btn);
+                }}
+            >
+                ⋯
+            </button>
+        </div>
+    );
+
+    let bubble = null;
+    if (role === 'user') {
+        const attachments = row.attachments || [];
+        const hasAttach = attachments.length > 0;
+        const hasText = !!(row.text && String(row.text).length > 0);
+        // 胶囊边界真源 = 附件（skillName/path 与正文精确匹配），RefTokenText 据此切分
+        const attached = RefTokenSpans.fromAttachments(attachments);
+        if (hasAttach || hasText) {
+            if (hasAttach) {
+                const attachKey = 'attach:' + row.id;
+                const attachExpanded = !!state.attachGroupExpanded[attachKey];
+                bubble = (
+                    <div className="bubble bubble--fill-width bubble--user-compose">
+                        {menuRow}
+                        {hasText ? (
+                            <div className="bubble-body">
+                                <RefTokenText text={String(row.text)} attached={attached} />
+                            </div>
+                        ) : null}
+                        <AttachGroup
+                            labels={state.labels}
+                            attachments={attachments}
+                            groupKey={attachKey}
+                            expanded={attachExpanded}
+                            showDividerAbove={hasText}
+                        />
+                    </div>
+                );
+            } else {
+                bubble = (
+                    <div className="bubble">
+                        {menuRow}
+                        <div className="bubble-body">
+                            <RefTokenText text={String(row.text)} attached={attached} />
+                        </div>
+                    </div>
+                );
+            }
+        }
+    } else if (row.thinking || row.text || (row.tools && row.tools.length > 0)) {
+        const toolGroupKey = 'msg:' + row.id;
+        const toolGroupExpanded = !!state.toolGroupExpanded[toolGroupKey];
+        bubble = (
+            <div className={'bubble' + Stream.assistantBubbleExtraClasses(row)}>
+                {menuRow}
+                <AssistantBubbleInner
+                    text={row.text}
+                    textHtml={row.textHtml}
+                    thinking={row.thinking}
+                    thinkingTitle={state.labels.thinking}
+                    labels={state.labels}
+                    thinkingKey={thinkingKey}
+                    thinkingExpanded={thinkingExpanded}
+                    thinkingHtml={row.thinkingHtml}
+                    tools={row.tools}
+                    toolGroupKey={toolGroupKey}
+                    toolGroupExpanded={toolGroupExpanded}
+                    richText={state.flags.richText}
+                />
+            </div>
+        );
+    }
+
+    return (
+        <div className={'row message ' + role + hidden} data-id={row.id}>
+            {bubble}
+        </div>
+    );
 }

@@ -22,342 +22,342 @@ import {useTheme} from '@/theme/ThemeProvider';
 import {coreT} from '@/i18n/core';
 
 type NewSkillTarget = {
-  domain: SkillDomain;
-  name: string;
-  projectId?: string;
+    domain: SkillDomain;
+    name: string;
+    projectId?: string;
 };
 
 type Props = {
-  visible: boolean;
-  /** 存储域（固定）：管理页跟当前 tab，会话面板固定当前项目域。 */
-  domain: SkillDomain;
-  /** 预选项目（选项目域时的默认所属项目，传入则不再显示下拉）。 */
-  defaultProjectId?: string;
-  onClose: () => void;
-  /** 创建成功（zip 导入或模板创建已落盘）；父组件负责跳详情与刷新。 */
-  onCreated: (target: NewSkillTarget) => void;
+    visible: boolean;
+    /** 存储域（固定）：管理页跟当前 tab，会话面板固定当前项目域。 */
+    domain: SkillDomain;
+    /** 预选项目（选项目域时的默认所属项目，传入则不再显示下拉）。 */
+    defaultProjectId?: string;
+    onClose: () => void;
+    /** 创建成功（zip 导入或模板创建已落盘）；父组件负责跳详情与刷新。 */
+    onCreated: (target: NewSkillTarget) => void;
 };
 
 /** 导入态：zip 字节（创建时落盘）+ 预检结果（预填与 front matter 重写判定）。 */
 type ImportedSkill = {
-  readonly bytes: Uint8Array;
-  readonly preview: SkillZipPreview;
+    readonly bytes: Uint8Array;
+    readonly preview: SkillZipPreview;
 };
 
 export function NewSkillModal({visible, domain, defaultProjectId, onClose, onCreated}: Props) {
-  const {tokens} = useTheme();
-  const runtime = useRuntime();
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [projects, setProjects] = useState<ChatProject[]>([]);
-  const [projectId, setProjectId] = useState<string | undefined>(defaultProjectId);
-  const [projectMenuOpen, setProjectMenuOpen] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [importing, setImporting] = useState(false);
-  const [imported, setImported] = useState<ImportedSkill | null>(null);
-  const [error, setError] = useState<string | undefined>();
-  // 底部高面板 + 技能名/描述输入：键盘避让用 ModalShell 的 adaptive 策略
-  //（上移 + maxHeight 收缩，面板高度随键盘收紧）；iOS 走 KAV padding 分支。
+    const {tokens} = useTheme();
+    const runtime = useRuntime();
+    const [name, setName] = useState('');
+    const [description, setDescription] = useState('');
+    const [projects, setProjects] = useState<ChatProject[]>([]);
+    const [projectId, setProjectId] = useState<string | undefined>(defaultProjectId);
+    const [projectMenuOpen, setProjectMenuOpen] = useState(false);
+    const [creating, setCreating] = useState(false);
+    const [importing, setImporting] = useState(false);
+    const [imported, setImported] = useState<ImportedSkill | null>(null);
+    const [error, setError] = useState<string | undefined>();
+    // 底部高面板 + 技能名/描述输入：键盘避让用 ModalShell 的 adaptive 策略
+    //（上移 + maxHeight 收缩，面板高度随键盘收紧）；iOS 走 KAV padding 分支。
 
-  useEffect(() => {
-    if (!visible) {
-      return;
-    }
-    setName('');
-    setDescription('');
-    setProjectId(defaultProjectId);
-    setImported(null);
-    setError(undefined);
-  }, [visible, defaultProjectId]);
-
-  // 项目下拉仅在「项目域且调用方未锁定项目」（管理页项目 tab）时需要。
-  const needsProjectPicker = domain === 'project' && defaultProjectId == null;
-
-  useEffect(() => {
-    if (!visible || !needsProjectPicker) {
-      return;
-    }
-    let cancelled = false;
-    void (async () => {
-      try {
-        const list = await runtime.projects.list();
-        if (!cancelled) {
-          setProjects(list);
-          // 无预选项目时默认第一个，避免「项目域但无 projectId」的空态
-          setProjectId(prev => (prev != null && list.some(p => p.id === prev) ? prev : list[0]?.id));
+    useEffect(() => {
+        if (!visible) {
+            return;
         }
-      } catch {
-        if (!cancelled) {
-          setProjects([]);
+        setName('');
+        setDescription('');
+        setProjectId(defaultProjectId);
+        setImported(null);
+        setError(undefined);
+    }, [visible, defaultProjectId]);
+
+    // 项目下拉仅在「项目域且调用方未锁定项目」（管理页项目 tab）时需要。
+    const needsProjectPicker = domain === 'project' && defaultProjectId == null;
+
+    useEffect(() => {
+        if (!visible || !needsProjectPicker) {
+            return;
         }
-      }
-    })();
-    return () => {
-      cancelled = true;
+        let cancelled = false;
+        void (async () => {
+            try {
+                const list = await runtime.projects.list();
+                if (!cancelled) {
+                    setProjects(list);
+                    // 无预选项目时默认第一个，避免「项目域但无 projectId」的空态
+                    setProjectId(prev => (prev != null && list.some(p => p.id === prev) ? prev : list[0]?.id));
+                }
+            } catch {
+                if (!cancelled) {
+                    setProjects([]);
+                }
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [visible, runtime, needsProjectPicker]);
+
+    const selectedProject = useMemo(() => projects.find(p => p.id === projectId), [projects, projectId]);
+
+    const nameReason = name.length > 0 ? SkillName.validate(name) : null;
+    const nameIssue = nameReason == null ? null : coreT(nameReason);
+    const descriptionIssue = description.length === 0 ? coreT({key: "ui.skills.desc_empty"}) : null;
+    const projectIssue = domain === 'project' && projectId == null ? coreT({key: "ui.skills.project_required"}) : null;
+    const canSubmit = name.length > 0 && description.length > 0 && nameIssue == null && projectIssue == null && !creating;
+
+    /** 选 zip → 预检 → 预填 name/description（可改）；取消选择不动表单。 */
+    const handleImport = async () => {
+        if (importing) {
+            return;
+        }
+        setImporting(true);
+        setError(undefined);
+        try {
+            const picked = await VfsZipService.pickBytes();
+            if (!picked.ok) {
+                setError(picked.error.message);
+                return;
+            }
+            if (picked.value == null) {
+                return;
+            }
+            const bytes = picked.value;
+            const previewResult = SkillZip.preview(bytes);
+            if (!previewResult.ok) {
+                setError(previewResult.error.message);
+                return;
+            }
+            const preview = previewResult.value;
+            if (preview.skillMd == null) {
+                setError(coreT({key: "ui.skills.zip_root_missing"}));
+                return;
+            }
+            setImported({bytes, preview});
+            setName(preview.name ?? '');
+            setDescription(preview.description ?? '');
+        } catch (err) {
+            setError(err instanceof Error ? err.message : String(err));
+        } finally {
+            setImporting(false);
+        }
     };
-  }, [visible, runtime, needsProjectPicker]);
 
-  const selectedProject = useMemo(() => projects.find(p => p.id === projectId), [projects, projectId]);
-
-  const nameReason = name.length > 0 ? SkillName.validate(name) : null;
-  const nameIssue = nameReason == null ? null : coreT(nameReason);
-  const descriptionIssue = description.length === 0 ? coreT({key: "ui.skills.desc_empty"}) : null;
-  const projectIssue = domain === 'project' && projectId == null ? coreT({key: "ui.skills.project_required"}) : null;
-  const canSubmit = name.length > 0 && description.length > 0 && nameIssue == null && projectIssue == null && !creating;
-
-  /** 选 zip → 预检 → 预填 name/description（可改）；取消选择不动表单。 */
-  const handleImport = async () => {
-    if (importing) {
-      return;
-    }
-    setImporting(true);
-    setError(undefined);
-    try {
-      const picked = await VfsZipService.pickBytes();
-      if (!picked.ok) {
-        setError(picked.error.message);
-        return;
-      }
-      if (picked.value == null) {
-        return;
-      }
-      const bytes = picked.value;
-      const previewResult = SkillZip.preview(bytes);
-      if (!previewResult.ok) {
-        setError(previewResult.error.message);
-        return;
-      }
-      const preview = previewResult.value;
-      if (preview.skillMd == null) {
-        setError(coreT({key: "ui.skills.zip_root_missing"}));
-        return;
-      }
-      setImported({bytes, preview});
-      setName(preview.name ?? '');
-      setDescription(preview.description ?? '');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setImporting(false);
-    }
-  };
-
-  const handleCreate = async () => {
-    if (!canSubmit) {
-      return;
-    }
-    setCreating(true);
-    setError(undefined);
-    try {
-      // 域内查重：同名技能已存在时拒绝（整包覆盖语义只在复制/提升链路，新建不覆盖）
-      const existing = await runtime.skills().listSkills(domain === 'global' ? 'global' : {projectId: projectId!});
-      if (existing.kind === 'failed') {
-        setError(existing.error.message);
-        return;
-      }
-      // listSkills 未注入 hooks：中断分支不可达；真出现时按「本次不创建」收尾。
-      if (existing.kind !== 'completed') {
-        return;
-      }
-      if (existing.value.some(s => s.name === name)) {
-        setError(coreT({key: "ui.skills.domain_name_conflict", params: {name}}));
-        return;
-      }
-      if (imported != null) {
-        // ZIP 是第二条新建通道（不经 writeSkillFile 的 D2② 门）：落盘前
-        // 先过保留名校验，拒绝时不落盘（CR D-1）。SkillError 的中文
-        // message 由 catch 分支冒泡展示。
-        await runtime.skills().assertSkillNameNotReservedForCreate(domain, name, domain === 'project' ? projectId : undefined);
-        // 导入创建：zip 内全部文件落入新技能目录（目录新建为空，无覆盖风险），
-        // 表单值与 zip 元数据不一致时重写 SKILL.md front matter（保留正文）。
-        // 技能已重定位到独立 meta 域，导入 scope 取 meta 域。
-        const scope: VfsScope = domain === 'global' ? {kind: 'global-meta'} : {kind: 'project-meta', projectId: projectId!};
-        const zipSvc = VfsServiceFactory.createZipIo(runtime.conn);
-        await zipSvc.import(scope, imported.bytes, {
-          confirmed: true,
-          directoryPath: `/meta/skills/${name}`,
-        });
-        if (imported.preview.name !== name || imported.preview.description !== description) {
-          const skillDoc = SkillFrontMatterValues.rewrite(imported.preview.skillMd!, {name, description});
-          await runtime.skills().writeSkillFile(domain, name, 'SKILL.md', skillDoc, domain === 'project' ? projectId : undefined);
+    const handleCreate = async () => {
+        if (!canSubmit) {
+            return;
         }
-      } else {
-        await runtime.skills().writeSkillFile(domain, name, 'SKILL.md', NewSkillDoc.build(name, description, 'mobile'), domain === 'project' ? projectId : undefined);
-      }
-      onCreated({
-        domain,
-        name,
-        ...(domain === 'project' && projectId != null ? {projectId} : {}),
-      });
-      onClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setCreating(false);
-    }
-  };
+        setCreating(true);
+        setError(undefined);
+        try {
+            // 域内查重：同名技能已存在时拒绝（整包覆盖语义只在复制/提升链路，新建不覆盖）
+            const existing = await runtime.skills().listSkills(domain === 'global' ? 'global' : {projectId: projectId!});
+            if (existing.kind === 'failed') {
+                setError(existing.error.message);
+                return;
+            }
+            // listSkills 未注入 hooks：中断分支不可达；真出现时按「本次不创建」收尾。
+            if (existing.kind !== 'completed') {
+                return;
+            }
+            if (existing.value.some(s => s.name === name)) {
+                setError(coreT({key: "ui.skills.domain_name_conflict", params: {name}}));
+                return;
+            }
+            if (imported != null) {
+                // ZIP 是第二条新建通道（不经 writeSkillFile 的 D2② 门）：落盘前
+                // 先过保留名校验，拒绝时不落盘（CR D-1）。SkillError 的中文
+                // message 由 catch 分支冒泡展示。
+                await runtime.skills().assertSkillNameNotReservedForCreate(domain, name, domain === 'project' ? projectId : undefined);
+                // 导入创建：zip 内全部文件落入新技能目录（目录新建为空，无覆盖风险），
+                // 表单值与 zip 元数据不一致时重写 SKILL.md front matter（保留正文）。
+                // 技能已重定位到独立 meta 域，导入 scope 取 meta 域。
+                const scope: VfsScope = domain === 'global' ? {kind: 'global-meta'} : {kind: 'project-meta', projectId: projectId!};
+                const zipSvc = VfsServiceFactory.createZipIo(runtime.conn);
+                await zipSvc.import(scope, imported.bytes, {
+                    confirmed: true,
+                    directoryPath: `/meta/skills/${name}`,
+                });
+                if (imported.preview.name !== name || imported.preview.description !== description) {
+                    const skillDoc = SkillFrontMatterValues.rewrite(imported.preview.skillMd!, {name, description});
+                    await runtime.skills().writeSkillFile(domain, name, 'SKILL.md', skillDoc, domain === 'project' ? projectId : undefined);
+                }
+            } else {
+                await runtime.skills().writeSkillFile(domain, name, 'SKILL.md', NewSkillDoc.build(name, description, 'mobile'), domain === 'project' ? projectId : undefined);
+            }
+            onCreated({
+                domain,
+                name,
+                ...(domain === 'project' && projectId != null ? {projectId} : {}),
+            });
+            onClose();
+        } catch (err) {
+            setError(err instanceof Error ? err.message : String(err));
+        } finally {
+            setCreating(false);
+        }
+    };
 
-  const sheetContent = (
-    <>
-      <Text style={[styles.title, {color: tokens.text}]}>{coreT({key: "ui.skills.new_title"})}</Text>
-      {imported != null ? (
-        <View style={styles.importRow}>
-          <Text style={{color: tokens.textSecondary, flex: 1}} numberOfLines={1}>
-            {coreT({key: "ui.skills.zip_imported_info", params: {count: imported.preview.fileCount}})}
-          </Text>
-          <Pressable testID="new-skill-import-clear" onPress={() => setImported(null)} hitSlop={8}>
-            <Text style={{color: tokens.primary}}>{coreT({key: "ui.common.remove"})}</Text>
-          </Pressable>
-        </View>
-      ) : (
-        <Pressable testID="new-skill-import-btn" style={[styles.importBtn, {borderColor: tokens.border}]} disabled={importing} onPress={() => handleImport().catch(() => undefined)}>
-          {importing ? <ActivityIndicator size="small" color={tokens.primary} /> : <Text style={{color: tokens.primary}}>{coreT({key: "ui.skills.importing_zip"})}</Text>}
-        </Pressable>
-      )}
-      <ScrollView style={styles.form} contentContainerStyle={styles.formContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-        <Text style={[styles.label, {color: tokens.textSecondary}]} testID="new-skill-name-label">
-          {coreT({key: "ui.skills.name_label_dir_hint"})}
-        </Text>
-        <TextInput
-          testID="new-skill-name-input"
-          style={[
-            styles.input,
-            {
-              color: tokens.text,
-              borderColor: nameIssue ? tokens.danger : tokens.border,
-              backgroundColor: tokens.background,
-            },
-          ]}
-          value={name}
-          onChangeText={setName}
-          placeholder={coreT({key: "ui.skills.name_example_mobile"})}
-          placeholderTextColor={tokens.textSecondary}
-          autoCorrect={false}
-        />
-        {nameIssue ? <Text style={[styles.error, {color: tokens.danger}]}>{nameIssue}</Text> : null}
-        <Text style={[styles.label, {color: tokens.textSecondary}]}>{coreT({key: "ui.common.description"})}</Text>
-        <TextInput
-          testID="new-skill-description-input"
-          style={[
-            styles.input,
-            styles.descriptionInput,
-            {
-              color: tokens.text,
-              borderColor: description.length > 0 && descriptionIssue ? tokens.danger : tokens.border,
-              backgroundColor: tokens.background,
-            },
-          ]}
-          value={description}
-          onChangeText={setDescription}
-          placeholder={coreT({key: "ui.skills.desc_hint"})}
-          placeholderTextColor={tokens.textSecondary}
-          multiline
-        />
-        {needsProjectPicker ? (
-          <>
-            <Text style={[styles.label, {color: tokens.textSecondary}]}>{coreT({key: "ui.skills.project_label"})}</Text>
-            <Pressable testID="new-skill-project-picker" style={[styles.projectPicker, {borderColor: tokens.border}]} onPress={() => setProjectMenuOpen(true)}>
-              <Text style={{color: tokens.text, flex: 1}} numberOfLines={1}>
-                {selectedProject ? selectedProject.name : coreT({key: "ui.skills.project_picker_title"})}
-              </Text>
-              <Text style={{color: tokens.textSecondary}}>▾</Text>
-            </Pressable>
-          </>
-        ) : null}
-        {error ? <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text> : null}
-      </ScrollView>
-      <View style={styles.foot}>
-        <Pressable onPress={onClose} style={styles.footBtn}>
-          <Text style={{color: tokens.textSecondary}}>{coreT({key: "ui.common.cancel"})}</Text>
-        </Pressable>
-        <Pressable
-          testID="new-skill-submit"
-          style={[styles.footBtn, {backgroundColor: canSubmit ? tokens.primary : tokens.border}]}
-          disabled={!canSubmit}
-          onPress={() => handleCreate().catch(() => undefined)}
-        >
-          {creating ? <ActivityIndicator size="small" color="#fff" /> : <Text style={{color: '#fff', fontWeight: '600'}}>{coreT({key: "ui.common.create"})}</Text>}
-        </Pressable>
-      </View>
-    </>
-  );
+    const sheetContent = (
+        <>
+            <Text style={[styles.title, {color: tokens.text}]}>{coreT({key: "ui.skills.new_title"})}</Text>
+            {imported != null ? (
+                <View style={styles.importRow}>
+                    <Text style={{color: tokens.textSecondary, flex: 1}} numberOfLines={1}>
+                        {coreT({key: "ui.skills.zip_imported_info", params: {count: imported.preview.fileCount}})}
+                    </Text>
+                    <Pressable testID="new-skill-import-clear" onPress={() => setImported(null)} hitSlop={8}>
+                        <Text style={{color: tokens.primary}}>{coreT({key: "ui.common.remove"})}</Text>
+                    </Pressable>
+                </View>
+            ) : (
+                <Pressable testID="new-skill-import-btn" style={[styles.importBtn, {borderColor: tokens.border}]} disabled={importing} onPress={() => handleImport().catch(() => undefined)}>
+                    {importing ? <ActivityIndicator size="small" color={tokens.primary} /> : <Text style={{color: tokens.primary}}>{coreT({key: "ui.skills.importing_zip"})}</Text>}
+                </Pressable>
+            )}
+            <ScrollView style={styles.form} contentContainerStyle={styles.formContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                <Text style={[styles.label, {color: tokens.textSecondary}]} testID="new-skill-name-label">
+                    {coreT({key: "ui.skills.name_label_dir_hint"})}
+                </Text>
+                <TextInput
+                    testID="new-skill-name-input"
+                    style={[
+                        styles.input,
+                        {
+                            color: tokens.text,
+                            borderColor: nameIssue ? tokens.danger : tokens.border,
+                            backgroundColor: tokens.background,
+                        },
+                    ]}
+                    value={name}
+                    onChangeText={setName}
+                    placeholder={coreT({key: "ui.skills.name_example_mobile"})}
+                    placeholderTextColor={tokens.textSecondary}
+                    autoCorrect={false}
+                />
+                {nameIssue ? <Text style={[styles.error, {color: tokens.danger}]}>{nameIssue}</Text> : null}
+                <Text style={[styles.label, {color: tokens.textSecondary}]}>{coreT({key: "ui.common.description"})}</Text>
+                <TextInput
+                    testID="new-skill-description-input"
+                    style={[
+                        styles.input,
+                        styles.descriptionInput,
+                        {
+                            color: tokens.text,
+                            borderColor: description.length > 0 && descriptionIssue ? tokens.danger : tokens.border,
+                            backgroundColor: tokens.background,
+                        },
+                    ]}
+                    value={description}
+                    onChangeText={setDescription}
+                    placeholder={coreT({key: "ui.skills.desc_hint"})}
+                    placeholderTextColor={tokens.textSecondary}
+                    multiline
+                />
+                {needsProjectPicker ? (
+                    <>
+                        <Text style={[styles.label, {color: tokens.textSecondary}]}>{coreT({key: "ui.skills.project_label"})}</Text>
+                        <Pressable testID="new-skill-project-picker" style={[styles.projectPicker, {borderColor: tokens.border}]} onPress={() => setProjectMenuOpen(true)}>
+                            <Text style={{color: tokens.text, flex: 1}} numberOfLines={1}>
+                                {selectedProject ? selectedProject.name : coreT({key: "ui.skills.project_picker_title"})}
+                            </Text>
+                            <Text style={{color: tokens.textSecondary}}>▾</Text>
+                        </Pressable>
+                    </>
+                ) : null}
+                {error ? <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text> : null}
+            </ScrollView>
+            <View style={styles.foot}>
+                <Pressable onPress={onClose} style={styles.footBtn}>
+                    <Text style={{color: tokens.textSecondary}}>{coreT({key: "ui.common.cancel"})}</Text>
+                </Pressable>
+                <Pressable
+                    testID="new-skill-submit"
+                    style={[styles.footBtn, {backgroundColor: canSubmit ? tokens.primary : tokens.border}]}
+                    disabled={!canSubmit}
+                    onPress={() => handleCreate().catch(() => undefined)}
+                >
+                    {creating ? <ActivityIndicator size="small" color="#fff" /> : <Text style={{color: '#fff', fontWeight: '600'}}>{coreT({key: "ui.common.create"})}</Text>}
+                </Pressable>
+            </View>
+        </>
+    );
 
-  return (
-    <>
-      <ModalShell visible={visible} onClose={onClose} variant="bottom" animationType="slide" keyboardAvoid={{kind: 'adaptive', maxHeightRatio: 0.85}} panelStyle={styles.panel}>
-        {sheetContent}
-      </ModalShell>
-      <BottomSheetMenu
-        visible={projectMenuOpen}
-        title={coreT({key: "ui.skills.project_picker_title"})}
-        items={projects.map(p => ({label: p.name, action: p.id}))}
-        onSelect={action => setProjectId(action)}
-        onClose={() => setProjectMenuOpen(false)}
-      />
-    </>
-  );
+    return (
+        <>
+            <ModalShell visible={visible} onClose={onClose} variant="bottom" animationType="slide" keyboardAvoid={{kind: 'adaptive', maxHeightRatio: 0.85}} panelStyle={styles.panel}>
+                {sheetContent}
+            </ModalShell>
+            <BottomSheetMenu
+                visible={projectMenuOpen}
+                title={coreT({key: "ui.skills.project_picker_title"})}
+                items={projects.map(p => ({label: p.name, action: p.id}))}
+                onSelect={action => setProjectId(action)}
+                onClose={() => setProjectMenuOpen(false)}
+            />
+        </>
+    );
 }
 
 const styles = StyleSheet.create({
-  panel: {
-    // maxHeight（含键盘收缩）由 ModalShell 的 adaptive 策略管
-    padding: 16,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    gap: 8,
-  },
-  // flexGrow:0 防止表单区反向撑开面板；flexShrink:1 在内容超高时收缩内部滚动，
-  // 保住标题与底部按钮的可见性。
-  form: {flexGrow: 0, flexShrink: 1},
-  formContent: {gap: 8},
-  title: {fontSize: 18, fontWeight: '600'},
-  importBtn: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  importRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  label: {fontSize: 13, marginTop: 4},
-  input: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 15,
-  },
-  descriptionInput: {
-    minHeight: 72,
-    // 多行输入限高：防止超长描述把输入框撑到占据整个面板
-    maxHeight: 140,
-    textAlignVertical: 'top',
-  },
-  projectPicker: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    gap: 8,
-  },
-  error: {fontSize: 12, lineHeight: 16},
-  foot: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 12,
-    marginTop: 8,
-  },
-  footBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-    minWidth: 88,
-    alignItems: 'center',
-  },
+    panel: {
+        // maxHeight（含键盘收缩）由 ModalShell 的 adaptive 策略管
+        padding: 16,
+        borderTopLeftRadius: 16,
+        borderTopRightRadius: 16,
+        gap: 8,
+    },
+    // flexGrow:0 防止表单区反向撑开面板；flexShrink:1 在内容超高时收缩内部滚动，
+    // 保住标题与底部按钮的可见性。
+    form: {flexGrow: 0, flexShrink: 1},
+    formContent: {gap: 8},
+    title: {fontSize: 18, fontWeight: '600'},
+    importBtn: {
+        borderWidth: StyleSheet.hairlineWidth,
+        borderRadius: 10,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        alignItems: 'center',
+    },
+    importRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    label: {fontSize: 13, marginTop: 4},
+    input: {
+        borderWidth: StyleSheet.hairlineWidth,
+        borderRadius: 10,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        fontSize: 15,
+    },
+    descriptionInput: {
+        minHeight: 72,
+        // 多行输入限高：防止超长描述把输入框撑到占据整个面板
+        maxHeight: 140,
+        textAlignVertical: 'top',
+    },
+    projectPicker: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderWidth: StyleSheet.hairlineWidth,
+        borderRadius: 10,
+        paddingHorizontal: 12,
+        paddingVertical: 12,
+        gap: 8,
+    },
+    error: {fontSize: 12, lineHeight: 16},
+    foot: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        gap: 12,
+        marginTop: 8,
+    },
+    footBtn: {
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        borderRadius: 8,
+        minWidth: 88,
+        alignItems: 'center',
+    },
 });

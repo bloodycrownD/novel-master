@@ -6,7 +6,7 @@
 
 /** started/ok 路径是否清正文。恒 false。 */
 export function shouldClearComposerBodyAfterAgentStarted(): boolean {
-  return false;
+    return false;
 }
 
 /**
@@ -14,5 +14,5 @@ export function shouldClearComposerBodyAfterAgentStarted(): boolean {
  * 异会话仅清 annotate store（D1），不改当前输入框。
  */
 export function shouldClearComposerBodyOnUserMessageAppended( payloadSessionId: string, viewingSessionId: string ): boolean {
-  return payloadSessionId === viewingSessionId;
+    return payloadSessionId === viewingSessionId;
 }

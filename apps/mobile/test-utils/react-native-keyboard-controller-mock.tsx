@@ -3,27 +3,27 @@ import {View} from 'react-native';
 import {notifyAnimatedValuesChanged} from './animated-value-registry';
 
 export function KeyboardProvider({children}: {children: React.ReactNode}) {
-  return <>{children}</>;
+    return <>{children}</>;
 }
 
 export function KeyboardStickyView({children}: {children: React.ReactNode}) {
-  return <>{children}</>;
+    return <>{children}</>;
 }
 
 export function KeyboardAvoidingView({
-  children,
-  style,
-  ...rest
+    children,
+    style,
+    ...rest
 }: {
-  children?: React.ReactNode;
-  style?: unknown;
-  [key: string]: unknown;
+    children?: React.ReactNode;
+    style?: unknown;
+    [key: string]: unknown;
 }) {
-  return (
-    <View style={style as never} {...rest}>
-      {children}
-    </View>
-  );
+    return (
+        <View style={style as never} {...rest}>
+            {children}
+        </View>
+    );
 }
 
 // 测试注入用：默认 0（与真实环境键盘收起时一致），既有用例不注入则行为不变。
@@ -42,28 +42,28 @@ const keyboardProgressSV = {value: 0};
 
 /** 仅测试用：注入键盘高度（弹起传负值，与真实 hook 语义一致）。 */
 export function __setKeyboardHeightForTests(height: number) {
-  testState.keyboardHeight = height;
-  keyboardHeightSV.value = height;
-  notifyAnimatedValuesChanged();
+    testState.keyboardHeight = height;
+    keyboardHeightSV.value = height;
+    notifyAnimatedValuesChanged();
 }
 
 export function useReanimatedKeyboardAnimation() {
-  return {
-    height: keyboardHeightSV,
-    progress: keyboardProgressSV,
-  };
+    return {
+        height: keyboardHeightSV,
+        progress: keyboardProgressSV,
+    };
 }
 
 export function useKeyboardAnimation() {
-  return {
-    height: keyboardHeightSV,
-    progress: keyboardProgressSV,
-  };
+    return {
+        height: keyboardHeightSV,
+        progress: keyboardProgressSV,
+    };
 }
 
 export function useKeyboardState<T = {height: number}>(selector?: (state: {height: number; isVisible: boolean}) => T): T {
-  const state = {height: 0, isVisible: false};
-  return (selector ? selector(state) : state) as T;
+    const state = {height: 0, isVisible: false};
+    return (selector ? selector(state) : state) as T;
 }
 
 export function useGenericKeyboardHandler() {}

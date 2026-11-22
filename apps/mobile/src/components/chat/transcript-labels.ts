@@ -17,59 +17,59 @@ type Translator = (m: MessageLike) => string;
  * transcript 段一致；波 3 webview 片组件接线后逐键消费）。
  */
 const UI_LABEL_KEYS = [
-  'ui.transcript.menu.edit',
-  'ui.transcript.menu.copy',
-  'ui.transcript.menu.set_floor',
-  'ui.transcript.menu.fork',
-  'ui.transcript.menu.rollback',
-  'ui.transcript.tool_result_title',
-  'ui.transcript.tool_status.success',
-  'ui.transcript.tool_status.error',
-  'ui.transcript.tool_status.pending',
-  'ui.transcript.tool_status.interrupted',
-  'ui.transcript.tool_group_title',
-  'ui.transcript.open_hint',
-  'ui.transcript.open_kind.subagent',
-  'ui.transcript.open_kind.skill',
-  'ui.transcript.open_kind.result',
-  'ui.transcript.open_kind.workspace',
-  'ui.transcript.role.user',
-  'ui.transcript.role.assistant',
-  'ui.transcript.message_actions',
-  'ui.transcript.attach_group_title',
-  'ui.transcript.attach_src.workspace',
-  'ui.transcript.attach_src.dir',
-  'ui.transcript.attach_src.file',
-  // mermaid 全屏关闭（两管线共享 portal；波 3-1 第二桥随两条 init.labels 通道都下发，波 3-2 接线）。
-  'ui.common.close',
-  // 附件状态 chip（presentation 降级 domain/chat 后 descriptor 化；webview AttachGroup 两步渲染：
-  // 先 uiText 取 action 词，再插 label.attachment.chip 模板。宿主 coreT 预渲染下发，缺省兜底见 webview labels）。
-  'label.attachment.action.delete',
-  'label.attachment.action.write',
-  'label.attachment.action.edit',
-  'label.attachment.action.mkdir',
-  'label.attachment.action.rename',
-  'label.attachment.action.move',
-  'label.attachment.action.workplace_change',
-  'label.attachment.action.annotate',
-  'label.attachment.chip',
-  'label.attachment.attach_ref',
+    'ui.transcript.menu.edit',
+    'ui.transcript.menu.copy',
+    'ui.transcript.menu.set_floor',
+    'ui.transcript.menu.fork',
+    'ui.transcript.menu.rollback',
+    'ui.transcript.tool_result_title',
+    'ui.transcript.tool_status.success',
+    'ui.transcript.tool_status.error',
+    'ui.transcript.tool_status.pending',
+    'ui.transcript.tool_status.interrupted',
+    'ui.transcript.tool_group_title',
+    'ui.transcript.open_hint',
+    'ui.transcript.open_kind.subagent',
+    'ui.transcript.open_kind.skill',
+    'ui.transcript.open_kind.result',
+    'ui.transcript.open_kind.workspace',
+    'ui.transcript.role.user',
+    'ui.transcript.role.assistant',
+    'ui.transcript.message_actions',
+    'ui.transcript.attach_group_title',
+    'ui.transcript.attach_src.workspace',
+    'ui.transcript.attach_src.dir',
+    'ui.transcript.attach_src.file',
+    // mermaid 全屏关闭（两管线共享 portal；波 3-1 第二桥随两条 init.labels 通道都下发，波 3-2 接线）。
+    'ui.common.close',
+    // 附件状态 chip（presentation 降级 domain/chat 后 descriptor 化；webview AttachGroup 两步渲染：
+    // 先 uiText 取 action 词，再插 label.attachment.chip 模板。宿主 coreT 预渲染下发，缺省兜底见 webview labels）。
+    'label.attachment.action.delete',
+    'label.attachment.action.write',
+    'label.attachment.action.edit',
+    'label.attachment.action.mkdir',
+    'label.attachment.action.rename',
+    'label.attachment.action.move',
+    'label.attachment.action.workplace_change',
+    'label.attachment.action.annotate',
+    'label.attachment.chip',
+    'label.attachment.attach_ref',
 ] as const;
 
 // 偏离登记：文件名主体 TranscriptLabels 与本文件 import 的类型 TranscriptLabels 撞名，
 // 按 p23 XxxFactory 先例加角色后缀起名 TranscriptLabelsFactory。
 export namespace TranscriptLabelsFactory {
-  // nm-style: keep-public — spec C32 指定的独立装配面（宿主 init.labels 下发 + T-SP22 单测直测）；内联会把 i18n key 映射埋进 WebView 组件，测试只能绕道渲染。
-  /** core 文案 translator → web 渲染层文案（四元组 + ui.* map，key 与 core catalog 一一对应）。 */
-  export function build(t: Translator): TranscriptLabels {
-    const ui: Record<string, string> = {};
-    for (const key of UI_LABEL_KEYS) ui[key] = t({key});
-    return {
-      generating: t({key: 'label.transcript.generating'}),
-      thinking: t({key: 'label.transcript.thinking_header'}),
-      empty: t({key: 'label.transcript.empty'}),
-      loadOlder: t({key: 'label.transcript.load_older'}),
-      ui,
-    };
-  }
+    // nm-style: keep-public — spec C32 指定的独立装配面（宿主 init.labels 下发 + T-SP22 单测直测）；内联会把 i18n key 映射埋进 WebView 组件，测试只能绕道渲染。
+    /** core 文案 translator → web 渲染层文案（四元组 + ui.* map，key 与 core catalog 一一对应）。 */
+    export function build(t: Translator): TranscriptLabels {
+        const ui: Record<string, string> = {};
+        for (const key of UI_LABEL_KEYS) ui[key] = t({key});
+        return {
+            generating: t({key: 'label.transcript.generating'}),
+            thinking: t({key: 'label.transcript.thinking_header'}),
+            empty: t({key: 'label.transcript.empty'}),
+            loadOlder: t({key: 'label.transcript.load_older'}),
+            ui,
+        };
+    }
 }

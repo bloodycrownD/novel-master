@@ -10,6 +10,6 @@
  */
 
 export {
-  EncodingRegistry,
-  type EncodingHandle,
+    EncodingRegistry,
+    type EncodingHandle,
 } from "@novel-master/core/tokenizer";

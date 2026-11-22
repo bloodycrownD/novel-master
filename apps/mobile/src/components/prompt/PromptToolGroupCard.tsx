@@ -34,187 +34,187 @@ const LOST_RESULT_TEXT = coreT({key: "ui.prompt.lost_result"});
  */
 /** 状态点旁的状态文案（三态可读，不只靠颜色区分）。 */
 const STATUS_LABEL: Record<PromptToolGroupCardData['status'], string> = {
-  ok: coreT({key: "ui.transcript.tool_status.success"}),
-  error: coreT({key: "ui.transcript.tool_status.error"}),
-  lost: coreT({key: "ui.prompt.status_lost"}),
+    ok: coreT({key: "ui.transcript.tool_status.success"}),
+    error: coreT({key: "ui.transcript.tool_status.error"}),
+    lost: coreT({key: "ui.prompt.status_lost"}),
 };
 
 type Props = {
-  card: PromptToolGroupCardData;
-  turnId: string;
-  expanded: boolean;
-  onToggle: (groupId: string) => void;
+    card: PromptToolGroupCardData;
+    turnId: string;
+    expanded: boolean;
+    onToggle: (groupId: string) => void;
 };
 
 export function PromptToolGroupCard({card, turnId, expanded, onToggle}: Props) {
-  const {tokens} = useTheme();
-  const openDetail = useOpenPromptDetail();
-  // 解析+收缩是纯函数重活（大 JSON 实测 ~90ms 量级），memo 住防展开态重渲染重跑。
-  const usePreviewJson = useMemo(() => PromptPreviewTurns.formatToolUsePreviewJson(card.inputJson), [card.inputJson]);
+    const {tokens} = useTheme();
+    const openDetail = useOpenPromptDetail();
+    // 解析+收缩是纯函数重活（大 JSON 实测 ~90ms 量级），memo 住防展开态重渲染重跑。
+    const usePreviewJson = useMemo(() => PromptPreviewTurns.formatToolUsePreviewJson(card.inputJson), [card.inputJson]);
 
-  const handleToggle = useCallback(() => {
-    onToggle(card.id);
-  }, [onToggle, card.id]);
+    const handleToggle = useCallback(() => {
+        onToggle(card.id);
+    }, [onToggle, card.id]);
 
-  const openUse = useCallback(() => {
-    openDetail({
-      title: `tool use · ${card.toolName}`,
-      body: card.inputJson,
-      leafId: `${card.id}-use`,
-      turnId,
-    });
-  }, [openDetail, card.id, card.toolName, card.inputJson, turnId]);
+    const openUse = useCallback(() => {
+        openDetail({
+            title: `tool use · ${card.toolName}`,
+            body: card.inputJson,
+            leafId: `${card.id}-use`,
+            turnId,
+        });
+    }, [openDetail, card.id, card.toolName, card.inputJson, turnId]);
 
-  const openResult = useCallback(() => {
-    openDetail({
-      title: `tool result · ${card.toolName}`,
-      body: card.result?.body ?? '',
-      leafId: `${card.id}-result`,
-      turnId,
-    });
-  }, [openDetail, card.id, card.toolName, card.result, turnId]);
+    const openResult = useCallback(() => {
+        openDetail({
+            title: `tool result · ${card.toolName}`,
+            body: card.result?.body ?? '',
+            leafId: `${card.id}-result`,
+            turnId,
+        });
+    }, [openDetail, card.id, card.toolName, card.result, turnId]);
 
-  return (
-    <View
-      testID="prompt-tool-group-card"
-      style={[
-        styles.card,
-        {
-          backgroundColor: tokens.bgSecondary,
-          borderColor: tokens.border,
-          borderLeftColor: tokens.primary,
-        },
-      ]}
-    >
-      <Pressable
-        testID="prompt-tool-group-head"
-        accessibilityRole="button"
-        accessibilityLabel={coreT({key: "ui.prompt.tool_group_aria", params: {action: expanded ? coreT({key: "ui.common.collapse"}) : coreT({key: "ui.common.expand"}), name: card.toolName}})}
-        accessibilityState={{expanded}}
-        onPress={handleToggle}
-        style={styles.head}
-      >
-        <View testID="prompt-tool-group-status" style={styles.headLeft}>
-          <View
-            testID={`prompt-tool-group-dot-${card.status}`}
-            style={[styles.dot, {backgroundColor: card.status === 'ok' ? tokens.success : card.status === 'error' ? tokens.danger : tokens.textTertiary}]}
-          />
-          <Text testID="prompt-tool-group-name" style={[styles.name, {color: tokens.text}]} numberOfLines={1}>
-            {card.toolName}
-          </Text>
-          {card.parallel ? (
-            <Text
-              testID="prompt-tool-group-parallel"
-              // 对齐 desktop 的中性色虚线徽标（role 徽标与状态三色是唯一的语义色留白）。
-              style={[styles.parallel, {color: tokens.textTertiary, borderColor: tokens.borderLight}]}
+    return (
+        <View
+            testID="prompt-tool-group-card"
+            style={[
+                styles.card,
+                {
+                    backgroundColor: tokens.bgSecondary,
+                    borderColor: tokens.border,
+                    borderLeftColor: tokens.primary,
+                },
+            ]}
+        >
+            <Pressable
+                testID="prompt-tool-group-head"
+                accessibilityRole="button"
+                accessibilityLabel={coreT({key: "ui.prompt.tool_group_aria", params: {action: expanded ? coreT({key: "ui.common.collapse"}) : coreT({key: "ui.common.expand"}), name: card.toolName}})}
+                accessibilityState={{expanded}}
+                onPress={handleToggle}
+                style={styles.head}
             >
-              {coreT({key: "ui.prompt.parallel_tag"})}
-            </Text>
-          ) : null}
-          {/* 状态文案用主题正文色：语义色浅底对比 1.86~2.54:1 低于 3:1 门槛，
+                <View testID="prompt-tool-group-status" style={styles.headLeft}>
+                    <View
+                        testID={`prompt-tool-group-dot-${card.status}`}
+                        style={[styles.dot, {backgroundColor: card.status === 'ok' ? tokens.success : card.status === 'error' ? tokens.danger : tokens.textTertiary}]}
+                    />
+                    <Text testID="prompt-tool-group-name" style={[styles.name, {color: tokens.text}]} numberOfLines={1}>
+                        {card.toolName}
+                    </Text>
+                    {card.parallel ? (
+                        <Text
+                            testID="prompt-tool-group-parallel"
+                            // 对齐 desktop 的中性色虚线徽标（role 徽标与状态三色是唯一的语义色留白）。
+                            style={[styles.parallel, {color: tokens.textTertiary, borderColor: tokens.borderLight}]}
+                        >
+                            {coreT({key: "ui.prompt.parallel_tag"})}
+                        </Text>
+                    ) : null}
+                    {/* 状态文案用主题正文色：语义色浅底对比 1.86~2.54:1 低于 3:1 门槛，
               仅用于装饰性状态点（上面的 dot）；tokens 化另开迭代。 */}
-          <Text testID="prompt-tool-group-status-label" style={[styles.statusLabel, {color: tokens.text}]} numberOfLines={1}>
-            {STATUS_LABEL[card.status]}
-          </Text>
+                    <Text testID="prompt-tool-group-status-label" style={[styles.statusLabel, {color: tokens.text}]} numberOfLines={1}>
+                        {STATUS_LABEL[card.status]}
+                    </Text>
+                </View>
+                <Text testID="prompt-tool-group-chevron" style={[styles.chevron, {color: tokens.textTertiary}]}>
+                    {expanded ? '⌄' : '›'}
+                </Text>
+            </Pressable>
+            {expanded ? (
+                <View testID="prompt-tool-group-body" style={styles.cells}>
+                    <Pressable
+                        testID="prompt-tool-group-use"
+                        accessibilityRole="button"
+                        accessibilityLabel={coreT({key: "ui.prompt.tool_input_aria", params: {name: card.toolName}})}
+                        onPress={openUse}
+                        style={[
+                            styles.cell,
+                            {
+                                backgroundColor: tokens.surface,
+                                borderColor: tokens.borderLight,
+                                borderLeftColor: tokens.primary,
+                            },
+                        ]}
+                    >
+                        <Text testID="prompt-tool-group-use-label" style={[styles.cellLabel, {color: tokens.textSecondary, borderColor: tokens.borderLight}]} numberOfLines={1}>
+                            tool use
+                        </Text>
+                        <Text testID="prompt-tool-group-use-preview" style={[styles.code, {color: tokens.text}]} numberOfLines={24}>
+                            {usePreviewJson}
+                        </Text>
+                    </Pressable>
+                    <Pressable
+                        testID="prompt-tool-group-result"
+                        accessibilityRole="button"
+                        accessibilityLabel={coreT({key: "ui.prompt.tool_result_aria", params: {name: card.toolName}})}
+                        // 悬挂 use 的占位格不挂 onPress：否则点进去是一份空正文（假入口）。
+                        onPress={card.result == null ? undefined : openResult}
+                        style={[
+                            styles.cell,
+                            {
+                                backgroundColor: tokens.surface,
+                                borderColor: tokens.borderLight,
+                                borderLeftColor: tokens.primary,
+                            },
+                        ]}
+                    >
+                        <Text testID="prompt-tool-group-result-label" style={[styles.cellLabel, {color: tokens.textSecondary, borderColor: tokens.borderLight}]} numberOfLines={1}>
+                            tool result
+                        </Text>
+                        <Text testID="prompt-tool-group-result-preview" style={[styles.code, card.result == null && {color: tokens.textTertiary}]} numberOfLines={24}>
+                            {card.result == null ? LOST_RESULT_TEXT : card.result.body}
+                        </Text>
+                    </Pressable>
+                </View>
+            ) : null}
         </View>
-        <Text testID="prompt-tool-group-chevron" style={[styles.chevron, {color: tokens.textTertiary}]}>
-          {expanded ? '⌄' : '›'}
-        </Text>
-      </Pressable>
-      {expanded ? (
-        <View testID="prompt-tool-group-body" style={styles.cells}>
-          <Pressable
-            testID="prompt-tool-group-use"
-            accessibilityRole="button"
-            accessibilityLabel={coreT({key: "ui.prompt.tool_input_aria", params: {name: card.toolName}})}
-            onPress={openUse}
-            style={[
-              styles.cell,
-              {
-                backgroundColor: tokens.surface,
-                borderColor: tokens.borderLight,
-                borderLeftColor: tokens.primary,
-              },
-            ]}
-          >
-            <Text testID="prompt-tool-group-use-label" style={[styles.cellLabel, {color: tokens.textSecondary, borderColor: tokens.borderLight}]} numberOfLines={1}>
-              tool use
-            </Text>
-            <Text testID="prompt-tool-group-use-preview" style={[styles.code, {color: tokens.text}]} numberOfLines={24}>
-              {usePreviewJson}
-            </Text>
-          </Pressable>
-          <Pressable
-            testID="prompt-tool-group-result"
-            accessibilityRole="button"
-            accessibilityLabel={coreT({key: "ui.prompt.tool_result_aria", params: {name: card.toolName}})}
-            // 悬挂 use 的占位格不挂 onPress：否则点进去是一份空正文（假入口）。
-            onPress={card.result == null ? undefined : openResult}
-            style={[
-              styles.cell,
-              {
-                backgroundColor: tokens.surface,
-                borderColor: tokens.borderLight,
-                borderLeftColor: tokens.primary,
-              },
-            ]}
-          >
-            <Text testID="prompt-tool-group-result-label" style={[styles.cellLabel, {color: tokens.textSecondary, borderColor: tokens.borderLight}]} numberOfLines={1}>
-              tool result
-            </Text>
-            <Text testID="prompt-tool-group-result-preview" style={[styles.code, card.result == null && {color: tokens.textTertiary}]} numberOfLines={24}>
-              {card.result == null ? LOST_RESULT_TEXT : card.result.body}
-            </Text>
-          </Pressable>
-        </View>
-      ) : null}
-    </View>
-  );
+    );
 }
 
 const styles = StyleSheet.create({
-  // blockCard 形态（智能体配置 PersistBlocksCard 同款）：1px 边 + 左 3px 粗条；
-  // 组头收窄（minHeight 28：只是一个函数名，不需要 40 高的块头）。
-  card: {
-    borderWidth: 1,
-    borderLeftWidth: 3,
-    borderRadius: 10,
-    padding: 10,
-    gap: 8,
-  },
-  head: {flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 28},
-  headLeft: {flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1},
-  dot: {width: 8, height: 8, borderRadius: 4},
-  name: {fontSize: 14, fontWeight: '600', flexShrink: 1},
-  parallel: {
-    fontSize: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderStyle: 'dashed',
-    borderRadius: 4,
-    paddingHorizontal: 4,
-  },
-  statusLabel: {fontSize: 11},
-  chevron: {fontSize: 14, marginLeft: 'auto'},
-  cells: {gap: 10},
-  // 格子：第三层，白底浮起（「灰→白→灰→白」明度交替的最末一档）+ 细一号左条与圆角。
-  cell: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderLeftWidth: 3,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    gap: 6,
-  },
-  // 格头标签 pill（badge 形态）：描边款，色随 textSecondary。
-  cellLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 6,
-    paddingVertical: 1,
-    paddingHorizontal: 6,
-    alignSelf: 'flex-start',
-    overflow: 'hidden',
-  },
-  code: {fontFamily: 'monospace', fontSize: 11, lineHeight: 16},
+    // blockCard 形态（智能体配置 PersistBlocksCard 同款）：1px 边 + 左 3px 粗条；
+    // 组头收窄（minHeight 28：只是一个函数名，不需要 40 高的块头）。
+    card: {
+        borderWidth: 1,
+        borderLeftWidth: 3,
+        borderRadius: 10,
+        padding: 10,
+        gap: 8,
+    },
+    head: {flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 28},
+    headLeft: {flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1},
+    dot: {width: 8, height: 8, borderRadius: 4},
+    name: {fontSize: 14, fontWeight: '600', flexShrink: 1},
+    parallel: {
+        fontSize: 10,
+        borderWidth: StyleSheet.hairlineWidth,
+        borderStyle: 'dashed',
+        borderRadius: 4,
+        paddingHorizontal: 4,
+    },
+    statusLabel: {fontSize: 11},
+    chevron: {fontSize: 14, marginLeft: 'auto'},
+    cells: {gap: 10},
+    // 格子：第三层，白底浮起（「灰→白→灰→白」明度交替的最末一档）+ 细一号左条与圆角。
+    cell: {
+        borderWidth: StyleSheet.hairlineWidth,
+        borderLeftWidth: 3,
+        borderRadius: 8,
+        paddingHorizontal: 10,
+        paddingVertical: 8,
+        gap: 6,
+    },
+    // 格头标签 pill（badge 形态）：描边款，色随 textSecondary。
+    cellLabel: {
+        fontSize: 10,
+        fontWeight: '600',
+        borderWidth: StyleSheet.hairlineWidth,
+        borderRadius: 6,
+        paddingVertical: 1,
+        paddingHorizontal: 6,
+        alignSelf: 'flex-start',
+        overflow: 'hidden',
+    },
+    code: {fontFamily: 'monospace', fontSize: 11, lineHeight: 16},
 });

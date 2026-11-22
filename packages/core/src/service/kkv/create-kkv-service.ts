@@ -17,6 +17,6 @@ import type { KkvService } from "./kkv.port.js";
  * nm-style: keep-bare — compaction/provider/persistent-state/persistent-preferences 四域共用的 KKV 存取工厂（单文件单函数、跨域多点消费），p23 重复组与 p24 主体桶均不在收口范围。
  */
 export function createKkvService(conn: TdbcConnection): KkvService {
-  const repo = new SqliteKkvRepository(conn);
-  return new DefaultKkvService(repo);
+    const repo = new SqliteKkvRepository(conn);
+    return new DefaultKkvService(repo);
 }

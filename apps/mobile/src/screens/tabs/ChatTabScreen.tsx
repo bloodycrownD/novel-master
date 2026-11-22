@@ -31,234 +31,234 @@ import {coreT} from '@/i18n/core';
 type Nav = CompositeNavigationProp<BottomTabNavigationProp<MainTabParamList, 'Chat'>, NativeStackNavigationProp<RootStackParamList>>;
 
 function ChatTabScreenInner() {
-  const sessionBatch = useBatchSelection();
-  const ctx = useChatTabContext();
-  const navigation = useNavigation<Nav>();
+    const sessionBatch = useBatchSelection();
+    const ctx = useChatTabContext();
+    const navigation = useNavigation<Nav>();
 
-  const onOpenSessionDetail = useCallback(() => {
-    if (ctx.projectId != null && ctx.sessionId != null) {
-      navigation.navigate('SessionDetail', {
-        projectId: ctx.projectId,
-        sessionId: ctx.sessionId,
-      });
-    }
-  }, [ctx.projectId, ctx.sessionId, navigation]);
+    const onOpenSessionDetail = useCallback(() => {
+        if (ctx.projectId != null && ctx.sessionId != null) {
+            navigation.navigate('SessionDetail', {
+                projectId: ctx.projectId,
+                sessionId: ctx.sessionId,
+            });
+        }
+    }, [ctx.projectId, ctx.sessionId, navigation]);
 
-  return (
-    <ChatTabNavigationProvider sessionBatchActive={sessionBatch.active} onExitSessionBatch={sessionBatch.exit} onOpenSessionDetail={onOpenSessionDetail}>
-      <ChatTabScreenContent sessionBatch={sessionBatch} />
-    </ChatTabNavigationProvider>
-  );
+    return (
+        <ChatTabNavigationProvider sessionBatchActive={sessionBatch.active} onExitSessionBatch={sessionBatch.exit} onOpenSessionDetail={onOpenSessionDetail}>
+            <ChatTabScreenContent sessionBatch={sessionBatch} />
+        </ChatTabNavigationProvider>
+    );
 }
 
 function ChatTabScreenContent({sessionBatch}: {sessionBatch: ReturnType<typeof useBatchSelection>}) {
-  const {tokens} = useTheme();
-  const insets = useSafeAreaInsets();
-  const ctx = useChatTabContext();
-  const controller = useChatTabController();
-  const nav = useChatTabNavigation();
-  const {setCurrentProject, setCurrentSession} = useMobileScope();
-  const navigation = useNavigation<Nav>();
+    const {tokens} = useTheme();
+    const insets = useSafeAreaInsets();
+    const ctx = useChatTabContext();
+    const controller = useChatTabController();
+    const nav = useChatTabNavigation();
+    const {setCurrentProject, setCurrentSession} = useMobileScope();
+    const navigation = useNavigation<Nav>();
 
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      tabBarStyle: MainTabBarStyle.resolveChat(ctx.chatSubview, tokens, insets),
-    });
-    // navigation 在 RN 中引用稳定；勿列入 deps，避免测试 mock 每次新建对象导致死循环
-  }, [ctx.chatSubview, insets.bottom, tokens.borderLight, tokens.tabBarBackground]);
+    useLayoutEffect(() => {
+        navigation.setOptions({
+            tabBarStyle: MainTabBarStyle.resolveChat(ctx.chatSubview, tokens, insets),
+        });
+        // navigation 在 RN 中引用稳定；勿列入 deps，避免测试 mock 每次新建对象导致死循环
+    }, [ctx.chatSubview, insets.bottom, tokens.borderLight, tokens.tabBarBackground]);
 
-  const backState = {
-    chatSubview: ctx.chatSubview,
-    conversationPanel: ctx.conversationPanel,
-    sessionListPanel: ctx.scope.sessionListPanel,
-    sessionDrawerOpen: ctx.sessionDrawerOpen,
-    mermaidViewerOpen: ctx.mermaidViewerOpen,
-    messageMenuOpen: ctx.webMenuOpen,
-    messageEditOpen: ctx.messageEditPrompt != null,
-    modelPickerOpen: ctx.modelPickerOpen,
-    agentPickerOpen: ctx.agentPickerOpen,
-    sessionRenameOpen: ctx.scope.sessionRenamePrompt != null,
-    projectDrawerOpen: ctx.scope.projectDrawerOpen,
-    sessionBatchActive: nav.state.sessionBatchActive,
-    workspaceCanGoUp: nav.state.workspaceCanGoUp,
-    workspaceGoUp: nav.actions.workspaceGoUp,
-  };
-  const backActions = {
-    backFromConversation: nav.actions.backFromConversation,
-    showChatPanel: nav.actions.showChatPanel,
-    closeSessionDrawer: nav.actions.closeSessionDrawer,
-    closeMermaidViewer: nav.actions.closeMermaidViewer,
-    closeMessageMenu: nav.actions.closeMessageMenu,
-    closeMessageEdit: nav.actions.closeMessageEdit,
-    closeModelPicker: nav.actions.closeModelPicker,
-    closeAgentPicker: nav.actions.closeAgentPicker,
-    closeSessionRename: nav.actions.closeSessionRename,
-    closeProjectDrawer: nav.actions.closeProjectDrawer,
-    exitSessionBatch: nav.actions.exitSessionBatch,
-    showSessionsPanel: nav.actions.showSessionsPanel,
-  };
-  useAndroidChatBackHandler(backState, backActions);
+    const backState = {
+        chatSubview: ctx.chatSubview,
+        conversationPanel: ctx.conversationPanel,
+        sessionListPanel: ctx.scope.sessionListPanel,
+        sessionDrawerOpen: ctx.sessionDrawerOpen,
+        mermaidViewerOpen: ctx.mermaidViewerOpen,
+        messageMenuOpen: ctx.webMenuOpen,
+        messageEditOpen: ctx.messageEditPrompt != null,
+        modelPickerOpen: ctx.modelPickerOpen,
+        agentPickerOpen: ctx.agentPickerOpen,
+        sessionRenameOpen: ctx.scope.sessionRenamePrompt != null,
+        projectDrawerOpen: ctx.scope.projectDrawerOpen,
+        sessionBatchActive: nav.state.sessionBatchActive,
+        workspaceCanGoUp: nav.state.workspaceCanGoUp,
+        workspaceGoUp: nav.actions.workspaceGoUp,
+    };
+    const backActions = {
+        backFromConversation: nav.actions.backFromConversation,
+        showChatPanel: nav.actions.showChatPanel,
+        closeSessionDrawer: nav.actions.closeSessionDrawer,
+        closeMermaidViewer: nav.actions.closeMermaidViewer,
+        closeMessageMenu: nav.actions.closeMessageMenu,
+        closeMessageEdit: nav.actions.closeMessageEdit,
+        closeModelPicker: nav.actions.closeModelPicker,
+        closeAgentPicker: nav.actions.closeAgentPicker,
+        closeSessionRename: nav.actions.closeSessionRename,
+        closeProjectDrawer: nav.actions.closeProjectDrawer,
+        exitSessionBatch: nav.actions.exitSessionBatch,
+        showSessionsPanel: nav.actions.showSessionsPanel,
+    };
+    useAndroidChatBackHandler(backState, backActions);
 
-  const openConversation = useCallback(
-    async (sid: string) => {
-      if (ctx.projectId == null) {
-        return;
-      }
-      await setCurrentSession(sid);
-      // 会话切换防闪：view cache 命中即同步采纳进 manager 的 idle 消息面
-      // （Step 7 收口：原 hook 的 hydrateFromSessionCache 等价迁移）。
-      ctx.runtime.sessionStreamUnitManager.hydrateSessionMessages(sid, ctx.projectId);
-      ctx.setChatSubview('conversation');
-      ctx.setConversationPanel('chat');
-    },
-    [ctx, setCurrentSession],
-  );
-
-  const confirmBatchDelete = useCallback(() => {
-    controller.confirmBatchDeleteSessions(sessionBatch.selectedCount, () =>
-      // 删除错误已在 deleteSelectedSessions 内部处理并 toast，
-      // 这里只兜底避免意外的 Promise 拒绝变成未处理告警。
-      ctx.scope.deleteSelectedSessions(sessionBatch.selectedIds, sessionBatch.exit).catch(() => undefined),
+    const openConversation = useCallback(
+        async (sid: string) => {
+            if (ctx.projectId == null) {
+                return;
+            }
+            await setCurrentSession(sid);
+            // 会话切换防闪：view cache 命中即同步采纳进 manager 的 idle 消息面
+            // （Step 7 收口：原 hook 的 hydrateFromSessionCache 等价迁移）。
+            ctx.runtime.sessionStreamUnitManager.hydrateSessionMessages(sid, ctx.projectId);
+            ctx.setChatSubview('conversation');
+            ctx.setConversationPanel('chat');
+        },
+        [ctx, setCurrentSession],
     );
-  }, [controller, sessionBatch, ctx.scope]);
 
-  // ⛶ 全屏编辑（照 onOpenSessionDetail 先例：chat-tab 目录零导航依赖，惯例是
-  // 父层注入回调）：跳的就是智能体配置那套全屏编辑页（PromptEditor 的 composer
-  // 变体——同一组件同一条键盘链，纯编辑态：预览/档位切换与保存按钮都不渲染，
-  // 编辑器退出即回填，没有显式保存动作）。初始文本走路由参数；退出回填写进
-  // 模块级存取（回调不可序列化，不走路由参数）。
-  //
-  // 回填链（chat-webview-unify Step 7 已验证闭合，两段都换了落点但语义不变）：
-  //   `onExit(text)` → `writeChatComposerDraft` → `setDraftRestoreToken(bump)` →
-  //   controller 的草稿水化 effect（依赖含 `draftRestoreToken`）重读 store →
-  //   controller `text` state 变 → 传给宿主的 `composerText` prop 变 →
-  //   宿主 M2 effect（外部写入判据 `composerText !== webTextRef`）下行 `setText`。
-  // 本回调自身对 scope 缺 projectId/sessionId 时静默 return；面板侧另有
-  // scopeReady 判据决定要不要注入，让 ⛶ 走既有 disabled 通路而不是变成点了
-  // 没反应的死按钮。
-  const setDraftRestoreToken = ctx.messages.setDraftRestoreToken;
-  const runtime = ctx.runtime;
-  const onOpenComposerFullscreen = useCallback(
-    (payload: {text: string}) => {
-      const targetSessionId = ctx.sessionId;
-      if (ctx.projectId == null || targetSessionId == null) {
-        return;
-      }
-      // composer 变体没有保存按钮：编辑器卸载（返回/手势）即回填——写入会话草稿
-      // （内联输入 onChangeText 落的是同一条 store），再 bump 草稿恢复令牌触发
-      // 下游从草稿重读（undo_send 同款回填链路）。
-      //
-      // D1 带外路径：全屏编辑器只改文本不改区间，退出回填时用正式编辑前的旧草稿
-      // 区间做一次 remap（全屏内的新 `$x` 不升格，与目标 5 一致）。旧草稿
-      // `tokenRanges` 为 undefined → **原样写 undefined**（不传字段、不做扫描
-      // 预处理），允许下一次水化兜底扫描一次（与旧版本草稿同语义）。
-      promptEditorOnSavedSlot.set(text => {
-        const previous = ChatComposerDraft.readState(targetSessionId);
-        ChatComposerDraft.write(targetSessionId, text, runtime.sessions, previous.tokenRanges !== undefined ? TokenRanges.remapTokenRanges(previous.text, text, previous.tokenRanges) : undefined);
-        setDraftRestoreToken(token => token + 1);
-      });
-      // D10 全屏守卫：进入全屏时的确认胶囊区间随路由带入（与 initialText 同一
-      // 坐标系）。全屏内新插入的区间由屏幕自身累积；这里只负责把进屏前的
-      // 草稿区间交过去，避免「已有胶囊贴尾 → 再插一颗」在无守卫时被整颗替换。
-      // 正常路径下 payload.text 与草稿文本一致（打字/插入都同步落草稿），
-      // remap 只是把「万一不一致」的坐标系对齐，相等时是恒等拷贝。
-      const entryDraft = ChatComposerDraft.readState(targetSessionId);
-      // 水化自愈落点③：区间必须以 **remap 后的 payload.text** 为基准逐条校验
-      //（entryDraft.text 与 payload.text 可能不同，用错基准会把合法区间判成越界）。
-      // 不合法的（旧格式 / 半截 / 越界）就地丢弃，全屏侧无需额外改动。
-      let remappedRanges: ReturnType<typeof TokenRanges.remapTokenRanges> | undefined;
-      if (entryDraft.tokenRanges !== undefined) {
-        remappedRanges = TokenRanges.remapTokenRanges(entryDraft.text, payload.text, entryDraft.tokenRanges).filter(range => ComposerHighlight.isValidTokenRangeText(payload.text, range));
-      }
-      navigation.navigate('PromptEditor', {
-        title: coreT({key: "ui.chat.edit_message_title"}),
-        initialText: payload.text,
-        variant: 'composer',
-        // @/$ tag 的选择器需要 scope（技能合并视图 / 会话工作区）
-        projectId: ctx.projectId,
-        sessionId: targetSessionId,
-        tokenRanges: remappedRanges,
-      });
-    },
-    [ctx.projectId, ctx.sessionId, runtime, setDraftRestoreToken, navigation],
-  );
+    const confirmBatchDelete = useCallback(() => {
+        controller.confirmBatchDeleteSessions(sessionBatch.selectedCount, () =>
+            // 删除错误已在 deleteSelectedSessions 内部处理并 toast，
+            // 这里只兜底避免意外的 Promise 拒绝变成未处理告警。
+            ctx.scope.deleteSelectedSessions(sessionBatch.selectedIds, sessionBatch.exit).catch(() => undefined),
+        );
+    }, [controller, sessionBatch, ctx.scope]);
 
-  const sessionRenameModal = (
-    <TextPromptModal
-      visible={ctx.scope.sessionRenamePrompt != null}
-      title={coreT({key: "ui.project.rename_session"})}
-      label={coreT({key: "ui.session.name_label"})}
-      placeholder={coreT({key: "ui.session.name_placeholder"})}
-      initialValue={ctx.scope.sessionRenamePrompt?.initialTitle ?? ''}
-      confirmLabel={coreT({key: "ui.common.save"})}
-      onClose={() => ctx.scope.setSessionRenamePrompt(undefined)}
-      onConfirm={async values => {
-        const prompt = ctx.scope.sessionRenamePrompt;
-        ctx.scope.setSessionRenamePrompt(undefined);
-        if (prompt) {
-          await ctx.scope.handleRenameSession(prompt.sessionId, values[0]);
-        }
-      }}
-    />
-  );
+    // ⛶ 全屏编辑（照 onOpenSessionDetail 先例：chat-tab 目录零导航依赖，惯例是
+    // 父层注入回调）：跳的就是智能体配置那套全屏编辑页（PromptEditor 的 composer
+    // 变体——同一组件同一条键盘链，纯编辑态：预览/档位切换与保存按钮都不渲染，
+    // 编辑器退出即回填，没有显式保存动作）。初始文本走路由参数；退出回填写进
+    // 模块级存取（回调不可序列化，不走路由参数）。
+    //
+    // 回填链（chat-webview-unify Step 7 已验证闭合，两段都换了落点但语义不变）：
+    //   `onExit(text)` → `writeChatComposerDraft` → `setDraftRestoreToken(bump)` →
+    //   controller 的草稿水化 effect（依赖含 `draftRestoreToken`）重读 store →
+    //   controller `text` state 变 → 传给宿主的 `composerText` prop 变 →
+    //   宿主 M2 effect（外部写入判据 `composerText !== webTextRef`）下行 `setText`。
+    // 本回调自身对 scope 缺 projectId/sessionId 时静默 return；面板侧另有
+    // scopeReady 判据决定要不要注入，让 ⛶ 走既有 disabled 通路而不是变成点了
+    // 没反应的死按钮。
+    const setDraftRestoreToken = ctx.messages.setDraftRestoreToken;
+    const runtime = ctx.runtime;
+    const onOpenComposerFullscreen = useCallback(
+        (payload: {text: string}) => {
+            const targetSessionId = ctx.sessionId;
+            if (ctx.projectId == null || targetSessionId == null) {
+                return;
+            }
+            // composer 变体没有保存按钮：编辑器卸载（返回/手势）即回填——写入会话草稿
+            // （内联输入 onChangeText 落的是同一条 store），再 bump 草稿恢复令牌触发
+            // 下游从草稿重读（undo_send 同款回填链路）。
+            //
+            // D1 带外路径：全屏编辑器只改文本不改区间，退出回填时用正式编辑前的旧草稿
+            // 区间做一次 remap（全屏内的新 `$x` 不升格，与目标 5 一致）。旧草稿
+            // `tokenRanges` 为 undefined → **原样写 undefined**（不传字段、不做扫描
+            // 预处理），允许下一次水化兜底扫描一次（与旧版本草稿同语义）。
+            promptEditorOnSavedSlot.set(text => {
+                const previous = ChatComposerDraft.readState(targetSessionId);
+                ChatComposerDraft.write(targetSessionId, text, runtime.sessions, previous.tokenRanges !== undefined ? TokenRanges.remapTokenRanges(previous.text, text, previous.tokenRanges) : undefined);
+                setDraftRestoreToken(token => token + 1);
+            });
+            // D10 全屏守卫：进入全屏时的确认胶囊区间随路由带入（与 initialText 同一
+            // 坐标系）。全屏内新插入的区间由屏幕自身累积；这里只负责把进屏前的
+            // 草稿区间交过去，避免「已有胶囊贴尾 → 再插一颗」在无守卫时被整颗替换。
+            // 正常路径下 payload.text 与草稿文本一致（打字/插入都同步落草稿），
+            // remap 只是把「万一不一致」的坐标系对齐，相等时是恒等拷贝。
+            const entryDraft = ChatComposerDraft.readState(targetSessionId);
+            // 水化自愈落点③：区间必须以 **remap 后的 payload.text** 为基准逐条校验
+            //（entryDraft.text 与 payload.text 可能不同，用错基准会把合法区间判成越界）。
+            // 不合法的（旧格式 / 半截 / 越界）就地丢弃，全屏侧无需额外改动。
+            let remappedRanges: ReturnType<typeof TokenRanges.remapTokenRanges> | undefined;
+            if (entryDraft.tokenRanges !== undefined) {
+                remappedRanges = TokenRanges.remapTokenRanges(entryDraft.text, payload.text, entryDraft.tokenRanges).filter(range => ComposerHighlight.isValidTokenRangeText(payload.text, range));
+            }
+            navigation.navigate('PromptEditor', {
+                title: coreT({key: "ui.chat.edit_message_title"}),
+                initialText: payload.text,
+                variant: 'composer',
+                // @/$ tag 的选择器需要 scope（技能合并视图 / 会话工作区）
+                projectId: ctx.projectId,
+                sessionId: targetSessionId,
+                tokenRanges: remappedRanges,
+            });
+        },
+        [ctx.projectId, ctx.sessionId, runtime, setDraftRestoreToken, navigation],
+    );
 
-  return (
-    <View style={[styles.root, {backgroundColor: tokens.background}]}>
-      <AppHeader pageKey="chat" />
-      {ctx.chatSubview === 'conversation' ? <ChatConversationPanel tokens={tokens} visible onOpenComposerFullscreen={onOpenComposerFullscreen} /> : null}
-      <ChatSessionListPanel
-        tokens={tokens}
-        visible={ctx.chatSubview === 'sessions'}
-        sessionListPanel={ctx.scope.sessionListPanel}
-        onSessionListPanelChange={ctx.scope.setSessionListPanel}
-        projectId={ctx.projectId}
-        sessionId={ctx.sessionId}
-        sessions={ctx.scope.sessions}
-        vfsRefreshKey={ctx.vfsRefreshKey}
-        projectVfs={ctx.scope.projectVfs}
-        projectWorktree={ctx.scope.projectWorktree}
-        sessionBatchActive={sessionBatch.active}
-        sessionBatchSelectedCount={sessionBatch.selectedCount}
-        onEnterSessionBatch={sessionBatch.enter}
-        onExitSessionBatch={sessionBatch.exit}
-        onConfirmBatchDelete={confirmBatchDelete}
-        onCreateSession={() => ctx.scope.handleCreateSession().catch(() => undefined)}
-        onOpenConversation={sid => openConversation(sid).catch(() => undefined)}
-        onToggleSessionSelect={sessionBatch.toggle}
-        isSessionSelected={sessionBatch.isSelected}
-        menuSessionId={ctx.scope.menuSessionId}
-        onMenuSessionIdChange={ctx.scope.setMenuSessionId}
-        onOpenSessionRename={ctx.scope.openSessionRenamePrompt}
-        onCopySession={sid => ctx.scope.handleCopySession(sid).catch(() => undefined)}
-        onConfirmDeleteSession={ctx.scope.confirmDeleteSession}
-        onOpenFileEditor={ctx.onOpenFileEditor}
-      />
-      {sessionRenameModal}
-      <ProjectDrawer
-        visible={ctx.scope.projectDrawerOpen}
-        projects={ctx.scope.projects}
-        currentProjectId={ctx.projectId}
-        onClose={() => ctx.scope.setProjectDrawerOpen(false)}
-        onSelect={async id => {
-          await setCurrentProject(id);
-          await ctx.scope.reloadLists();
-        }}
-        onCreateProject={ctx.scope.handleCreateProject}
-        onRenameProject={ctx.scope.handleRenameProject}
-        onDeleteSelected={ctx.scope.handleDeleteProjects}
-      />
-    </View>
-  );
+    const sessionRenameModal = (
+        <TextPromptModal
+            visible={ctx.scope.sessionRenamePrompt != null}
+            title={coreT({key: "ui.project.rename_session"})}
+            label={coreT({key: "ui.session.name_label"})}
+            placeholder={coreT({key: "ui.session.name_placeholder"})}
+            initialValue={ctx.scope.sessionRenamePrompt?.initialTitle ?? ''}
+            confirmLabel={coreT({key: "ui.common.save"})}
+            onClose={() => ctx.scope.setSessionRenamePrompt(undefined)}
+            onConfirm={async values => {
+                const prompt = ctx.scope.sessionRenamePrompt;
+                ctx.scope.setSessionRenamePrompt(undefined);
+                if (prompt) {
+                    await ctx.scope.handleRenameSession(prompt.sessionId, values[0]);
+                }
+            }}
+        />
+    );
+
+    return (
+        <View style={[styles.root, {backgroundColor: tokens.background}]}>
+            <AppHeader pageKey="chat" />
+            {ctx.chatSubview === 'conversation' ? <ChatConversationPanel tokens={tokens} visible onOpenComposerFullscreen={onOpenComposerFullscreen} /> : null}
+            <ChatSessionListPanel
+                tokens={tokens}
+                visible={ctx.chatSubview === 'sessions'}
+                sessionListPanel={ctx.scope.sessionListPanel}
+                onSessionListPanelChange={ctx.scope.setSessionListPanel}
+                projectId={ctx.projectId}
+                sessionId={ctx.sessionId}
+                sessions={ctx.scope.sessions}
+                vfsRefreshKey={ctx.vfsRefreshKey}
+                projectVfs={ctx.scope.projectVfs}
+                projectWorktree={ctx.scope.projectWorktree}
+                sessionBatchActive={sessionBatch.active}
+                sessionBatchSelectedCount={sessionBatch.selectedCount}
+                onEnterSessionBatch={sessionBatch.enter}
+                onExitSessionBatch={sessionBatch.exit}
+                onConfirmBatchDelete={confirmBatchDelete}
+                onCreateSession={() => ctx.scope.handleCreateSession().catch(() => undefined)}
+                onOpenConversation={sid => openConversation(sid).catch(() => undefined)}
+                onToggleSessionSelect={sessionBatch.toggle}
+                isSessionSelected={sessionBatch.isSelected}
+                menuSessionId={ctx.scope.menuSessionId}
+                onMenuSessionIdChange={ctx.scope.setMenuSessionId}
+                onOpenSessionRename={ctx.scope.openSessionRenamePrompt}
+                onCopySession={sid => ctx.scope.handleCopySession(sid).catch(() => undefined)}
+                onConfirmDeleteSession={ctx.scope.confirmDeleteSession}
+                onOpenFileEditor={ctx.onOpenFileEditor}
+            />
+            {sessionRenameModal}
+            <ProjectDrawer
+                visible={ctx.scope.projectDrawerOpen}
+                projects={ctx.scope.projects}
+                currentProjectId={ctx.projectId}
+                onClose={() => ctx.scope.setProjectDrawerOpen(false)}
+                onSelect={async id => {
+                    await setCurrentProject(id);
+                    await ctx.scope.reloadLists();
+                }}
+                onCreateProject={ctx.scope.handleCreateProject}
+                onRenameProject={ctx.scope.handleRenameProject}
+                onDeleteSelected={ctx.scope.handleDeleteProjects}
+            />
+        </View>
+    );
 }
 
 export function ChatTabScreen() {
-  return (
-    <ChatTabProvider>
-      <ChatTabScreenInner />
-    </ChatTabProvider>
-  );
+    return (
+        <ChatTabProvider>
+            <ChatTabScreenInner />
+        </ChatTabProvider>
+    );
 }
 
 const styles = StyleSheet.create({
-  root: {flex: 1},
+    root: {flex: 1},
 });

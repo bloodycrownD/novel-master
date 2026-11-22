@@ -9,15 +9,15 @@
  */
 
 import type {
-  VfsListEntry,
-  VfsReadResult,
+    VfsListEntry,
+    VfsReadResult,
 } from "@/domain/vfs/ports/vfs-service.port.js";
 import type { AppError } from "@/errors/app-error.js";
 import type { Result } from "@/errors/either.js";
 
 /** 只读物理树服务（无 scope，跨域拼接视图）。 */
 export interface PhysicalVfsService {
-  /**
+    /**
    * 列物理目录的直接子项（非递归；懒加载：展开哪层查哪层）。
    *
    * @remarks
@@ -28,9 +28,9 @@ export interface PhysicalVfsService {
    * 路径非法走返回值 `Result.err`（错误通道迁移四期）；
    * @throws `AppError("VFS_NOT_FOUND")` 当路径不落在任何域前缀下，或项目/会话不存在
    */
-  list(physicalPath: string): Promise<Result<VfsListEntry[], AppError>>;
+    list(physicalPath: string): Promise<Result<VfsListEntry[], AppError>>;
 
-  /**
+    /**
    * 批量列物理目录下**全部层级**的行（递归，含隐含中间目录行与虚拟目录合成）。
    *
    * @remarks
@@ -45,9 +45,9 @@ export interface PhysicalVfsService {
    * 路径非法走返回值 `Result.err`（错误通道迁移四期）；
    * @throws `AppError("VFS_NOT_FOUND")` 当路径不落在任何域前缀下，或项目/会话不存在
    */
-  listTree(physicalPath: string): Promise<Result<VfsListEntry[], AppError>>;
+    listTree(physicalPath: string): Promise<Result<VfsListEntry[], AppError>>;
 
-  /**
+    /**
    * 读物理路径对应的文件内容。
    *
    * @remarks
@@ -59,5 +59,5 @@ export interface PhysicalVfsService {
    * 路径非法 / scope 校验失败走返回值 `Result.err`（错误通道迁移四期）；
    * @throws `AppError("VFS_NOT_FOUND")` 当路径不落在任何域前缀下或文件不存在
    */
-  read(physicalPath: string): Promise<Result<VfsReadResult, AppError>>;
+    read(physicalPath: string): Promise<Result<VfsReadResult, AppError>>;
 }

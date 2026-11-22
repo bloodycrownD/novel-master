@@ -12,41 +12,41 @@
 import { AppErrorOps } from "@/errors/app-error.js";
 
 export const RollbackErrorGuards = {
-  /** 取 cause 链链尾；visited 拦住自引用与多节点环，环上停在重复进入的节点。 */
-  unwrapCause(error: unknown): unknown {
-    const visited = new Set<unknown>();
-    let cur: unknown = error;
-    while (typeof cur === "object" && cur !== null && !visited.has(cur)) {
-      visited.add(cur);
-      const next = (cur as {cause?: unknown}).cause;
-      if (next == null) return cur;
-      cur = next;
-    }
-    return cur;
-  },
+    /** 取 cause 链链尾；visited 拦住自引用与多节点环，环上停在重复进入的节点。 */
+    unwrapCause(error: unknown): unknown {
+        const visited = new Set<unknown>();
+        let cur: unknown = error;
+        while (typeof cur === "object" && cur !== null && !visited.has(cur)) {
+            visited.add(cur);
+            const next = (cur as {cause?: unknown}).cause;
+            if (next == null) return cur;
+            cur = next;
+        }
+        return cur;
+    },
 
-  /**
+    /**
    * 判断是否为 revision 缺失需回补错误（含 cause 链）；判的是链尾，不收窄外层对象。
    *
    * nm-style: keep-public — mobile 回滚确认流的跨包公共入口（public/session-fs 转发），不能内联。
    */
-  isRevisionBackfillRequired(error: unknown): boolean {
-    return AppErrorOps.is(RollbackErrorGuards.unwrapCause(error), "SESSION_FS_ROLLBACK_REVISION_BACKFILL_REQUIRED");
-  },
+    isRevisionBackfillRequired(error: unknown): boolean {
+        return AppErrorOps.is(RollbackErrorGuards.unwrapCause(error), "SESSION_FS_ROLLBACK_REVISION_BACKFILL_REQUIRED");
+    },
 
-  /**
+    /**
    * 从回补错误链尾读取缺失快照的逻辑路径列表（details.missingLogicalPaths，camelCase 供内部消费）。
    *
    * nm-style: keep-public — mobile 回补确认流读取缺失路径的跨包公共入口（public/session-fs 转发），不能内联。
    */
-  readRevisionBackfillMissingPaths(error: unknown): readonly string[] {
-    const target = RollbackErrorGuards.unwrapCause(error);
-    if (!AppErrorOps.is(target, "SESSION_FS_ROLLBACK_REVISION_BACKFILL_REQUIRED")) return [];
-    const details = target.details as { missingLogicalPaths?: readonly string[] } | undefined;
-    return details?.missingLogicalPaths ?? [];
-  },
+    readRevisionBackfillMissingPaths(error: unknown): readonly string[] {
+        const target = RollbackErrorGuards.unwrapCause(error);
+        if (!AppErrorOps.is(target, "SESSION_FS_ROLLBACK_REVISION_BACKFILL_REQUIRED")) return [];
+        const details = target.details as { missingLogicalPaths?: readonly string[] } | undefined;
+        return details?.missingLogicalPaths ?? [];
+    },
 
-  /**
+    /**
    * 判断错误是否可降级为仅截断消息（含 cause 链）。
    *
    * @remarks 当 error 或其 cause 链中存在 `SESSION_FS_ROLLBACK_VFS_RESTORE_FAILED` 或
@@ -54,11 +54,11 @@ export const RollbackErrorGuards = {
    *
    * nm-style: keep-public — mobile 回滚降级分支的跨包公共入口（public/session-fs 转发），不能内联。
    */
-  isVfsDegradable(error: unknown): boolean {
-    return (
-      AppErrorOps.is(RollbackErrorGuards.unwrapCause(error), "SESSION_FS_ROLLBACK_VFS_RESTORE_FAILED") ||
-      // undo_send 无 baseline：live 树非空时拒绝清空，上层可走「仅截断消息」降级
-      AppErrorOps.is(RollbackErrorGuards.unwrapCause(error), "SESSION_FS_ROLLBACK_UNDO_SEND_EMPTY_TARGET")
-    );
-  },
+    isVfsDegradable(error: unknown): boolean {
+        return (
+            AppErrorOps.is(RollbackErrorGuards.unwrapCause(error), "SESSION_FS_ROLLBACK_VFS_RESTORE_FAILED") ||
+            // undo_send 无 baseline：live 树非空时拒绝清空，上层可走「仅截断消息」降级
+            AppErrorOps.is(RollbackErrorGuards.unwrapCause(error), "SESSION_FS_ROLLBACK_UNDO_SEND_EMPTY_TARGET")
+        );
+    },
 } as const;

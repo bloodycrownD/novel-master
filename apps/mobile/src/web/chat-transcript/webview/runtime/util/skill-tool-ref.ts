@@ -19,10 +19,10 @@ const SKILL_TOOL_NAME = 'skill';
 
 /** 输入里可解析出跳转三元组的 action（与 core REF_ACTIONS 同集：list 无目标技能）。 */
 const REF_ACTIONS: Record<string, number> = {
-  load: 1,
-  read: 1,
-  write: 1,
-  edit: 1,
+    load: 1,
+    read: 1,
+    write: 1,
+    edit: 1,
 };
 
 /**
@@ -30,24 +30,24 @@ const REF_ACTIONS: Record<string, number> = {
  * 否则从 tool_use 输入解析（write/edit；pending 的 read 缺省域解析不出）。
  */
 export const SkillToolRef = {
-  resolve: (tool: ToolCallRow, projectId?: string): SkillRefMeta | undefined => {
-    if (tool.skillRef != null) return tool.skillRef;
-    const name = tool.name || '';
-    if (name !== SKILL_TOOL_NAME) return undefined;
-    const input = tool.input || {};
-    const action = input.action;
-    if (typeof action !== 'string' || !REF_ACTIONS[action]) return undefined;
-    const skillName = input.name;
-    if (typeof skillName !== 'string' || skillName.length === 0) return undefined;
-    const rawDomain = input.domain;
-    // domain 缺省：write/edit 补工具同款默认 project；load/read 缺省读生效副本，
-    // 实际命中域只有工具输出知道——返回 undefined，等行数据透传的 skillRef。
-    const domain = rawDomain === 'global' || rawDomain === 'project' ? rawDomain : action === 'load' || action === 'read' ? undefined : 'project';
-    if (domain == null) return undefined;
-    return {
-      domain,
-      name: skillName,
-      ...(domain === 'project' && projectId != null ? {projectId} : {}),
-    };
-  },
+    resolve: (tool: ToolCallRow, projectId?: string): SkillRefMeta | undefined => {
+        if (tool.skillRef != null) return tool.skillRef;
+        const name = tool.name || '';
+        if (name !== SKILL_TOOL_NAME) return undefined;
+        const input = tool.input || {};
+        const action = input.action;
+        if (typeof action !== 'string' || !REF_ACTIONS[action]) return undefined;
+        const skillName = input.name;
+        if (typeof skillName !== 'string' || skillName.length === 0) return undefined;
+        const rawDomain = input.domain;
+        // domain 缺省：write/edit 补工具同款默认 project；load/read 缺省读生效副本，
+        // 实际命中域只有工具输出知道——返回 undefined，等行数据透传的 skillRef。
+        const domain = rawDomain === 'global' || rawDomain === 'project' ? rawDomain : action === 'load' || action === 'read' ? undefined : 'project';
+        if (domain == null) return undefined;
+        return {
+            domain,
+            name: skillName,
+            ...(domain === 'project' && projectId != null ? {projectId} : {}),
+        };
+    },
 } as const;

@@ -14,57 +14,57 @@ import type { Result } from "@/errors/either.js";
  * Session abstraction for agent context (in-memory or chat-backed).
  */
 export interface AgentSession {
-  /** 本 session 的消息 session id（消息落库 / 读取用）。 */
-  readonly sessionId: string;
-  /**
+    /** 本 session 的消息 session id（消息落库 / 读取用）。 */
+    readonly sessionId: string;
+    /**
    * 常驻工作区前缀的规则评估与 workplace 服务归属 session id。
    *
    * 主 session 等于自身 sessionId；子 session 指向父 session（孙 agent 同样指向
    * 根父会话）——子 agent 在父 session 工作区工作：规则评估（evaluateRuleView）
    * 与文件列表都按父工作区来。agent-runner 据此组装 wtScope，无需区分主 / 子。
    */
-  readonly workplaceScopeSessionId: string;
-  /**
+    readonly workplaceScopeSessionId: string;
+    /**
    * rule_snapshot / file_cache 的 KKV 归属 session id。
    *
    * 永远等于自身 sessionId（子会话仅做规则快照隔离：KKV 存取走子 session 自己的
    * 域，规则评估仍按 {@link workplaceScopeSessionId} 指向的父工作区）。
    */
-  readonly kkvScopeSessionId: string;
+    readonly kkvScopeSessionId: string;
 
-  /** Visible messages in order (excludes `hidden`). */
-  list(): Promise<readonly ChatMessageData[]>;
+    /** Visible messages in order (excludes `hidden`). */
+    list(): Promise<readonly ChatMessageData[]>;
 
-  /**
+    /**
    * Appends a message to the session.
    *
    * 已知失败走返回值（五期门⑦）：消息仓储 `Result` 失败沿 `Result.err` 接力，
    * 由调用方（agent turn loop 框架级）统一收口；未知异常仍抛。
    */
-  append(
-    role: string,
-    content: MessageContent,
-    options?: {
-      provider?: string | null;
-      /** 厂商模型 id（透传到 `chat_message.model_name`）。 */
-      modelName?: string | null;
-      raw?: Record<string, unknown> | null;
-      usage?: MessageUsage;
-      /**
+    append(
+        role: string,
+        content: MessageContent,
+        options?: {
+            provider?: string | null;
+            /** 厂商模型 id（透传到 `chat_message.model_name`）。 */
+            modelName?: string | null;
+            raw?: Record<string, unknown> | null;
+            usage?: MessageUsage;
+            /**
        * 结构化附件（写入 `attachments_json`，不写 `content_json`）。
        *
        * task 工具 `fileAttachment` 借这条通道把显式路径物化成 `source:"attach"`
        * 附件挂到子会话首条 user 消息上——与主会话同链路（view-time hydrate +
        * alreadyReferenced 去重）。可选参数，老调用方零变化。
        */
-      attachments?: readonly MessageAttachment[];
-    }
-  ): Promise<Result<ChatMessageData, AppError>>;
+            attachments?: readonly MessageAttachment[];
+        }
+    ): Promise<Result<ChatMessageData, AppError>>;
 
-  /** Hides messages in a seq range (compaction). Returns affected count; 失败沿 `Result.err` 接力（五期门⑦）。 */
-  hideRange(fromSeq: number, toSeq: number): Promise<Result<number, AppError>>;
+    /** Hides messages in a seq range (compaction). Returns affected count; 失败沿 `Result.err` 接力（五期门⑦）。 */
+    hideRange(fromSeq: number, toSeq: number): Promise<Result<number, AppError>>;
 
-  /**
+    /**
    * 删除当前 session 中严格位于 `afterMessageId` 之后追加的消息（不含 anchor 自身）；
    * `afterMessageId` 为 null 时清空 session 内全部消息。
    *
@@ -72,5 +72,5 @@ export interface AgentSession {
    *
    * 用途：agent turn abort 时回滚到 turn 起点，避免残留 partial assistant 消息。
    */
-  truncateAfterMessage(afterMessageId: string | null): Promise<Result<void, AppError>>;
+    truncateAfterMessage(afterMessageId: string | null): Promise<Result<void, AppError>>;
 }

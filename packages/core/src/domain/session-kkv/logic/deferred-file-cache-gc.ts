@@ -10,7 +10,7 @@ import { FileCacheSql } from "@/infra/sql-template/generated/file_cache.mapper.g
 import { TdbcTemplate } from "@/infra/tdbc/logic/template-helper.js";
 
 export const DeferredFileCacheGc = {
-  /**
+    /**
    * 回收无引用的 `session_file_cache_blob` 行。
    *
    * 引用集 = `session_file_cache_entry` **全表**（所有会话的引用行），
@@ -28,9 +28,9 @@ export const DeferredFileCacheGc = {
    *
    * @returns 删除的孤儿 blob 行数
    */
-  run: async (conn: TdbcConnection): Promise<number> => {
-    const parser = new SqlTemplateParser();
-    const result = await TdbcTemplate.execute(conn, parser, FileCacheSql.deleteOrphanBlobs, {});
-    return result.changes;
-  },
+    run: async (conn: TdbcConnection): Promise<number> => {
+        const parser = new SqlTemplateParser();
+        const result = await TdbcTemplate.execute(conn, parser, FileCacheSql.deleteOrphanBlobs, {});
+        return result.changes;
+    },
 } as const;

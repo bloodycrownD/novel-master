@@ -61,19 +61,19 @@
 
 /** 单池上界与命名（name 只进诊断输出，用于定位是哪层在抖）。 */
 interface DecodedContentPoolLimits {
-  readonly name: string;
-  readonly maxEntries: number;
-  readonly maxChars: number;
+    readonly name: string;
+    readonly maxEntries: number;
+    readonly maxChars: number;
 }
 
 /** 池快照（测试与诊断观测面）。 */
 interface DecodedContentPoolStats {
-  readonly name: string;
-  readonly entries: number;
-  readonly chars: number;
-  readonly hits: number;
-  readonly misses: number;
-  readonly evictions: number;
+    readonly name: string;
+    readonly entries: number;
+    readonly chars: number;
+    readonly hits: number;
+    readonly misses: number;
+    readonly evictions: number;
 }
 
 /**
@@ -83,80 +83,80 @@ interface DecodedContentPoolStats {
  * 单例 {@link decodedContentCache}，不需要自己 new。
  */
 export class DecodedContentPool {
-  /** 迭代序 = 插入序：命中先删再插即 LRU 刷新，逐出取最前键。 */
-  private readonly lru = new Map<string, string>();
-  private chars = 0;
-  private hits = 0;
-  private misses = 0;
-  private evictions = 0;
+    /** 迭代序 = 插入序：命中先删再插即 LRU 刷新，逐出取最前键。 */
+    private readonly lru = new Map<string, string>();
+    private chars = 0;
+    private hits = 0;
+    private misses = 0;
+    private evictions = 0;
 
-  constructor(private readonly limits: DecodedContentPoolLimits) {}
+    constructor(private readonly limits: DecodedContentPoolLimits) {}
 
-  /** 命中返回缓存值（含空串）；miss 返回 null。 */
-  get(key: string): string | null {
-    const hit = this.lru.get(key);
-    if (hit == null) {
-      this.misses++;
-      return null;
+    /** 命中返回缓存值（含空串）；miss 返回 null。 */
+    get(key: string): string | null {
+        const hit = this.lru.get(key);
+        if (hit == null) {
+            this.misses++;
+            return null;
+        }
+        this.lru.delete(key);
+        this.lru.set(key, hit);
+        this.hits++;
+        return hit;
     }
-    this.lru.delete(key);
-    this.lru.set(key, hit);
-    this.hits++;
-    return hit;
-  }
 
-  set(key: string, value: string): void {
-    if (value.length > this.limits.maxChars) {
-      // 单条吃不下整个预算：不收录（见模块头「不收录」段），并清掉可能
-      // 存在的旧值，避免旧值占着预算不放。
-      this.delete(key);
-      return;
+    set(key: string, value: string): void {
+        if (value.length > this.limits.maxChars) {
+            // 单条吃不下整个预算：不收录（见模块头「不收录」段），并清掉可能
+            // 存在的旧值，避免旧值占着预算不放。
+            this.delete(key);
+            return;
+        }
+        const previous = this.lru.get(key);
+        if (previous != null) {
+            this.lru.delete(key);
+            this.chars -= previous.length;
+        }
+        this.lru.set(key, value);
+        this.chars += value.length;
+        while (this.lru.size > this.limits.maxEntries || this.chars > this.limits.maxChars) {
+            const oldest = this.lru.keys().next().value;
+            if (oldest == null) {
+                return;
+            }
+            this.delete(oldest);
+            this.evictions++;
+        }
     }
-    const previous = this.lru.get(key);
-    if (previous != null) {
-      this.lru.delete(key);
-      this.chars -= previous.length;
-    }
-    this.lru.set(key, value);
-    this.chars += value.length;
-    while (this.lru.size > this.limits.maxEntries || this.chars > this.limits.maxChars) {
-      const oldest = this.lru.keys().next().value;
-      if (oldest == null) {
-        return;
-      }
-      this.delete(oldest);
-      this.evictions++;
-    }
-  }
 
-  delete(key: string): void {
-    const previous = this.lru.get(key);
-    if (previous == null) {
-      return;
+    delete(key: string): void {
+        const previous = this.lru.get(key);
+        if (previous == null) {
+            return;
+        }
+        this.lru.delete(key);
+        this.chars -= previous.length;
     }
-    this.lru.delete(key);
-    this.chars -= previous.length;
-  }
 
-  /** 清空条目与计数器（整体归零，测试隔离用）。 */
-  clear(): void {
-    this.lru.clear();
-    this.chars = 0;
-    this.hits = 0;
-    this.misses = 0;
-    this.evictions = 0;
-  }
+    /** 清空条目与计数器（整体归零，测试隔离用）。 */
+    clear(): void {
+        this.lru.clear();
+        this.chars = 0;
+        this.hits = 0;
+        this.misses = 0;
+        this.evictions = 0;
+    }
 
-  stats(): DecodedContentPoolStats {
-    return {
-      name: this.limits.name,
-      entries: this.lru.size,
-      chars: this.chars,
-      hits: this.hits,
-      misses: this.misses,
-      evictions: this.evictions,
-    };
-  }
+    stats(): DecodedContentPoolStats {
+        return {
+            name: this.limits.name,
+            entries: this.lru.size,
+            chars: this.chars,
+            hits: this.hits,
+            misses: this.misses,
+            evictions: this.evictions,
+        };
+    }
 }
 
 /**
@@ -185,7 +185,7 @@ const CONTENT_BODY_POOL_MAX_ENTRIES = 1024;
  * 换库清池）；类只为其 LRU/预算行为可直测而导出，生产接线只认这一个实例。
  */
 export const decodedContentCache = new DecodedContentPool({
-  name: "content-body",
-  maxEntries: CONTENT_BODY_POOL_MAX_ENTRIES,
-  maxChars: CONTENT_BODY_POOL_MAX_CHARS,
+    name: "content-body",
+    maxEntries: CONTENT_BODY_POOL_MAX_ENTRIES,
+    maxChars: CONTENT_BODY_POOL_MAX_CHARS,
 });

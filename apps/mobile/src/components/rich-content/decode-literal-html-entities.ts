@@ -11,11 +11,11 @@ import {Text} from '@novel-master/core/common';
 
 // 文件名带动词 decode，按内容主体（保留尖括号的实体解码）起名 LiteralHtmlEntities。
 export namespace LiteralHtmlEntities {
-  /**
+    /**
    * sanitize 出口：仍修复 quot/amp 双重编码，但保留 `&lt;` / `&gt;`，
    * 使 TrustedHtml 以实体形式展示用户可见尖括号。
    */
-  export function decodeAfterSanitize(text: string): string {
-    return Text.decodeHtmlEntities(text, {preserveAngleBrackets: true});
-  }
+    export function decodeAfterSanitize(text: string): string {
+        return Text.decodeHtmlEntities(text, {preserveAngleBrackets: true});
+    }
 }

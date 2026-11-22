@@ -5,8 +5,8 @@ import {type ChatMessageData} from '@novel-master/core/chat';
 import {ScopeKeyCache} from './scope-key-cache';
 
 export type SessionViewCache = {
-  readonly messages: readonly ChatMessageData[];
-  readonly hasMoreMessages: boolean;
+    readonly messages: readonly ChatMessageData[];
+    readonly hasMoreMessages: boolean;
 };
 
 /**
@@ -21,7 +21,7 @@ const cache = ScopeKeyCache.create<SessionViewCache>({maxEntries: 500});
  * 会话视图缓存：key 收口、读写清理与水合窗口裁剪（隐藏 cache 对象）。
  */
 export const SessionViewCache = {
-  /**
+    /**
    * view-cache 命中采纳时的窗口裁剪：只取尾部 {@link SESSION_VIEW_HYDRATE_WINDOW} 条。
    *
    * 缓存里存的是「浏览史全量」——向上翻页每次 prepend 都会把整个消息面写回，
@@ -30,40 +30,40 @@ export const SessionViewCache = {
    * 重进越卡」的根因）。裁掉后 hasMore 相应置真（窗口外还有更早的，向上翻
    * 页按 DB 分页照常补齐——loadOlder 以消息面首行 seq 为锚，不依赖缓存）。
    */
-  hydrateWindowFromCache: (entry: SessionViewCache): SessionViewCache => {
-    if (entry.messages.length <= SESSION_VIEW_HYDRATE_WINDOW) {
-      return entry;
-    }
-    return {
-      messages: entry.messages.slice(-SESSION_VIEW_HYDRATE_WINDOW),
-      hasMoreMessages: true,
-    };
-  },
+    hydrateWindowFromCache: (entry: SessionViewCache): SessionViewCache => {
+        if (entry.messages.length <= SESSION_VIEW_HYDRATE_WINDOW) {
+            return entry;
+        }
+        return {
+            messages: entry.messages.slice(-SESSION_VIEW_HYDRATE_WINDOW),
+            hasMoreMessages: true,
+        };
+    },
 
-  // nm-style: keep-public — scoped cache 的 key 收口（隐藏 cache 对象）
-  key: (projectId: string, sessionId: string): string => cache.key(projectId, sessionId),
+    // nm-style: keep-public — scoped cache 的 key 收口（隐藏 cache 对象）
+    key: (projectId: string, sessionId: string): string => cache.key(projectId, sessionId),
 
-  // nm-style: keep-public — scoped cache 的读取收口（隐藏 cache 对象）
-  get: (key: string): SessionViewCache | undefined => cache.get(key),
+    // nm-style: keep-public — scoped cache 的读取收口（隐藏 cache 对象）
+    get: (key: string): SessionViewCache | undefined => cache.get(key),
 
-  set: (key: string, entry: SessionViewCache): void => {
-    cache.set(key, entry);
-  },
+    set: (key: string, entry: SessionViewCache): void => {
+        cache.set(key, entry);
+    },
 
-  clear: (key: string): void => {
-    cache.clear(key);
-  },
+    clear: (key: string): void => {
+        cache.clear(key);
+    },
 
-  /** 项目删除后按前缀清理其全部会话缓存（消息 tail 不残留）。 */
-  clearByProject: (projectId: string): void => {
-    cache.clearByProjectPrefix(projectId);
-  },
+    /** 项目删除后按前缀清理其全部会话缓存（消息 tail 不残留）。 */
+    clearByProject: (projectId: string): void => {
+        cache.clearByProjectPrefix(projectId);
+    },
 
-  /** Test-only: reset process-wide cache between cases. */
-  clearAll: (): void => {
-    cache.clearAll();
-  },
+    /** Test-only: reset process-wide cache between cases. */
+    clearAll: (): void => {
+        cache.clearAll();
+    },
 
-  /** Test-only: entry count for LRU-bound assertions. */
-  size: (): number => cache.size,
+    /** Test-only: entry count for LRU-bound assertions. */
+    size: (): number => cache.size,
 } as const;

@@ -5,36 +5,36 @@ import {Platform, StyleSheet, type ViewStyle} from 'react-native';
 import type {ThemeTokens} from '@/theme/tokens';
 
 type TabBarInsets = {
-  bottom: number;
+    bottom: number;
 };
 
 export namespace MainTabBarStyle {
-  /** 与 RootNavigator 初始 tabBarStyle 等价的完整底栏样式。 */
-  export function build(tokens: Pick<ThemeTokens, 'tabBarBackground' | 'borderLight'>, insets: TabBarInsets): ViewStyle {
-    return {
-      backgroundColor: tokens.tabBarBackground,
-      borderTopColor: tokens.borderLight,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      paddingTop: 8,
-      paddingBottom: Math.max(8, insets.bottom),
-      height: 56 + insets.bottom,
-      ...Platform.select({
-        android: {elevation: 8},
-        ios: {
-          shadowColor: '#000',
-          shadowOffset: {width: 0, height: -2},
-          shadowOpacity: 0.06,
-          shadowRadius: 8,
-        },
-      }),
-    };
-  }
-
-  /** 对话态隐藏底栏；会话列表态恢复完整样式。 */
-  export function resolveChat(chatSubview: 'sessions' | 'conversation', tokens: Pick<ThemeTokens, 'tabBarBackground' | 'borderLight'>, insets: TabBarInsets): ViewStyle {
-    if (chatSubview === 'conversation') {
-      return {display: 'none'};
+    /** 与 RootNavigator 初始 tabBarStyle 等价的完整底栏样式。 */
+    export function build(tokens: Pick<ThemeTokens, 'tabBarBackground' | 'borderLight'>, insets: TabBarInsets): ViewStyle {
+        return {
+            backgroundColor: tokens.tabBarBackground,
+            borderTopColor: tokens.borderLight,
+            borderTopWidth: StyleSheet.hairlineWidth,
+            paddingTop: 8,
+            paddingBottom: Math.max(8, insets.bottom),
+            height: 56 + insets.bottom,
+            ...Platform.select({
+                android: {elevation: 8},
+                ios: {
+                    shadowColor: '#000',
+                    shadowOffset: {width: 0, height: -2},
+                    shadowOpacity: 0.06,
+                    shadowRadius: 8,
+                },
+            }),
+        };
     }
-    return build(tokens, insets);
-  }
+
+    /** 对话态隐藏底栏；会话列表态恢复完整样式。 */
+    export function resolveChat(chatSubview: 'sessions' | 'conversation', tokens: Pick<ThemeTokens, 'tabBarBackground' | 'borderLight'>, insets: TabBarInsets): ViewStyle {
+        if (chatSubview === 'conversation') {
+            return {display: 'none'};
+        }
+        return build(tokens, insets);
+    }
 }

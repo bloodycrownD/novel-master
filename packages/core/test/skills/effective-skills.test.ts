@@ -10,108 +10,108 @@ import {  EffectiveSkills  } from "@/domain/skills/logic/effective-skills.js";
 import type { SkillSummary } from "@/domain/skills/model/skill.schema.js";
 
 function skill(
-  name: string,
-  domain: "global" | "project",
-  overrides: Partial<SkillSummary> = {},
+    name: string,
+    domain: "global" | "project",
+    overrides: Partial<SkillSummary> = {},
 ): SkillSummary {
-  return {
-    name,
-    description: `${name}-desc`,
-    domain,
-    valid: true,
-    ...overrides,
-  };
+    return {
+        name,
+        description: `${name}-desc`,
+        domain,
+        valid: true,
+        ...overrides,
+    };
 }
 
 describe("EffectiveSkills.compute（T-SK4）", () => {
-  it("global ∪ project 合并，按名称排序", () => {
-    const result = EffectiveSkills.compute({
-      global: [skill("alpha", "global"), skill("gamma", "global")],
-      project: [skill("beta", "project")],
+    it("global ∪ project 合并，按名称排序", () => {
+        const result = EffectiveSkills.compute({
+            global: [skill("alpha", "global"), skill("gamma", "global")],
+            project: [skill("beta", "project")],
+        });
+        assert.deepEqual(
+            result.map((s) => s.name),
+            ["alpha", "beta", "gamma"],
+        );
+        assert.deepEqual(
+            result.map((s) => s.domain),
+            ["global", "project", "global"],
+        );
+        assert.ok(result.every((s) => s.effective));
+        assert.ok(result.every((s) => !s.overridden && !s.disabled));
     });
-    assert.deepEqual(
-      result.map((s) => s.name),
-      ["alpha", "beta", "gamma"],
-    );
-    assert.deepEqual(
-      result.map((s) => s.domain),
-      ["global", "project", "global"],
-    );
-    assert.ok(result.every((s) => s.effective));
-    assert.ok(result.every((s) => !s.overridden && !s.disabled));
-  });
 
-  it("同名时 project 副本覆盖 global 版并标 overridden，global 原件不出现", () => {
-    const result = EffectiveSkills.compute({
-      global: [skill("helper", "global", { description: "global 版" })],
-      project: [skill("helper", "project", { description: "project 版" })],
+    it("同名时 project 副本覆盖 global 版并标 overridden，global 原件不出现", () => {
+        const result = EffectiveSkills.compute({
+            global: [skill("helper", "global", { description: "global 版" })],
+            project: [skill("helper", "project", { description: "project 版" })],
+        });
+        assert.equal(result.length, 1);
+        assert.equal(result[0]!.domain, "project");
+        assert.equal(result[0]!.description, "project 版");
+        assert.equal(result[0]!.overridden, true);
     });
-    assert.equal(result.length, 1);
-    assert.equal(result[0]!.domain, "project");
-    assert.equal(result[0]!.description, "project 版");
-    assert.equal(result[0]!.overridden, true);
-  });
 
-  it("负清单过滤：禁用技能保留但不计入生效", () => {
-    const result = EffectiveSkills.compute({
-      global: [skill("alpha", "global"), skill("beta", "global")],
-      project: [],
-      disabledNames: ["alpha"],
+    it("负清单过滤：禁用技能保留但不计入生效", () => {
+        const result = EffectiveSkills.compute({
+            global: [skill("alpha", "global"), skill("beta", "global")],
+            project: [],
+            disabledNames: ["alpha"],
+        });
+        const alpha = result.find((s) => s.name === "alpha")!;
+        assert.equal(alpha.disabled, true);
+        assert.equal(alpha.effective, false, "禁用技能不计入生效");
+        assert.equal(alpha.valid, true, "禁用不影响有效性");
+        const beta = result.find((s) => s.name === "beta")!;
+        assert.equal(beta.disabled, false);
+        assert.equal(beta.effective, true);
     });
-    const alpha = result.find((s) => s.name === "alpha")!;
-    assert.equal(alpha.disabled, true);
-    assert.equal(alpha.effective, false, "禁用技能不计入生效");
-    assert.equal(alpha.valid, true, "禁用不影响有效性");
-    const beta = result.find((s) => s.name === "beta")!;
-    assert.equal(beta.disabled, false);
-    assert.equal(beta.effective, true);
-  });
 
-  it("同名覆盖时禁用按名字命中（覆盖后的副本为准）", () => {
-    const result = EffectiveSkills.compute({
-      global: [skill("helper", "global")],
-      project: [skill("helper", "project")],
-      disabledNames: new Set(["helper"]),
+    it("同名覆盖时禁用按名字命中（覆盖后的副本为准）", () => {
+        const result = EffectiveSkills.compute({
+            global: [skill("helper", "global")],
+            project: [skill("helper", "project")],
+            disabledNames: new Set(["helper"]),
+        });
+        const helper = result.find((s) => s.name === "helper")!;
+        assert.equal(helper.domain, "project");
+        assert.equal(helper.overridden, true);
+        assert.equal(helper.disabled, true);
+        assert.equal(helper.effective, false);
     });
-    const helper = result.find((s) => s.name === "helper")!;
-    assert.equal(helper.domain, "project");
-    assert.equal(helper.overridden, true);
-    assert.equal(helper.disabled, true);
-    assert.equal(helper.effective, false);
-  });
 
-  it("无效技能保留并标 invalid，不计入生效", () => {
-    const result = EffectiveSkills.compute({
-      global: [
-        skill("broken", "global", {
-          valid: false,
-          invalidReason: "缺少 front matter",
-          description: null,
-        }),
-      ],
-      project: [],
+    it("无效技能保留并标 invalid，不计入生效", () => {
+        const result = EffectiveSkills.compute({
+            global: [
+                skill("broken", "global", {
+                    valid: false,
+                    invalidReason: "缺少 front matter",
+                    description: null,
+                }),
+            ],
+            project: [],
+        });
+        assert.equal(result.length, 1, "无效技能应保留在清单");
+        const broken = result[0]!;
+        assert.equal(broken.valid, false);
+        assert.equal(broken.invalidReason, "缺少 front matter");
+        assert.equal(broken.effective, false, "无效技能不计入生效");
     });
-    assert.equal(result.length, 1, "无效技能应保留在清单");
-    const broken = result[0]!;
-    assert.equal(broken.valid, false);
-    assert.equal(broken.invalidReason, "缺少 front matter");
-    assert.equal(broken.effective, false, "无效技能不计入生效");
-  });
 
-  it("无效技能的同名 project 副本有效时按副本生效", () => {
-    const result = EffectiveSkills.compute({
-      global: [
-        skill("helper", "global", { valid: false, invalidReason: "YAML 坏了" }),
-      ],
-      project: [skill("helper", "project")],
+    it("无效技能的同名 project 副本有效时按副本生效", () => {
+        const result = EffectiveSkills.compute({
+            global: [
+                skill("helper", "global", { valid: false, invalidReason: "YAML 坏了" }),
+            ],
+            project: [skill("helper", "project")],
+        });
+        const helper = result.find((s) => s.name === "helper")!;
+        assert.equal(helper.domain, "project");
+        assert.equal(helper.valid, true);
+        assert.equal(helper.effective, true);
     });
-    const helper = result.find((s) => s.name === "helper")!;
-    assert.equal(helper.domain, "project");
-    assert.equal(helper.valid, true);
-    assert.equal(helper.effective, true);
-  });
 
-  it("空输入返回空数组", () => {
-    assert.deepEqual(EffectiveSkills.compute({ global: [], project: [] }), []);
-  });
+    it("空输入返回空数组", () => {
+        assert.deepEqual(EffectiveSkills.compute({ global: [], project: [] }), []);
+    });
 });

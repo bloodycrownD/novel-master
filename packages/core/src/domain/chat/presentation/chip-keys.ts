@@ -18,14 +18,14 @@ export const CHIP_BARE_KEY = "label.attachment.attach_ref" as const;
 
 /** action → 二字/短词 key（userAttach/skillAttach 不进状态 chip，无 key）。 */
 export const CHIP_ACTION_KEYS = {
-  delete: "label.attachment.action.delete",
-  write: "label.attachment.action.write",
-  edit: "label.attachment.action.edit",
-  mkdir: "label.attachment.action.mkdir",
-  /** 同目录换名。 */
-  rename: "label.attachment.action.rename",
-  /** 跨目录移动。 */
-  move: "label.attachment.action.move",
-  workplaceChange: "label.attachment.action.workplace_change",
-  annotate: "label.attachment.action.annotate",
+    delete: "label.attachment.action.delete",
+    write: "label.attachment.action.write",
+    edit: "label.attachment.action.edit",
+    mkdir: "label.attachment.action.mkdir",
+    /** 同目录换名。 */
+    rename: "label.attachment.action.rename",
+    /** 跨目录移动。 */
+    move: "label.attachment.action.move",
+    workplaceChange: "label.attachment.action.workplace_change",
+    annotate: "label.attachment.action.annotate",
 } as const satisfies Partial<Record<MessageAttachmentAction, CoreMessageKey>>;

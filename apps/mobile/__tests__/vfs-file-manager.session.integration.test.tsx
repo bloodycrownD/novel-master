@@ -6,37 +6,37 @@ import {Alert} from 'react-native';
 const mockShowToast = jest.fn();
 
 jest.mock('@react-navigation/native', () => ({
-  useFocusEffect: () => undefined,
-  useIsFocused: () => true,
+    useFocusEffect: () => undefined,
+    useIsFocused: () => true,
 }));
 
 jest.mock('../src/theme/ThemeProvider', () => ({
-  useTheme: () => ({
-    tokens: {
-      background: '#000',
-      surface: '#111',
-      surfaceElevated: '#111',
-      border: '#222',
-      borderLight: '#222',
-      text: '#fff',
-      textSecondary: '#ccc',
-      textTertiary: '#777',
-      primary: '#08f',
-      danger: '#f00',
-    },
-  }),
+    useTheme: () => ({
+        tokens: {
+            background: '#000',
+            surface: '#111',
+            surfaceElevated: '#111',
+            border: '#222',
+            borderLight: '#222',
+            text: '#fff',
+            textSecondary: '#ccc',
+            textTertiary: '#777',
+            primary: '#08f',
+            danger: '#f00',
+        },
+    }),
 }));
 
 let capturedDismissOverlays: (() => void) | undefined;
 
 jest.mock('../src/hooks/useDismissOverlaysOnBlur', () => ({
-  useDismissOverlaysOnBlur: (dismiss: () => void) => {
-    capturedDismissOverlays = dismiss;
-  },
+    useDismissOverlaysOnBlur: (dismiss: () => void) => {
+        capturedDismissOverlays = dismiss;
+    },
 }));
 
 jest.mock('../src/components/chrome/ToastHost', () => ({
-  useToast: () => ({showToast: mockShowToast}),
+    useToast: () => ({showToast: mockShowToast}),
 }));
 
 /**
@@ -45,43 +45,43 @@ jest.mock('../src/components/chrome/ToastHost', () => ({
  * formatError 渲染分叉。
  */
 jest.mock('../src/errors/toast-message', () =>
-  jest.requireActual('../src/errors/toast-message'),
+    jest.requireActual('../src/errors/toast-message'),
 );
 
 jest.mock('../src/services/vfs-operations.service', () => {
-  const legacy = {
-  createVfsDirectory: jest.fn(),
-  createVfsFile: jest.fn(),
-  deleteScopedVfsEntry: jest.fn(),
-  renameVfsDirectory: jest.fn(),
-  renameVfsFile: jest.fn(),
-  sessionCreateVfsDirectory: jest.fn(),
-  sessionCreateVfsFile: jest.fn(),
-  sessionRenameVfsDirectory: jest.fn(),
-  sessionRenameVfsFile: jest.fn(),
+    const legacy = {
+    createVfsDirectory: jest.fn(),
+    createVfsFile: jest.fn(),
+    deleteScopedVfsEntry: jest.fn(),
+    renameVfsDirectory: jest.fn(),
+    renameVfsFile: jest.fn(),
+    sessionCreateVfsDirectory: jest.fn(),
+    sessionCreateVfsFile: jest.fn(),
+    sessionRenameVfsDirectory: jest.fn(),
+    sessionRenameVfsFile: jest.fn(),
 };
-  return {...legacy, VfsOperationsService: {deleteScopedEntry: legacy.deleteScopedVfsEntry, sessionCreateFile: legacy.sessionCreateVfsFile, sessionCreateDirectory: legacy.sessionCreateVfsDirectory, sessionRenameFile: legacy.sessionRenameVfsFile, sessionRenameFile: legacy.sessionRenameVfsDirectory}};
+    return {...legacy, VfsOperationsService: {deleteScopedEntry: legacy.deleteScopedVfsEntry, sessionCreateFile: legacy.sessionCreateVfsFile, sessionCreateDirectory: legacy.sessionCreateVfsDirectory, sessionRenameFile: legacy.sessionRenameVfsFile, sessionRenameFile: legacy.sessionRenameVfsDirectory}};
 });
 
 jest.mock('../src/services/workplace-operations.service', () => {
-  const actual = jest.requireActual(
-    '../src/services/workplace-operations.service',
-  ) as typeof import('../src/services/workplace-operations.service');
-  return {
-    ...actual,
-    WorkplaceOperationsService: {
-      ...actual.WorkplaceOperationsService,
-      batchSetDirRulesEnabled: jest.fn(),
-      cycleFileInclusion: jest.fn(),
-      migrateDirRename: jest.fn(),
-      toggleDirRuleEnabled: jest.fn(),
-    },
-  };
+    const actual = jest.requireActual(
+        '../src/services/workplace-operations.service',
+    ) as typeof import('../src/services/workplace-operations.service');
+    return {
+        ...actual,
+        WorkplaceOperationsService: {
+            ...actual.WorkplaceOperationsService,
+            batchSetDirRulesEnabled: jest.fn(),
+            cycleFileInclusion: jest.fn(),
+            migrateDirRename: jest.fn(),
+            toggleDirRuleEnabled: jest.fn(),
+        },
+    };
 });
 
 type CapturedSheet = {
-  onSelect: (action: string) => void;
-  items: {action: string; label?: string}[];
+    onSelect: (action: string) => void;
+    items: {action: string; label?: string}[];
 };
 
 /**
@@ -89,7 +89,7 @@ type CapturedSheet = {
  * （直接 cast 成 jest.Mock 会把 mockResolvedValue 的入参推成 never）。
  */
 function mockFn(fn: unknown) {
-  return fn as jest.Mock<(...args: any[]) => any>;
+    return fn as jest.Mock<(...args: any[]) => any>;
 }
 
 let capturedEntityMenuOnSelect: ((action: string) => void) | undefined;
@@ -101,74 +101,74 @@ let capturedMoreMenu: CapturedSheet | undefined;
 let capturedImportSheet: CapturedSheet | undefined;
 
 jest.mock('../src/components/sheet/BottomSheetMenu', () => ({
-  BottomSheetMenu: ({
-    visible,
-    onSelect,
-    items,
-  }: {
-    visible: boolean;
-    onSelect: (action: string) => void;
-    items: {action: string; label?: string}[];
-  }) => {
-    const actions = (items ?? []).map(item => item.action);
-    // 三张 sheet 各自用互斥的 action 特征识别：行菜单含 rename/delete、
-    // more 菜单含 create-file、导入形式 sheet 含 file/zip。
-    if (visible && actions.some(a => a === 'rename' || a === 'delete')) {
-      capturedEntityMenu = {onSelect, items};
-      capturedEntityMenuOnSelect = onSelect;
-    }
-    if (visible && actions.some(a => a === 'create-file')) {
-      capturedMoreMenu = {onSelect, items};
-      capturedMoreMenuOnSelect = onSelect;
-    }
-    if (visible && actions.some(a => a === 'file' || a === 'zip')) {
-      capturedImportSheet = {onSelect, items};
-    }
-    return null;
-  },
+    BottomSheetMenu: ({
+        visible,
+        onSelect,
+        items,
+    }: {
+        visible: boolean;
+        onSelect: (action: string) => void;
+        items: {action: string; label?: string}[];
+    }) => {
+        const actions = (items ?? []).map(item => item.action);
+        // 三张 sheet 各自用互斥的 action 特征识别：行菜单含 rename/delete、
+        // more 菜单含 create-file、导入形式 sheet 含 file/zip。
+        if (visible && actions.some(a => a === 'rename' || a === 'delete')) {
+            capturedEntityMenu = {onSelect, items};
+            capturedEntityMenuOnSelect = onSelect;
+        }
+        if (visible && actions.some(a => a === 'create-file')) {
+            capturedMoreMenu = {onSelect, items};
+            capturedMoreMenuOnSelect = onSelect;
+        }
+        if (visible && actions.some(a => a === 'file' || a === 'zip')) {
+            capturedImportSheet = {onSelect, items};
+        }
+        return null;
+    },
 }));
 
 jest.mock('../src/components/sheet/DirectoryRuleSheet', () => ({
-  DirectoryRuleSheet: ({
-    visible,
-    onSave,
-  }: {
-    visible: boolean;
-    onSave: (input: unknown) => Promise<void>;
-  }) => {
-    if (visible) {
-      capturedDirRuleOnSave = onSave;
-    }
-    return null;
-  },
+    DirectoryRuleSheet: ({
+        visible,
+        onSave,
+    }: {
+        visible: boolean;
+        onSave: (input: unknown) => Promise<void>;
+    }) => {
+        if (visible) {
+            capturedDirRuleOnSave = onSave;
+        }
+        return null;
+    },
 }));
 
 jest.mock('../src/components/prompt/TemplatePullButton', () => ({
-  TemplatePullButton: () => null,
+    TemplatePullButton: () => null,
 }));
 
 jest.mock('../src/services/vfs-zip.service', () => {
-  const legacy = {
-  exportVfsZip: jest.fn(),
-  importVfsZip: jest.fn(),
+    const legacy = {
+    exportVfsZip: jest.fn(),
+    importVfsZip: jest.fn(),
 };
-  return {...legacy, VfsZipService: {exportZip: legacy.exportVfsZip, importZip: legacy.importVfsZip}};
+    return {...legacy, VfsZipService: {exportZip: legacy.exportVfsZip, importZip: legacy.importVfsZip}};
 });
 
 jest.mock('../src/services/vfs-character-card.service', () => {
-  const legacy = {
-  importCharacterCard: jest.fn(),
+    const legacy = {
+    importCharacterCard: jest.fn(),
 };
-  return {...legacy, VfsCharacterCardService: {import: legacy.importCharacterCard}};
+    return {...legacy, VfsCharacterCardService: {import: legacy.importCharacterCard}};
 });
 
 // Step 5 起组件直接 import 单文件服务（导入走 picker / 系统 UI，测试里一律 mock）。
 jest.mock('../src/services/vfs-single-file.service', () => {
-  const legacy = {
-  exportVfsSingleFile: jest.fn(),
-  importVfsSingleFile: jest.fn(),
+    const legacy = {
+    exportVfsSingleFile: jest.fn(),
+    importVfsSingleFile: jest.fn(),
 };
-  return {...legacy, VfsSingleFileService: {exportFile: legacy.exportVfsSingleFile, importFile: legacy.importVfsSingleFile}};
+    return {...legacy, VfsSingleFileService: {exportFile: legacy.exportVfsSingleFile, importFile: legacy.importVfsSingleFile}};
 });
 
 import {WorkplaceOperationsService} from '../src/services/workplace-operations.service'
@@ -178,25 +178,25 @@ import {VfsSingleFileService} from '../src/services/vfs-single-file.service'
 import {AppError} from '@novel-master/core/errors';
 
 const {VfsFileManager} =
-  require('../src/components/vfs/VfsFileManager') as typeof import('../src/components/vfs/VfsFileManager');
+    require('../src/components/vfs/VfsFileManager') as typeof import('../src/components/vfs/VfsFileManager');
 
 const fixedListRows = [
-  {
-    kind: 'dir' as const,
-    path: '/',
-    ruleState: 'rule_on' as const,
-  },
-  {
-    kind: 'file' as const,
-    path: '/note.md',
-    inclusionMode: 'auto' as const,
-    displayState: 'full' as const,
-  },
+    {
+        kind: 'dir' as const,
+        path: '/',
+        ruleState: 'rule_on' as const,
+    },
+    {
+        kind: 'file' as const,
+        path: '/note.md',
+        inclusionMode: 'auto' as const,
+        displayState: 'full' as const,
+    },
 ];
 
 const buildListRows = jest.fn(async () => ({
-  ok: true as const,
-  value: fixedListRows,
+    ok: true as const,
+    value: fixedListRows,
 }));
 // reload 现以 vfs.list() 为权威源（worktree 仅作元数据补丁）：
 // 不在 vfs.list 结果里的路径会被当孤儿残留过滤掉，因此 list 需返回
@@ -204,58 +204,58 @@ const buildListRows = jest.fn(async () => ({
 // 显式标注返回类型：菜单收敛用例需要 mock 出目录行。
 type ListEntry = {path: string; kind: 'file' | 'directory'};
 const list = jest.fn(async (): Promise<{ok: true; value: ListEntry[]}> => ({
-  ok: true,
-  value: [{path: '/note.md', kind: 'file'}],
+    ok: true,
+    value: [{path: '/note.md', kind: 'file'}],
 }));
 const getDirRule = jest.fn(async () => ({ok: true as const, value: null}));
 const setDirRule = jest.fn(async () => ({ok: true as const, value: undefined}));
 
 const mockRuntime = {
-  workplace: jest.fn(),
-  sessionKkv: {
-    clearSession: jest.fn(async () => undefined),
-    listKeys: jest.fn(async () => []),
-  },
+    workplace: jest.fn(),
+    sessionKkv: {
+        clearSession: jest.fn(async () => undefined),
+        listKeys: jest.fn(async () => []),
+    },
 };
 
 jest.mock('../src/hooks/useRuntime', () => ({
-  useRuntime: () => mockRuntime,
+    useRuntime: () => mockRuntime,
 }));
 
 function flushPromises(): Promise<void> {
-  return new Promise(resolve => setImmediate(resolve));
+    return new Promise(resolve => setImmediate(resolve));
 }
 
 async function waitFor(
-  predicate: () => boolean,
-  options?: {maxAttempts?: number},
+    predicate: () => boolean,
+    options?: {maxAttempts?: number},
 ): Promise<void> {
-  const maxAttempts = options?.maxAttempts ?? 50;
-  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    if (predicate()) {
-      return;
+    const maxAttempts = options?.maxAttempts ?? 50;
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+        if (predicate()) {
+            return;
+        }
+        await act(async () => {
+            await flushPromises();
+        });
     }
-    await act(async () => {
-      await flushPromises();
-    });
-  }
-  throw new Error('waitFor: condition not met');
+    throw new Error('waitFor: condition not met');
 }
 
 function renderSessionVfm(rootPath = '/') {
-  return (
-    <VfsFileManager
-      scope={{
-        kind: 'session',
-        projectId: 'p1',
-        sessionId: 's1',
-      }}
-      vfs={{list} as any}
-      workplace={{buildListRows, getDirRule, setDirRule} as any}
-      onOpenFile={jest.fn()}
-      rootPath={rootPath}
-    />
-  );
+    return (
+        <VfsFileManager
+            scope={{
+                kind: 'session',
+                projectId: 'p1',
+                sessionId: 's1',
+            }}
+            vfs={{list} as any}
+            workplace={{buildListRows, getDirRule, setDirRule} as any}
+            onOpenFile={jest.fn()}
+            rootPath={rootPath}
+        />
+    );
 }
 
 /**
@@ -263,148 +263,148 @@ function renderSessionVfm(rootPath = '/') {
  * 防「导出」泄漏到技能域的回归断言面。
  */
 function renderSessionVfmWithoutWorkplace() {
-  return (
-    <VfsFileManager
-      scope={{
-        kind: 'session',
-        projectId: 'p1',
-        sessionId: 's1',
-      }}
-      vfs={{list} as any}
-      onOpenFile={jest.fn()}
-      rootPath="/"
-    />
-  );
+    return (
+        <VfsFileManager
+            scope={{
+                kind: 'session',
+                projectId: 'p1',
+                sessionId: 's1',
+            }}
+            vfs={{list} as any}
+            onOpenFile={jest.fn()}
+            rootPath="/"
+        />
+    );
 }
 
 /** 复位被 mock 的服务：每次用例自己决定返回值。 */
 function resetMenuServiceMocks() {
-  mockFn(VfsZipService.importZip).mockReset();
-  mockFn(VfsZipService.exportZip).mockReset();
-  mockFn(VfsZipService.exportZip).mockResolvedValue({ok: true, value: 'saved'});
-  mockFn(VfsCharacterCardService.import).mockReset();
-  mockFn(VfsCharacterCardService.import).mockResolvedValue(undefined);
-  mockFn(VfsSingleFileService.importFile).mockReset();
-  mockFn(VfsSingleFileService.exportFile).mockReset();
-  mockFn(VfsSingleFileService.exportFile).mockResolvedValue({ok: true, value: 'saved'});
+    mockFn(VfsZipService.importZip).mockReset();
+    mockFn(VfsZipService.exportZip).mockReset();
+    mockFn(VfsZipService.exportZip).mockResolvedValue({ok: true, value: 'saved'});
+    mockFn(VfsCharacterCardService.import).mockReset();
+    mockFn(VfsCharacterCardService.import).mockResolvedValue(undefined);
+    mockFn(VfsSingleFileService.importFile).mockReset();
+    mockFn(VfsSingleFileService.exportFile).mockReset();
+    mockFn(VfsSingleFileService.exportFile).mockResolvedValue({ok: true, value: 'saved'});
 }
 
 describe('VfsFileManager session list (no BlockStore capture)', () => {
-  let tree: TestRenderer.ReactTestRenderer | undefined;
+    let tree: TestRenderer.ReactTestRenderer | undefined;
 
-  beforeEach(() => {
-    buildListRows.mockClear();
-    list.mockClear();
-    getDirRule.mockClear();
-    setDirRule.mockClear();
-    mockShowToast.mockClear();
-    capturedEntityMenuOnSelect = undefined;
-    capturedMoreMenuOnSelect = undefined;
-    capturedDirRuleOnSave = undefined;
-    capturedEntityMenu = undefined;
-    capturedMoreMenu = undefined;
-    capturedImportSheet = undefined;
-    capturedDismissOverlays = undefined;
-    (WorkplaceOperationsService.cycleFileInclusion as jest.Mock).mockReset();
-    (WorkplaceOperationsService.cycleFileInclusion as jest.Mock).mockResolvedValue('show');
-    buildListRows.mockResolvedValue({ok: true, value: fixedListRows});
-    // 复位各用例可能改过的 list 返回值（默认只有 /note.md 文件行）。
-    list.mockResolvedValue({
-      ok: true,
-      value: [{path: '/note.md', kind: 'file'} as ListEntry],
-    });
-    resetMenuServiceMocks();
-  });
-
-  afterEach(() => {
-    if (tree != null) {
-      act(() => {
-        tree!.unmount();
-      });
-    }
-    tree = undefined;
-  });
-
-  it('session reload uses buildListRows and never snapshot for list', async () => {
-    await act(async () => {
-      tree = TestRenderer.create(renderSessionVfm());
-      await flushPromises();
+    beforeEach(() => {
+        buildListRows.mockClear();
+        list.mockClear();
+        getDirRule.mockClear();
+        setDirRule.mockClear();
+        mockShowToast.mockClear();
+        capturedEntityMenuOnSelect = undefined;
+        capturedMoreMenuOnSelect = undefined;
+        capturedDirRuleOnSave = undefined;
+        capturedEntityMenu = undefined;
+        capturedMoreMenu = undefined;
+        capturedImportSheet = undefined;
+        capturedDismissOverlays = undefined;
+        (WorkplaceOperationsService.cycleFileInclusion as jest.Mock).mockReset();
+        (WorkplaceOperationsService.cycleFileInclusion as jest.Mock).mockResolvedValue('show');
+        buildListRows.mockResolvedValue({ok: true, value: fixedListRows});
+        // 复位各用例可能改过的 list 返回值（默认只有 /note.md 文件行）。
+        list.mockResolvedValue({
+            ok: true,
+            value: [{path: '/note.md', kind: 'file'} as ListEntry],
+        });
+        resetMenuServiceMocks();
     });
 
-    expect(buildListRows).toHaveBeenCalled();
-  });
-
-  it('path change triggers buildListRows reload without snapshot', async () => {
-    await act(async () => {
-      tree = TestRenderer.create(renderSessionVfm());
-      await flushPromises();
-    });
-    buildListRows.mockClear();
-
-    await act(async () => {
-      tree!.update(renderSessionVfm('/subdir'));
-      await flushPromises();
-    });
-    expect(buildListRows).toHaveBeenCalled();
-  });
-
-  it('T-WEC6: setDirRule 经 VfsFileManager 成功且不依赖 capture', async () => {
-    await act(async () => {
-      tree = TestRenderer.create(renderSessionVfm());
-      await flushPromises();
-    });
-    buildListRows.mockClear();
-
-    const moreBtn = tree!.root.findByProps({testID: 'vfs-more-action'});
-    await act(async () => {
-      moreBtn.props.onPress();
-      await flushPromises();
-    });
-    expect(capturedMoreMenuOnSelect).toBeDefined();
-
-    await act(async () => {
-      capturedMoreMenuOnSelect!('directory-rule');
-      await flushPromises();
+    afterEach(() => {
+        if (tree != null) {
+            act(() => {
+                tree!.unmount();
+            });
+        }
+        tree = undefined;
     });
 
-    await waitFor(() => capturedDirRuleOnSave != null);
-    expect(getDirRule).toHaveBeenCalled();
+    it('session reload uses buildListRows and never snapshot for list', async () => {
+        await act(async () => {
+            tree = TestRenderer.create(renderSessionVfm());
+            await flushPromises();
+        });
 
-    await act(async () => {
-      await capturedDirRuleOnSave!({
-        logicalPath: '/',
-        ruleEnabled: true,
-        sortField: 'name',
-        sortOrder: 'asc',
-        fillPolicy: 'filename',
-      });
-      await flushPromises();
+        expect(buildListRows).toHaveBeenCalled();
     });
 
-    expect(setDirRule).toHaveBeenCalled();
-    expect(buildListRows).toHaveBeenCalled();
-  });
+    it('path change triggers buildListRows reload without snapshot', async () => {
+        await act(async () => {
+            tree = TestRenderer.create(renderSessionVfm());
+            await flushPromises();
+        });
+        buildListRows.mockClear();
 
-  it('file toggle-include 仅 cycle 规则，无 BlockStore', async () => {
-    await act(async () => {
-      tree = TestRenderer.create(renderSessionVfm());
-      await flushPromises();
+        await act(async () => {
+            tree!.update(renderSessionVfm('/subdir'));
+            await flushPromises();
+        });
+        expect(buildListRows).toHaveBeenCalled();
     });
 
-    const menuBtn = tree!.root.findByProps({testID: 'vfs-row-menu-note.md'});
-    await act(async () => {
-      menuBtn.props.onPress();
-      await flushPromises();
-    });
-    expect(capturedEntityMenuOnSelect).toBeDefined();
+    it('T-WEC6: setDirRule 经 VfsFileManager 成功且不依赖 capture', async () => {
+        await act(async () => {
+            tree = TestRenderer.create(renderSessionVfm());
+            await flushPromises();
+        });
+        buildListRows.mockClear();
 
-    await act(async () => {
-      await capturedEntityMenuOnSelect!('toggle-include');
-      await flushPromises();
+        const moreBtn = tree!.root.findByProps({testID: 'vfs-more-action'});
+        await act(async () => {
+            moreBtn.props.onPress();
+            await flushPromises();
+        });
+        expect(capturedMoreMenuOnSelect).toBeDefined();
+
+        await act(async () => {
+            capturedMoreMenuOnSelect!('directory-rule');
+            await flushPromises();
+        });
+
+        await waitFor(() => capturedDirRuleOnSave != null);
+        expect(getDirRule).toHaveBeenCalled();
+
+        await act(async () => {
+            await capturedDirRuleOnSave!({
+                logicalPath: '/',
+                ruleEnabled: true,
+                sortField: 'name',
+                sortOrder: 'asc',
+                fillPolicy: 'filename',
+            });
+            await flushPromises();
+        });
+
+        expect(setDirRule).toHaveBeenCalled();
+        expect(buildListRows).toHaveBeenCalled();
     });
 
-    expect(WorkplaceOperationsService.cycleFileInclusion).toHaveBeenCalled();
-  });
+    it('file toggle-include 仅 cycle 规则，无 BlockStore', async () => {
+        await act(async () => {
+            tree = TestRenderer.create(renderSessionVfm());
+            await flushPromises();
+        });
+
+        const menuBtn = tree!.root.findByProps({testID: 'vfs-row-menu-note.md'});
+        await act(async () => {
+            menuBtn.props.onPress();
+            await flushPromises();
+        });
+        expect(capturedEntityMenuOnSelect).toBeDefined();
+
+        await act(async () => {
+            await capturedEntityMenuOnSelect!('toggle-include');
+            await flushPromises();
+        });
+
+        expect(WorkplaceOperationsService.cycleFileInclusion).toHaveBeenCalled();
+    });
 });
 
 /**
@@ -412,366 +412,366 @@ describe('VfsFileManager session list (no BlockStore capture)', () => {
  * 「导入」「导出」+ 第三张导入形式 sheet + 导出按行类型分流。
  */
 describe('VfsFileManager 导入导出菜单（Step 5）', () => {
-  let tree: TestRenderer.ReactTestRenderer | undefined;
+    let tree: TestRenderer.ReactTestRenderer | undefined;
 
-  beforeEach(() => {
-    buildListRows.mockClear();
-    list.mockClear();
-    mockShowToast.mockClear();
-    capturedEntityMenu = undefined;
-    capturedMoreMenu = undefined;
-    capturedImportSheet = undefined;
-    capturedDismissOverlays = undefined;
-    list.mockResolvedValue({
-      ok: true,
-      value: [{path: '/note.md', kind: 'file'} as ListEntry],
+    beforeEach(() => {
+        buildListRows.mockClear();
+        list.mockClear();
+        mockShowToast.mockClear();
+        capturedEntityMenu = undefined;
+        capturedMoreMenu = undefined;
+        capturedImportSheet = undefined;
+        capturedDismissOverlays = undefined;
+        list.mockResolvedValue({
+            ok: true,
+            value: [{path: '/note.md', kind: 'file'} as ListEntry],
+        });
+        buildListRows.mockResolvedValue({ok: true, value: fixedListRows});
+        resetMenuServiceMocks();
     });
-    buildListRows.mockResolvedValue({ok: true, value: fixedListRows});
-    resetMenuServiceMocks();
-  });
 
-  afterEach(() => {
-    if (tree != null) {
-      act(() => {
-        tree!.unmount();
-      });
+    afterEach(() => {
+        if (tree != null) {
+            act(() => {
+                tree!.unmount();
+            });
+        }
+        tree = undefined;
+        jest.restoreAllMocks();
+    });
+
+    async function renderAndSettle(element: React.ReactElement) {
+        await act(async () => {
+            tree = TestRenderer.create(element);
+            await flushPromises();
+        });
     }
-    tree = undefined;
-    jest.restoreAllMocks();
-  });
 
-  async function renderAndSettle(element: React.ReactElement) {
-    await act(async () => {
-      tree = TestRenderer.create(element);
-      await flushPromises();
-    });
-  }
+    async function openRowMenu(name: string) {
+        const btn = tree!.root.findByProps({testID: `vfs-row-menu-${name}`});
+        await act(async () => {
+            btn.props.onPress();
+            await flushPromises();
+        });
+    }
 
-  async function openRowMenu(name: string) {
-    const btn = tree!.root.findByProps({testID: `vfs-row-menu-${name}`});
-    await act(async () => {
-      btn.props.onPress();
-      await flushPromises();
-    });
-  }
+    async function openMoreMenu() {
+        const btn = tree!.root.findByProps({testID: 'vfs-more-action'});
+        await act(async () => {
+            btn.props.onPress();
+            await flushPromises();
+        });
+    }
 
-  async function openMoreMenu() {
-    const btn = tree!.root.findByProps({testID: 'vfs-more-action'});
-    await act(async () => {
-      btn.props.onPress();
-      await flushPromises();
-    });
-  }
+    /** 取最近一次 Alert 的确认按钮并按下（标题/正文随用例断言）。 */
+    function pressAlertConfirm(alertSpy: jest.SpiedFunction<typeof Alert.alert>) {
+        const buttons = alertSpy.mock.calls.at(-1)![2] as {
+            text: string;
+            onPress?: () => void;
+        }[];
+        buttons.find(b => b.text === '导入')!.onPress!();
+    }
 
-  /** 取最近一次 Alert 的确认按钮并按下（标题/正文随用例断言）。 */
-  function pressAlertConfirm(alertSpy: jest.SpiedFunction<typeof Alert.alert>) {
-    const buttons = alertSpy.mock.calls.at(-1)![2] as {
-      text: string;
-      onPress?: () => void;
-    }[];
-    buttons.find(b => b.text === '导入')!.onPress!();
-  }
+    it('T-MM1：dir 行菜单与 more 菜单都是「导入」「导出」，旧三项已退役', async () => {
+        list.mockResolvedValue({
+            ok: true,
+            value: [
+                {path: '/sub', kind: 'directory'} as ListEntry,
+                {path: '/note.md', kind: 'file'} as ListEntry,
+            ],
+        });
+        await renderAndSettle(renderSessionVfm());
 
-  it('T-MM1：dir 行菜单与 more 菜单都是「导入」「导出」，旧三项已退役', async () => {
-    list.mockResolvedValue({
-      ok: true,
-      value: [
-        {path: '/sub', kind: 'directory'} as ListEntry,
-        {path: '/note.md', kind: 'file'} as ListEntry,
-      ],
-    });
-    await renderAndSettle(renderSessionVfm());
+        await openRowMenu('sub');
+        expect(capturedEntityMenu!.items.map(i => i.action)).toEqual([
+            'export',
+            'import',
+            'toggle-include',
+            'rename',
+            'delete',
+        ]);
+        const dirLabels = capturedEntityMenu!.items.map(i => i.label);
+        expect(dirLabels).toContain('导出');
+        expect(dirLabels).toContain('导入');
+        expect(dirLabels).not.toContain('导出 ZIP');
+        expect(dirLabels).not.toContain('导入 ZIP');
+        expect(dirLabels).not.toContain('导入角色卡');
 
-    await openRowMenu('sub');
-    expect(capturedEntityMenu!.items.map(i => i.action)).toEqual([
-      'export',
-      'import',
-      'toggle-include',
-      'rename',
-      'delete',
-    ]);
-    const dirLabels = capturedEntityMenu!.items.map(i => i.label);
-    expect(dirLabels).toContain('导出');
-    expect(dirLabels).toContain('导入');
-    expect(dirLabels).not.toContain('导出 ZIP');
-    expect(dirLabels).not.toContain('导入 ZIP');
-    expect(dirLabels).not.toContain('导入角色卡');
-
-    await openMoreMenu();
-    expect(capturedMoreMenu!.items.map(i => i.action)).toEqual([
-      'create-directory',
-      'create-file',
-      'import',
-      'export',
-      'directory-rule',
-    ]);
-    const moreLabels = capturedMoreMenu!.items.map(i => i.label);
-    expect(moreLabels).toContain('导入');
-    expect(moreLabels).toContain('导出');
-  });
-
-  it('T-MM2：file 行菜单含「导出」', async () => {
-    await renderAndSettle(renderSessionVfm());
-    await openRowMenu('note.md');
-    expect(capturedEntityMenu!.items.map(i => i.action)).toEqual([
-      'export',
-      'toggle-include',
-      'rename',
-      'delete',
-    ]);
-  });
-
-  it('T-MM2：无 workplace（技能详情页）时 file 行菜单不含「导出」', async () => {
-    await renderAndSettle(renderSessionVfmWithoutWorkplace());
-    await openRowMenu('note.md');
-    expect(capturedEntityMenu!.items.map(i => i.action)).toEqual([
-      'rename',
-      'delete',
-    ]);
-    expect(capturedEntityMenu!.items.map(i => i.label)).not.toContain('导出');
-  });
-
-  it('T-MM5：file 行「导出」走单文件导出服务（logicalPath=行路径）', async () => {
-    await renderAndSettle(renderSessionVfm());
-    await openRowMenu('note.md');
-
-    await act(async () => {
-      capturedEntityMenu!.onSelect('export');
-      await flushPromises();
+        await openMoreMenu();
+        expect(capturedMoreMenu!.items.map(i => i.action)).toEqual([
+            'create-directory',
+            'create-file',
+            'import',
+            'export',
+            'directory-rule',
+        ]);
+        const moreLabels = capturedMoreMenu!.items.map(i => i.label);
+        expect(moreLabels).toContain('导入');
+        expect(moreLabels).toContain('导出');
     });
 
-    expect(VfsSingleFileService.exportFile).toHaveBeenCalledWith(
-      mockRuntime,
-      expect.anything(),
-      '/note.md',
-    );
-    expect(VfsZipService.exportZip).not.toHaveBeenCalled();
-    expect(mockShowToast).toHaveBeenCalledWith('文件已保存到所选位置');
-  });
-
-  it('T-MM2：dir 行「导出」走 ZIP 导出服务（directoryPath=目录路径）', async () => {
-    // 目录行才有 /sub 可导出：list 须先 mock 出该目录行（同 T-MM1）。
-    list.mockResolvedValue({
-      ok: true,
-      value: [
-        {path: '/sub', kind: 'directory'} as ListEntry,
-        {path: '/note.md', kind: 'file'} as ListEntry,
-      ],
-    });
-    await renderAndSettle(renderSessionVfm());
-    await openRowMenu('sub');
-
-    await act(async () => {
-      capturedEntityMenu!.onSelect('export');
-      await flushPromises();
+    it('T-MM2：file 行菜单含「导出」', async () => {
+        await renderAndSettle(renderSessionVfm());
+        await openRowMenu('note.md');
+        expect(capturedEntityMenu!.items.map(i => i.action)).toEqual([
+            'export',
+            'toggle-include',
+            'rename',
+            'delete',
+        ]);
     });
 
-    expect(VfsZipService.exportZip).toHaveBeenCalledWith(mockRuntime, expect.anything(), {
-      directoryPath: '/sub',
-    });
-    expect(VfsSingleFileService.exportFile).not.toHaveBeenCalled();
-    expect(mockShowToast).toHaveBeenCalledWith('ZIP 已保存到所选位置');
-  });
-
-  it('T-MM4：「导入」开第三张 sheet（单文件 / ZIP 包 / 角色卡）', async () => {
-    await renderAndSettle(renderSessionVfm());
-    await openMoreMenu();
-    expect(capturedImportSheet).toBeUndefined();
-
-    await act(async () => {
-      capturedMoreMenu!.onSelect('import');
-      await flushPromises();
+    it('T-MM2：无 workplace（技能详情页）时 file 行菜单不含「导出」', async () => {
+        await renderAndSettle(renderSessionVfmWithoutWorkplace());
+        await openRowMenu('note.md');
+        expect(capturedEntityMenu!.items.map(i => i.action)).toEqual([
+            'rename',
+            'delete',
+        ]);
+        expect(capturedEntityMenu!.items.map(i => i.label)).not.toContain('导出');
     });
 
-    expect(capturedImportSheet).toBeDefined();
-    expect(capturedImportSheet!.items).toEqual([
-      {label: '单文件', action: 'file'},
-      {label: 'ZIP 包', action: 'zip'},
-      {label: '角色卡', action: 'character-card'},
-    ]);
-  });
+    it('T-MM5：file 行「导出」走单文件导出服务（logicalPath=行路径）', async () => {
+        await renderAndSettle(renderSessionVfm());
+        await openRowMenu('note.md');
 
-  it('T-MM4：sheet 选 zip / character-card 各走 runImport 对应链路与独立文案', async () => {
-    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
-    await renderAndSettle(renderSessionVfm());
-    await openMoreMenu();
-    await act(async () => {
-      capturedMoreMenu!.onSelect('import');
-      await flushPromises();
-    });
+        await act(async () => {
+            capturedEntityMenu!.onSelect('export');
+            await flushPromises();
+        });
 
-    // ZIP：确认正文是「覆盖全部文件」语义。
-    await act(async () => {
-      capturedImportSheet!.onSelect('zip');
-      await flushPromises();
-    });
-    expect(alertSpy).toHaveBeenCalledTimes(1);
-    const [zipTitle, zipMessage] = alertSpy.mock.calls[0] as [string, string];
-    expect(zipTitle).toBe('导入 ZIP');
-    expect(zipMessage).toContain('全部文件');
-    pressAlertConfirm(alertSpy);
-    await act(async () => {
-      await flushPromises();
-    });
-    expect(VfsZipService.importZip).toHaveBeenCalledWith(mockRuntime, expect.anything(), {
-      confirmed: true,
-      directoryPath: '/',
+        expect(VfsSingleFileService.exportFile).toHaveBeenCalledWith(
+            mockRuntime,
+            expect.anything(),
+            '/note.md',
+        );
+        expect(VfsZipService.exportZip).not.toHaveBeenCalled();
+        expect(mockShowToast).toHaveBeenCalledWith('文件已保存到所选位置');
     });
 
-    // 角色卡：标题与正文都与 ZIP 不同（独立文案）。
-    await act(async () => {
-      capturedImportSheet!.onSelect('character-card');
-      await flushPromises();
-    });
-    const [cardTitle, cardMessage] = alertSpy.mock.calls.at(-1) as [
-      string,
-      string,
-    ];
-    expect(cardTitle).toBe('导入角色卡');
-    expect(cardMessage).toContain('同名角色卡文件');
-    expect(cardMessage).not.toBe(zipMessage);
-    pressAlertConfirm(alertSpy);
-    await act(async () => {
-      await flushPromises();
-    });
-    expect(VfsCharacterCardService.import).toHaveBeenCalledWith(
-      mockRuntime,
-      expect.anything(),
-      {confirmed: true, directoryPath: '/'},
-    );
-  });
+    it('T-MM2：dir 行「导出」走 ZIP 导出服务（directoryPath=目录路径）', async () => {
+        // 目录行才有 /sub 可导出：list 须先 mock 出该目录行（同 T-MM1）。
+        list.mockResolvedValue({
+            ok: true,
+            value: [
+                {path: '/sub', kind: 'directory'} as ListEntry,
+                {path: '/note.md', kind: 'file'} as ListEntry,
+            ],
+        });
+        await renderAndSettle(renderSessionVfm());
+        await openRowMenu('sub');
 
-  it('T-MM4：dir 行「导入」→ sheet 选 file 走单文件导入；同名冲突先确认再落库', async () => {
-    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
-    const confirmMock = jest.fn(async () => ({
-      ok: true as const,
-      value: {
-        status: 'applied' as const,
-        report: {},
-        skippedBinary: ['/blob.png'],
-      },
-    }));
-    mockFn(VfsSingleFileService.importFile).mockResolvedValue({
-      ok: true,
-      value: {
-        status: 'needs-confirm',
-        conflictCount: 2,
-        fileName: 'note.md',
-        confirm: confirmMock,
-      },
-    });
-    // 目录行才有「导入」入口（file 行菜单不含 import），须先 mock 出 /sub 目录行。
-    list.mockResolvedValue({
-      ok: true,
-      value: [
-        {path: '/sub', kind: 'directory'} as ListEntry,
-        {path: '/note.md', kind: 'file'} as ListEntry,
-      ],
+        await act(async () => {
+            capturedEntityMenu!.onSelect('export');
+            await flushPromises();
+        });
+
+        expect(VfsZipService.exportZip).toHaveBeenCalledWith(mockRuntime, expect.anything(), {
+            directoryPath: '/sub',
+        });
+        expect(VfsSingleFileService.exportFile).not.toHaveBeenCalled();
+        expect(mockShowToast).toHaveBeenCalledWith('ZIP 已保存到所选位置');
     });
 
-    await renderAndSettle(renderSessionVfm());
-    await openRowMenu('sub');
-    await act(async () => {
-      capturedEntityMenu!.onSelect('import');
-      await flushPromises();
+    it('T-MM4：「导入」开第三张 sheet（单文件 / ZIP 包 / 角色卡）', async () => {
+        await renderAndSettle(renderSessionVfm());
+        await openMoreMenu();
+        expect(capturedImportSheet).toBeUndefined();
+
+        await act(async () => {
+            capturedMoreMenu!.onSelect('import');
+            await flushPromises();
+        });
+
+        expect(capturedImportSheet).toBeDefined();
+        expect(capturedImportSheet!.items).toEqual([
+            {label: '单文件', action: 'file'},
+            {label: 'ZIP 包', action: 'zip'},
+            {label: '角色卡', action: 'character-card'},
+        ]);
     });
 
-    await act(async () => {
-      capturedImportSheet!.onSelect('file');
-      await flushPromises();
+    it('T-MM4：sheet 选 zip / character-card 各走 runImport 对应链路与独立文案', async () => {
+        const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+        await renderAndSettle(renderSessionVfm());
+        await openMoreMenu();
+        await act(async () => {
+            capturedMoreMenu!.onSelect('import');
+            await flushPromises();
+        });
+
+        // ZIP：确认正文是「覆盖全部文件」语义。
+        await act(async () => {
+            capturedImportSheet!.onSelect('zip');
+            await flushPromises();
+        });
+        expect(alertSpy).toHaveBeenCalledTimes(1);
+        const [zipTitle, zipMessage] = alertSpy.mock.calls[0] as [string, string];
+        expect(zipTitle).toBe('导入 ZIP');
+        expect(zipMessage).toContain('全部文件');
+        pressAlertConfirm(alertSpy);
+        await act(async () => {
+            await flushPromises();
+        });
+        expect(VfsZipService.importZip).toHaveBeenCalledWith(mockRuntime, expect.anything(), {
+            confirmed: true,
+            directoryPath: '/',
+        });
+
+        // 角色卡：标题与正文都与 ZIP 不同（独立文案）。
+        await act(async () => {
+            capturedImportSheet!.onSelect('character-card');
+            await flushPromises();
+        });
+        const [cardTitle, cardMessage] = alertSpy.mock.calls.at(-1) as [
+            string,
+            string,
+        ];
+        expect(cardTitle).toBe('导入角色卡');
+        expect(cardMessage).toContain('同名角色卡文件');
+        expect(cardMessage).not.toBe(zipMessage);
+        pressAlertConfirm(alertSpy);
+        await act(async () => {
+            await flushPromises();
+        });
+        expect(VfsCharacterCardService.import).toHaveBeenCalledWith(
+            mockRuntime,
+            expect.anything(),
+            {confirmed: true, directoryPath: '/'},
+        );
     });
 
-    // targetDir 是目录路径（行菜单来源 = menuPath），不是文件路径。
-    expect(VfsSingleFileService.importFile).toHaveBeenCalledWith(
-      mockRuntime,
-      expect.anything(),
-      {targetDir: '/sub'},
-    );
-    // 冲突确认框：文案带同名文件数，且确认前不落库。
-    const [confirmTitle, confirmMessage] = alertSpy.mock.calls.at(-1) as [
-      string,
-      string,
-    ];
-    expect(confirmTitle).toBe('导入单文件');
-    expect(confirmMessage).toBe(
-      '目标处已有 2 个同名文件，覆盖后不可撤销，是否继续？',
-    );
-    expect(confirmMock).not.toHaveBeenCalled();
+    it('T-MM4：dir 行「导入」→ sheet 选 file 走单文件导入；同名冲突先确认再落库', async () => {
+        const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+        const confirmMock = jest.fn(async () => ({
+            ok: true as const,
+            value: {
+                status: 'applied' as const,
+                report: {},
+                skippedBinary: ['/blob.png'],
+            },
+        }));
+        mockFn(VfsSingleFileService.importFile).mockResolvedValue({
+            ok: true,
+            value: {
+                status: 'needs-confirm',
+                conflictCount: 2,
+                fileName: 'note.md',
+                confirm: confirmMock,
+            },
+        });
+        // 目录行才有「导入」入口（file 行菜单不含 import），须先 mock 出 /sub 目录行。
+        list.mockResolvedValue({
+            ok: true,
+            value: [
+                {path: '/sub', kind: 'directory'} as ListEntry,
+                {path: '/note.md', kind: 'file'} as ListEntry,
+            ],
+        });
 
-    pressAlertConfirm(alertSpy);
-    await act(async () => {
-      await flushPromises();
-    });
-    expect(confirmMock).toHaveBeenCalled();
-    expect(mockShowToast).toHaveBeenCalledWith(
-      '已导入单文件，跳过 1 个非 UTF-8 文件',
-    );
-  });
+        await renderAndSettle(renderSessionVfm());
+        await openRowMenu('sub');
+        await act(async () => {
+            capturedEntityMenu!.onSelect('import');
+            await flushPromises();
+        });
 
-  it('T-MM4：单文件导入 picker 取消静默（无 Alert 无 toast）', async () => {
-    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
-    mockFn(VfsSingleFileService.importFile).mockResolvedValue({
-      ok: true,
-      value: {status: 'cancelled'},
-    });
+        await act(async () => {
+            capturedImportSheet!.onSelect('file');
+            await flushPromises();
+        });
 
-    await renderAndSettle(renderSessionVfm());
-    await openMoreMenu();
-    await act(async () => {
-      capturedMoreMenu!.onSelect('import');
-      await flushPromises();
-    });
-    await act(async () => {
-      capturedImportSheet!.onSelect('file');
-      await flushPromises();
-    });
+        // targetDir 是目录路径（行菜单来源 = menuPath），不是文件路径。
+        expect(VfsSingleFileService.importFile).toHaveBeenCalledWith(
+            mockRuntime,
+            expect.anything(),
+            {targetDir: '/sub'},
+        );
+        // 冲突确认框：文案带同名文件数，且确认前不落库。
+        const [confirmTitle, confirmMessage] = alertSpy.mock.calls.at(-1) as [
+            string,
+            string,
+        ];
+        expect(confirmTitle).toBe('导入单文件');
+        expect(confirmMessage).toBe(
+            '目标处已有 2 个同名文件，覆盖后不可撤销，是否继续？',
+        );
+        expect(confirmMock).not.toHaveBeenCalled();
 
-    expect(alertSpy).not.toHaveBeenCalled();
-    expect(mockShowToast).not.toHaveBeenCalled();
-  });
-
-  it('T-MM4：单文件导入超限被拒（服务抛错）→ toast 含「导入失败」与超限详情', async () => {
-    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
-    mockFn(VfsSingleFileService.importFile).mockResolvedValue({
-      ok: false,
-      error: new AppError('VFS_SINGLE_FILE_TOO_LARGE', {
-        sizeBytes: 34000000,
-        maxBytes: 33554432,
-      }),
-    });
-
-    await renderAndSettle(renderSessionVfm());
-    await openMoreMenu();
-    await act(async () => {
-      capturedMoreMenu!.onSelect('import');
-      await flushPromises();
-    });
-    await act(async () => {
-      capturedImportSheet!.onSelect('file');
-      await flushPromises();
+        pressAlertConfirm(alertSpy);
+        await act(async () => {
+            await flushPromises();
+        });
+        expect(confirmMock).toHaveBeenCalled();
+        expect(mockShowToast).toHaveBeenCalledWith(
+            '已导入单文件，跳过 1 个非 UTF-8 文件',
+        );
     });
 
-    // 失败不弹确认框（超限发生在 picker 读字节阶段，走不到 needs-confirm）。
-    expect(alertSpy).not.toHaveBeenCalled();
-    const toast = mockFn(mockShowToast).mock.calls.at(-1)?.[0] as string;
-    expect(toast).toContain('导入失败');
-    expect(toast).toContain('超过导入上限');
-  });
+    it('T-MM4：单文件导入 picker 取消静默（无 Alert 无 toast）', async () => {
+        const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+        mockFn(VfsSingleFileService.importFile).mockResolvedValue({
+            ok: true,
+            value: {status: 'cancelled'},
+        });
 
-  it('T-MM4：切走浮层（dismissAllOverlays）后导入 sheet 一并关闭', async () => {
-    await renderAndSettle(renderSessionVfm());
-    await openMoreMenu();
-    await act(async () => {
-      capturedMoreMenu!.onSelect('import');
-      await flushPromises();
-    });
-    expect(capturedImportSheet).toBeDefined();
+        await renderAndSettle(renderSessionVfm());
+        await openMoreMenu();
+        await act(async () => {
+            capturedMoreMenu!.onSelect('import');
+            await flushPromises();
+        });
+        await act(async () => {
+            capturedImportSheet!.onSelect('file');
+            await flushPromises();
+        });
 
-    capturedImportSheet = undefined;
-    await act(async () => {
-      capturedDismissOverlays!();
-      await flushPromises();
+        expect(alertSpy).not.toHaveBeenCalled();
+        expect(mockShowToast).not.toHaveBeenCalled();
     });
-    expect(capturedImportSheet).toBeUndefined();
-  });
+
+    it('T-MM4：单文件导入超限被拒（服务抛错）→ toast 含「导入失败」与超限详情', async () => {
+        const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+        mockFn(VfsSingleFileService.importFile).mockResolvedValue({
+            ok: false,
+            error: new AppError('VFS_SINGLE_FILE_TOO_LARGE', {
+                sizeBytes: 34000000,
+                maxBytes: 33554432,
+            }),
+        });
+
+        await renderAndSettle(renderSessionVfm());
+        await openMoreMenu();
+        await act(async () => {
+            capturedMoreMenu!.onSelect('import');
+            await flushPromises();
+        });
+        await act(async () => {
+            capturedImportSheet!.onSelect('file');
+            await flushPromises();
+        });
+
+        // 失败不弹确认框（超限发生在 picker 读字节阶段，走不到 needs-confirm）。
+        expect(alertSpy).not.toHaveBeenCalled();
+        const toast = mockFn(mockShowToast).mock.calls.at(-1)?.[0] as string;
+        expect(toast).toContain('导入失败');
+        expect(toast).toContain('超过导入上限');
+    });
+
+    it('T-MM4：切走浮层（dismissAllOverlays）后导入 sheet 一并关闭', async () => {
+        await renderAndSettle(renderSessionVfm());
+        await openMoreMenu();
+        await act(async () => {
+            capturedMoreMenu!.onSelect('import');
+            await flushPromises();
+        });
+        expect(capturedImportSheet).toBeDefined();
+
+        capturedImportSheet = undefined;
+        await act(async () => {
+            capturedDismissOverlays!();
+            await flushPromises();
+        });
+        expect(capturedImportSheet).toBeUndefined();
+    });
 });

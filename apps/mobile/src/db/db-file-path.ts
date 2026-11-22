@@ -17,7 +17,7 @@ export const QUICK_SQLITE_DEFAULT_LOCATION = 'default';
  */
 /** 已探测到的真实库文件路径缓存（模块内 holder，对象管理；undefined = 未探测）。 */
 const dbFilePathCache = {
-  path: undefined as string | undefined,
+    path: undefined as string | undefined,
 };
 
 /**
@@ -29,71 +29,71 @@ const dbFilePathCache = {
  * `.db` 变体一并保留，兜底真机 `getDbPath()` 核对前的不确定性。
  */
 export const MobileDatabaseFilePath = {
-  /**
+    /**
    * Candidate paths for `novel_master_vfs` across driver layouts.
    */
-  buildCandidates: (dirs: typeof ReactNativeBlobUtil.fs.dirs = RnFileIo.blobFs().dirs): string[] => {
-    const dirsWithSupport = dirs as typeof dirs & {ApplicationSupportDir?: string};
-    const base = dirs.DocumentDir ?? dirs.LibraryDir ?? dirsWithSupport.ApplicationSupportDir;
-    if (typeof base !== 'string' || base.length === 0) {
-      // nm-throw: keep — 平台边界：设备未返回可用的数据库根目录，同步路径解析无失败位
-      throw new Error('无法定位应用数据库目录');
-    }
-    const fileNames = [MOBILE_VFS_DB_NAME, `${MOBILE_VFS_DB_NAME}.db`];
-    const paths: string[] = [];
-    for (const name of fileNames) {
-      paths.push(`${base}/${QUICK_SQLITE_DEFAULT_LOCATION}/${name}`);
-      paths.push(`${base}/${name}`);
-    }
-    const opSqliteBase = base.endsWith('/files') ? `${base.slice(0, -'/files'.length)}/databases` : undefined;
-    if (opSqliteBase != null) {
-      for (const name of fileNames) {
-        paths.push(`${opSqliteBase}/${name}`);
-      }
-    }
-    return paths;
-  },
+    buildCandidates: (dirs: typeof ReactNativeBlobUtil.fs.dirs = RnFileIo.blobFs().dirs): string[] => {
+        const dirsWithSupport = dirs as typeof dirs & {ApplicationSupportDir?: string};
+        const base = dirs.DocumentDir ?? dirs.LibraryDir ?? dirsWithSupport.ApplicationSupportDir;
+        if (typeof base !== 'string' || base.length === 0) {
+            // nm-throw: keep — 平台边界：设备未返回可用的数据库根目录，同步路径解析无失败位
+            throw new Error('无法定位应用数据库目录');
+        }
+        const fileNames = [MOBILE_VFS_DB_NAME, `${MOBILE_VFS_DB_NAME}.db`];
+        const paths: string[] = [];
+        for (const name of fileNames) {
+            paths.push(`${base}/${QUICK_SQLITE_DEFAULT_LOCATION}/${name}`);
+            paths.push(`${base}/${name}`);
+        }
+        const opSqliteBase = base.endsWith('/files') ? `${base.slice(0, -'/files'.length)}/databases` : undefined;
+        if (opSqliteBase != null) {
+            for (const name of fileNames) {
+                paths.push(`${opSqliteBase}/${name}`);
+            }
+        }
+        return paths;
+    },
 
-  default: (): string => MobileDatabaseFilePath.buildCandidates()[0]!,
+    default: (): string => MobileDatabaseFilePath.buildCandidates()[0]!,
 
-  /**
+    /**
    * Probes the filesystem after the DB is open and caches the real file path.
    * Call from {@link getMobileConnection} bootstrap.
    */
-  probeAndCache: async (): Promise<string> => {
-    const fs = RnFileIo.blobFs();
-    for (const candidate of MobileDatabaseFilePath.buildCandidates(fs.dirs)) {
-      if (await fs.exists(candidate)) {
-        dbFilePathCache.path = candidate;
-        return candidate;
-      }
-    }
-    const fallback = MobileDatabaseFilePath.default();
-    dbFilePathCache.path = fallback;
-    return fallback;
-  },
+    probeAndCache: async (): Promise<string> => {
+        const fs = RnFileIo.blobFs();
+        for (const candidate of MobileDatabaseFilePath.buildCandidates(fs.dirs)) {
+            if (await fs.exists(candidate)) {
+                dbFilePathCache.path = candidate;
+                return candidate;
+            }
+        }
+        const fallback = MobileDatabaseFilePath.default();
+        dbFilePathCache.path = fallback;
+        return fallback;
+    },
 
-  /** Clears cached path (tests / after import replaces file at same location). */
-  clearCache: (): void => {
-    dbFilePathCache.path = undefined;
-  },
+    /** Clears cached path (tests / after import replaces file at same location). */
+    clearCache: (): void => {
+        dbFilePathCache.path = undefined;
+    },
 
-  /**
+    /**
    * Returns the SQLite file path for backup copy.
    * Prefer {@link MobileDatabaseFilePath.probeAndCache} after runtime bootstrap.
    */
-  get: (): string => {
-    if (dbFilePathCache.path != null) {
-      return dbFilePathCache.path;
-    }
-    return MobileDatabaseFilePath.default();
-  },
+    get: (): string => {
+        if (dbFilePathCache.path != null) {
+            return dbFilePathCache.path;
+        }
+        return MobileDatabaseFilePath.default();
+    },
 
-  /** Resolves path when cache is cold; probes disk if needed. */
-  resolve: async (): Promise<string> => {
-    if (dbFilePathCache.path != null) {
-      return dbFilePathCache.path;
-    }
-    return MobileDatabaseFilePath.probeAndCache();
-  },
+    /** Resolves path when cache is cold; probes disk if needed. */
+    resolve: async (): Promise<string> => {
+        if (dbFilePathCache.path != null) {
+            return dbFilePathCache.path;
+        }
+        return MobileDatabaseFilePath.probeAndCache();
+    },
 } as const;

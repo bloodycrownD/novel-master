@@ -24,102 +24,102 @@ import type { UserVfsTurnExecuteResult, UserVfsTurnOp, UserVfsTurnService } from
 
 /** {@link DefaultUserVfsTurnService} 依赖。 */
 export interface UserVfsTurnServiceDeps {
-  readonly conn: TdbcConnection;
-  readonly sessions: SessionRepository;
-  /**
+    readonly conn: TdbcConnection;
+    readonly sessions: SessionRepository;
+    /**
    * 历史：曾写 `user_vfs_pending`；现仅保留以便工厂签名稳定 / truncate 清旧域。
    * execute / flush **不再**读写 pending 队列。
    */
-  readonly sessionKkv: SessionKkvService;
-  readonly messages: MessageService;
-  /**
+    readonly sessionKkv: SessionKkvService;
+    readonly messages: MessageService;
+    /**
    * 历史：净 diff preview 曾读消息列表；preview* 已 stub，保留以便工厂签名稳定。
    * @deprecated
    */
-  readonly chatMessages: MessageRepository;
-  readonly checkpoints: MessageCheckpointRepository;
-  readonly entries: VfsEntryRepository;
-  readonly revisions: VfsRevisionRepository;
-  readonly toolRunner: ToolRunner<BuiltinToolContext>;
-  readonly resolveToolCtx: (sessionId: string, projectId: string) => BuiltinToolContext;
-  /**
+    readonly chatMessages: MessageRepository;
+    readonly checkpoints: MessageCheckpointRepository;
+    readonly entries: VfsEntryRepository;
+    readonly revisions: VfsRevisionRepository;
+    readonly toolRunner: ToolRunner<BuiltinToolContext>;
+    readonly resolveToolCtx: (sessionId: string, projectId: string) => BuiltinToolContext;
+    /**
    * 历史依赖：checkpoint 已改挂带 user_ops 的 user append；保留以便工厂签名稳定。
    */
-  readonly messageCheckpoint: MessageCheckpointService;
+    readonly messageCheckpoint: MessageCheckpointService;
 }
 
 /**
  * 编排 execute（写盘 + 失败回滚 restore）。
  */
 export class DefaultUserVfsTurnService implements UserVfsTurnService {
-  constructor(private readonly deps: UserVfsTurnServiceDeps) {}
+    constructor(private readonly deps: UserVfsTurnServiceDeps) {}
 
-  async executeOp(sessionId: string, op: UserVfsTurnOp): Promise<UserVfsTurnExecuteResult> {
-    if (op.tools.length === 0) {
-      return { ok: false, error: new AppError("CHAT_INVALID_ARGUMENT", { detail: "userVfsTurn.op.tools must not be empty" }) };
-    }
-    if (op.actionXml.trim() === "") {
-      return { ok: false, error: new AppError("CHAT_INVALID_ARGUMENT", { detail: "userVfsTurn.op.actionXml must not be empty" }) };
-    }
-
-    const session = await this.deps.sessions.findById(sessionId);
-    if (session == null) {
-      return { ok: false, error: new AppError("CHAT_NOT_FOUND", { detail: `session not found: ${sessionId}`, kind: "session", id: sessionId }) };
-    }
-
-    const toolCtx = this.deps.resolveToolCtx(sessionId, session.projectId);
-    const calls = op.tools.map((tool) => ({
-      name: tool.name,
-      input: tool.input,
-    }));
-    const mutatingPaths = MutatingPaths.collectFromCalls(calls);
-    const captured = await MutatingPathHeads.captureSnapshots(toolCtx.vfs, mutatingPaths);
-    if (!captured.ok) {
-      return { ok: false, error: captured.error };
-    }
-    const headSnapshots = captured.value;
-
-    const outcomes = await this.deps.toolRunner.runParallel(calls, toolCtx);
-
-    const failed = outcomes.find((o) => !o.ok);
-    if (failed != null) {
-      const restoreErrors: unknown[] = [];
-      for (let index = outcomes.length - 1; index >= 0; index -= 1) {
-        const outcome = outcomes[index]!;
-        if (!outcome.ok) {
-          continue;
+    async executeOp(sessionId: string, op: UserVfsTurnOp): Promise<UserVfsTurnExecuteResult> {
+        if (op.tools.length === 0) {
+            return { ok: false, error: new AppError("CHAT_INVALID_ARGUMENT", { detail: "userVfsTurn.op.tools must not be empty" }) };
         }
-        const tool = op.tools[index]!;
-        const paths = MutatingPaths.extract({
-          name: tool.name,
-          input: tool.input,
-        });
-        if (paths == null || paths.length === 0) {
-          continue;
+        if (op.actionXml.trim() === "") {
+            return { ok: false, error: new AppError("CHAT_INVALID_ARGUMENT", { detail: "userVfsTurn.op.actionXml must not be empty" }) };
         }
-        const restored = await MutatingPathHeads.restore(toolCtx.vfs, headSnapshots, paths);
-        if (!restored.ok) {
-          if (restored.error instanceof MutatingPathRestoreCompositeError) {
-            restoreErrors.push(...restored.error.causes);
-          } else {
-            restoreErrors.push(restored.error);
-          }
-        }
-      }
-      // restore 尝试结束后不论 composite 仍 sweep 一次（末尾全库 blob gc）
-      await RevisionGc.sweepSession(this.deps.revisions, session.projectId, sessionId);
-      await DeferredBlobGc.run(this.deps.conn);
-      if (restoreErrors.length > 0) {
-        return {
-          ok: false,
-          error: new MutatingPathRestoreCompositeError(restoreErrors),
-          partialFailure: true,
-        };
-      }
-      return { ok: false, error: failed.error, partialFailure: true };
-    }
 
-    // 写盘已成功：不再记操作日志（user ops 拆除，E-core）。
-    return { ok: true };
-  }
+        const session = await this.deps.sessions.findById(sessionId);
+        if (session == null) {
+            return { ok: false, error: new AppError("CHAT_NOT_FOUND", { detail: `session not found: ${sessionId}`, kind: "session", id: sessionId }) };
+        }
+
+        const toolCtx = this.deps.resolveToolCtx(sessionId, session.projectId);
+        const calls = op.tools.map((tool) => ({
+            name: tool.name,
+            input: tool.input,
+        }));
+        const mutatingPaths = MutatingPaths.collectFromCalls(calls);
+        const captured = await MutatingPathHeads.captureSnapshots(toolCtx.vfs, mutatingPaths);
+        if (!captured.ok) {
+            return { ok: false, error: captured.error };
+        }
+        const headSnapshots = captured.value;
+
+        const outcomes = await this.deps.toolRunner.runParallel(calls, toolCtx);
+
+        const failed = outcomes.find((o) => !o.ok);
+        if (failed != null) {
+            const restoreErrors: unknown[] = [];
+            for (let index = outcomes.length - 1; index >= 0; index -= 1) {
+                const outcome = outcomes[index]!;
+                if (!outcome.ok) {
+                    continue;
+                }
+                const tool = op.tools[index]!;
+                const paths = MutatingPaths.extract({
+                    name: tool.name,
+                    input: tool.input,
+                });
+                if (paths == null || paths.length === 0) {
+                    continue;
+                }
+                const restored = await MutatingPathHeads.restore(toolCtx.vfs, headSnapshots, paths);
+                if (!restored.ok) {
+                    if (restored.error instanceof MutatingPathRestoreCompositeError) {
+                        restoreErrors.push(...restored.error.causes);
+                    } else {
+                        restoreErrors.push(restored.error);
+                    }
+                }
+            }
+            // restore 尝试结束后不论 composite 仍 sweep 一次（末尾全库 blob gc）
+            await RevisionGc.sweepSession(this.deps.revisions, session.projectId, sessionId);
+            await DeferredBlobGc.run(this.deps.conn);
+            if (restoreErrors.length > 0) {
+                return {
+                    ok: false,
+                    error: new MutatingPathRestoreCompositeError(restoreErrors),
+                    partialFailure: true,
+                };
+            }
+            return { ok: false, error: failed.error, partialFailure: true };
+        }
+
+        // 写盘已成功：不再记操作日志（user ops 拆除，E-core）。
+        return { ok: true };
+    }
 }

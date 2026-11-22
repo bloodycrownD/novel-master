@@ -6,53 +6,53 @@
 
 import {
 
-  createContext,
+    createContext,
 
-  useCallback,
+    useCallback,
 
-  useContext,
+    useContext,
 
-  useEffect,
+    useEffect,
 
-  useMemo,
+    useMemo,
 
-  useRef,
+    useRef,
 
-  useState,
+    useState,
 
-  type ReactNode,
+    type ReactNode,
 
 } from "react";
 
 import type {
-  ProjectDto,
-  SessionDto,
-  PreviewFileSelection,
-  WorkplaceListRowDto,
-  WorkspaceMutatedPayload,
-  WorkspacePanelScope,
+    ProjectDto,
+    SessionDto,
+    PreviewFileSelection,
+    WorkplaceListRowDto,
+    WorkspaceMutatedPayload,
+    WorkspacePanelScope,
 } from "@shared/ipc-types";
 import {
-  EVENT_AGENT_RUN_FINISHED,
-  EVENT_AGENT_STEP_COMMITTED,
-  type AgentRunFinishedPayload,
-  type AgentStepCommittedPayload,
+    EVENT_AGENT_RUN_FINISHED,
+    EVENT_AGENT_STEP_COMMITTED,
+    type AgentRunFinishedPayload,
+    type AgentStepCommittedPayload,
 } from "@shared/logic/events";
 import { previewTabKey } from "../layout/preview-tab-utils";
 
 import {
 
-  ipcAppOpenExternal,
+    ipcAppOpenExternal,
 
-  ipcProjectsList,
+    ipcProjectsList,
 
-  ipcSessionsListByProject,
+    ipcSessionsListByProject,
 
-  ipcVfsRead,
+    ipcVfsRead,
 
-  onAgentStream,
+    onAgentStream,
 
-  onWorkspaceMutated,
+    onWorkspaceMutated,
 
 } from "../ipc/client";
 
@@ -62,8 +62,8 @@ import { coreT } from "@shared/logic/core-i18n";
 import { showToast } from "@/components/ui/show-toast";
 
 import {
-  markPreviewTabsDeletedUnderPathInList,
-  syncPreviewTabsWithFileRows,
+    markPreviewTabsDeletedUnderPathInList,
+    syncPreviewTabsWithFileRows,
 } from "../features/workspace/preview-tab-sync";
 import { useWorkspaceFooterReload } from "../features/chat/useWorkspaceFooterReload";
 
@@ -71,11 +71,11 @@ import { loadDesktopScope, setDesktopProject, setDesktopSession } from "../state
 
 import {
 
-  syncWorkspaceWithNav,
+    syncWorkspaceWithNav,
 
-  type NavViewId,
+    type NavViewId,
 
-  type WorkspaceScope,
+    type WorkspaceScope,
 
 } from "../state/nav-workspace";
 
@@ -83,110 +83,110 @@ import {
 
 interface ShellNavContextValue {
 
-  viewId: NavViewId;
+    viewId: NavViewId;
 
-  workspaceScope: WorkspaceScope;
+    workspaceScope: WorkspaceScope;
 
-  projectId: string | undefined;
+    projectId: string | undefined;
 
-  projectName: string | undefined;
+    projectName: string | undefined;
 
-  sessionId: string | undefined;
+    sessionId: string | undefined;
 
-  /**
+    /**
    * 工作区展示用的 session id。
    *
    * 子会话面板与父会话共享工作区（子会话没有独立工作区），因此该字段
    * 恒等于 sessionId（父 session）。保留字段本身做恒等映射，
    * ExplorerPane / WorkspaceTree 等消费方无需感知这一语义。
    */
-  workspaceSessionId: string | undefined;
+    workspaceSessionId: string | undefined;
 
-  /** 进入子会话只读 view：记录子 sessionId 并切到 subagent-conversation view。 */
-  openSubagentSession: (childSessionId: string, label?: string) => void;
+    /** 进入子会话只读 view：记录子 sessionId 并切到 subagent-conversation view。 */
+    openSubagentSession: (childSessionId: string, label?: string) => void;
 
-  /** 退出子会话只读 view：回到主会话 conversation view。 */
-  exitSubagentSession: () => void;
+    /** 退出子会话只读 view：回到主会话 conversation view。 */
+    exitSubagentSession: () => void;
 
-  /** 当前子会话 view 的子 sessionId（供 ChatRail 标题 / 停止按钮等使用）。 */
-  subagentSessionId: string | undefined;
+    /** 当前子会话 view 的子 sessionId（供 ChatRail 标题 / 停止按钮等使用）。 */
+    subagentSessionId: string | undefined;
 
-  /** 当前子会话 view 的展示名。 */
-  subagentSessionName: string | undefined;
+    /** 当前子会话 view 的展示名。 */
+    subagentSessionName: string | undefined;
 
-  sessionName: string | undefined;
+    sessionName: string | undefined;
 
-  updateSessionName: (name: string) => void;
+    updateSessionName: (name: string) => void;
 
-  showNavView: (viewId: NavViewId) => void;
+    showNavView: (viewId: NavViewId) => void;
 
-  openProject: (project: ProjectDto) => Promise<void>;
+    openProject: (project: ProjectDto) => Promise<void>;
 
-  openSession: (session: SessionDto, projectName: string) => Promise<void>;
+    openSession: (session: SessionDto, projectName: string) => Promise<void>;
 
-  goBackToProjects: () => void;
+    goBackToProjects: () => void;
 
-  goBackToSessions: () => void;
+    goBackToSessions: () => void;
 
-  previewTabs: PreviewFileSelection[];
-  activePreviewKey: string | null;
-  /** 当前激活的预览文件（由 active tab 派生） */
-  previewFile: PreviewFileSelection | null;
-  selectPreviewFile: (
-    workspaceScope: PreviewFileSelection["workspaceScope"],
-    path: string,
-  ) => void;
-  closePreviewTab: (
-    workspaceScope: PreviewFileSelection["workspaceScope"],
-    path: string,
-  ) => void;
-  closePreviewTabsUnderPath: (
-    workspaceScope: PreviewFileSelection["workspaceScope"],
-    path: string,
-  ) => void;
-  /** 将路径下预览 tab 标为已删除（VS Code 式，不关闭 tab） */
-  markPreviewTabsDeletedUnderPath: (
-    workspaceScope: PreviewFileSelection["workspaceScope"],
-    path: string,
-  ) => void;
-  /** 工作区重命名后同步预览 tab 的路径与文件名 */
-  renamePreviewTab: (
-    workspaceScope: PreviewFileSelection["workspaceScope"],
-    oldPath: string,
-    newPath: string,
-  ) => void;
-  /** 工作区树重载后，用 file 行校验 open tab 是否存在 */
-  syncPreviewTabsFromFileRows: (
-    scope: WorkspacePanelScope,
-    rows: WorkplaceListRowDto[],
-  ) => void;
-  clearPreviewFile: () => void;
-  treeRefreshToken: number;
-  /** Desktop 消费方 ①：VFS / 规则变更后立即刷新 Explorer（100ms 去抖） */
-  notifyWorkspaceMutated: () => void;
-  /** @deprecated 使用 notifyWorkspaceMutated */
-  refreshWorkspaceTrees: () => void;
-  treeExpandRequest: { path: string; token: number } | null;
-  requestTreeExpandPath: (path: string) => void;
-  /** Bumps when workspace model/agent selection changes (footer, settings, etc.). */
-  agentConfigRevision: number;
-  notifyAgentConfigChanged: () => void;
-  /** 强制重挂 WorkspaceFooter / 重拉 token IPC（run finished、messages changed）。 */
-  footerKey: number;
-  reloadFooter: () => void;
-  /** 注册 Preview 列可见性回调（由 App 注入 toggleColumn）。 */
-  registerEnsurePreviewVisible: (fn: () => void) => void;
-  /** 在聊天工作区 Preview 打开文件；若 Preview 列隐藏则先显示。 */
-  openChatWorkspacePreview: (path: string) => void;
-  /**
+    previewTabs: PreviewFileSelection[];
+    activePreviewKey: string | null;
+    /** 当前激活的预览文件（由 active tab 派生） */
+    previewFile: PreviewFileSelection | null;
+    selectPreviewFile: (
+        workspaceScope: PreviewFileSelection["workspaceScope"],
+        path: string,
+    ) => void;
+    closePreviewTab: (
+        workspaceScope: PreviewFileSelection["workspaceScope"],
+        path: string,
+    ) => void;
+    closePreviewTabsUnderPath: (
+        workspaceScope: PreviewFileSelection["workspaceScope"],
+        path: string,
+    ) => void;
+    /** 将路径下预览 tab 标为已删除（VS Code 式，不关闭 tab） */
+    markPreviewTabsDeletedUnderPath: (
+        workspaceScope: PreviewFileSelection["workspaceScope"],
+        path: string,
+    ) => void;
+    /** 工作区重命名后同步预览 tab 的路径与文件名 */
+    renamePreviewTab: (
+        workspaceScope: PreviewFileSelection["workspaceScope"],
+        oldPath: string,
+        newPath: string,
+    ) => void;
+    /** 工作区树重载后，用 file 行校验 open tab 是否存在 */
+    syncPreviewTabsFromFileRows: (
+        scope: WorkspacePanelScope,
+        rows: WorkplaceListRowDto[],
+    ) => void;
+    clearPreviewFile: () => void;
+    treeRefreshToken: number;
+    /** Desktop 消费方 ①：VFS / 规则变更后立即刷新 Explorer（100ms 去抖） */
+    notifyWorkspaceMutated: () => void;
+    /** @deprecated 使用 notifyWorkspaceMutated */
+    refreshWorkspaceTrees: () => void;
+    treeExpandRequest: { path: string; token: number } | null;
+    requestTreeExpandPath: (path: string) => void;
+    /** Bumps when workspace model/agent selection changes (footer, settings, etc.). */
+    agentConfigRevision: number;
+    notifyAgentConfigChanged: () => void;
+    /** 强制重挂 WorkspaceFooter / 重拉 token IPC（run finished、messages changed）。 */
+    footerKey: number;
+    reloadFooter: () => void;
+    /** 注册 Preview 列可见性回调（由 App 注入 toggleColumn）。 */
+    registerEnsurePreviewVisible: (fn: () => void) => void;
+    /** 在聊天工作区 Preview 打开文件；若 Preview 列隐藏则先显示。 */
+    openChatWorkspacePreview: (path: string) => void;
+    /**
    * 聊天 markdown 链接点击路由（chat-link-file-nav）：识别与探测在
    * chat-link-route 纯函数完成，这里只执行意图——工作区文件进 Preview，
    * http(s) 外跳系统浏览器，mailto/未命中 no-op。
    */
-  openChatLink: (href: string) => void;
-  /** 详情抽屉「查看提示词」请求：bump 后由 ConversationPanel 切到 realPrompt tab。 */
-  viewPromptRequest: { token: number } | null;
-  requestViewPrompt: () => void;
+    openChatLink: (href: string) => void;
+    /** 详情抽屉「查看提示词」请求：bump 后由 ConversationPanel 切到 realPrompt tab。 */
+    viewPromptRequest: { token: number } | null;
+    requestViewPrompt: () => void;
 }
 
 
@@ -195,13 +195,13 @@ const WORKSPACE_MUTATED_DEBOUNCE_MS = 100;
 
 /** 判断 main push 的工作区变更是否影响当前导航上下文。 */
 function workspaceMutatedMatchesNav( payload: WorkspaceMutatedPayload, projectId: string | undefined, sessionId: string | undefined ): boolean {
-  if (payload.workspaceScope === "global") {
-    return true;
-  }
-  if (payload.workspaceScope === "session") {
-    return payload.projectId === projectId;
-  }
-  return payload.projectId === projectId && payload.sessionId === sessionId;
+    if (payload.workspaceScope === "global") {
+        return true;
+    }
+    if (payload.workspaceScope === "session") {
+        return payload.projectId === projectId;
+    }
+    return payload.projectId === projectId && payload.sessionId === sessionId;
 }
 
 const ShellNavContext = createContext<ShellNavContextValue | undefined>(undefined);
@@ -212,19 +212,19 @@ const ShellNavContext = createContext<ShellNavContextValue | undefined>(undefine
 
 function viewIdForScope( projectId: string | undefined, sessionId: string | undefined ): NavViewId {
 
-  if (projectId == null) {
+    if (projectId == null) {
 
-    return "projects";
+        return "projects";
 
-  }
+    }
 
-  if (sessionId == null) {
+    if (sessionId == null) {
 
-    return "sessions";
+        return "sessions";
 
-  }
+    }
 
-  return "conversation";
+    return "conversation";
 
 }
 
@@ -232,743 +232,743 @@ function viewIdForScope( projectId: string | undefined, sessionId: string | unde
 
 export function ShellNavProvider({ children }: { children: ReactNode }) {
 
-  const [viewId, setViewId] = useState<NavViewId>("projects");
+    const [viewId, setViewId] = useState<NavViewId>("projects");
 
-  const [workspaceScope, setWorkspaceScope] = useState<WorkspaceScope>("physical");
+    const [workspaceScope, setWorkspaceScope] = useState<WorkspaceScope>("physical");
 
-  const [projectId, setProjectId] = useState<string | undefined>();
+    const [projectId, setProjectId] = useState<string | undefined>();
 
-  const [projectName, setProjectName] = useState<string | undefined>();
+    const [projectName, setProjectName] = useState<string | undefined>();
 
-  const [sessionId, setSessionId] = useState<string | undefined>();
+    const [sessionId, setSessionId] = useState<string | undefined>();
 
-  const [sessionName, setSessionName] = useState<string | undefined>();
+    const [sessionName, setSessionName] = useState<string | undefined>();
 
-  // 子会话只读 view 的 sessionId 在 Provider 层维护（不进持久化 nav state），
-  // 仅供导航展示（ChatRail 标题 / 停止按钮等）使用。子会话与父会话共享工作区，
-  // workspaceSessionId 恒等 sessionId，不随子会话 view 切换。
-  const [subagentSessionId, setSubagentSessionId] = useState<string | undefined>();
-  const [subagentSessionName, setSubagentSessionName] = useState<string | undefined>();
+    // 子会话只读 view 的 sessionId 在 Provider 层维护（不进持久化 nav state），
+    // 仅供导航展示（ChatRail 标题 / 停止按钮等）使用。子会话与父会话共享工作区，
+    // workspaceSessionId 恒等 sessionId，不随子会话 view 切换。
+    const [subagentSessionId, setSubagentSessionId] = useState<string | undefined>();
+    const [subagentSessionName, setSubagentSessionName] = useState<string | undefined>();
 
-  // 工作区 session id：子会话没有独立工作区，恒等于 sessionId（父 session）。
-  // 保留这个派生字段做恒等映射，消费组件（ExplorerPane / WorkspaceTree 等）零改动。
-  const workspaceSessionId = sessionId;
+    // 工作区 session id：子会话没有独立工作区，恒等于 sessionId（父 session）。
+    // 保留这个派生字段做恒等映射，消费组件（ExplorerPane / WorkspaceTree 等）零改动。
+    const workspaceSessionId = sessionId;
 
-  const [previewTabs, setPreviewTabs] = useState<PreviewFileSelection[]>([]);
-  const [activePreviewKey, setActivePreviewKey] = useState<string | null>(null);
-  const [treeRefreshToken, setTreeRefreshToken] = useState(0);
-  const [treeExpandRequest, setTreeExpandRequest] = useState<{
-    path: string;
-    token: number;
-  } | null>(null);
-  const [agentConfigRevision, setAgentConfigRevision] = useState(0);
-  const [viewPromptRequest, setViewPromptRequest] = useState<{
-    token: number;
-  } | null>(null);
-  const mutateDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const ensurePreviewVisibleRef = useRef<(() => void) | null>(null);
+    const [previewTabs, setPreviewTabs] = useState<PreviewFileSelection[]>([]);
+    const [activePreviewKey, setActivePreviewKey] = useState<string | null>(null);
+    const [treeRefreshToken, setTreeRefreshToken] = useState(0);
+    const [treeExpandRequest, setTreeExpandRequest] = useState<{
+        path: string;
+        token: number;
+    } | null>(null);
+    const [agentConfigRevision, setAgentConfigRevision] = useState(0);
+    const [viewPromptRequest, setViewPromptRequest] = useState<{
+        token: number;
+    } | null>(null);
+    const mutateDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const ensurePreviewVisibleRef = useRef<(() => void) | null>(null);
 
-  const registerEnsurePreviewVisible = useCallback((fn: () => void) => {
-    ensurePreviewVisibleRef.current = fn;
-  }, []);
+    const registerEnsurePreviewVisible = useCallback((fn: () => void) => {
+        ensurePreviewVisibleRef.current = fn;
+    }, []);
 
-  const bumpTreeRefresh = useCallback(() => {
-    setTreeRefreshToken((t) => t + 1);
-  }, []);
+    const bumpTreeRefresh = useCallback(() => {
+        setTreeRefreshToken((t) => t + 1);
+    }, []);
 
-  const notifyWorkspaceMutated = useCallback(() => {
-    if (mutateDebounceRef.current != null) {
-      clearTimeout(mutateDebounceRef.current);
-    }
-    mutateDebounceRef.current = setTimeout(() => {
-      mutateDebounceRef.current = null;
-      bumpTreeRefresh();
-    }, WORKSPACE_MUTATED_DEBOUNCE_MS);
-  }, [bumpTreeRefresh]);
-
-  useEffect(() => {
-    return () => {
-      if (mutateDebounceRef.current != null) {
-        clearTimeout(mutateDebounceRef.current);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    return onWorkspaceMutated((payload) => {
-      if (workspaceMutatedMatchesNav(payload, projectId, workspaceSessionId)) {
-        notifyWorkspaceMutated();
-      }
-    });
-  }, [projectId, workspaceSessionId, notifyWorkspaceMutated]);
-
-  // 子 agent（子 session）的 VFS 写入落在父 session scope（共享父工作区），
-  // 但 step / run 事件挂在子 session 的 run 上——ConversationPanel 的
-  // useAgentStream 守卫（sessionId + acceptRunEvent）只放行本面板自己的
-  // run，子 session 的事件被拒收，父面板文件树就不会刷新。main 侧其实把
-  // 所有事件都转发到了 renderer（forward-event-bus），所以这里旁路订阅
-  // agent stream：只看 STEP_COMMITTED / RUN_FINISHED，按 projectId 匹配
-  // （与 workspaceMutatedMatchesNav 对 session scope 只匹配 projectId 的
-  // 口径一致）。本会话自己的 run 已由 ConversationPanel 处理，跳过它避免
-  // 双触发（防抖下无害，跳过更干净）。notifyWorkspaceMutated 自带 100ms
-  // 防抖，重复触发无副作用。
-  useEffect(() => {
-    return onAgentStream((envelope) => {
-      const { type, payload } = envelope;
-      if (
-        type !== EVENT_AGENT_STEP_COMMITTED &&
-        type !== EVENT_AGENT_RUN_FINISHED
-      ) {
-        return;
-      }
-      const p = payload as AgentStepCommittedPayload | AgentRunFinishedPayload;
-      if (
-        p.vfsMutated !== true ||
-        p.projectId !== projectId ||
-        p.sessionId === workspaceSessionId
-      ) {
-        return;
-      }
-      notifyWorkspaceMutated();
-    });
-  }, [projectId, workspaceSessionId, notifyWorkspaceMutated]);
-
-  const selectPreviewFile = useCallback(
-    (workspaceScope: PreviewFileSelection["workspaceScope"], path: string) => {
-      const key = previewTabKey(workspaceScope, path);
-      const name = path === "/" ? "/" : path.slice(path.lastIndexOf("/") + 1);
-      setPreviewTabs((prev) => {
-        const index = prev.findIndex(
-          (tab) =>
-            tab.workspaceScope === workspaceScope && tab.path === path,
-        );
-        if (index !== -1) {
-          const tab = prev[index]!;
-          if (!tab.isDeleted) {
-            return prev;
-          }
-          const next = [...prev];
-          next[index] = { ...tab, isDeleted: false };
-          return next;
+    const notifyWorkspaceMutated = useCallback(() => {
+        if (mutateDebounceRef.current != null) {
+            clearTimeout(mutateDebounceRef.current);
         }
-        return [...prev, { workspaceScope, path, name, isDeleted: false }];
-      });
-      setActivePreviewKey(key);
-    },
-    [],
-  );
+        mutateDebounceRef.current = setTimeout(() => {
+            mutateDebounceRef.current = null;
+            bumpTreeRefresh();
+        }, WORKSPACE_MUTATED_DEBOUNCE_MS);
+    }, [bumpTreeRefresh]);
 
-  const openChatWorkspacePreview = useCallback(
-    (path: string) => {
-      selectPreviewFile("chat", path);
-      ensurePreviewVisibleRef.current?.();
-    },
-    [selectPreviewFile],
-  );
+    useEffect(() => {
+        return () => {
+            if (mutateDebounceRef.current != null) {
+                clearTimeout(mutateDebounceRef.current);
+            }
+        };
+    }, []);
 
-  // 聊天链接路由：探测经 ipcVfsRead（chat 域=core session 域、session 域=core
-  // project 域，命名陷阱见 chat-link-route 头注）；执行 preview 时复用
-  // openChatWorkspacePreview 的「选 tab + 确保可见」链路；外跳消费现成
-  // ipcAppOpenExternal（nm:shell/openExternal），失败静默兜底。探测 miss
-  // 接 console.info 日志（MF-5：生产可观测，兑现 chat-link-route 头注承诺）。
-  const openChatLink = useCallback(
-    (href: string) => {
-      const sessionContext = projectId != null && sessionId != null ? { projectId, sessionId } : null;
-      const projectContext = projectId != null ? { projectId } : null;
-      void resolveChatLinkAction(href, {
-        sessionContext,
-        projectContext,
-        vfsRead: ipcVfsRead,
-        log: (message, detail) => console.info(message, detail),
-      }).then((action) => {
-        if (action.kind === "external") {
-          void ipcAppOpenExternal(action.url).catch(() => undefined);
-          return;
-        }
-        if (action.kind === "preview") {
-          if (action.workspaceScope === "chat") {
-            openChatWorkspacePreview(action.path);
-          } else {
-            selectPreviewFile("session", action.path);
-            ensurePreviewVisibleRef.current?.();
-          }
-          return;
-        }
-        if (action.kind === "not-found") {
-          // 路径型链接双域探测未命中：用户拍板弹提示，不再静默无动作
-          showToast(coreT(ChatLinkResolver.notFoundMessage(action.path)));
-        }
-      });
-    },
-    [projectId, sessionId, openChatWorkspacePreview, selectPreviewFile],
-  );
-
-  const closePreviewTab = useCallback(
-    (workspaceScope: PreviewFileSelection["workspaceScope"], path: string) => {
-      const key = previewTabKey(workspaceScope, path);
-      setPreviewTabs((prev) => {
-        const index = prev.findIndex(
-          (tab) =>
-            tab.workspaceScope === workspaceScope && tab.path === path,
-        );
-        if (index === -1) {
-          return prev;
-        }
-        const next = prev.filter((_, i) => i !== index);
-        setActivePreviewKey((activeKey) => {
-          if (activeKey !== key) {
-            return activeKey;
-          }
-          if (next.length === 0) {
-            return null;
-          }
-          const nextIndex = Math.min(index, next.length - 1);
-          const tab = next[nextIndex]!;
-          return previewTabKey(tab.workspaceScope, tab.path);
+    useEffect(() => {
+        return onWorkspaceMutated((payload) => {
+            if (workspaceMutatedMatchesNav(payload, projectId, workspaceSessionId)) {
+                notifyWorkspaceMutated();
+            }
         });
-        return next;
-      });
-    },
-    [],
-  );
+    }, [projectId, workspaceSessionId, notifyWorkspaceMutated]);
 
-  const closePreviewTabsUnderPath = useCallback(
-    (workspaceScope: PreviewFileSelection["workspaceScope"], path: string) => {
-      setPreviewTabs((prev) => {
-        const next = prev.filter(
-          (tab) =>
-            tab.workspaceScope !== workspaceScope ||
-            (tab.path !== path && !tab.path.startsWith(`${path}/`)),
-        );
-        if (next.length === prev.length) {
-          return prev;
-        }
-        setActivePreviewKey((activeKey) => {
-          if (activeKey == null) {
-            return null;
-          }
-          const stillOpen = next.some(
-            (tab) => previewTabKey(tab.workspaceScope, tab.path) === activeKey,
-          );
-          if (stillOpen) {
-            return activeKey;
-          }
-          if (next.length === 0) {
-            return null;
-          }
-          const tab = next[next.length - 1]!;
-          return previewTabKey(tab.workspaceScope, tab.path);
+    // 子 agent（子 session）的 VFS 写入落在父 session scope（共享父工作区），
+    // 但 step / run 事件挂在子 session 的 run 上——ConversationPanel 的
+    // useAgentStream 守卫（sessionId + acceptRunEvent）只放行本面板自己的
+    // run，子 session 的事件被拒收，父面板文件树就不会刷新。main 侧其实把
+    // 所有事件都转发到了 renderer（forward-event-bus），所以这里旁路订阅
+    // agent stream：只看 STEP_COMMITTED / RUN_FINISHED，按 projectId 匹配
+    // （与 workspaceMutatedMatchesNav 对 session scope 只匹配 projectId 的
+    // 口径一致）。本会话自己的 run 已由 ConversationPanel 处理，跳过它避免
+    // 双触发（防抖下无害，跳过更干净）。notifyWorkspaceMutated 自带 100ms
+    // 防抖，重复触发无副作用。
+    useEffect(() => {
+        return onAgentStream((envelope) => {
+            const { type, payload } = envelope;
+            if (
+                type !== EVENT_AGENT_STEP_COMMITTED &&
+                type !== EVENT_AGENT_RUN_FINISHED
+            ) {
+                return;
+            }
+            const p = payload as AgentStepCommittedPayload | AgentRunFinishedPayload;
+            if (
+                p.vfsMutated !== true ||
+                p.projectId !== projectId ||
+                p.sessionId === workspaceSessionId
+            ) {
+                return;
+            }
+            notifyWorkspaceMutated();
         });
-        return next;
-      });
-    },
-    [],
-  );
+    }, [projectId, workspaceSessionId, notifyWorkspaceMutated]);
 
-  const markPreviewTabsDeletedUnderPath = useCallback(
-    (workspaceScope: PreviewFileSelection["workspaceScope"], path: string) => {
-      setPreviewTabs((prev) =>
-        markPreviewTabsDeletedUnderPathInList(prev, workspaceScope, path),
-      );
-    },
-    [],
-  );
-
-  const renamePreviewTab = useCallback(
-    ( workspaceScope: PreviewFileSelection["workspaceScope"], oldPath: string, newPath: string ) => {
-      const newName = newPath === "/" ? "/" : newPath.slice(newPath.lastIndexOf("/") + 1);
-      const oldKey = previewTabKey(workspaceScope, oldPath);
-      const newKey = previewTabKey(workspaceScope, newPath);
-      setPreviewTabs((prev) =>
-        prev.map((tab) =>
-          tab.workspaceScope === workspaceScope && tab.path === oldPath
-            ? {
-                ...tab,
-                path: newPath,
-                name: newName,
-                isDeleted: false,
-              }
-            : tab,
-        ),
-      );
-      setActivePreviewKey((activeKey) =>
-        activeKey === oldKey ? newKey : activeKey,
-      );
-    },
-    [],
-  );
-
-  const syncPreviewTabsFromFileRows = useCallback(
-    (scope: WorkspacePanelScope, rows: WorkplaceListRowDto[]) => {
-      setPreviewTabs((prev) => syncPreviewTabsWithFileRows(prev, rows, scope));
-    },
-    [],
-  );
-
-  const clearPreviewFile = useCallback(() => {
-    setPreviewTabs([]);
-    setActivePreviewKey(null);
-  }, []);
-
-  const previewFile = useMemo(() => {
-    if (activePreviewKey == null) {
-      return null;
-    }
-    return (
-      previewTabs.find(
-        (tab) => previewTabKey(tab.workspaceScope, tab.path) === activePreviewKey,
-      ) ?? null
+    const selectPreviewFile = useCallback(
+        (workspaceScope: PreviewFileSelection["workspaceScope"], path: string) => {
+            const key = previewTabKey(workspaceScope, path);
+            const name = path === "/" ? "/" : path.slice(path.lastIndexOf("/") + 1);
+            setPreviewTabs((prev) => {
+                const index = prev.findIndex(
+                    (tab) =>
+                        tab.workspaceScope === workspaceScope && tab.path === path,
+                );
+                if (index !== -1) {
+                    const tab = prev[index]!;
+                    if (!tab.isDeleted) {
+                        return prev;
+                    }
+                    const next = [...prev];
+                    next[index] = { ...tab, isDeleted: false };
+                    return next;
+                }
+                return [...prev, { workspaceScope, path, name, isDeleted: false }];
+            });
+            setActivePreviewKey(key);
+        },
+        [],
     );
-  }, [previewTabs, activePreviewKey]);
 
-  const refreshWorkspaceTrees = notifyWorkspaceMutated;
-
-  const requestTreeExpandPath = useCallback((path: string) => {
-    setTreeExpandRequest((prev) => ({
-      path,
-      token: (prev?.token ?? 0) + 1,
-    }));
-  }, []);
-
-  const requestViewPrompt = useCallback(() => {
-    setViewPromptRequest((prev) => ({ token: (prev?.token ?? 0) + 1 }));
-  }, []);
-
-  const { footerKey, reloadFooter } = useWorkspaceFooterReload();
-
-  const notifyAgentConfigChanged = useCallback(() => {
-    setAgentConfigRevision((r) => r + 1);
-    reloadFooter();
-  }, [reloadFooter]);
-
-  const updateSessionName = useCallback((name: string) => {
-    setSessionName(name);
-  }, []);
-
-  const showNavView = useCallback((nextViewId: NavViewId) => {
-
-    setViewId(nextViewId);
-
-    setWorkspaceScope(syncWorkspaceWithNav(nextViewId));
-
-  }, []);
-
-  // 子会话只读 view 进入 / 退出。子 sessionId 在 Provider 层维护，仅用于导航展示，
-  // 工作区 scope 不受影响（子会话与父会话共享工作区）。
-  const openSubagentSession = useCallback(
-    (childSessionId: string, label?: string) => {
-      setSubagentSessionId(childSessionId);
-      setSubagentSessionName(label ?? coreT({key: "ui.nav.subagent_session_view"}));
-      showNavView("subagent-conversation");
-    },
-    [showNavView],
-  );
-
-  const exitSubagentSession = useCallback(() => {
-    showNavView("conversation");
-  }, [showNavView]);
-
-
-
-  const openProject = useCallback(
-
-    async (project: ProjectDto) => {
-
-      clearPreviewFile();
-
-      setProjectId(project.id);
-
-      setProjectName(project.name);
-
-      setSessionId(undefined);
-
-      setSessionName(undefined);
-
-      await setDesktopProject(project.id);
-
-      showNavView("sessions");
-
-    },
-
-    [showNavView, clearPreviewFile],
-
-  );
-
-
-
-  const openSession = useCallback(
-
-    async (session: SessionDto, parentProjectName: string) => {
-
-      clearPreviewFile();
-
-      setProjectId(session.projectId);
-
-      setProjectName(parentProjectName);
-
-      setSessionId(session.id);
-
-      setSessionName(session.title ?? coreT({key: "ui.nav.untitled_session"}));
-
-      await setDesktopSession(session.projectId, session.id);
-
-      showNavView("conversation");
-
-    },
-
-    [showNavView, clearPreviewFile],
-
-  );
-
-
-
-  const goBackToProjects = useCallback(() => {
-
-    clearPreviewFile();
-
-    setProjectId(undefined);
-
-    setProjectName(undefined);
-
-    setSessionId(undefined);
-
-    setSessionName(undefined);
-
-    showNavView("projects");
-
-  }, [showNavView, clearPreviewFile]);
-
-
-
-  const goBackToSessions = useCallback(() => {
-
-    clearPreviewFile();
-
-    setSessionId(undefined);
-
-    setSessionName(undefined);
-
-    showNavView("sessions");
-
-  }, [showNavView, clearPreviewFile]);
-
-
-
-  useEffect(() => {
-
-    let cancelled = false;
-
-
-
-    (async () => {
-
-      // Intent: hydrate chat-rail nav from PersistentState after runtime bootstrap.
-
-      // Main reconciles missing ids; renderer resolves display names and drill-down view.
-
-      const scope = await loadDesktopScope();
-
-      if (cancelled) {
-
-        return;
-
-      }
-
-
-
-      let nextProjectId = scope.projectId;
-
-      let nextSessionId = scope.sessionId;
-
-      let nextProjectName: string | undefined;
-
-      let nextSessionName: string | undefined;
-
-
-
-      const projectsResult = await ipcProjectsList();
-
-      if (cancelled) {
-
-        return;
-
-      }
-
-      const projects = projectsResult.ok ? projectsResult.data : [];
-
-
-
-      if (nextProjectId != null) {
-
-        const project = projects.find((p) => p.id === nextProjectId);
-
-        if (!project) {
-
-          // Stored project no longer exists — fall back to project list.
-
-          nextProjectId = undefined;
-
-          nextSessionId = undefined;
-
-        } else {
-
-          nextProjectName = project.name;
-
+    const openChatWorkspacePreview = useCallback(
+        (path: string) => {
+            selectPreviewFile("chat", path);
+            ensurePreviewVisibleRef.current?.();
+        },
+        [selectPreviewFile],
+    );
+
+    // 聊天链接路由：探测经 ipcVfsRead（chat 域=core session 域、session 域=core
+    // project 域，命名陷阱见 chat-link-route 头注）；执行 preview 时复用
+    // openChatWorkspacePreview 的「选 tab + 确保可见」链路；外跳消费现成
+    // ipcAppOpenExternal（nm:shell/openExternal），失败静默兜底。探测 miss
+    // 接 console.info 日志（MF-5：生产可观测，兑现 chat-link-route 头注承诺）。
+    const openChatLink = useCallback(
+        (href: string) => {
+            const sessionContext = projectId != null && sessionId != null ? { projectId, sessionId } : null;
+            const projectContext = projectId != null ? { projectId } : null;
+            void resolveChatLinkAction(href, {
+                sessionContext,
+                projectContext,
+                vfsRead: ipcVfsRead,
+                log: (message, detail) => console.info(message, detail),
+            }).then((action) => {
+                if (action.kind === "external") {
+                    void ipcAppOpenExternal(action.url).catch(() => undefined);
+                    return;
+                }
+                if (action.kind === "preview") {
+                    if (action.workspaceScope === "chat") {
+                        openChatWorkspacePreview(action.path);
+                    } else {
+                        selectPreviewFile("session", action.path);
+                        ensurePreviewVisibleRef.current?.();
+                    }
+                    return;
+                }
+                if (action.kind === "not-found") {
+                    // 路径型链接双域探测未命中：用户拍板弹提示，不再静默无动作
+                    showToast(coreT(ChatLinkResolver.notFoundMessage(action.path)));
+                }
+            });
+        },
+        [projectId, sessionId, openChatWorkspacePreview, selectPreviewFile],
+    );
+
+    const closePreviewTab = useCallback(
+        (workspaceScope: PreviewFileSelection["workspaceScope"], path: string) => {
+            const key = previewTabKey(workspaceScope, path);
+            setPreviewTabs((prev) => {
+                const index = prev.findIndex(
+                    (tab) =>
+                        tab.workspaceScope === workspaceScope && tab.path === path,
+                );
+                if (index === -1) {
+                    return prev;
+                }
+                const next = prev.filter((_, i) => i !== index);
+                setActivePreviewKey((activeKey) => {
+                    if (activeKey !== key) {
+                        return activeKey;
+                    }
+                    if (next.length === 0) {
+                        return null;
+                    }
+                    const nextIndex = Math.min(index, next.length - 1);
+                    const tab = next[nextIndex]!;
+                    return previewTabKey(tab.workspaceScope, tab.path);
+                });
+                return next;
+            });
+        },
+        [],
+    );
+
+    const closePreviewTabsUnderPath = useCallback(
+        (workspaceScope: PreviewFileSelection["workspaceScope"], path: string) => {
+            setPreviewTabs((prev) => {
+                const next = prev.filter(
+                    (tab) =>
+                        tab.workspaceScope !== workspaceScope ||
+                        (tab.path !== path && !tab.path.startsWith(`${path}/`)),
+                );
+                if (next.length === prev.length) {
+                    return prev;
+                }
+                setActivePreviewKey((activeKey) => {
+                    if (activeKey == null) {
+                        return null;
+                    }
+                    const stillOpen = next.some(
+                        (tab) => previewTabKey(tab.workspaceScope, tab.path) === activeKey,
+                    );
+                    if (stillOpen) {
+                        return activeKey;
+                    }
+                    if (next.length === 0) {
+                        return null;
+                    }
+                    const tab = next[next.length - 1]!;
+                    return previewTabKey(tab.workspaceScope, tab.path);
+                });
+                return next;
+            });
+        },
+        [],
+    );
+
+    const markPreviewTabsDeletedUnderPath = useCallback(
+        (workspaceScope: PreviewFileSelection["workspaceScope"], path: string) => {
+            setPreviewTabs((prev) =>
+                markPreviewTabsDeletedUnderPathInList(prev, workspaceScope, path),
+            );
+        },
+        [],
+    );
+
+    const renamePreviewTab = useCallback(
+        ( workspaceScope: PreviewFileSelection["workspaceScope"], oldPath: string, newPath: string ) => {
+            const newName = newPath === "/" ? "/" : newPath.slice(newPath.lastIndexOf("/") + 1);
+            const oldKey = previewTabKey(workspaceScope, oldPath);
+            const newKey = previewTabKey(workspaceScope, newPath);
+            setPreviewTabs((prev) =>
+                prev.map((tab) =>
+                    tab.workspaceScope === workspaceScope && tab.path === oldPath
+                        ? {
+                                ...tab,
+                                path: newPath,
+                                name: newName,
+                                isDeleted: false,
+                            }
+                        : tab,
+                ),
+            );
+            setActivePreviewKey((activeKey) =>
+                activeKey === oldKey ? newKey : activeKey,
+            );
+        },
+        [],
+    );
+
+    const syncPreviewTabsFromFileRows = useCallback(
+        (scope: WorkspacePanelScope, rows: WorkplaceListRowDto[]) => {
+            setPreviewTabs((prev) => syncPreviewTabsWithFileRows(prev, rows, scope));
+        },
+        [],
+    );
+
+    const clearPreviewFile = useCallback(() => {
+        setPreviewTabs([]);
+        setActivePreviewKey(null);
+    }, []);
+
+    const previewFile = useMemo(() => {
+        if (activePreviewKey == null) {
+            return null;
         }
+        return (
+            previewTabs.find(
+                (tab) => previewTabKey(tab.workspaceScope, tab.path) === activePreviewKey,
+            ) ?? null
+        );
+    }, [previewTabs, activePreviewKey]);
 
-      }
+    const refreshWorkspaceTrees = notifyWorkspaceMutated;
+
+    const requestTreeExpandPath = useCallback((path: string) => {
+        setTreeExpandRequest((prev) => ({
+            path,
+            token: (prev?.token ?? 0) + 1,
+        }));
+    }, []);
+
+    const requestViewPrompt = useCallback(() => {
+        setViewPromptRequest((prev) => ({ token: (prev?.token ?? 0) + 1 }));
+    }, []);
+
+    const { footerKey, reloadFooter } = useWorkspaceFooterReload();
+
+    const notifyAgentConfigChanged = useCallback(() => {
+        setAgentConfigRevision((r) => r + 1);
+        reloadFooter();
+    }, [reloadFooter]);
+
+    const updateSessionName = useCallback((name: string) => {
+        setSessionName(name);
+    }, []);
+
+    const showNavView = useCallback((nextViewId: NavViewId) => {
+
+        setViewId(nextViewId);
+
+        setWorkspaceScope(syncWorkspaceWithNav(nextViewId));
+
+    }, []);
+
+    // 子会话只读 view 进入 / 退出。子 sessionId 在 Provider 层维护，仅用于导航展示，
+    // 工作区 scope 不受影响（子会话与父会话共享工作区）。
+    const openSubagentSession = useCallback(
+        (childSessionId: string, label?: string) => {
+            setSubagentSessionId(childSessionId);
+            setSubagentSessionName(label ?? coreT({key: "ui.nav.subagent_session_view"}));
+            showNavView("subagent-conversation");
+        },
+        [showNavView],
+    );
+
+    const exitSubagentSession = useCallback(() => {
+        showNavView("conversation");
+    }, [showNavView]);
 
 
 
-      if (nextProjectId != null && nextSessionId != null) {
+    const openProject = useCallback(
 
-        const sessionsResult = await ipcSessionsListByProject({
+        async (project: ProjectDto) => {
 
-          projectId: nextProjectId,
+            clearPreviewFile();
+
+            setProjectId(project.id);
+
+            setProjectName(project.name);
+
+            setSessionId(undefined);
+
+            setSessionName(undefined);
+
+            await setDesktopProject(project.id);
+
+            showNavView("sessions");
+
+        },
+
+        [showNavView, clearPreviewFile],
+
+    );
+
+
+
+    const openSession = useCallback(
+
+        async (session: SessionDto, parentProjectName: string) => {
+
+            clearPreviewFile();
+
+            setProjectId(session.projectId);
+
+            setProjectName(parentProjectName);
+
+            setSessionId(session.id);
+
+            setSessionName(session.title ?? coreT({key: "ui.nav.untitled_session"}));
+
+            await setDesktopSession(session.projectId, session.id);
+
+            showNavView("conversation");
+
+        },
+
+        [showNavView, clearPreviewFile],
+
+    );
+
+
+
+    const goBackToProjects = useCallback(() => {
+
+        clearPreviewFile();
+
+        setProjectId(undefined);
+
+        setProjectName(undefined);
+
+        setSessionId(undefined);
+
+        setSessionName(undefined);
+
+        showNavView("projects");
+
+    }, [showNavView, clearPreviewFile]);
+
+
+
+    const goBackToSessions = useCallback(() => {
+
+        clearPreviewFile();
+
+        setSessionId(undefined);
+
+        setSessionName(undefined);
+
+        showNavView("sessions");
+
+    }, [showNavView, clearPreviewFile]);
+
+
+
+    useEffect(() => {
+
+        let cancelled = false;
+
+
+
+        (async () => {
+
+            // Intent: hydrate chat-rail nav from PersistentState after runtime bootstrap.
+
+            // Main reconciles missing ids; renderer resolves display names and drill-down view.
+
+            const scope = await loadDesktopScope();
+
+            if (cancelled) {
+
+                return;
+
+            }
+
+
+
+            let nextProjectId = scope.projectId;
+
+            let nextSessionId = scope.sessionId;
+
+            let nextProjectName: string | undefined;
+
+            let nextSessionName: string | undefined;
+
+
+
+            const projectsResult = await ipcProjectsList();
+
+            if (cancelled) {
+
+                return;
+
+            }
+
+            const projects = projectsResult.ok ? projectsResult.data : [];
+
+
+
+            if (nextProjectId != null) {
+
+                const project = projects.find((p) => p.id === nextProjectId);
+
+                if (!project) {
+
+                    // Stored project no longer exists — fall back to project list.
+
+                    nextProjectId = undefined;
+
+                    nextSessionId = undefined;
+
+                } else {
+
+                    nextProjectName = project.name;
+
+                }
+
+            }
+
+
+
+            if (nextProjectId != null && nextSessionId != null) {
+
+                const sessionsResult = await ipcSessionsListByProject({
+
+                    projectId: nextProjectId,
+
+                });
+
+                if (cancelled) {
+
+                    return;
+
+                }
+
+                const sessions = sessionsResult.ok ? sessionsResult.data : [];
+
+                const session = sessions.find((s) => s.id === nextSessionId);
+
+                if (!session) {
+
+                    // Stored session missing — stay on sessions list for the project.
+
+                    nextSessionId = undefined;
+
+                } else {
+
+                    nextSessionName = session.title ?? coreT({key: "ui.nav.untitled_session"});
+
+                }
+
+            }
+
+
+
+            const nextViewId = viewIdForScope(nextProjectId, nextSessionId);
+
+            setProjectId(nextProjectId);
+
+            setProjectName(nextProjectName);
+
+            setSessionId(nextSessionId);
+
+            setSessionName(nextSessionName);
+
+            setViewId(nextViewId);
+
+            setWorkspaceScope(syncWorkspaceWithNav(nextViewId));
+
+        })().catch(() => {
+
+            // Scope hydration failure is non-fatal; user stays on default projects view.
 
         });
 
-        if (cancelled) {
 
-          return;
 
-        }
+        return () => {
 
-        const sessions = sessionsResult.ok ? sessionsResult.data : [];
+            cancelled = true;
 
-        const session = sessions.find((s) => s.id === nextSessionId);
+        };
 
-        if (!session) {
+    }, []);
 
-          // Stored session missing — stay on sessions list for the project.
 
-          nextSessionId = undefined;
 
-        } else {
+    const value = useMemo<ShellNavContextValue>(
 
-          nextSessionName = session.title ?? coreT({key: "ui.nav.untitled_session"});
+        () => ({
 
-        }
+            viewId,
 
-      }
+            workspaceScope,
 
+            projectId,
 
+            projectName,
 
-      const nextViewId = viewIdForScope(nextProjectId, nextSessionId);
+            sessionId,
 
-      setProjectId(nextProjectId);
+            workspaceSessionId,
 
-      setProjectName(nextProjectName);
+            openSubagentSession,
 
-      setSessionId(nextSessionId);
+            exitSubagentSession,
 
-      setSessionName(nextSessionName);
+            subagentSessionId,
 
-      setViewId(nextViewId);
+            subagentSessionName,
 
-      setWorkspaceScope(syncWorkspaceWithNav(nextViewId));
+            sessionName,
 
-    })().catch(() => {
+            updateSessionName,
 
-      // Scope hydration failure is non-fatal; user stays on default projects view.
+            showNavView,
 
-    });
+            openProject,
 
+            openSession,
 
+            goBackToProjects,
 
-    return () => {
+            goBackToSessions,
 
-      cancelled = true;
+            previewTabs,
 
-    };
+            activePreviewKey,
 
-  }, []);
+            previewFile,
 
+            selectPreviewFile,
 
+            closePreviewTab,
 
-  const value = useMemo<ShellNavContextValue>(
+            closePreviewTabsUnderPath,
 
-    () => ({
+            markPreviewTabsDeletedUnderPath,
 
-      viewId,
+            renamePreviewTab,
 
-      workspaceScope,
+            syncPreviewTabsFromFileRows,
 
-      projectId,
+            clearPreviewFile,
 
-      projectName,
+            treeRefreshToken,
 
-      sessionId,
+            notifyWorkspaceMutated,
 
-      workspaceSessionId,
+            refreshWorkspaceTrees,
 
-      openSubagentSession,
+            treeExpandRequest,
 
-      exitSubagentSession,
+            requestTreeExpandPath,
 
-      subagentSessionId,
+            agentConfigRevision,
 
-      subagentSessionName,
+            notifyAgentConfigChanged,
 
-      sessionName,
+            footerKey,
 
-      updateSessionName,
+            reloadFooter,
 
-      showNavView,
+            registerEnsurePreviewVisible,
 
-      openProject,
+            openChatWorkspacePreview,
 
-      openSession,
+            openChatLink,
 
-      goBackToProjects,
+            viewPromptRequest,
 
-      goBackToSessions,
+            requestViewPrompt,
 
-      previewTabs,
+        }),
 
-      activePreviewKey,
+        [
 
-      previewFile,
+            viewId,
 
-      selectPreviewFile,
+            workspaceScope,
 
-      closePreviewTab,
+            projectId,
 
-      closePreviewTabsUnderPath,
+            projectName,
 
-      markPreviewTabsDeletedUnderPath,
+            sessionId,
 
-      renamePreviewTab,
+            workspaceSessionId,
 
-      syncPreviewTabsFromFileRows,
+            openSubagentSession,
 
-      clearPreviewFile,
+            exitSubagentSession,
 
-      treeRefreshToken,
+            subagentSessionId,
 
-      notifyWorkspaceMutated,
+            subagentSessionName,
 
-      refreshWorkspaceTrees,
+            sessionName,
 
-      treeExpandRequest,
+            updateSessionName,
 
-      requestTreeExpandPath,
+            showNavView,
 
-      agentConfigRevision,
+            openProject,
 
-      notifyAgentConfigChanged,
+            openSession,
 
-      footerKey,
+            goBackToProjects,
 
-      reloadFooter,
+            goBackToSessions,
 
-      registerEnsurePreviewVisible,
+            previewTabs,
 
-      openChatWorkspacePreview,
+            activePreviewKey,
 
-      openChatLink,
+            previewFile,
 
-      viewPromptRequest,
+            selectPreviewFile,
 
-      requestViewPrompt,
+            closePreviewTab,
 
-    }),
+            closePreviewTabsUnderPath,
 
-    [
+            markPreviewTabsDeletedUnderPath,
 
-      viewId,
+            renamePreviewTab,
 
-      workspaceScope,
+            syncPreviewTabsFromFileRows,
 
-      projectId,
+            clearPreviewFile,
 
-      projectName,
+            treeRefreshToken,
 
-      sessionId,
+            notifyWorkspaceMutated,
 
-      workspaceSessionId,
+            refreshWorkspaceTrees,
 
-      openSubagentSession,
+            treeExpandRequest,
 
-      exitSubagentSession,
+            requestTreeExpandPath,
 
-      subagentSessionId,
+            agentConfigRevision,
 
-      subagentSessionName,
+            notifyAgentConfigChanged,
 
-      sessionName,
+            footerKey,
 
-      updateSessionName,
+            reloadFooter,
 
-      showNavView,
+            registerEnsurePreviewVisible,
 
-      openProject,
+            openChatWorkspacePreview,
 
-      openSession,
+            openChatLink,
 
-      goBackToProjects,
+            viewPromptRequest,
 
-      goBackToSessions,
+            requestViewPrompt,
 
-      previewTabs,
+        ],
 
-      activePreviewKey,
+    );
 
-      previewFile,
 
-      selectPreviewFile,
 
-      closePreviewTab,
+    return (
 
-      closePreviewTabsUnderPath,
+        <ShellNavContext.Provider value={value}>{children}</ShellNavContext.Provider>
 
-      markPreviewTabsDeletedUnderPath,
-
-      renamePreviewTab,
-
-      syncPreviewTabsFromFileRows,
-
-      clearPreviewFile,
-
-      treeRefreshToken,
-
-      notifyWorkspaceMutated,
-
-      refreshWorkspaceTrees,
-
-      treeExpandRequest,
-
-      requestTreeExpandPath,
-
-      agentConfigRevision,
-
-      notifyAgentConfigChanged,
-
-      footerKey,
-
-      reloadFooter,
-
-      registerEnsurePreviewVisible,
-
-      openChatWorkspacePreview,
-
-      openChatLink,
-
-      viewPromptRequest,
-
-      requestViewPrompt,
-
-    ],
-
-  );
-
-
-
-  return (
-
-    <ShellNavContext.Provider value={value}>{children}</ShellNavContext.Provider>
-
-  );
+    );
 
 }
 
@@ -976,17 +976,17 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
 
 export function useShellNav(): ShellNavContextValue {
 
-  const ctx = useContext(ShellNavContext);
+    const ctx = useContext(ShellNavContext);
 
-  if (!ctx) {
+    if (!ctx) {
 
-    // nm-throw: keep — UI 错误边界语义：Context hook 缺 Provider 属渲染期编程护栏（React 惯例 throw）。
+        // nm-throw: keep — UI 错误边界语义：Context hook 缺 Provider 属渲染期编程护栏（React 惯例 throw）。
 
-    throw new Error("useShellNav must be used within ShellNavProvider");
+        throw new Error("useShellNav must be used within ShellNavProvider");
 
-  }
+    }
 
-  return ctx;
+    return ctx;
 
 }
 

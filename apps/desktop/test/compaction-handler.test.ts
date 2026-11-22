@@ -32,8 +32,8 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import {
-  promptWholeCache,
-  sessionApiPromptTokenCache,
+    promptWholeCache,
+    sessionApiPromptTokenCache,
 } from "@novel-master/core/tokenizer";
 import { DesktopRuntimeSingleton } from "../src/main/runtime/desktop-runtime-singleton.js";
 import { CompactionIpc } from "../src/main/ipc/handlers/compaction.js";
@@ -44,145 +44,145 @@ import { AgentRegistry } from "../src/main/ipc/handlers/agent-registry.js";
 import { Agent } from "../src/main/ipc/handlers/agent.js";
 import { Sessions } from "../src/main/ipc/handlers/sessions.js";
 import {
-  IPC_CHANNELS,
-  type PromptChatTokenUpdatedPayload,
+    IPC_CHANNELS,
+    type PromptChatTokenUpdatedPayload,
 } from "../shared/ipc-types.js";
 import { ComposerAttachmentsSuggestForwarder } from "../src/main/ipc/forward-composer-attachments-suggest.js";
 import { PromptChatTokenUpdatedForwarder } from "../src/main/ipc/forward-prompt-chat-token-updated.js";
 import { ChatPromptTokensService } from "../src/main/services/chat-prompt-tokens.service.js";
 import {
-  setupDesktopDbTestEnv,
-  teardownDesktopDbTestEnv,
+    setupDesktopDbTestEnv,
+    teardownDesktopDbTestEnv,
 } from "./desktop-db-test-env.js";
 
 describe("handleCompactionManual", () => {
-  let tempDir: string;
-  let projectId: string;
-  let sessionId: string;
+    let tempDir: string;
+    let projectId: string;
+    let sessionId: string;
 
-  before(async () => {
-    ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-compaction-"));
+    before(async () => {
+        ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-compaction-"));
 
-    const project = await Projects.create({ name: "compaction-ipc" });
-    assert.equal(project.ok, true);
-    if (!project.ok) {
-      return;
-    }
-    projectId = project.data.id;
+        const project = await Projects.create({ name: "compaction-ipc" });
+        assert.equal(project.ok, true);
+        if (!project.ok) {
+            return;
+        }
+        projectId = project.data.id;
 
-    // 新 core 下 session 创建要求 workspace 已配置 agent。
-    const blank = await AgentRegistry.createBlank();
-    assert.equal(blank.ok, true);
-    if (blank.ok) {
-      await Agent.setCurrent({ agentId: blank.data.agentId });
-    }
+        // 新 core 下 session 创建要求 workspace 已配置 agent。
+        const blank = await AgentRegistry.createBlank();
+        assert.equal(blank.ok, true);
+        if (blank.ok) {
+            await Agent.setCurrent({ agentId: blank.data.agentId });
+        }
 
-    const session = await Sessions.create({
-      projectId,
-      title: "compaction-session",
-    });
-    assert.equal(session.ok, true);
-    if (!session.ok) {
-      return;
-    }
-    sessionId = session.data.id;
+        const session = await Sessions.create({
+            projectId,
+            title: "compaction-session",
+        });
+        assert.equal(session.ok, true);
+        if (!session.ok) {
+            return;
+        }
+        sessionId = session.data.id;
 
-    await Messages.append({ sessionId, role: "user", text: "u1" });
-    await Messages.append({ sessionId, role: "assistant", text: "a1" });
-    await Messages.append({ sessionId, role: "user", text: "u2" });
-  });
-
-  after(async () => {
-    await teardownDesktopDbTestEnv(tempDir);
-  });
-
-  it("T-IPC1R: manual 压缩（trigger:manual）成功后清 file_cache / rule_snapshot，保留 pending", async () => {
-    const rtR = await DesktopRuntimeSingleton.get();
-    if (!rtR.ok) throw rtR.error;
-    const rt = rtR.value;
-    const pendingJson = JSON.stringify([
-      {
-        actionXml: '<action name="mkdir"><path>/keep</path></action>',
-        tools: [{ id: "t1", name: "vfs_mkdir" }],
-        createdAtMs: 1,
-      },
-    ]);
-    await rt.sessionKkv.set(
-      sessionId,
-      "file_cache",
-      "full:/a.md",
-      JSON.stringify({ body: "x", mtimeMs: 1 }),
-    );
-    await rt.sessionKkv.set(sessionId, "rule_snapshot", "canon", "[]");
-    await rt.sessionKkv.set(
-      sessionId,
-      "user_vfs_pending",
-      "queue",
-      pendingJson,
-    );
-
-    // 入口传了 trigger:"manual"，runCompaction 成功后清两域。
-    assert.deepEqual(await rt.sessionKkv.listKeys(sessionId, "file_cache"), [
-      "full:/a.md",
-    ]);
-    assert.deepEqual(await rt.sessionKkv.listKeys(sessionId, "rule_snapshot"), [
-      "canon",
-    ]);
-
-    // SPEC L274：runCompaction 成功后调 refreshComposerStatusAfterFloorOrCompaction，
-    // 该函数最终经 ComposerAttachmentsSuggestForwarder 向 renderer 广播
-    // COMPOSER_ATTACHMENTS_SUGGEST。注入假 webContents 捕获 send（与同目录
-    // notify-composer-status-after-kkv-clear.test.ts 同范式）。
-    const sent: Array<{ channel: string; payload: unknown }> = [];
-    ComposerAttachmentsSuggestForwarder.setTarget(() => {
-      return {
-        send(channel: string, payload: unknown) {
-          sent.push({ channel, payload });
-        },
-      } as never;
+        await Messages.append({ sessionId, role: "user", text: "u1" });
+        await Messages.append({ sessionId, role: "assistant", text: "a1" });
+        await Messages.append({ sessionId, role: "user", text: "u2" });
     });
 
-    const result = await CompactionIpc.handleManual({ projectId, sessionId });
-    assert.equal(result.ok, true);
-    // 手动压缩是用户主动的「重整 + 刷新」意图：按内容寻址的 file_cache 与
-    // workplace 规则快照一并作废，下一次拼提示词（发送或预览）时 workplace
-    // 块按当前工作区重评估（新文件进清单、正文重读）。
-    assert.deepEqual(
-      await rt.sessionKkv.listKeys(sessionId, "file_cache"),
-      [],
-      "手动压缩应清空 file_cache（workplace 刷新前置）",
-    );
-    assert.deepEqual(
-      await rt.sessionKkv.listKeys(sessionId, "rule_snapshot"),
-      [],
-      "手动压缩应清空 rule_snapshot（workplace 规则重评估前置）",
-    );
-    // user_vfs_pending 不在清理范围内：它是待执行的写盘动作队列，与
-    // workplace 刷新正交。
-    assert.equal(
-      await rt.sessionKkv.get(sessionId, "user_vfs_pending", "queue"),
-      pendingJson,
-    );
-
-    // refreshComposerStatusAfterFloorOrCompaction 被调用：发出一次 COMPOSER_ATTACHMENTS_SUGGEST，
-    // payload 携带本次 sessionId。
-    const composerBroadcasts = sent.filter(
-      (s) => s.channel === IPC_CHANNELS.COMPOSER_ATTACHMENTS_SUGGEST,
-    );
-    assert.equal(
-      composerBroadcasts.length,
-      1,
-      "refreshComposerStatusAfterFloorOrCompaction should broadcast exactly once after successful runCompaction",
-    );
-    assert.deepEqual(composerBroadcasts[0]?.payload, {
-      sessionId,
-      attachments: [],
+    after(async () => {
+        await teardownDesktopDbTestEnv(tempDir);
     });
 
-    ComposerAttachmentsSuggestForwarder.setTarget(() => undefined);
-  });
+    it("T-IPC1R: manual 压缩（trigger:manual）成功后清 file_cache / rule_snapshot，保留 pending", async () => {
+        const rtR = await DesktopRuntimeSingleton.get();
+        if (!rtR.ok) throw rtR.error;
+        const rt = rtR.value;
+        const pendingJson = JSON.stringify([
+            {
+                actionXml: '<action name="mkdir"><path>/keep</path></action>',
+                tools: [{ id: "t1", name: "vfs_mkdir" }],
+                createdAtMs: 1,
+            },
+        ]);
+        await rt.sessionKkv.set(
+            sessionId,
+            "file_cache",
+            "full:/a.md",
+            JSON.stringify({ body: "x", mtimeMs: 1 }),
+        );
+        await rt.sessionKkv.set(sessionId, "rule_snapshot", "canon", "[]");
+        await rt.sessionKkv.set(
+            sessionId,
+            "user_vfs_pending",
+            "queue",
+            pendingJson,
+        );
 
-  /**
+        // 入口传了 trigger:"manual"，runCompaction 成功后清两域。
+        assert.deepEqual(await rt.sessionKkv.listKeys(sessionId, "file_cache"), [
+            "full:/a.md",
+        ]);
+        assert.deepEqual(await rt.sessionKkv.listKeys(sessionId, "rule_snapshot"), [
+            "canon",
+        ]);
+
+        // SPEC L274：runCompaction 成功后调 refreshComposerStatusAfterFloorOrCompaction，
+        // 该函数最终经 ComposerAttachmentsSuggestForwarder 向 renderer 广播
+        // COMPOSER_ATTACHMENTS_SUGGEST。注入假 webContents 捕获 send（与同目录
+        // notify-composer-status-after-kkv-clear.test.ts 同范式）。
+        const sent: Array<{ channel: string; payload: unknown }> = [];
+        ComposerAttachmentsSuggestForwarder.setTarget(() => {
+            return {
+                send(channel: string, payload: unknown) {
+                    sent.push({ channel, payload });
+                },
+            } as never;
+        });
+
+        const result = await CompactionIpc.handleManual({ projectId, sessionId });
+        assert.equal(result.ok, true);
+        // 手动压缩是用户主动的「重整 + 刷新」意图：按内容寻址的 file_cache 与
+        // workplace 规则快照一并作废，下一次拼提示词（发送或预览）时 workplace
+        // 块按当前工作区重评估（新文件进清单、正文重读）。
+        assert.deepEqual(
+            await rt.sessionKkv.listKeys(sessionId, "file_cache"),
+            [],
+            "手动压缩应清空 file_cache（workplace 刷新前置）",
+        );
+        assert.deepEqual(
+            await rt.sessionKkv.listKeys(sessionId, "rule_snapshot"),
+            [],
+            "手动压缩应清空 rule_snapshot（workplace 规则重评估前置）",
+        );
+        // user_vfs_pending 不在清理范围内：它是待执行的写盘动作队列，与
+        // workplace 刷新正交。
+        assert.equal(
+            await rt.sessionKkv.get(sessionId, "user_vfs_pending", "queue"),
+            pendingJson,
+        );
+
+        // refreshComposerStatusAfterFloorOrCompaction 被调用：发出一次 COMPOSER_ATTACHMENTS_SUGGEST，
+        // payload 携带本次 sessionId。
+        const composerBroadcasts = sent.filter(
+            (s) => s.channel === IPC_CHANNELS.COMPOSER_ATTACHMENTS_SUGGEST,
+        );
+        assert.equal(
+            composerBroadcasts.length,
+            1,
+            "refreshComposerStatusAfterFloorOrCompaction should broadcast exactly once after successful runCompaction",
+        );
+        assert.deepEqual(composerBroadcasts[0]?.payload, {
+            sessionId,
+            attachments: [],
+        });
+
+        ComposerAttachmentsSuggestForwarder.setTarget(() => undefined);
+    });
+
+    /**
    * T-CR6：run 在途时手动压缩被 main 侧门禁拦下。
    *
    * 为什么注入 agent 门面真态而不是 mock 掉 runCompaction：desktop 测试
@@ -197,128 +197,128 @@ describe("handleCompactionManual", () => {
    * ②composer 广播 0 次；③两域 listKeys 与触发前逐字相同——先预置各一键，
    * 防「空对空恒真」。
    */
-  it("T-CR6: run 在途时手动压缩被拦（AGENT_RUN_IN_FLIGHT），不广播不清理", async () => {
-    const rtR = await DesktopRuntimeSingleton.get();
-    if (!rtR.ok) throw rtR.error;
-    const rt = rtR.value;
+    it("T-CR6: run 在途时手动压缩被拦（AGENT_RUN_IN_FLIGHT），不广播不清理", async () => {
+        const rtR = await DesktopRuntimeSingleton.get();
+        if (!rtR.ok) throw rtR.error;
+        const rt = rtR.value;
 
-    // 独立会话：不污染 T-CR5「无预置 kkv」的干净前提（同 T-IPC2 的做法）。
-    const session = await Sessions.create({
-      projectId,
-      title: "compaction-run-in-flight",
-    });
-    assert.equal(session.ok, true, session.ok ? "" : session.error.message);
-    if (!session.ok) {
-      return;
-    }
-    const cr6SessionId = session.data.id;
+        // 独立会话：不污染 T-CR5「无预置 kkv」的干净前提（同 T-IPC2 的做法）。
+        const session = await Sessions.create({
+            projectId,
+            title: "compaction-run-in-flight",
+        });
+        assert.equal(session.ok, true, session.ok ? "" : session.error.message);
+        if (!session.ok) {
+            return;
+        }
+        const cr6SessionId = session.data.id;
 
-    // 预置：先让两域非空，拦截后必须原样保留。
-    await rt.sessionKkv.set(
-      cr6SessionId,
-      "file_cache",
-      "full:/cr6.md",
-      JSON.stringify({ body: "y", mtimeMs: 2 }),
-    );
-    await rt.sessionKkv.set(
-      cr6SessionId,
-      "rule_snapshot",
-      "canon-cr6",
-      "[]",
-    );
+        // 预置：先让两域非空，拦截后必须原样保留。
+        await rt.sessionKkv.set(
+            cr6SessionId,
+            "file_cache",
+            "full:/cr6.md",
+            JSON.stringify({ body: "y", mtimeMs: 2 }),
+        );
+        await rt.sessionKkv.set(
+            cr6SessionId,
+            "rule_snapshot",
+            "canon-cr6",
+            "[]",
+        );
 
-    const sent: Array<{ channel: string; payload: unknown }> = [];
-    ComposerAttachmentsSuggestForwarder.setTarget(() => {
-      return {
-        send(channel: string, payload: unknown) {
-          sent.push({ channel, payload });
-        },
-      } as never;
-    });
+        const sent: Array<{ channel: string; payload: unknown }> = [];
+        ComposerAttachmentsSuggestForwarder.setTarget(() => {
+            return {
+                send(channel: string, payload: unknown) {
+                    sent.push({ channel, payload });
+                },
+            } as never;
+        });
 
-    // 伪造成「run 在途」：向 core agent 门面注册一个 controller。
-    const controller = new AbortController();
-    rt.agentAbortRegistry.register(cr6SessionId, controller);
+        // 伪造成「run 在途」：向 core agent 门面注册一个 controller。
+        const controller = new AbortController();
+        rt.agentAbortRegistry.register(cr6SessionId, controller);
 
-    try {
-      const result = await CompactionIpc.handleManual({
-        projectId,
-        sessionId: cr6SessionId,
-      });
-      assert.equal(result.ok, false);
-      assert.equal(
-        result.ok ? undefined : result.error.code,
-        "AGENT_RUN_IN_FLIGHT",
-      );
-      assert.equal(
-        result.ok ? undefined : result.error.message,
-        "Agent 运行中无法压缩",
-      );
+        try {
+            const result = await CompactionIpc.handleManual({
+                projectId,
+                sessionId: cr6SessionId,
+            });
+            assert.equal(result.ok, false);
+            assert.equal(
+                result.ok ? undefined : result.error.code,
+                "AGENT_RUN_IN_FLIGHT",
+            );
+            assert.equal(
+                result.ok ? undefined : result.error.message,
+                "Agent 运行中无法压缩",
+            );
 
-      const composerBroadcasts = sent.filter(
-        (s) => s.channel === IPC_CHANNELS.COMPOSER_ATTACHMENTS_SUGGEST,
-      );
-      assert.equal(
-        composerBroadcasts.length,
-        0,
-        "被拦下时不得进入 runCompaction 成功分支，故不应广播 composer 状态",
-      );
+            const composerBroadcasts = sent.filter(
+                (s) => s.channel === IPC_CHANNELS.COMPOSER_ATTACHMENTS_SUGGEST,
+            );
+            assert.equal(
+                composerBroadcasts.length,
+                0,
+                "被拦下时不得进入 runCompaction 成功分支，故不应广播 composer 状态",
+            );
 
-      assert.deepEqual(
-        await rt.sessionKkv.listKeys(cr6SessionId, "file_cache"),
-        ["full:/cr6.md"],
-        "被拦下时不得清 file_cache",
-      );
-      assert.deepEqual(
-        await rt.sessionKkv.listKeys(cr6SessionId, "rule_snapshot"),
-        ["canon-cr6"],
-        "被拦下时不得清 rule_snapshot",
-      );
-    } finally {
-      rt.agentAbortRegistry.unregister(cr6SessionId, controller);
-      ComposerAttachmentsSuggestForwarder.setTarget(() => undefined);
-    }
-  });
-
-  // T-CR5：原测 condition 压缩走 eventOrchestrator.emit（Step 9 已删），
-  // Step 20 改为测 runCompaction 对「无预置 kkv」的干净 session 的容错。
-  // T-IPC1R 预置了 file_cache / rule_snapshot / user_vfs_pending；本用例不预置，
-  // 验证 runCompaction 在 kkv 空时仍返回 ok:true 并触发 composer 广播。
-  //
-  // 注意：core 侧 run-compaction.test.ts 已覆盖 runCompaction 的成败两路；
-  // 本用例聚焦 IPC 层 handleCompactionManual → runCompaction → notify 的链路。
-  it("T-CR5: 无预置 kkv 时 runCompaction 仍返回 ok 并触发 composer 广播", async () => {
-    const sent: Array<{ channel: string; payload: unknown }> = [];
-    ComposerAttachmentsSuggestForwarder.setTarget(() => {
-      return {
-        send(channel: string, payload: unknown) {
-          sent.push({ channel, payload });
-        },
-      } as never;
+            assert.deepEqual(
+                await rt.sessionKkv.listKeys(cr6SessionId, "file_cache"),
+                ["full:/cr6.md"],
+                "被拦下时不得清 file_cache",
+            );
+            assert.deepEqual(
+                await rt.sessionKkv.listKeys(cr6SessionId, "rule_snapshot"),
+                ["canon-cr6"],
+                "被拦下时不得清 rule_snapshot",
+            );
+        } finally {
+            rt.agentAbortRegistry.unregister(cr6SessionId, controller);
+            ComposerAttachmentsSuggestForwarder.setTarget(() => undefined);
+        }
     });
 
-    const result = await CompactionIpc.handleManual({ projectId, sessionId });
-    assert.equal(result.ok, true);
-    assert.equal(
-      result.data?.ok,
-      true,
-      "data.ok 应透传 runCompaction 的 true（kkv 空 不影响成败）",
-    );
+    // T-CR5：原测 condition 压缩走 eventOrchestrator.emit（Step 9 已删），
+    // Step 20 改为测 runCompaction 对「无预置 kkv」的干净 session 的容错。
+    // T-IPC1R 预置了 file_cache / rule_snapshot / user_vfs_pending；本用例不预置，
+    // 验证 runCompaction 在 kkv 空时仍返回 ok:true 并触发 composer 广播。
+    //
+    // 注意：core 侧 run-compaction.test.ts 已覆盖 runCompaction 的成败两路；
+    // 本用例聚焦 IPC 层 handleCompactionManual → runCompaction → notify 的链路。
+    it("T-CR5: 无预置 kkv 时 runCompaction 仍返回 ok 并触发 composer 广播", async () => {
+        const sent: Array<{ channel: string; payload: unknown }> = [];
+        ComposerAttachmentsSuggestForwarder.setTarget(() => {
+            return {
+                send(channel: string, payload: unknown) {
+                    sent.push({ channel, payload });
+                },
+            } as never;
+        });
 
-    // 成功路径仍广播一次 COMPOSER_ATTACHMENTS_SUGGEST（与 T-IPC1 同口径）。
-    const composerBroadcasts = sent.filter(
-      (s) => s.channel === IPC_CHANNELS.COMPOSER_ATTACHMENTS_SUGGEST,
-    );
-    assert.equal(
-      composerBroadcasts.length,
-      1,
-      "runCompaction 成功时应广播一次 COMPOSER_ATTACHMENTS_SUGGEST",
-    );
+        const result = await CompactionIpc.handleManual({ projectId, sessionId });
+        assert.equal(result.ok, true);
+        assert.equal(
+            result.data?.ok,
+            true,
+            "data.ok 应透传 runCompaction 的 true（kkv 空 不影响成败）",
+        );
 
-    ComposerAttachmentsSuggestForwarder.setTarget(() => undefined);
-  });
+        // 成功路径仍广播一次 COMPOSER_ATTACHMENTS_SUGGEST（与 T-IPC1 同口径）。
+        const composerBroadcasts = sent.filter(
+            (s) => s.channel === IPC_CHANNELS.COMPOSER_ATTACHMENTS_SUGGEST,
+        );
+        assert.equal(
+            composerBroadcasts.length,
+            1,
+            "runCompaction 成功时应广播一次 COMPOSER_ATTACHMENTS_SUGGEST",
+        );
 
-  /**
+        ComposerAttachmentsSuggestForwarder.setTarget(() => undefined);
+    });
+
+    /**
    * T-IPC2（2026-10-07 反转）：压缩 IPC 成功返回**不依赖也不触发**显式暖机。
    *
    * 口径与置位同路径（handleMessagesSetFloor）：核心操作落库即返回，token 读数
@@ -332,118 +332,118 @@ describe("handleCompactionManual", () => {
    * 常规读口首帧如实回落估算档（L1 没被压缩路径提前写热），再由读口自己的
    * 后台暖机推送精确档——这正是「交给常规刷新自然跟进」的形态。
    */
-  it("T-IPC2: 压缩 IPC 成功返回不依赖也不触发显式暖机（读数交给常规刷新）", async () => {
-    const rtR = await DesktopRuntimeSingleton.get();
-    if (!rtR.ok) throw rtR.error;
-    const rt = rtR.value;
+    it("T-IPC2: 压缩 IPC 成功返回不依赖也不触发显式暖机（读数交给常规刷新）", async () => {
+        const rtR = await DesktopRuntimeSingleton.get();
+        if (!rtR.ok) throw rtR.error;
+        const rt = rtR.value;
 
-    // 与旧用例同款前提：现搭一个 gpt-4o 模型 + 独立会话，构造「本该有精确档」
-    // 的场景——没有可用模型时压根没有精确档，「没有推送」的断言会失去牙齿。
-    const provider = await Providers.create({
-      protocol: "openai",
-      baseUrl: "https://api.openai.com/v1",
-      displayName: "openai-compaction-nowarm",
-      apiKey: "sk-test",
-    });
-    assert.equal(provider.ok, true, provider.ok ? "" : provider.error.message);
-    if (!provider.ok) {
-      return;
-    }
-    const saved = await rt.providerModels.save(
-      provider.data.providerId,
-      "gpt-4o",
-    );
-    // 四期签名：save 沿 Result 回传，解包取实体。
-    if (!saved.ok) throw saved.error;
-    await rt.state.setCurrentModelId(saved.value.id);
-
-    const project = await Projects.create({
-      name: "compaction-nowarm-ipc",
-    });
-    assert.equal(project.ok, true);
-    if (!project.ok) {
-      return;
-    }
-    const session = await Sessions.create({
-      projectId: project.data.id,
-      title: "compaction-nowarm",
-    });
-    assert.equal(session.ok, true);
-    if (!session.ok) {
-      return;
-    }
-    const scope = { projectId: project.data.id, sessionId: session.data.id };
-    await Messages.append({
-      sessionId: scope.sessionId,
-      role: "user",
-      text: "他把伞收了，窗外的雨顺着玻璃往下淌，街灯在水洼里碎成一片橙。".repeat(
-        8,
-      ),
-    });
-
-    // L1 冷 + 无 API 基线：显式暖机若还在，它必须在这里写热 L1 并推送。
-    sessionApiPromptTokenCache.clearAll();
-    promptWholeCache.clearForTests();
-
-    const pushed: PromptChatTokenUpdatedPayload[] = [];
-    PromptChatTokenUpdatedForwarder.setTarget(
-      () =>
-        ({
-          send: (channel: string, payload: unknown) => {
-            if (channel === IPC_CHANNELS.PROMPT_CHAT_TOKEN_UPDATED) {
-              pushed.push(payload as PromptChatTokenUpdatedPayload);
-            }
-          },
-        }) as never,
-    );
-
-    try {
-      const result = await CompactionIpc.handleManual(scope);
-      assert.equal(result.ok, true);
-      assert.equal(result.data?.ok, true);
-
-      // 判据②a：IPC 返回那一刻没有任何推送（旧实现在这里必然已推送）。
-      assert.equal(
-        pushed.length,
-        0,
-        "压缩 IPC 成功返回不该触发显式暖机（返回前推送即旧实现复活）",
-      );
-      // 判据②b：一个完整防抖窗口之后再确认一次——顺带挡住 fire-and-forget
-      // 形态的暖机（它会在返回后偷偷补推）。
-      await new Promise((resolve) => setTimeout(resolve, 450));
-      assert.equal(
-        pushed.length,
-        0,
-        "压缩 IPC 返回后也不该有暖机推送（fire-and-forget 形态同样不许）",
-      );
-
-      // 判据③：常规读口首帧如实回落估算档（L1 没被压缩路径写热）。
-      const firstFrame = await ChatPromptTokensService.load(rt, scope);
-      if (!firstFrame.ok) throw firstFrame.error;
-      assert.equal(
-        firstFrame.value?.estimated,
-        true,
-        "压缩后常规读口首帧应回落估算档（压缩路径不该预写 L1）",
-      );
-
-      // 随后由读口自己的后台暖机自然升级到精确档（读数不时间敏感，晚一拍可接受）。
-      const deadline = Date.now() + 4000;
-      let upgraded: PromptChatTokenUpdatedPayload | undefined;
-      while (upgraded == null && Date.now() < deadline) {
-        upgraded = pushed.find((p) => p.sessionId === scope.sessionId);
-        if (upgraded == null) {
-          await new Promise((resolve) => setTimeout(resolve, 25));
+        // 与旧用例同款前提：现搭一个 gpt-4o 模型 + 独立会话，构造「本该有精确档」
+        // 的场景——没有可用模型时压根没有精确档，「没有推送」的断言会失去牙齿。
+        const provider = await Providers.create({
+            protocol: "openai",
+            baseUrl: "https://api.openai.com/v1",
+            displayName: "openai-compaction-nowarm",
+            apiKey: "sk-test",
+        });
+        assert.equal(provider.ok, true, provider.ok ? "" : provider.error.message);
+        if (!provider.ok) {
+            return;
         }
-      }
-      assert.ok(
-        upgraded != null,
-        "常规读口应自然升级到精确档（后台暖机推送）",
-      );
-      assert.equal(upgraded.stats.estimated, false);
-      assert.equal(upgraded.stats.counterKind, "tiktoken");
-    } finally {
-      PromptChatTokenUpdatedForwarder.setTarget(() => undefined);
-    }
-  });
+        const saved = await rt.providerModels.save(
+            provider.data.providerId,
+            "gpt-4o",
+        );
+        // 四期签名：save 沿 Result 回传，解包取实体。
+        if (!saved.ok) throw saved.error;
+        await rt.state.setCurrentModelId(saved.value.id);
+
+        const project = await Projects.create({
+            name: "compaction-nowarm-ipc",
+        });
+        assert.equal(project.ok, true);
+        if (!project.ok) {
+            return;
+        }
+        const session = await Sessions.create({
+            projectId: project.data.id,
+            title: "compaction-nowarm",
+        });
+        assert.equal(session.ok, true);
+        if (!session.ok) {
+            return;
+        }
+        const scope = { projectId: project.data.id, sessionId: session.data.id };
+        await Messages.append({
+            sessionId: scope.sessionId,
+            role: "user",
+            text: "他把伞收了，窗外的雨顺着玻璃往下淌，街灯在水洼里碎成一片橙。".repeat(
+                8,
+            ),
+        });
+
+        // L1 冷 + 无 API 基线：显式暖机若还在，它必须在这里写热 L1 并推送。
+        sessionApiPromptTokenCache.clearAll();
+        promptWholeCache.clearForTests();
+
+        const pushed: PromptChatTokenUpdatedPayload[] = [];
+        PromptChatTokenUpdatedForwarder.setTarget(
+            () =>
+                ({
+                    send: (channel: string, payload: unknown) => {
+                        if (channel === IPC_CHANNELS.PROMPT_CHAT_TOKEN_UPDATED) {
+                            pushed.push(payload as PromptChatTokenUpdatedPayload);
+                        }
+                    },
+                }) as never,
+        );
+
+        try {
+            const result = await CompactionIpc.handleManual(scope);
+            assert.equal(result.ok, true);
+            assert.equal(result.data?.ok, true);
+
+            // 判据②a：IPC 返回那一刻没有任何推送（旧实现在这里必然已推送）。
+            assert.equal(
+                pushed.length,
+                0,
+                "压缩 IPC 成功返回不该触发显式暖机（返回前推送即旧实现复活）",
+            );
+            // 判据②b：一个完整防抖窗口之后再确认一次——顺带挡住 fire-and-forget
+            // 形态的暖机（它会在返回后偷偷补推）。
+            await new Promise((resolve) => setTimeout(resolve, 450));
+            assert.equal(
+                pushed.length,
+                0,
+                "压缩 IPC 返回后也不该有暖机推送（fire-and-forget 形态同样不许）",
+            );
+
+            // 判据③：常规读口首帧如实回落估算档（L1 没被压缩路径写热）。
+            const firstFrame = await ChatPromptTokensService.load(rt, scope);
+            if (!firstFrame.ok) throw firstFrame.error;
+            assert.equal(
+                firstFrame.value?.estimated,
+                true,
+                "压缩后常规读口首帧应回落估算档（压缩路径不该预写 L1）",
+            );
+
+            // 随后由读口自己的后台暖机自然升级到精确档（读数不时间敏感，晚一拍可接受）。
+            const deadline = Date.now() + 4000;
+            let upgraded: PromptChatTokenUpdatedPayload | undefined;
+            while (upgraded == null && Date.now() < deadline) {
+                upgraded = pushed.find((p) => p.sessionId === scope.sessionId);
+                if (upgraded == null) {
+                    await new Promise((resolve) => setTimeout(resolve, 25));
+                }
+            }
+            assert.ok(
+                upgraded != null,
+                "常规读口应自然升级到精确档（后台暖机推送）",
+            );
+            assert.equal(upgraded.stats.estimated, false);
+            assert.equal(upgraded.stats.counterKind, "tiktoken");
+        } finally {
+            PromptChatTokenUpdatedForwarder.setTarget(() => undefined);
+        }
+    });
 
 });

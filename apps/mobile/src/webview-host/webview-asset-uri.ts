@@ -15,47 +15,47 @@ import {RnFileIo} from '@/services/rn-file-io';
 export type WebViewAssetPackageId = 'rich-document' | 'code-editor' | 'composer-input' | 'chat-transcript';
 
 export const WebviewAssetUri = {
-  /** 解析 iOS 主 Bundle 绝对路径；空/异常时同步 throw。 */
-  iosMainBundleDir: (): string => {
-    const anyMod = ReactNativeBlobUtil as unknown as {fs?: typeof ReactNativeBlobUtil.fs; default?: {fs?: typeof ReactNativeBlobUtil.fs}};
-    const fsModule = anyMod.fs ?? anyMod.default?.fs;
-    if (fsModule?.dirs == null) {
-      // nm-throw: keep — 平台边界：react-native-blob-util 原生模块缺失/未链接，同步 API 无失败位
-      throw new Error('react-native-blob-util.fs.dirs 不可用');
-    }
-    const dir = fsModule.dirs.MainBundleDir;
-    if (typeof dir !== 'string' || dir.trim().length === 0) {
-      // nm-throw: keep — 平台边界：iOS MainBundleDir 未解析（原生模块链接问题），同步 API 无失败位
-      throw new Error('无法解析 iOS MainBundleDir，WebView 资产 URI 不可用（请确认 react-native-blob-util 已链接）');
-    }
-    return dir.replace(/\/+$/, '');
-  },
+    /** 解析 iOS 主 Bundle 绝对路径；空/异常时同步 throw。 */
+    iosMainBundleDir: (): string => {
+        const anyMod = ReactNativeBlobUtil as unknown as {fs?: typeof ReactNativeBlobUtil.fs; default?: {fs?: typeof ReactNativeBlobUtil.fs}};
+        const fsModule = anyMod.fs ?? anyMod.default?.fs;
+        if (fsModule?.dirs == null) {
+            // nm-throw: keep — 平台边界：react-native-blob-util 原生模块缺失/未链接，同步 API 无失败位
+            throw new Error('react-native-blob-util.fs.dirs 不可用');
+        }
+        const dir = fsModule.dirs.MainBundleDir;
+        if (typeof dir !== 'string' || dir.trim().length === 0) {
+            // nm-throw: keep — 平台边界：iOS MainBundleDir 未解析（原生模块链接问题），同步 API 无失败位
+            throw new Error('无法解析 iOS MainBundleDir，WebView 资产 URI 不可用（请确认 react-native-blob-util 已链接）');
+        }
+        return dir.replace(/\/+$/, '');
+    },
 
-  /**
+    /**
    * 返回包内 `index.html` 的平台 URI（同步；不做文件存在性探测）。
    */
-  getWebViewPackageIndexUri: (pkg: WebViewAssetPackageId): string => {
-    if (Platform.OS === 'android') {
-      return `file:///android_asset/webview/${pkg}/index.html`;
-    }
-    if (Platform.OS === 'ios') {
-      return RnFileIo.toFileUri(`${WebviewAssetUri.iosMainBundleDir()}/WebViewDist/${pkg}/index.html`);
-    }
-    // nm-throw: keep — 平台边界：仅 android/ios 有 WebView 资产布局，同步 API 无失败位
-    throw new Error(`WebView 资产 URI 不支持平台: ${Platform.OS}`);
-  },
+    getWebViewPackageIndexUri: (pkg: WebViewAssetPackageId): string => {
+        if (Platform.OS === 'android') {
+            return `file:///android_asset/webview/${pkg}/index.html`;
+        }
+        if (Platform.OS === 'ios') {
+            return RnFileIo.toFileUri(`${WebviewAssetUri.iosMainBundleDir()}/WebViewDist/${pkg}/index.html`);
+        }
+        // nm-throw: keep — 平台边界：仅 android/ios 有 WebView 资产布局，同步 API 无失败位
+        throw new Error(`WebView 资产 URI 不支持平台: ${Platform.OS}`);
+    },
 
-  /**
+    /**
    * 包目录 `file://` URI，供 iOS `allowingReadAccessToURL`（相对 ./app.js / ./app.css）。
    */
-  getWebViewPackageDirUri: (pkg: WebViewAssetPackageId): string => {
-    if (Platform.OS === 'android') {
-      return `file:///android_asset/webview/${pkg}/`;
-    }
-    if (Platform.OS === 'ios') {
-      return RnFileIo.toFileUri(`${WebviewAssetUri.iosMainBundleDir()}/WebViewDist/${pkg}/`);
-    }
-    // nm-throw: keep — 平台边界：仅 android/ios 有 WebView 资产布局，同步 API 无失败位
-    throw new Error(`WebView 资产目录 URI 不支持平台: ${Platform.OS}`);
-  },
+    getWebViewPackageDirUri: (pkg: WebViewAssetPackageId): string => {
+        if (Platform.OS === 'android') {
+            return `file:///android_asset/webview/${pkg}/`;
+        }
+        if (Platform.OS === 'ios') {
+            return RnFileIo.toFileUri(`${WebviewAssetUri.iosMainBundleDir()}/WebViewDist/${pkg}/`);
+        }
+        // nm-throw: keep — 平台边界：仅 android/ios 有 WebView 资产布局，同步 API 无失败位
+        throw new Error(`WebView 资产目录 URI 不支持平台: ${Platform.OS}`);
+    },
 } as const;

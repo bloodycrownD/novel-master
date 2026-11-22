@@ -15,34 +15,34 @@ import {join} from 'path';
 import {describe, expect, it} from '@jest/globals';
 
 const PROVIDER_PATH = join(
-  __dirname,
-  '../src/screens/tabs/chat-tab/ChatTabProvider.tsx',
+    __dirname,
+    '../src/screens/tabs/chat-tab/ChatTabProvider.tsx',
 );
 
 /** 守卫词表：以 Step 6/7 实际清空的运行态标识为准。 */
 const RUNTIME_STATE_TOKENS = [
-  'uiRunning',
-  'activeRunId',
-  'streamingText',
-  'streamingThinking',
-  'sessionAgentRunning',
-  'streamTailGenerating',
+    'uiRunning',
+    'activeRunId',
+    'streamingText',
+    'streamingThinking',
+    'sessionAgentRunning',
+    'streamTailGenerating',
 ] as const;
 
 describe('T-U10: ChatTabProvider 无运行态静态守卫', () => {
-  const source = readFileSync(PROVIDER_PATH, 'utf8');
+    const source = readFileSync(PROVIDER_PATH, 'utf8');
 
-  it.each(RUNTIME_STATE_TOKENS)(
-    'ChatTabProvider.tsx 源码不含运行态标识 %s',
-    token => {
-      expect(source).not.toMatch(new RegExp(`\\b${token}\\b`));
-    },
-  );
+    it.each(RUNTIME_STATE_TOKENS)(
+        'ChatTabProvider.tsx 源码不含运行态标识 %s',
+        token => {
+            expect(source).not.toMatch(new RegExp(`\\b${token}\\b`));
+        },
+    );
 
-  it('守卫文件存在（防路径漂移导致空跑）', () => {
-    expect(source.length).toBeGreaterThan(0);
-    expect(source).toContain('ChatTabProvider');
-  });
+    it('守卫文件存在（防路径漂移导致空跑）', () => {
+        expect(source.length).toBeGreaterThan(0);
+        expect(source).toContain('ChatTabProvider');
+    });
 });
 
 
@@ -50,10 +50,10 @@ describe('T-U10: ChatTabProvider 无运行态静态守卫', () => {
 // deriveComposerSendState/集成测试覆盖，此处静态保证推导含 interrupted 分支
 // （分支被误删时立即红灯，而非静默回到锁死）。
 describe('中断现场解锁输入（静态守卫）', () => {
-  const source = readFileSync(PROVIDER_PATH, 'utf8');
+    const source = readFileSync(PROVIDER_PATH, 'utf8');
 
-  it('composerSendState 推导含 interrupted 解锁分支', () => {
-    expect(source).toContain("unitView?.status === 'interrupted'");
-    expect(source).toContain('lastMessageIsPlainUserText: false');
-  });
+    it('composerSendState 推导含 interrupted 解锁分支', () => {
+        expect(source).toContain("unitView?.status === 'interrupted'");
+        expect(source).toContain('lastMessageIsPlainUserText: false');
+    });
 });

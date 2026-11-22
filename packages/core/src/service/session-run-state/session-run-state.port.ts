@@ -5,22 +5,22 @@
  */
 
 import type {
-  SessionRunState,
-  SessionRunStatus,
-  SessionRunStateTokenSource,
+    SessionRunState,
+    SessionRunStatus,
+    SessionRunStateTokenSource,
 } from "@/domain/session-run-state/model/session-run-state.js";
 
 /** {@link SessionRunStateService.settle} 的 metrics 输入（不含 partial 字段）。 */
 export interface SessionRunStateSettleInput {
-  readonly sessionId: string;
-  readonly projectId: string;
-  readonly runId: string;
-  readonly startedAtMs: number;
-  readonly textChars: number;
-  readonly thinkingChars: number;
-  readonly completionTokens: number;
-  readonly tokenSource: SessionRunStateTokenSource;
-  readonly updatedAtMs: number;
+    readonly sessionId: string;
+    readonly projectId: string;
+    readonly runId: string;
+    readonly startedAtMs: number;
+    readonly textChars: number;
+    readonly thinkingChars: number;
+    readonly completionTokens: number;
+    readonly tokenSource: SessionRunStateTokenSource;
+    readonly updatedAtMs: number;
 }
 
 /**
@@ -36,26 +36,26 @@ export interface SessionRunStateSettleInput {
  * - fork / copy 会话**不**复制本表行。
  */
 export interface SessionRunStateService {
-  get(sessionId: string): Promise<SessionRunState | null>;
+    get(sessionId: string): Promise<SessionRunState | null>;
 
-  /** UPSERT 覆盖写该会话的行（不存在则插入）。 */
-  upsert(state: SessionRunState): Promise<void>;
+    /** UPSERT 覆盖写该会话的行（不存在则插入）。 */
+    upsert(state: SessionRunState): Promise<void>;
 
-  /**
+    /**
    * 收尾写 settled 行：partial_text/partial_thinking/pending_children_json
    * 清空，仅保留 metrics 字段（覆盖 starting/running 行，终态子类型由
    * runtime 内存状态机负责，持久层统一存 `settled`）。
    */
-  settle(input: SessionRunStateSettleInput): Promise<void>;
+    settle(input: SessionRunStateSettleInput): Promise<void>;
 
-  /** 按状态扫描（全表小扫描，结果按 session_id 排序）。 */
-  listByStatuses(
-    statuses: readonly SessionRunStatus[]
-  ): Promise<SessionRunState[]>;
+    /** 按状态扫描（全表小扫描，结果按 session_id 排序）。 */
+    listByStatuses(
+        statuses: readonly SessionRunStatus[]
+    ): Promise<SessionRunState[]>;
 
-  /** 删除该会话的行（会话删除联动），返回是否删到。 */
-  deleteBySession(sessionId: string): Promise<boolean>;
+    /** 删除该会话的行（会话删除联动），返回是否删到。 */
+    deleteBySession(sessionId: string): Promise<boolean>;
 
-  /** 删除该项目的全部行（项目删除级联），返回是否删到。 */
-  deleteByProject(projectId: string): Promise<boolean>;
+    /** 删除该项目的全部行（项目删除级联），返回是否删到。 */
+    deleteByProject(projectId: string): Promise<boolean>;
 }

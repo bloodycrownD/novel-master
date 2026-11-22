@@ -13,11 +13,11 @@ import { RevisionGc } from "./revision-gc.js";
 
 /** tail 截断事务参数。 */
 export type TruncateTailParams = {
-  readonly projectId: string;
-  readonly sessionId: string;
-  readonly afterSeq: number;
-  readonly sweepRevisions: boolean;
-  /**
+    readonly projectId: string;
+    readonly sessionId: string;
+    readonly afterSeq: number;
+    readonly sweepRevisions: boolean;
+    /**
    * 是否把「全局孤儿清扫」推迟到事务提交后（rollback-large-jank Step 4）。
    *
    * 缺省即 `false`：事务内照常连同 scoped 打扫一起做全局孤儿 DELETE——本函数
@@ -26,18 +26,18 @@ export type TruncateTailParams = {
    * 在事务提交后 deferred 调度 `DeferredRevisionOrphanGc.schedule` 兜底，否则
    * 孤儿行永久残留。
    */
-  readonly deferGlobalOrphanGc?: boolean;
+    readonly deferGlobalOrphanGc?: boolean;
 };
 
 /** `TruncateTail.truncate` 依赖（共享底座里只取 checkpoint / revision 两项）。 */
 export type TruncateTailDeps = Pick<CheckpointRepoDeps, "checkpointRepo" | "revisionRepo"> & {
-  readonly messageRepo: MessageRepository;
-  /** Composer 状态条真源：session kkv（tail 非空时按域清空）。 */
-  readonly sessionKkv: SessionKkvRepository;
+    readonly messageRepo: MessageRepository;
+    /** Composer 状态条真源：session kkv（tail 非空时按域清空）。 */
+    readonly sessionKkv: SessionKkvRepository;
 };
 
 export const TruncateTail = {
-  /**
+    /**
    * 在已有事务内截断 tail 消息并清理 checkpoint。
    *
    * **前置条件：调用方必须已在事务内**（原 `truncateTailInTransaction` 的
@@ -50,38 +50,38 @@ export const TruncateTail = {
    *    调用方传 deferGlobalOrphanGc 时跳过全局孤儿那一半）
    * 4. 若 tail 非空 → 清 backfill 游标（seq 复用防线）+ 清空 Composer 无叉 chip 对应 kkv 域
    */
-  async truncate(deps: TruncateTailDeps, params: TruncateTailParams): Promise<void> {
-    const { projectId, sessionId, afterSeq, sweepRevisions, deferGlobalOrphanGc } = params;
+    async truncate(deps: TruncateTailDeps, params: TruncateTailParams): Promise<void> {
+        const { projectId, sessionId, afterSeq, sweepRevisions, deferGlobalOrphanGc } = params;
 
-    // 拉 tail（seq > afterSeq ⟺ seq >= afterSeq + 1）：id 列表删除链素材。
-    // read 引用 −1（尾截断的消息不再持有 revision）已随 E1 清理版退役。
-    // 本函数在事务内执行：已知失败与中断都必须抛错才能触发整体回滚。
-    const tailRead = await deps.messageRepo.listBySessionFromSeq(sessionId, afterSeq + 1);
-    if (tailRead.kind === "failed") throw tailRead.error;
-    // 未注入 hooks，中断分支不可达；命中说明调用链被改动，按事务边界语义转抛。
-    if (tailRead.kind !== "completed") throw AbortError.create();
-    const tailIds = tailRead.value.map((m) => m.id);
+        // 拉 tail（seq > afterSeq ⟺ seq >= afterSeq + 1）：id 列表删除链素材。
+        // read 引用 −1（尾截断的消息不再持有 revision）已随 E1 清理版退役。
+        // 本函数在事务内执行：已知失败与中断都必须抛错才能触发整体回滚。
+        const tailRead = await deps.messageRepo.listBySessionFromSeq(sessionId, afterSeq + 1);
+        if (tailRead.kind === "failed") throw tailRead.error;
+        // 未注入 hooks，中断分支不可达；命中说明调用链被改动，按事务边界语义转抛。
+        if (tailRead.kind !== "completed") throw AbortError.create();
+        const tailIds = tailRead.value.map((m) => m.id);
 
-    if (tailIds.length > 0) {
-      await deps.checkpointRepo.deleteCheckpointsForMessages(sessionId, tailIds);
-    }
-    await deps.messageRepo.deleteAfterSeq(sessionId, afterSeq);
+        if (tailIds.length > 0) {
+            await deps.checkpointRepo.deleteCheckpointsForMessages(sessionId, tailIds);
+        }
+        await deps.messageRepo.deleteAfterSeq(sessionId, afterSeq);
 
-    if (sweepRevisions) {
-      // rollback-large-jank Step 4：默认保持原行为——scoped 打扫后接着做全局
-      // 孤儿兜底（全表 DELETE）。只有显式 deferGlobalOrphanGc 的调用方（回滚
-      // 链）才把它移出事务，改由该调用方在事务提交后 fire-and-forget 调度
-      // DeferredRevisionOrphanGc.schedule 补做。
-      await RevisionGc.sweepSession(deps.revisionRepo, projectId, sessionId, deferGlobalOrphanGc === true ? { includeGlobalOrphans: false } : undefined);
-    }
+        if (sweepRevisions) {
+            // rollback-large-jank Step 4：默认保持原行为——scoped 打扫后接着做全局
+            // 孤儿兜底（全表 DELETE）。只有显式 deferGlobalOrphanGc 的调用方（回滚
+            // 链）才把它移出事务，改由该调用方在事务提交后 fire-and-forget 调度
+            // DeferredRevisionOrphanGc.schedule 补做。
+            await RevisionGc.sweepSession(deps.revisionRepo, projectId, sessionId, deferGlobalOrphanGc === true ? { includeGlobalOrphans: false } : undefined);
+        }
 
-    if (tailIds.length > 0) {
-      // 发生删除即清 backfill 游标（seq 复用防线）：tail 删除后新消息会复用被删
-      // 的 seq，残留游标按行数圈段会错位——清掉让下次判定回退全量自愈。
-      await deps.sessionKkv.clearDomain(sessionId, SESSION_KKV_DOMAIN_BACKFILL_CURSOR);
-      for (const domain of SESSION_KKV_COMPOSER_STATUS_DOMAINS) {
-        await deps.sessionKkv.clearDomain(sessionId, domain);
-      }
-    }
-  },
+        if (tailIds.length > 0) {
+            // 发生删除即清 backfill 游标（seq 复用防线）：tail 删除后新消息会复用被删
+            // 的 seq，残留游标按行数圈段会错位——清掉让下次判定回退全量自愈。
+            await deps.sessionKkv.clearDomain(sessionId, SESSION_KKV_DOMAIN_BACKFILL_CURSOR);
+            for (const domain of SESSION_KKV_COMPOSER_STATUS_DOMAINS) {
+                await deps.sessionKkv.clearDomain(sessionId, domain);
+            }
+        }
+    },
 } as const;

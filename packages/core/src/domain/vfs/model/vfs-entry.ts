@@ -15,15 +15,15 @@ export type VfsEntryKind = "file" | "directory";
  * A single VFS entry as stored in SQLite.
  */
 export interface VfsEntry {
-  /** 不可变身份键；rename / move 后保持不变。 */
-  readonly entryId: number;
-  /** scope 归属键，如 `session:{pid}:{sid}` / `project:{pid}` / `global`。 */
-  readonly scopeKey: string;
-  /** scope 内的纯逻辑路径。 */
-  readonly path: string;
-  readonly content: string;
-  /** 当前 head 版本（对应 DB 的 `head_version` 列）。 */
-  readonly version: number;
-  readonly mtimeMs: number;
-  readonly entryKind: VfsEntryKind;
+    /** 不可变身份键；rename / move 后保持不变。 */
+    readonly entryId: number;
+    /** scope 归属键，如 `session:{pid}:{sid}` / `project:{pid}` / `global`。 */
+    readonly scopeKey: string;
+    /** scope 内的纯逻辑路径。 */
+    readonly path: string;
+    readonly content: string;
+    /** 当前 head 版本（对应 DB 的 `head_version` 列）。 */
+    readonly version: number;
+    readonly mtimeMs: number;
+    readonly entryKind: VfsEntryKind;
 }

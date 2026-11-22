@@ -17,15 +17,15 @@ const macStrategy = SkspNodeFactory.createAesGcmStrategy({ algo: ALGO, masterKey
 
 /** Keychain-backed secret store using an open TDBC connection. */
 export class MacSqliteSecretStore extends BaseSqliteSecretStore {
-  constructor(conn: TdbcConnection) {
-    super(conn, macStrategy);
-  }
+    constructor(conn: TdbcConnection) {
+        super(conn, macStrategy);
+    }
 }
 
 // nm-style 注记：namespace 按内容主体起名（撞同文件 export class MacSqliteSecretStore，取平台主体 MacSecretStore）。
 /** Creates a macOS SQLite secret store. */
 export namespace MacSecretStore {
-  export function create(conn: TdbcConnection): SecretStore {
-    return new MacSqliteSecretStore(conn);
-  }
+    export function create(conn: TdbcConnection): SecretStore {
+        return new MacSqliteSecretStore(conn);
+    }
 }

@@ -3,6 +3,6 @@ export { S3ObjectStorage } from "./create-s3-object-storage.js";
 export type { S3ObjectStorageDeps } from "./create-s3-object-storage.js";
 export type { FileSystemPort } from "./ports/file-system.port.js";
 export type {
-  ObjectStorageHeadResult,
-  ObjectStoragePort,
+    ObjectStorageHeadResult,
+    ObjectStoragePort,
 } from "@novel-master/core";

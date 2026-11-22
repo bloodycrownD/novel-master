@@ -8,9 +8,9 @@ import {  Result  } from "@/errors/either.js";
 import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import {  subagentTool, type TaskToolInput, type TaskToolOutput  } from "@/domain/tool/builtin/subagent-tool.js";
 import type {
-  BuiltinToolContext,
-  BuiltinToolSubagentContext,
-  RunChildAgentOptions,
+    BuiltinToolContext,
+    BuiltinToolSubagentContext,
+    RunChildAgentOptions,
 } from "@/domain/tool/builtin/builtin-tool-context.js";
 import type { AgentRegistryService } from "@/service/agent/agent-registry.port.js";
 import type { MessageService } from "@/service/chat/message.port.js";
@@ -18,8 +18,8 @@ import type { SessionService } from "@/service/chat/session.port.js";
 import {  unwrap  } from "../helpers/result-unwrap.js";
 
 const generalDef: AgentDefinition = {
-  name: "general",
-  prompts: { persist: [], dynamic: [] },
+    name: "general",
+    prompts: { persist: [], dynamic: [] },
 };
 
 /**
@@ -31,91 +31,91 @@ const generalDef: AgentDefinition = {
  * 的 T-SS-3/4 覆盖。本测试里的 `runChildAgent` 是 mock，不跑真实装配。
  */
 describe("子代理 VFS 可见性（T-T9 / P0-4）", () => {
-  it("task 工具 ctx.vfs 是父 session VFS（预置文件可读）", async () => {
-    // 父 session VFS 视图（mock）：含 /outline.md。这是父 agent 上下文的 VFS；
-    // 子 agent 装配的 VFS 同样指向父 session（共享父工作区，见 T-SS-3/4）。
-    const parentVfs = {
-      read: async () => ({ content: "# 大纲\n主角：林白" }),
-    } as never;
+    it("task 工具 ctx.vfs 是父 session VFS（预置文件可读）", async () => {
+        // 父 session VFS 视图（mock）：含 /outline.md。这是父 agent 上下文的 VFS；
+        // 子 agent 装配的 VFS 同样指向父 session（共享父工作区，见 T-SS-3/4）。
+        const parentVfs = {
+            read: async () => ({ content: "# 大纲\n主角：林白" }),
+        } as never;
 
-    let observedVfsInRunChild: unknown = undefined;
-    let observedProjectId: string | undefined;
-    let observedParentSessionId: string | undefined;
+        let observedVfsInRunChild: unknown = undefined;
+        let observedProjectId: string | undefined;
+        let observedParentSessionId: string | undefined;
 
-    const agentRegistry: AgentRegistryService = {
-      listAgentIds: async () => ["id-1"],
-      list: async () => Result.ok([generalDef]),
-      get: async () => generalDef,
-      getRawWire: async () => null,
-      upsert: async () => undefined,
-      delete: async () => undefined,
-    };
-    const messages: MessageService = {
-      listBySession: async () => ({
-        kind: "completed",
-        value: [{ role: "assistant", content: { blocks: [{ type: "text", text: "ok" }] } } as ChatMessageData],
-      }),
-      // tail+role 读口（subagent-tool 现在的消费方）：先按 role 过滤再取末 limit 条。
-      listBySessionTailOfRole: async (_sid, options) => ({
-        kind: "completed",
-        value: [{ role: "assistant", content: { blocks: [{ type: "text", text: "ok" }] } } as ChatMessageData]
-          .filter((m) => m.role === options.role)
-          .slice(-Math.max(1, Math.floor(options.limit))),
-      }),
-    } as unknown as MessageService;
-    const sessions: SessionService = {
-      createSubSession: async (parent, project) => {
-        observedProjectId = project;
-        observedParentSessionId = parent;
-        return { id: "child-1", parentSessionId: parent, projectId: project } as never;
-      },
-    } as unknown as SessionService;
+        const agentRegistry: AgentRegistryService = {
+            listAgentIds: async () => ["id-1"],
+            list: async () => Result.ok([generalDef]),
+            get: async () => generalDef,
+            getRawWire: async () => null,
+            upsert: async () => undefined,
+            delete: async () => undefined,
+        };
+        const messages: MessageService = {
+            listBySession: async () => ({
+                kind: "completed",
+                value: [{ role: "assistant", content: { blocks: [{ type: "text", text: "ok" }] } } as ChatMessageData],
+            }),
+            // tail+role 读口（subagent-tool 现在的消费方）：先按 role 过滤再取末 limit 条。
+            listBySessionTailOfRole: async (_sid, options) => ({
+                kind: "completed",
+                value: [{ role: "assistant", content: { blocks: [{ type: "text", text: "ok" }] } } as ChatMessageData]
+                    .filter((m) => m.role === options.role)
+                    .slice(-Math.max(1, Math.floor(options.limit))),
+            }),
+        } as unknown as MessageService;
+        const sessions: SessionService = {
+            createSubSession: async (parent, project) => {
+                observedProjectId = project;
+                observedParentSessionId = parent;
+                return { id: "child-1", parentSessionId: parent, projectId: project } as never;
+            },
+        } as unknown as SessionService;
 
-    const subagent: BuiltinToolSubagentContext = {
-      agentRegistry,
-      messages,
-      sessions,
-      depth: 0,
-      callableAgents: [{ name: "general" }],
-      parentSignal: new AbortController().signal,
-      createChildSession: async (title) => {
-        const s = await sessions.createSubSession("parent-sess", "proj-x", title);
-        return Result.ok(s.id);
-      },
-      // 续用校验用（spec G4）：与 createSubSession 的父 id 保持一致。
-      parentSessionId: "parent-sess",
-      isSessionRunActive: () => false,
-      resolveChildModelId: (def) =>
-        Result.ok({
-          savedModelId: def.model ?? "parent-model",
-          workspaceModelId: "ws-model",
-        }),
-      runChildAgent: async (_def, _sid, _opts: RunChildAgentOptions): Promise<Result<AgentRunResult, AppError>> => {
-        // 在真实 runChildAgent 实现里，这里会 runtime.sessionVfs(parentProjectId, parentSessionId)。
-        observedVfsInRunChild = parentVfs; // 模拟：用 parentVfs 装配子 toolCtx.vfs（共享父工作区）
-        return Result.ok({ stepsExecuted: 1, finished: true, stopReason: "completed", rounds: [] });
-      },
-    };
+        const subagent: BuiltinToolSubagentContext = {
+            agentRegistry,
+            messages,
+            sessions,
+            depth: 0,
+            callableAgents: [{ name: "general" }],
+            parentSignal: new AbortController().signal,
+            createChildSession: async (title) => {
+                const s = await sessions.createSubSession("parent-sess", "proj-x", title);
+                return Result.ok(s.id);
+            },
+            // 续用校验用（spec G4）：与 createSubSession 的父 id 保持一致。
+            parentSessionId: "parent-sess",
+            isSessionRunActive: () => false,
+            resolveChildModelId: (def) =>
+                Result.ok({
+                    savedModelId: def.model ?? "parent-model",
+                    workspaceModelId: "ws-model",
+                }),
+            runChildAgent: async (_def, _sid, _opts: RunChildAgentOptions): Promise<Result<AgentRunResult, AppError>> => {
+                // 在真实 runChildAgent 实现里，这里会 runtime.sessionVfs(parentProjectId, parentSessionId)。
+                observedVfsInRunChild = parentVfs; // 模拟：用 parentVfs 装配子 toolCtx.vfs（共享父工作区）
+                return Result.ok({ stepsExecuted: 1, finished: true, stopReason: "completed", rounds: [] });
+            },
+        };
 
-    const ctx: BuiltinToolContext = {
-      vfs: parentVfs,
-      projectId: "proj-x",
-      sessionId: "parent-sess",
-      subagent,
-    };
+        const ctx: BuiltinToolContext = {
+            vfs: parentVfs,
+            projectId: "proj-x",
+            sessionId: "parent-sess",
+            subagent,
+        };
 
-    const out: TaskToolOutput = unwrap(await subagentTool.run(
-      { description: "读大纲", prompt: "请读 /outline.md", subagentName: "general" } satisfies TaskToolInput,
-      ctx,
-    ));
+        const out: TaskToolOutput = unwrap(await subagentTool.run(
+            { description: "读大纲", prompt: "请读 /outline.md", subagentName: "general" } satisfies TaskToolInput,
+            ctx,
+        ));
 
-    // 子 session 创建时父 projectId/sessionId 正确透传。
-    assert.equal(observedProjectId, "proj-x");
-    assert.equal(observedParentSessionId, "parent-sess");
-    // runChildAgent 内部观测到的 vfs 与父 session VFS 是同一引用。
-    assert.equal(observedVfsInRunChild, parentVfs);
-    // task 工具回流文本正常。
-    assert.equal(out.text, "ok");
-    assert.equal(out.subagentSessionId, "child-1");
-  });
+        // 子 session 创建时父 projectId/sessionId 正确透传。
+        assert.equal(observedProjectId, "proj-x");
+        assert.equal(observedParentSessionId, "parent-sess");
+        // runChildAgent 内部观测到的 vfs 与父 session VFS 是同一引用。
+        assert.equal(observedVfsInRunChild, parentVfs);
+        // task 工具回流文本正常。
+        assert.equal(out.text, "ok");
+        assert.equal(out.subagentSessionId, "child-1");
+    });
 });

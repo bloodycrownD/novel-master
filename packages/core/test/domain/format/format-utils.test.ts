@@ -7,82 +7,82 @@ import {  tCore  } from "../../helpers/core-i18n.js";
 
 /** parts → 整行（消费方形态：`{prefix} · {elapsed} · {body}`，descriptor 经 tCore 渲染）。 */
 function renderMetricsLine(metrics: StreamMetricsLineInput): string {
-  const parts = StreamMetricsLine.build(metrics);
-  return `${tCore(parts.prefix)} · ${parts.elapsed} · ${tCore(parts.body)}`;
+    const parts = StreamMetricsLine.build(metrics);
+    return `${tCore(parts.prefix)} · ${parts.elapsed} · ${tCore(parts.body)}`;
 }
 
 describe("Number.charCount", () => {
-  it("uses zh-CN grouping", () => {
-    assert.match(Number.charCount(1234), /1/);
-  });
+    it("uses zh-CN grouping", () => {
+        assert.match(Number.charCount(1234), /1/);
+    });
 });
 
 describe("StreamMetricsLine.formatElapsed（core-metrics/C-2：core 单点实现，双端复用）", () => {
-  it("60s 内一位小数（含 0 与四舍五入）", () => {
-    assert.equal(StreamMetricsLine.formatElapsed(0), "0.0s");
-    assert.equal(StreamMetricsLine.formatElapsed(1.25), "1.3s");
-    assert.equal(StreamMetricsLine.formatElapsed(12.34), "12.3s");
-    assert.equal(StreamMetricsLine.formatElapsed(59.94), "59.9s");
-  });
+    it("60s 内一位小数（含 0 与四舍五入）", () => {
+        assert.equal(StreamMetricsLine.formatElapsed(0), "0.0s");
+        assert.equal(StreamMetricsLine.formatElapsed(1.25), "1.3s");
+        assert.equal(StreamMetricsLine.formatElapsed(12.34), "12.3s");
+        assert.equal(StreamMetricsLine.formatElapsed(59.94), "59.9s");
+    });
 
-  it("60s 起取整（边界 60 即离开小数段）", () => {
-    assert.equal(StreamMetricsLine.formatElapsed(60), "60s");
-    assert.equal(StreamMetricsLine.formatElapsed(61.4), "61s");
-    assert.equal(StreamMetricsLine.formatElapsed(3_599.6), "3600s");
-  });
+    it("60s 起取整（边界 60 即离开小数段）", () => {
+        assert.equal(StreamMetricsLine.formatElapsed(60), "60s");
+        assert.equal(StreamMetricsLine.formatElapsed(61.4), "61s");
+        assert.equal(StreamMetricsLine.formatElapsed(3_599.6), "3600s");
+    });
 });
 
 describe("StreamMetricsLine.build（T-M8 文案快照，经 tCore 渲染拼装）", () => {
-  it("生成中 · 秒 · 输出 token · 速率全段拼接（千分位 + tok/s 惯例）", () => {
-    const line = renderMetricsLine({
-      running: true,
-      elapsedMs: 12_300,
-      completionTokens: 1_234,
-      tokensPerSecond: 45,
+    it("生成中 · 秒 · 输出 token · 速率全段拼接（千分位 + tok/s 惯例）", () => {
+        const line = renderMetricsLine({
+            running: true,
+            elapsedMs: 12_300,
+            completionTokens: 1_234,
+            tokensPerSecond: 45,
+        });
+        assert.equal(line, "生成中 · 12.3s · 输出 1,234 tok · 45 tok/s");
     });
-    assert.equal(line, "生成中 · 12.3s · 输出 1,234 tok · 45 tok/s");
-  });
 
-  it("无速率样本时省略速率段（仅输出 token）", () => {
-    const line = renderMetricsLine({
-      running: false,
-      elapsedMs: 61_000,
-      completionTokens: 2_500,
-      tokensPerSecond: null,
+    it("无速率样本时省略速率段（仅输出 token）", () => {
+        const line = renderMetricsLine({
+            running: false,
+            elapsedMs: 61_000,
+            completionTokens: 2_500,
+            tokensPerSecond: null,
+        });
+        assert.equal(line, "上次生成 · 61s · 输出 2,500 tok");
     });
-    assert.equal(line, "上次生成 · 61s · 输出 2,500 tok");
-  });
 
-  it("速率数字格式：≥100 取整数、否则一位小数", () => {
-    assert.equal(
-      renderMetricsLine({
-        running: true,
-        elapsedMs: 5_000,
-        completionTokens: 600,
-        tokensPerSecond: 123.4,
-      }),
-      "生成中 · 5.0s · 输出 600 tok · 123 tok/s"
-    );
-    assert.equal(
-      renderMetricsLine({
-        running: true,
-        elapsedMs: 5_000,
-        completionTokens: 28,
-        tokensPerSecond: 5.52,
-      }),
-      "生成中 · 5.0s · 输出 28 tok · 5.5 tok/s"
-    );
-  });
-
-  it("正文/思考不再分列（token 化改版后的形态锁定）", () => {
-    const line = renderMetricsLine({
-      running: true,
-      elapsedMs: 3_000,
-      completionTokens: 90,
-      tokensPerSecond: 30,
+    it("速率数字格式：≥100 取整数、否则一位小数", () => {
+        assert.equal(
+            renderMetricsLine({
+                running: true,
+                elapsedMs: 5_000,
+                completionTokens: 600,
+                tokensPerSecond: 123.4,
+            }),
+            "生成中 · 5.0s · 输出 600 tok · 123 tok/s"
+        );
+        assert.equal(
+            renderMetricsLine({
+                running: true,
+                elapsedMs: 5_000,
+                completionTokens: 28,
+                tokensPerSecond: 5.52,
+            }),
+            "生成中 · 5.0s · 输出 28 tok · 5.5 tok/s"
+        );
     });
-    assert.doesNotMatch(line, /正文/);
-    assert.doesNotMatch(line, /思考/);
-    assert.doesNotMatch(line, /字/);
-  });
+
+    it("正文/思考不再分列（token 化改版后的形态锁定）", () => {
+        const line = renderMetricsLine({
+            running: true,
+            elapsedMs: 3_000,
+            completionTokens: 90,
+            tokensPerSecond: 30,
+        });
+        assert.doesNotMatch(line, /正文/);
+        assert.doesNotMatch(line, /思考/);
+        assert.doesNotMatch(line, /字/);
+    });
 });

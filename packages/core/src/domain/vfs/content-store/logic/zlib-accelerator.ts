@@ -29,40 +29,40 @@ const log = LogFactory.create("vfs.zlib-accelerator");
  * 不是死代码——断言面见 `test/vfs/zlib-accelerator.test.ts` 的 level 用例。
  */
 export interface ZlibCodecAccelerator {
-  /** zlib deflate（wrapped zlib 格式，与 fflate zlibSync 同容器）。 */
-  deflate(data: Uint8Array, level?: number): Uint8Array | null;
-  /** zlib inflate（wrapped zlib 格式，与 fflate unzlibSync 同容器）。 */
-  inflate(data: Uint8Array): Uint8Array | null;
+    /** zlib deflate（wrapped zlib 格式，与 fflate zlibSync 同容器）。 */
+    deflate(data: Uint8Array, level?: number): Uint8Array | null;
+    /** zlib inflate（wrapped zlib 格式，与 fflate unzlibSync 同容器）。 */
+    inflate(data: Uint8Array): Uint8Array | null;
 }
 
 /** 当前注册的加速器槽（模块级单例；注册语义对齐 tokenizer registry 先例）。 */
 const acceleratorSlot = {
-  current: null as ZlibCodecAccelerator | null,
+    current: null as ZlibCodecAccelerator | null,
 };
 
 /** 加速器回落告警是否已打过（每个方向只打一次，防热路径刷屏）。 */
 const warned = { deflate: false, inflate: false };
 
 export const ZlibAccelerator = {
-  /**
+    /**
    * 收整加速器产物为**普通 `Uint8Array`**：`node:zlib` 同步接口返回 `Buffer`
    * （Uint8Array 子类，原型不同），核心内部各消费方的产物形态必须与 fflate
    * 路径一致（避免下游/断言按原型区分）。Buffer → Uint8Array 视图是零拷贝。
    */
-  asPlainUint8Array(bytes: Uint8Array): Uint8Array {
-    return bytes.constructor === Uint8Array ? bytes : new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  },
+    asPlainUint8Array(bytes: Uint8Array): Uint8Array {
+        return bytes.constructor === Uint8Array ? bytes : new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    },
 
-  /**
+    /**
    * 注册加速器（宿主启动装配期调用，重复注册覆盖旧值）。
    *
    * @param accelerator 同步 deflate/inflate 实现。
    */
-  register(accelerator: ZlibCodecAccelerator): void {
-    acceleratorSlot.current = accelerator;
-  },
+    register(accelerator: ZlibCodecAccelerator): void {
+        acceleratorSlot.current = accelerator;
+    },
 
-  /**
+    /**
    * 注销加速器（测试与宿主卸载用）。注销后全部热路径回落 fflate，行为与
    * 从未注册一致。
    *
@@ -70,49 +70,49 @@ export const ZlibAccelerator = {
    * 注册不受影响——闩锁的用途只是防热路径刷屏，跨注册期保留反而会让后来
    * 换上的加速器抛错时静默无声）。
    */
-  clear(): void {
-    acceleratorSlot.current = null;
-    warned.deflate = false;
-    warned.inflate = false;
-  },
+    clear(): void {
+        acceleratorSlot.current = null;
+        warned.deflate = false;
+        warned.inflate = false;
+    },
 
-  /**
+    /**
    * 尝试走加速器 deflate；未注册 / 返回 null / 抛错 → null（调用方回落 fflate）。
    */
-  tryDeflate(data: Uint8Array, level?: number): Uint8Array | null {
-    const accelerator = acceleratorSlot.current;
-    if (accelerator == null) {
-      return null;
-    }
-    try {
-      const output = accelerator.deflate(data, level);
-      return output == null ? null : ZlibAccelerator.asPlainUint8Array(output);
-    } catch (error) {
-      if (!warned.deflate) {
-        warned.deflate = true;
-        log.warn(`deflate 加速器抛错，已回落 fflate（本进程只提示一次）：${Errors.text(error)}`);
-      }
-      return null;
-    }
-  },
+    tryDeflate(data: Uint8Array, level?: number): Uint8Array | null {
+        const accelerator = acceleratorSlot.current;
+        if (accelerator == null) {
+            return null;
+        }
+        try {
+            const output = accelerator.deflate(data, level);
+            return output == null ? null : ZlibAccelerator.asPlainUint8Array(output);
+        } catch (error) {
+            if (!warned.deflate) {
+                warned.deflate = true;
+                log.warn(`deflate 加速器抛错，已回落 fflate（本进程只提示一次）：${Errors.text(error)}`);
+            }
+            return null;
+        }
+    },
 
-  /**
+    /**
    * 尝试走加速器 inflate；未注册 / 返回 null / 抛错 → null（调用方回落 fflate）。
    */
-  tryInflate(data: Uint8Array): Uint8Array | null {
-    const accelerator = acceleratorSlot.current;
-    if (accelerator == null) {
-      return null;
-    }
-    try {
-      const output = accelerator.inflate(data);
-      return output == null ? null : ZlibAccelerator.asPlainUint8Array(output);
-    } catch (error) {
-      if (!warned.inflate) {
-        warned.inflate = true;
-        log.warn(`inflate 加速器抛错，已回落 fflate（本进程只提示一次）：${Errors.text(error)}`);
-      }
-      return null;
-    }
-  },
+    tryInflate(data: Uint8Array): Uint8Array | null {
+        const accelerator = acceleratorSlot.current;
+        if (accelerator == null) {
+            return null;
+        }
+        try {
+            const output = accelerator.inflate(data);
+            return output == null ? null : ZlibAccelerator.asPlainUint8Array(output);
+        } catch (error) {
+            if (!warned.inflate) {
+                warned.inflate = true;
+                log.warn(`inflate 加速器抛错，已回落 fflate（本进程只提示一次）：${Errors.text(error)}`);
+            }
+            return null;
+        }
+    },
 } as const;

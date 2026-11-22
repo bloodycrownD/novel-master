@@ -23,19 +23,19 @@ import { AppError } from "@/errors/app-error.js";
 
 /** 锁句柄；release 时必须传回同一实例（id 匹配）才生效。 */
 export type PushAgentLockHandle = {
-  readonly id: number;
-  readonly acquiredAt: number;
+    readonly id: number;
+    readonly acquiredAt: number;
 };
 
 type PushAgentMutexAcquireOptions = {
-  /** 排队等待的最长时间；超时 reject `AGENT_BUSY` 的 AppError（调用方据此降级拒绝）。 */
-  timeoutMs: number;
+    /** 排队等待的最长时间；超时 reject `AGENT_BUSY` 的 AppError（调用方据此降级拒绝）。 */
+    timeoutMs: number;
 };
 
 type Waiter = {
-  resolve: (handle: PushAgentLockHandle) => void;
-  reject: (error: AppError<"AGENT_BUSY">) => void;
-  timer: ReturnType<typeof setTimeout> | null;
+    resolve: (handle: PushAgentLockHandle) => void;
+    reject: (error: AppError<"AGENT_BUSY">) => void;
+    timer: ReturnType<typeof setTimeout> | null;
 };
 
 /**
@@ -46,74 +46,74 @@ type Waiter = {
  * - 重复 release、非持锁者 release 都安全忽略，避免 agent 早退兜底路径双释放。
  */
 export class PushAgentMutex {
-  private heldBy: PushAgentLockHandle | null = null;
-  private nextId = 1;
-  private readonly waiters: Waiter[] = [];
+    private heldBy: PushAgentLockHandle | null = null;
+    private nextId = 1;
+    private readonly waiters: Waiter[] = [];
 
-  /** 当前是否被持有（调试/状态查询用）。nm-style: keep-public — 对外状态断言 API，core 测试直接消费。 */
-  isHeld(): boolean {
-    return this.heldBy != null;
-  }
+    /** 当前是否被持有（调试/状态查询用）。nm-style: keep-public — 对外状态断言 API，core 测试直接消费。 */
+    isHeld(): boolean {
+        return this.heldBy != null;
+    }
 
-  /** 当前排队等待者数量（调试/监控用）。nm-style: keep-public — 对外状态断言 API，core 测试直接消费。 */
-  waiterCount(): number {
-    return this.waiters.length;
-  }
+    /** 当前排队等待者数量（调试/监控用）。nm-style: keep-public — 对外状态断言 API，core 测试直接消费。 */
+    waiterCount(): number {
+        return this.waiters.length;
+    }
 
-  /**
+    /**
    * 申请锁。空闲时立即返回；否则进入 FIFO 等待队列，
    * 在 `timeoutMs` 内被唤醒则拿到锁，超时则从队列移除并抛 TIMEOUT。
    * nm-style: keep-public — 互斥锁的对外申请入口（coordinator 与 core 测试消费）。
    */
-  async acquire(options: PushAgentMutexAcquireOptions): Promise<PushAgentLockHandle> {
-    if (this.heldBy == null) {
-      const handle = this.createHandle();
-      this.heldBy = handle;
-      return handle;
+    async acquire(options: PushAgentMutexAcquireOptions): Promise<PushAgentLockHandle> {
+        if (this.heldBy == null) {
+            const handle = this.createHandle();
+            this.heldBy = handle;
+            return handle;
+        }
+
+        return new Promise<PushAgentLockHandle>((resolve, reject) => {
+            const waiter: Waiter = {
+                resolve,
+                reject,
+                timer: null,
+            };
+            waiter.timer = setTimeout(() => {
+                const idx = this.waiters.indexOf(waiter);
+                if (idx >= 0) {
+                    this.waiters.splice(idx, 1);
+                    reject(new AppError("AGENT_BUSY", { detail: "等待 push/agent 互斥锁超时" }));
+                }
+            }, options.timeoutMs);
+            this.waiters.push(waiter);
+        });
     }
 
-    return new Promise<PushAgentLockHandle>((resolve, reject) => {
-      const waiter: Waiter = {
-        resolve,
-        reject,
-        timer: null,
-      };
-      waiter.timer = setTimeout(() => {
-        const idx = this.waiters.indexOf(waiter);
-        if (idx >= 0) {
-          this.waiters.splice(idx, 1);
-          reject(new AppError("AGENT_BUSY", { detail: "等待 push/agent 互斥锁超时" }));
-        }
-      }, options.timeoutMs);
-      this.waiters.push(waiter);
-    });
-  }
-
-  /**
+    /**
    * 释放锁。仅当前持锁者（id 匹配）释放才生效；
    * 释放后把锁移交给队首等待者，没有等待者则置空。
    */
-  release(handle: PushAgentLockHandle): void {
-    if (this.heldBy?.id !== handle.id) {
-      // 非持锁者或已释放过——agent 早退兜底路径可能双释放，安全忽略
-      return;
+    release(handle: PushAgentLockHandle): void {
+        if (this.heldBy?.id !== handle.id) {
+            // 非持锁者或已释放过——agent 早退兜底路径可能双释放，安全忽略
+            return;
+        }
+
+        const next = this.waiters.shift();
+        if (next != null) {
+            if (next.timer != null) {
+                clearTimeout(next.timer);
+            }
+            const granted = this.createHandle();
+            this.heldBy = granted;
+            next.resolve(granted);
+            return;
+        }
+
+        this.heldBy = null;
     }
 
-    const next = this.waiters.shift();
-    if (next != null) {
-      if (next.timer != null) {
-        clearTimeout(next.timer);
-      }
-      const granted = this.createHandle();
-      this.heldBy = granted;
-      next.resolve(granted);
-      return;
+    private createHandle(): PushAgentLockHandle {
+        return { id: this.nextId++, acquiredAt: Date.now() };
     }
-
-    this.heldBy = null;
-  }
-
-  private createHandle(): PushAgentLockHandle {
-    return { id: this.nextId++, acquiredAt: Date.now() };
-  }
 }

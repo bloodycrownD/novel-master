@@ -12,16 +12,16 @@ export type TdbcErrorCode = "UNKNOWN_DRIVER" | "INVALID_URL" | "CONNECTION_CLOSE
  * Unified error for TDBC protocol, registry, and driver operations.
  */
 export class TdbcError extends Error {
-  readonly code: TdbcErrorCode;
-  readonly driver?: string;
-  readonly sqliteCode?: number;
-  declare readonly cause?: unknown;
+    readonly code: TdbcErrorCode;
+    readonly driver?: string;
+    readonly sqliteCode?: number;
+    declare readonly cause?: unknown;
 
-  constructor(code: TdbcErrorCode, message: string, options?: { driver?: string; sqliteCode?: number; cause?: unknown }) {
-    super(message, { cause: options?.cause });
-    this.name = "TdbcError";
-    this.code = code;
-    this.driver = options?.driver;
-    this.sqliteCode = options?.sqliteCode;
-  }
+    constructor(code: TdbcErrorCode, message: string, options?: { driver?: string; sqliteCode?: number; cause?: unknown }) {
+        super(message, { cause: options?.cause });
+        this.name = "TdbcError";
+        this.code = code;
+        this.driver = options?.driver;
+        this.sqliteCode = options?.sqliteCode;
+    }
 }

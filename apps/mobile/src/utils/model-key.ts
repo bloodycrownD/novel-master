@@ -7,8 +7,8 @@
  *   `MODEL_OTHER_KEY` 直接拼在其后）。
  */
 export const ModelKey = {
-  /** 同名计数键（只在同一列表内两两比较，不对外展示）。 */
-  name: (providerId: string, modelName: string): string => `${providerId}\0${modelName}`,
-  /** 统计筛选项 / 列表行 key（`{providerId}::{model}`，`model` 可为 `__other__`）。 */
-  providerModel: (providerId: string, model: string): string => `${providerId}::${model}`,
+    /** 同名计数键（只在同一列表内两两比较，不对外展示）。 */
+    name: (providerId: string, modelName: string): string => `${providerId}\0${modelName}`,
+    /** 统计筛选项 / 列表行 key（`{providerId}::{model}`，`model` 可为 `__other__`）。 */
+    providerModel: (providerId: string, model: string): string => `${providerId}::${model}`,
 } as const;

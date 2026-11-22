@@ -6,7 +6,7 @@
 
 export { TokenizerRnRegister } from "./register.js";
 export {
-  AndroidNativeBridge,
-  type NativeCountRequest,
-  type NativeCountResponse,
+    AndroidNativeBridge,
+    type NativeCountRequest,
+    type NativeCountResponse,
 } from "./android-native-bridge.js";

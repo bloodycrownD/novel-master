@@ -18,12 +18,12 @@ export type ComposerMode = 'composer-token' | 'prompt-macro';
  * PromptEditor/CodeEditorWebView，保留为协议能力勿当死代码删），web 侧不上报 heightChange。
  */
 export type ComposerMetrics = {
-  readonly fontSize: number;
-  readonly lineHeight: number;
-  readonly paddingH: number;
-  readonly paddingV: number;
-  readonly minHeight: number;
-  readonly maxHeight: number | null;
+    readonly fontSize: number;
+    readonly lineHeight: number;
+    readonly paddingH: number;
+    readonly paddingV: number;
+    readonly minHeight: number;
+    readonly maxHeight: number | null;
 };
 
 /**
@@ -31,61 +31,61 @@ export type ComposerMetrics = {
  * primaryMuted / selection 由宿主拼好下发，web 不做颜色计算。
  */
 export type ComposerTheme = {
-  readonly background: string;
-  readonly text: string;
-  readonly textSecondary: string;
-  readonly primary: string;
-  readonly primaryMuted: string;
-  readonly selection: string;
+    readonly background: string;
+    readonly text: string;
+    readonly textSecondary: string;
+    readonly primary: string;
+    readonly primaryMuted: string;
+    readonly selection: string;
 };
 
 type ComposerSelectionPayload = {
-  readonly start: number;
-  readonly end: number;
+    readonly start: number;
+    readonly end: number;
 };
 
 export type InitPayload = {
-  readonly mode: ComposerMode;
-  /** 初始禁用态（chat 链 running/无模型/末条纯文本；宏链只读详情）。 */
-  readonly disabled: boolean;
-  readonly theme: ComposerTheme;
-  readonly metrics: ComposerMetrics;
-  readonly placeholder: string;
+    readonly mode: ComposerMode;
+    /** 初始禁用态（chat 链 running/无模型/末条纯文本；宏链只读详情）。 */
+    readonly disabled: boolean;
+    readonly theme: ComposerTheme;
+    readonly metrics: ComposerMetrics;
+    readonly placeholder: string;
 };
 
 type SetTextPayload = {
-  readonly text: string;
-  /** 缺省时保持内核写值后的光标位置（textarea.value 赋值后落末位）。 */
-  readonly selectionStart?: number;
-  readonly selectionEnd?: number;
+    readonly text: string;
+    /** 缺省时保持内核写值后的光标位置（textarea.value 赋值后落末位）。 */
+    readonly selectionStart?: number;
+    readonly selectionEnd?: number;
 };
 
 /** Host → Web */
 export type HostToComposerInputMessage =
-  | {readonly type: 'init'; readonly payload: InitPayload}
-  | {
-      readonly type: 'themeUpdate';
-      readonly payload: {readonly theme: ComposerTheme};
-    }
-  | {readonly type: 'setText'; readonly payload: SetTextPayload}
-  | {readonly type: 'setSelection'; readonly payload: ComposerSelectionPayload}
-  | {
-      readonly type: 'setDisabled';
-      readonly payload: {readonly disabled: boolean};
-    }
-  | {readonly type: 'blur'; readonly payload: Record<string, never>};
+    | {readonly type: 'init'; readonly payload: InitPayload}
+    | {
+            readonly type: 'themeUpdate';
+            readonly payload: {readonly theme: ComposerTheme};
+        }
+    | {readonly type: 'setText'; readonly payload: SetTextPayload}
+    | {readonly type: 'setSelection'; readonly payload: ComposerSelectionPayload}
+    | {
+            readonly type: 'setDisabled';
+            readonly payload: {readonly disabled: boolean};
+        }
+    | {readonly type: 'blur'; readonly payload: Record<string, never>};
 
 /** Web → Host */
 export type ComposerInputToHostMessage =
-  | {readonly type: 'ready'; readonly payload: {readonly version: number}}
-  | {readonly type: 'change'; readonly payload: {readonly text: string}}
-  | {
-      readonly type: 'selectionChange';
-      readonly payload: ComposerSelectionPayload;
-    }
-  | {readonly type: 'focus'; readonly payload: Record<string, never>}
-  | {readonly type: 'blur'; readonly payload: Record<string, never>}
-  | {
-      readonly type: 'heightChange';
-      readonly payload: {readonly height: number};
-    };
+    | {readonly type: 'ready'; readonly payload: {readonly version: number}}
+    | {readonly type: 'change'; readonly payload: {readonly text: string}}
+    | {
+            readonly type: 'selectionChange';
+            readonly payload: ComposerSelectionPayload;
+        }
+    | {readonly type: 'focus'; readonly payload: Record<string, never>}
+    | {readonly type: 'blur'; readonly payload: Record<string, never>}
+    | {
+            readonly type: 'heightChange';
+            readonly payload: {readonly height: number};
+        };

@@ -17,30 +17,30 @@ import {coreT} from '@/i18n/core';
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 export function AgentsSettingsScreen() {
-  const {tokens} = useTheme();
-  const {showToast} = useToast();
-  const runtime = useRuntime();
-  const navigation = useNavigation<Nav>();
+    const {tokens} = useTheme();
+    const {showToast} = useToast();
+    const runtime = useRuntime();
+    const navigation = useNavigation<Nav>();
 
-  return (
-    <View style={[styles.root, {backgroundColor: tokens.background}]}>
-      {/* 新建默认作用域随 tab 落库：主 tab → primary、子 tab → subagent。 */}
-      <AgentList
-        onCreate={tab => {
-          const mode = tab === 'primary' ? 'primary' : 'subagent';
-          void AgentCreate.createBlank(runtime, undefined, mode).then(created => {
-            if (!created.ok) {
-              showToast(ToastMessage.toast(coreT({key: "ui.common.create_failed"}), created.error));
-              return;
-            }
-            navigation.navigate('AgentEditor', {agentId: created.value});
-          });
-        }}
-      />
-    </View>
-  );
+    return (
+        <View style={[styles.root, {backgroundColor: tokens.background}]}>
+            {/* 新建默认作用域随 tab 落库：主 tab → primary、子 tab → subagent。 */}
+            <AgentList
+                onCreate={tab => {
+                    const mode = tab === 'primary' ? 'primary' : 'subagent';
+                    void AgentCreate.createBlank(runtime, undefined, mode).then(created => {
+                        if (!created.ok) {
+                            showToast(ToastMessage.toast(coreT({key: "ui.common.create_failed"}), created.error));
+                            return;
+                        }
+                        navigation.navigate('AgentEditor', {agentId: created.value});
+                    });
+                }}
+            />
+        </View>
+    );
 }
 
 const styles = StyleSheet.create({
-  root: {flex: 1},
+    root: {flex: 1},
 });

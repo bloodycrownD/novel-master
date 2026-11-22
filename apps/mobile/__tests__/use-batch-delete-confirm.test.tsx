@@ -11,21 +11,21 @@ import {useBatchDeleteConfirm} from '@/hooks/useBatchDeleteConfirm';
 const mockShowToast = jest.fn();
 
 jest.mock('@/services/app-toast', () => {
-  const legacy = {
-  showAppToast: (...args: unknown[]) => mockShowToast(...args),
+    const legacy = {
+    showAppToast: (...args: unknown[]) => mockShowToast(...args),
 };
-  return {...legacy, AppToast: {show: legacy.showAppToast}};
+    return {...legacy, AppToast: {show: legacy.showAppToast}};
 });
 
 jest.mock('@/errors/toast-message', () => {
-  const legacy = {
-  toastMessage: (title: string, _err: unknown) => title,
+    const legacy = {
+    toastMessage: (title: string, _err: unknown) => title,
 };
-  return {...legacy, ToastMessage: {toast: legacy.toastMessage}};
+    return {...legacy, ToastMessage: {toast: legacy.toastMessage}};
 });
 
 jest.mock('react-native', () => ({
-  Alert: {alert: jest.fn()},
+    Alert: {alert: jest.fn()},
 }));
 
 type AlertButton = {text: string; style?: string; onPress?: () => void};
@@ -34,107 +34,107 @@ const deleteOne = jest.fn<(id: string) => Promise<{ok: boolean; value?: undefine
 const onDone = jest.fn(() => Promise.resolve());
 
 function mountConfirm(): (items: readonly string[]) => void {
-  let confirm: ((items: readonly string[]) => void) | undefined;
-  function TestHost() {
-    confirm = useBatchDeleteConfirm<string>({
-      title: '删除规则',
-      message: items => `确定删除选中的 ${items.length} 条规则？`,
-      deleteOne: id => deleteOne(id),
-      onDone: () => onDone(),
+    let confirm: ((items: readonly string[]) => void) | undefined;
+    function TestHost() {
+        confirm = useBatchDeleteConfirm<string>({
+            title: '删除规则',
+            message: items => `确定删除选中的 ${items.length} 条规则？`,
+            deleteOne: id => deleteOne(id),
+            onDone: () => onDone(),
+        });
+        return null;
+    }
+    TestRenderer.act(() => {
+        TestRenderer.create(<TestHost />);
     });
-    return null;
-  }
-  TestRenderer.act(() => {
-    TestRenderer.create(<TestHost />);
-  });
-  return (items: readonly string[]) => confirm!(items);
+    return (items: readonly string[]) => confirm!(items);
 }
 
 function alertButtons(): AlertButton[] {
-  const calls = (Alert.alert as unknown as jest.Mock).mock.calls;
-  return calls[calls.length - 1]![2] as AlertButton[];
+    const calls = (Alert.alert as unknown as jest.Mock).mock.calls;
+    return calls[calls.length - 1]![2] as AlertButton[];
 }
 
 async function pressConfirm(): Promise<void> {
-  await act(async () => {
-    alertButtons()
-      .find(b => b.text === '删除')
-      ?.onPress?.();
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
-  });
+    await act(async () => {
+        alertButtons()
+            .find(b => b.text === '删除')
+            ?.onPress?.();
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+    });
 }
 
 beforeEach(() => {
-  jest.clearAllMocks();
-  deleteOne.mockReset();
-  onDone.mockReset();
+    jest.clearAllMocks();
+    deleteOne.mockReset();
+    onDone.mockReset();
 });
 
 describe('useBatchDeleteConfirm', () => {
-  it('确认：Alert 文案带条目数，逐条删除后回调 onDone，不弹 toast', async () => {
-    deleteOne.mockResolvedValue({ok: true, value: undefined});
-    const confirm = mountConfirm();
+    it('确认：Alert 文案带条目数，逐条删除后回调 onDone，不弹 toast', async () => {
+        deleteOne.mockResolvedValue({ok: true, value: undefined});
+        const confirm = mountConfirm();
 
-    confirm(['a', 'b']);
+        confirm(['a', 'b']);
 
-    expect(Alert.alert).toHaveBeenCalledWith(
-      '删除规则',
-      '确定删除选中的 2 条规则？',
-      expect.any(Array),
-    );
-    expect(deleteOne).not.toHaveBeenCalled();
+        expect(Alert.alert).toHaveBeenCalledWith(
+            '删除规则',
+            '确定删除选中的 2 条规则？',
+            expect.any(Array),
+        );
+        expect(deleteOne).not.toHaveBeenCalled();
 
-    await pressConfirm();
+        await pressConfirm();
 
-    expect(deleteOne).toHaveBeenCalledTimes(2);
-    expect(deleteOne).toHaveBeenNthCalledWith(1, 'a');
-    expect(deleteOne).toHaveBeenNthCalledWith(2, 'b');
-    expect(onDone).toHaveBeenCalledTimes(1);
-    expect(mockShowToast).not.toHaveBeenCalled();
-  });
-
-  it('取消：点取消按钮（或不确认）不触发删除与 onDone', async () => {
-    deleteOne.mockResolvedValue({ok: true, value: undefined});
-    const confirm = mountConfirm();
-
-    confirm(['a']);
-
-    const cancel = alertButtons().find(b => b.text === '取消')!;
-    expect(cancel.style).toBe('cancel');
-    await act(async () => {
-      cancel.onPress?.();
-      await Promise.resolve();
+        expect(deleteOne).toHaveBeenCalledTimes(2);
+        expect(deleteOne).toHaveBeenNthCalledWith(1, 'a');
+        expect(deleteOne).toHaveBeenNthCalledWith(2, 'b');
+        expect(onDone).toHaveBeenCalledTimes(1);
+        expect(mockShowToast).not.toHaveBeenCalled();
     });
 
-    expect(deleteOne).not.toHaveBeenCalled();
-    expect(onDone).not.toHaveBeenCalled();
-    expect(mockShowToast).not.toHaveBeenCalled();
-  });
+    it('取消：点取消按钮（或不确认）不触发删除与 onDone', async () => {
+        deleteOne.mockResolvedValue({ok: true, value: undefined});
+        const confirm = mountConfirm();
 
-  it('中途失败：顺序删除到失败项即中断，toast 删除失败，不回调 onDone', async () => {
-    deleteOne.mockResolvedValueOnce({ok: true, value: undefined});
-    deleteOne.mockRejectedValueOnce(new Error('boom'));
-    const confirm = mountConfirm();
+        confirm(['a']);
 
-    confirm(['a', 'b', 'c']);
+        const cancel = alertButtons().find(b => b.text === '取消')!;
+        expect(cancel.style).toBe('cancel');
+        await act(async () => {
+            cancel.onPress?.();
+            await Promise.resolve();
+        });
 
-    await pressConfirm();
+        expect(deleteOne).not.toHaveBeenCalled();
+        expect(onDone).not.toHaveBeenCalled();
+        expect(mockShowToast).not.toHaveBeenCalled();
+    });
 
-    // 已删的 a 保留（部分成功语义），b 失败后不再碰 c
-    expect(deleteOne).toHaveBeenCalledTimes(2);
-    expect(deleteOne).not.toHaveBeenCalledWith('c');
-    expect(onDone).not.toHaveBeenCalled();
-    expect(mockShowToast).toHaveBeenCalledTimes(1);
-    expect(mockShowToast).toHaveBeenCalledWith('删除失败');
-  });
+    it('中途失败：顺序删除到失败项即中断，toast 删除失败，不回调 onDone', async () => {
+        deleteOne.mockResolvedValueOnce({ok: true, value: undefined});
+        deleteOne.mockRejectedValueOnce(new Error('boom'));
+        const confirm = mountConfirm();
 
-  it('空集不弹确认框', () => {
-    const confirm = mountConfirm();
+        confirm(['a', 'b', 'c']);
 
-    confirm([]);
+        await pressConfirm();
 
-    expect(Alert.alert).not.toHaveBeenCalled();
-  });
+        // 已删的 a 保留（部分成功语义），b 失败后不再碰 c
+        expect(deleteOne).toHaveBeenCalledTimes(2);
+        expect(deleteOne).not.toHaveBeenCalledWith('c');
+        expect(onDone).not.toHaveBeenCalled();
+        expect(mockShowToast).toHaveBeenCalledTimes(1);
+        expect(mockShowToast).toHaveBeenCalledWith('删除失败');
+    });
+
+    it('空集不弹确认框', () => {
+        const confirm = mountConfirm();
+
+        confirm([]);
+
+        expect(Alert.alert).not.toHaveBeenCalled();
+    });
 });

@@ -6,50 +6,50 @@
 import React, {createContext, useContext} from 'react';
 
 export type ChatTabNavigationState = {
-  readonly chatSubview: 'list' | 'conversation';
-  readonly sessionListPanel: 'sessions' | 'projects';
-  readonly projectName: string | undefined;
-  readonly sessionTitle: string | undefined;
-  readonly sessionDrawerOpen: boolean;
-  readonly projectDrawerOpen: boolean;
-  readonly sessionBatchActive: boolean;
-  readonly workspaceCanGoUp: boolean;
+    readonly chatSubview: 'list' | 'conversation';
+    readonly sessionListPanel: 'sessions' | 'projects';
+    readonly projectName: string | undefined;
+    readonly sessionTitle: string | undefined;
+    readonly sessionDrawerOpen: boolean;
+    readonly projectDrawerOpen: boolean;
+    readonly sessionBatchActive: boolean;
+    readonly workspaceCanGoUp: boolean;
 };
 
 export type ChatTabNavigationActions = {
-  readonly backFromConversation: () => void;
-  readonly showChatPanel: () => void;
-  readonly closeSessionDrawer: () => void;
-  /** 返回键关闭 mermaid 全屏查看器（下发 closeMermaidViewer）。 */
-  readonly closeMermaidViewer: () => void;
-  readonly closeProjectDrawer: () => void;
-  readonly showSessionsPanel: () => void;
-  readonly openDrawer: () => void;
-  readonly closeMessageMenu: () => void;
-  readonly closeMessageEdit: () => void;
-  readonly closeModelPicker: () => void;
-  readonly closeAgentPicker: () => void;
-  readonly closeSessionRename: () => void;
-  readonly exitSessionBatch: () => void;
-  readonly workspaceGoUp: (() => void) | undefined;
+    readonly backFromConversation: () => void;
+    readonly showChatPanel: () => void;
+    readonly closeSessionDrawer: () => void;
+    /** 返回键关闭 mermaid 全屏查看器（下发 closeMermaidViewer）。 */
+    readonly closeMermaidViewer: () => void;
+    readonly closeProjectDrawer: () => void;
+    readonly showSessionsPanel: () => void;
+    readonly openDrawer: () => void;
+    readonly closeMessageMenu: () => void;
+    readonly closeMessageEdit: () => void;
+    readonly closeModelPicker: () => void;
+    readonly closeAgentPicker: () => void;
+    readonly closeSessionRename: () => void;
+    readonly exitSessionBatch: () => void;
+    readonly workspaceGoUp: (() => void) | undefined;
 };
 
 export type ChatTabNavigationContextValue = {
-  readonly state: ChatTabNavigationState;
-  readonly actions: ChatTabNavigationActions;
+    readonly state: ChatTabNavigationState;
+    readonly actions: ChatTabNavigationActions;
 };
 
 export const ChatTabNavigationCtx = createContext<ChatTabNavigationContextValue | null>(null);
 
 export function useChatTabNavigation(): ChatTabNavigationContextValue {
-  const ctx = useContext(ChatTabNavigationCtx);
-  if (ctx == null) {
-    // nm-throw: keep — UI 错误边界语义：hook 契约护栏，渲染期抛给错误边界
-    throw new Error('useChatTabNavigation 须在 ChatTabNavigationProvider 内使用');
-  }
-  return ctx;
+    const ctx = useContext(ChatTabNavigationCtx);
+    if (ctx == null) {
+        // nm-throw: keep — UI 错误边界语义：hook 契约护栏，渲染期抛给错误边界
+        throw new Error('useChatTabNavigation 须在 ChatTabNavigationProvider 内使用');
+    }
+    return ctx;
 }
 
 export function useChatTabNavigationOptional(): ChatTabNavigationContextValue | null {
-  return useContext(ChatTabNavigationCtx);
+    return useContext(ChatTabNavigationCtx);
 }

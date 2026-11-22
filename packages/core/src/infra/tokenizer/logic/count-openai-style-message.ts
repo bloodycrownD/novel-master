@@ -21,75 +21,75 @@ import { ChatTokenCount } from "./count-tokens.js";
  * WASM tiktoken 与 js-tiktoken 的 `Tiktoken` 都满足。
  */
 interface TokenEncoder {
-  encode(text: string): { readonly length: number };
+    encode(text: string): { readonly length: number };
 }
 
 export interface OpenAiStyleMessage {
-  readonly role: string;
-  readonly content: string;
-  readonly name?: string;
+    readonly role: string;
+    readonly content: string;
+    readonly name?: string;
 }
 
 export const OpenAiStyleMessageCount = {
-  /**
+    /**
    * Counts tokens for chat-style messages using OpenAI billing overhead.
    *
    * 骨架走 core 公共纯函数 {@link ChatTokenCount.count}（`precise` 档），
    * 这里只负责把 tiktoken encoding 适配成 `ChatTokenEncoder`。
    * 与 SillyTavern `/api/tokenizers/openai/count` 行为一致。
    */
-  count(encoding: TokenEncoder, messages: readonly OpenAiStyleMessage[], tiktokenModel: string): number {
-    // message-token-cache 分块接入（唯一落点）：传入 countTokens 的 encode 函数
-    // 包上 {@link TokenizerTextCount.count}——单次 encode 被内部切成
-    // ≤64 字符的自然边界段逐段求和，「无空白长中文串」的 O(len²) 病态由这里
-    // 兜住（实测 12K 字符 88s → 亚秒级）。per-message overhead 公式不动：
-    // role / content / name 每段**文本**各自走包装，+3/+9/0301 调整保持原样。
-    // 数值口径因此从「整串 encode」变为「边界段加和」——正常文本误差
-    // -0.02%~+0.35%（spec 实测），T-FA2 的逐字节基准已按 spec 时序迁移至
-    // T-TC5 的 ≤1% 容差口径。
-    return ChatTokenCount.count((text) => TokenizerTextCount.count((chunk) => encoding.encode(chunk).length, text), messages, "precise", { tiktokenModel });
-  },
+    count(encoding: TokenEncoder, messages: readonly OpenAiStyleMessage[], tiktokenModel: string): number {
+        // message-token-cache 分块接入（唯一落点）：传入 countTokens 的 encode 函数
+        // 包上 {@link TokenizerTextCount.count}——单次 encode 被内部切成
+        // ≤64 字符的自然边界段逐段求和，「无空白长中文串」的 O(len²) 病态由这里
+        // 兜住（实测 12K 字符 88s → 亚秒级）。per-message overhead 公式不动：
+        // role / content / name 每段**文本**各自走包装，+3/+9/0301 调整保持原样。
+        // 数值口径因此从「整串 encode」变为「边界段加和」——正常文本误差
+        // -0.02%~+0.35%（spec 实测），T-FA2 的逐字节基准已按 spec 时序迁移至
+        // T-TC5 的 ≤1% 容差口径。
+        return ChatTokenCount.count((text) => TokenizerTextCount.count((chunk) => encoding.encode(chunk).length, text), messages, "precise", { tiktokenModel });
+    },
 
-  /**
+    /**
    * Wraps serialized prompt as a single system message for ST-aligned counting.
    */
-  wrapSerializedPromptAsSystemMessage(serialized: string): OpenAiStyleMessage {
-    return { role: "system", content: serialized };
-  },
+    wrapSerializedPromptAsSystemMessage(serialized: string): OpenAiStyleMessage {
+        return { role: "system", content: serialized };
+    },
 
-  /**
+    /**
    * Converts messages to a Claude-style prompt string for web tokenizers.
    *
    * nm-style: keep-public — node 驱动跨包消费（web tokenizer 计数入口）
    */
-  convertMessagesForWebTokenizer(messages: readonly OpenAiStyleMessage[]): string {
-    const parts: string[] = [];
-    for (const msg of messages) {
-      const role = msg.role.toLowerCase();
-      const content = msg.content ?? "";
-      if (role === "system") {
-        parts.push(content);
-      } else if (role === "user" || role === "human") {
-        parts.push(`\n\nHuman: ${content}`);
-      } else if (role === "assistant") {
-        parts.push(`\n\nAssistant: ${content}`);
-      } else {
-        parts.push(`\n\n${msg.role}: ${content}`);
-      }
-    }
-    if (!parts.some((p) => p.includes("Assistant:"))) {
-      parts.push("\n\nAssistant:");
-    }
-    return parts.join("").trimStart();
-  },
+    convertMessagesForWebTokenizer(messages: readonly OpenAiStyleMessage[]): string {
+        const parts: string[] = [];
+        for (const msg of messages) {
+            const role = msg.role.toLowerCase();
+            const content = msg.content ?? "";
+            if (role === "system") {
+                parts.push(content);
+            } else if (role === "user" || role === "human") {
+                parts.push(`\n\nHuman: ${content}`);
+            } else if (role === "assistant") {
+                parts.push(`\n\nAssistant: ${content}`);
+            } else {
+                parts.push(`\n\n${msg.role}: ${content}`);
+            }
+        }
+        if (!parts.some((p) => p.includes("Assistant:"))) {
+            parts.push("\n\nAssistant:");
+        }
+        return parts.join("").trimStart();
+    },
 
-  /**
+    /**
    * Web tokenizer count aligned with ST `countWebTokenizerTokens`.
    *
    * nm-style: keep-public — node 驱动跨包消费（web tokenizer 计数入口）
    */
-  countWebTokenizerMessages(encode: (text: string) => { length: number }, messages: readonly OpenAiStyleMessage[]): number {
-    const converted = OpenAiStyleMessageCount.convertMessagesForWebTokenizer(messages);
-    return encode(converted).length;
-  },
+    countWebTokenizerMessages(encode: (text: string) => { length: number }, messages: readonly OpenAiStyleMessage[]): number {
+        const converted = OpenAiStyleMessageCount.convertMessagesForWebTokenizer(messages);
+        return encode(converted).length;
+    },
 } as const;

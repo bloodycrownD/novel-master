@@ -25,8 +25,8 @@ import type { StreamTokenSource } from "../session-run-state/model/session-run-s
 
 /** 一次速率采样：时刻（毫秒）与该时刻的累计 token 数。 */
 interface TokenRateSample {
-  readonly tMs: number;
-  readonly tokens: number;
+    readonly tMs: number;
+    readonly tokens: number;
 }
 
 /** 速率滑窗的默认时长（毫秒）。 */
@@ -58,32 +58,32 @@ const MAX_RATE_SAMPLES = 512;
  * - 新 run / 数据源切换由调用方 `reset()`。
  */
 export interface TokenRateSampler {
-  /** 采样当前累计值并返回窗口速率（token/秒）；样本不足返回 null。 */
-  sample(tokens: number, source: StreamTokenSource, nowMs: number): number | null;
-  /**
+    /** 采样当前累计值并返回窗口速率（token/秒）；样本不足返回 null。 */
+    sample(tokens: number, source: StreamTokenSource, nowMs: number): number | null;
+    /**
    * 只读当前窗口速率（不记样本、不改序列）——供渲染节拍读取：暂停期随
    * nowMs 增长自然衰减，恢复输出后随新样本回升。
    */
-  rateAt(nowMs: number): number | null;
-  /**
+    rateAt(nowMs: number): number | null;
+    /**
    * 末值快照（run 收尾冻结用）：窗口以**最后一个样本时刻**收尾，不受调用
    * 时刻影响——输出停下后读它仍是「最后一段在稳定输出时的速度」，而不是
    * 被停顿拖低的值。样本不足以成窗口时回落到上一个稳定窗口的末值（校正点
    * 重 seed 前的末值，含 source 翻转与窗口折叠两种校正点）。
    */
-  freeze(): number | null;
-  /** 重 seed（新 run / 切会话 / 冻结态退出）。 */
-  reset(): void;
+    freeze(): number | null;
+    /** 重 seed（新 run / 切会话 / 冻结态退出）。 */
+    reset(): void;
 }
 
 /** 末值：窗口以最后一个样本时刻收尾（停顿不拉低；无样本返回 null）。 */
 const tailRate = (samples: readonly TokenRateSample[]): number | null => {
-  const last = samples[samples.length - 1];
-  return last == null ? null : SlidingTokenRate.rate(samples, last.tMs);
+    const last = samples[samples.length - 1];
+    return last == null ? null : SlidingTokenRate.rate(samples, last.tMs);
 };
 
 export const SlidingTokenRate = {
-  /**
+    /**
    * 计算滑窗 token 速率（token/秒）；样本不足或时长非正时返回 null。
    *
    * 序列按 tMs 升序（采样器保证）；未来样本（`tMs > nowMs`）不参与窗口，
@@ -94,89 +94,89 @@ export const SlidingTokenRate = {
    * @param nowMs 当前时刻（毫秒）。
    * @param windowMs 窗口时长（毫秒），缺省 2.5s。
    */
-  rate(samples: readonly TokenRateSample[], nowMs: number, windowMs: number = SLIDING_TOKEN_RATE_WINDOW_MS): number | null {
-    // 末样本 = 不晚于 nowMs 的最近一条：时钟回拨/跳变留下的未来样本不参与
-    // 窗口（全未来样本 → lastIndex < 1 → null，与「样本不足」同解）。
-    let lastIndex = samples.length - 1;
-    while (lastIndex >= 0 && samples[lastIndex]!.tMs > nowMs) {
-      lastIndex -= 1;
-    }
-    if (lastIndex < 1) {
-      return null;
-    }
-    // 窗口外样本淘汰：只保留窗口内（含边界）的可用段；候选样本仍须不晚于
-    // nowMs（无序残留的未来样本到此为止，窗口内样本恒 ≤ nowMs）。
-    const windowStartMs = nowMs - windowMs;
-    let firstIndex = lastIndex;
-    while (firstIndex > 0 && samples[firstIndex - 1]!.tMs >= windowStartMs && samples[firstIndex - 1]!.tMs <= nowMs) {
-      firstIndex -= 1;
-    }
-    const first = samples[firstIndex]!;
-    const last = samples[lastIndex]!;
-    const elapsedMs = nowMs - first.tMs;
-    if (elapsedMs <= 0) {
-      return null;
-    }
-    const tokenDelta = Math.max(0, last.tokens - first.tokens);
-    return (tokenDelta * 1_000) / elapsedMs;
-  },
+    rate(samples: readonly TokenRateSample[], nowMs: number, windowMs: number = SLIDING_TOKEN_RATE_WINDOW_MS): number | null {
+        // 末样本 = 不晚于 nowMs 的最近一条：时钟回拨/跳变留下的未来样本不参与
+        // 窗口（全未来样本 → lastIndex < 1 → null，与「样本不足」同解）。
+        let lastIndex = samples.length - 1;
+        while (lastIndex >= 0 && samples[lastIndex]!.tMs > nowMs) {
+            lastIndex -= 1;
+        }
+        if (lastIndex < 1) {
+            return null;
+        }
+        // 窗口外样本淘汰：只保留窗口内（含边界）的可用段；候选样本仍须不晚于
+        // nowMs（无序残留的未来样本到此为止，窗口内样本恒 ≤ nowMs）。
+        const windowStartMs = nowMs - windowMs;
+        let firstIndex = lastIndex;
+        while (firstIndex > 0 && samples[firstIndex - 1]!.tMs >= windowStartMs && samples[firstIndex - 1]!.tMs <= nowMs) {
+            firstIndex -= 1;
+        }
+        const first = samples[firstIndex]!;
+        const last = samples[lastIndex]!;
+        const elapsedMs = nowMs - first.tMs;
+        if (elapsedMs <= 0) {
+            return null;
+        }
+        const tokenDelta = Math.max(0, last.tokens - first.tokens);
+        return (tokenDelta * 1_000) / elapsedMs;
+    },
 
-  /** 建一个采样器（持有可变样本序列，组件级单例使用）。 */
-  createSampler(): TokenRateSampler {
-    let samples: TokenRateSample[] = [];
-    let lastTokens: number | null = null;
-    let lastSource: string | null = null;
-    /** 末样本时刻（同刻去重与时钟回拨判定用；reset 清回 −∞）。 */
-    let lastSampleMs = Number.NEGATIVE_INFINITY;
-    /**
+    /** 建一个采样器（持有可变样本序列，组件级单例使用）。 */
+    createSampler(): TokenRateSampler {
+        let samples: TokenRateSample[] = [];
+        let lastTokens: number | null = null;
+        let lastSource: string | null = null;
+        /** 末样本时刻（同刻去重与时钟回拨判定用；reset 清回 −∞）。 */
+        let lastSampleMs = Number.NEGATIVE_INFINITY;
+        /**
      * 上一个稳定窗口的末值 = `freeze()` 的回落值（样本不足以成窗口时用）。
      * 写入点即校正点（source 翻转 / 窗口折叠）；reset 清空。
      */
-    let lastSettledRate: number | null = null;
-    return {
-      sample(tokens, source, nowMs) {
-        if (lastSource !== source) {
-          // 校正点（heuristic→usage 覆盖跳变）：先留翻转前末值，再清空重 seed。
-          lastSettledRate = tailRate(samples) ?? lastSettledRate;
-          samples = [{ tMs: nowMs, tokens }];
-          lastSampleMs = nowMs;
-          lastSource = source;
-        } else if (lastTokens !== tokens) {
-          if (nowMs > lastSampleMs) {
-            if (nowMs - lastSampleMs >= SLIDING_TOKEN_RATE_WINDOW_MS) {
-              // 窗口折叠：与上个样本相隔 ≥ 窗口时长，旧样本再也不会进任何未来
-              // 窗口（多步 run 的 step 间静默即此形态）。先把当前窗口末值刷进
-              // 回落值，再清空重 seed——freeze() 才能给出最后一段稳定速率。
-              lastSettledRate = tailRate(samples) ?? lastSettledRate;
-              samples = [];
-            }
-            samples.push({ tMs: nowMs, tokens });
-            lastSampleMs = nowMs;
-            if (samples.length > MAX_RATE_SAMPLES) {
-              samples = samples.slice(-MAX_RATE_SAMPLES);
-            }
-          } else if (nowMs === lastSampleMs) {
-            // 同刻去重：同一毫秒内的多条 delta 只留最终累计值，不 push。
-            samples[samples.length - 1] = { tMs: nowMs, tokens };
-          }
-          // nowMs < lastSampleMs：时钟回拨，入口丢弃——不记样本，保序列升序。
-        }
-        lastTokens = tokens;
-        return SlidingTokenRate.rate(samples, nowMs);
-      },
-      rateAt(nowMs) {
-        return SlidingTokenRate.rate(samples, nowMs);
-      },
-      freeze() {
-        return tailRate(samples) ?? lastSettledRate;
-      },
-      reset() {
-        samples = [];
-        lastTokens = null;
-        lastSource = null;
-        lastSampleMs = Number.NEGATIVE_INFINITY;
-        lastSettledRate = null;
-      },
-    };
-  },
+        let lastSettledRate: number | null = null;
+        return {
+            sample(tokens, source, nowMs) {
+                if (lastSource !== source) {
+                    // 校正点（heuristic→usage 覆盖跳变）：先留翻转前末值，再清空重 seed。
+                    lastSettledRate = tailRate(samples) ?? lastSettledRate;
+                    samples = [{ tMs: nowMs, tokens }];
+                    lastSampleMs = nowMs;
+                    lastSource = source;
+                } else if (lastTokens !== tokens) {
+                    if (nowMs > lastSampleMs) {
+                        if (nowMs - lastSampleMs >= SLIDING_TOKEN_RATE_WINDOW_MS) {
+                            // 窗口折叠：与上个样本相隔 ≥ 窗口时长，旧样本再也不会进任何未来
+                            // 窗口（多步 run 的 step 间静默即此形态）。先把当前窗口末值刷进
+                            // 回落值，再清空重 seed——freeze() 才能给出最后一段稳定速率。
+                            lastSettledRate = tailRate(samples) ?? lastSettledRate;
+                            samples = [];
+                        }
+                        samples.push({ tMs: nowMs, tokens });
+                        lastSampleMs = nowMs;
+                        if (samples.length > MAX_RATE_SAMPLES) {
+                            samples = samples.slice(-MAX_RATE_SAMPLES);
+                        }
+                    } else if (nowMs === lastSampleMs) {
+                        // 同刻去重：同一毫秒内的多条 delta 只留最终累计值，不 push。
+                        samples[samples.length - 1] = { tMs: nowMs, tokens };
+                    }
+                    // nowMs < lastSampleMs：时钟回拨，入口丢弃——不记样本，保序列升序。
+                }
+                lastTokens = tokens;
+                return SlidingTokenRate.rate(samples, nowMs);
+            },
+            rateAt(nowMs) {
+                return SlidingTokenRate.rate(samples, nowMs);
+            },
+            freeze() {
+                return tailRate(samples) ?? lastSettledRate;
+            },
+            reset() {
+                samples = [];
+                lastTokens = null;
+                lastSource = null;
+                lastSampleMs = Number.NEGATIVE_INFINITY;
+                lastSettledRate = null;
+            },
+        };
+    },
 } as const;

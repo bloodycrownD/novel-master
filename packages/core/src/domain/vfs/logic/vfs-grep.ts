@@ -15,180 +15,180 @@ type VfsGrepError = AppError<"VFS_INVALID_PATTERN">;
 type VfsGrepMatchMode = "auto" | "literal" | "regex";
 
 export interface VfsGrepOptions {
-  /** 仅搜索路径以此前缀开头的文件 */
-  readonly pathPrefix?: string;
-  /** 仅搜索路径匹配该 glob 的文件（如 **\/*.ts） */
-  readonly pathGlob?: string;
-  /** pattern 匹配模式；默认 auto */
-  readonly matchMode?: VfsGrepMatchMode;
-  /** 忽略大小写 */
-  readonly caseInsensitive?: boolean;
-  /** 为 true 时返回不匹配 pattern 的行 */
-  readonly invert?: boolean;
-  /** 命中行前后附带的上下文行数（写入 excerpt） */
-  readonly contextLines?: number;
-  /** 为 true 时每个文件至多返回一条命中 */
-  readonly oneMatchPerFile?: boolean;
+    /** 仅搜索路径以此前缀开头的文件 */
+    readonly pathPrefix?: string;
+    /** 仅搜索路径匹配该 glob 的文件（如 **\/*.ts） */
+    readonly pathGlob?: string;
+    /** pattern 匹配模式；默认 auto */
+    readonly matchMode?: VfsGrepMatchMode;
+    /** 忽略大小写 */
+    readonly caseInsensitive?: boolean;
+    /** 为 true 时返回不匹配 pattern 的行 */
+    readonly invert?: boolean;
+    /** 命中行前后附带的上下文行数（写入 excerpt） */
+    readonly contextLines?: number;
+    /** 为 true 时每个文件至多返回一条命中 */
+    readonly oneMatchPerFile?: boolean;
 }
 
 type VfsGrepContentRow = {
-  readonly path: string;
-  readonly content: string;
+    readonly path: string;
+    readonly content: string;
 };
 
 type LineMatcher = {
-  readonly lineMatches: (line: string) => boolean;
-  readonly matchColumns: (line: string) => readonly number[];
+    readonly lineMatches: (line: string) => boolean;
+    readonly matchColumns: (line: string) => readonly number[];
 };
 
 export const VfsGrep = {
-  compileRegex(pattern: string, caseInsensitive: boolean): RegExp {
-    const flags = caseInsensitive ? "gi" : "g";
-    return new RegExp(pattern, flags);
-  },
+    compileRegex(pattern: string, caseInsensitive: boolean): RegExp {
+        const flags = caseInsensitive ? "gi" : "g";
+        return new RegExp(pattern, flags);
+    },
 
-  // nm-style: keep-local — 匹配器闭包持有 regex / literal 与 lastIndex、大小写策略，
-  // lineMatches 与 matchColumns 共用同一份编译状态；内联会把构建逻辑混进行遍历。
-  createLineMatcher(pattern: string, options?: VfsGrepOptions): Result<LineMatcher, VfsGrepError> {
-    const mode = options?.matchMode ?? "auto";
-    const caseInsensitive = options?.caseInsensitive === true;
+    // nm-style: keep-local — 匹配器闭包持有 regex / literal 与 lastIndex、大小写策略，
+    // lineMatches 与 matchColumns 共用同一份编译状态；内联会把构建逻辑混进行遍历。
+    createLineMatcher(pattern: string, options?: VfsGrepOptions): Result<LineMatcher, VfsGrepError> {
+        const mode = options?.matchMode ?? "auto";
+        const caseInsensitive = options?.caseInsensitive === true;
 
-    let regex: RegExp | null = null;
-    let literal: string | null = null;
+        let regex: RegExp | null = null;
+        let literal: string | null = null;
 
-    if (mode === "regex") {
-      try {
-        regex = VfsGrep.compileRegex(pattern, caseInsensitive);
-      } catch {
-        return Result.err(new AppError("VFS_INVALID_PATTERN", { detail: `Invalid regular expression: ${pattern}`, pattern }));
-      }
-    } else if (mode === "literal") {
-      literal = pattern;
-    } else {
-      try {
-        regex = VfsGrep.compileRegex(pattern, caseInsensitive);
-      } catch {
-        literal = pattern;
-      }
-    }
-
-    if (regex != null) {
-      return Result.ok({
-        lineMatches(line: string) {
-          regex!.lastIndex = 0;
-          return regex!.test(line);
-        },
-        matchColumns(line: string) {
-          const columns: number[] = [];
-          regex!.lastIndex = 0;
-          let m: RegExpExecArray | null;
-          while ((m = regex!.exec(line)) != null) {
-            columns.push(m.index + 1);
-            if (m[0].length === 0) {
-              regex!.lastIndex++;
+        if (mode === "regex") {
+            try {
+                regex = VfsGrep.compileRegex(pattern, caseInsensitive);
+            } catch {
+                return Result.err(new AppError("VFS_INVALID_PATTERN", { detail: `Invalid regular expression: ${pattern}`, pattern }));
             }
-          }
-          return columns;
-        },
-      });
-    }
-
-    const needle = literal!;
-    const haystackNeedle = caseInsensitive ? needle.toLowerCase() : needle;
-
-    return Result.ok({
-      lineMatches(line: string) {
-        const haystack = caseInsensitive ? line.toLowerCase() : line;
-        return haystack.includes(haystackNeedle);
-      },
-      matchColumns(line: string) {
-        const haystack = caseInsensitive ? line.toLowerCase() : line;
-        const columns: number[] = [];
-        let searchFrom = 0;
-        while (searchFrom < haystack.length) {
-          const columnIndex = haystack.indexOf(haystackNeedle, searchFrom);
-          if (columnIndex === -1) {
-            break;
-          }
-          columns.push(columnIndex + 1);
-          searchFrom = columnIndex + Math.max(haystackNeedle.length, 1);
+        } else if (mode === "literal") {
+            literal = pattern;
+        } else {
+            try {
+                regex = VfsGrep.compileRegex(pattern, caseInsensitive);
+            } catch {
+                literal = pattern;
+            }
         }
-        return columns;
-      },
-    });
-  },
 
-  buildExcerpt(lines: readonly string[], lineIndex: number, contextLines: number): string {
-    if (contextLines <= 0) {
-      return lines[lineIndex] ?? "";
-    }
-    const start = Math.max(0, lineIndex - contextLines);
-    const end = Math.min(lines.length - 1, lineIndex + contextLines);
-    return lines.slice(start, end + 1).join("\n");
-  },
+        if (regex != null) {
+            return Result.ok({
+                lineMatches(line: string) {
+                    regex!.lastIndex = 0;
+                    return regex!.test(line);
+                },
+                matchColumns(line: string) {
+                    const columns: number[] = [];
+                    regex!.lastIndex = 0;
+                    let m: RegExpExecArray | null;
+                    while ((m = regex!.exec(line)) != null) {
+                        columns.push(m.index + 1);
+                        if (m[0].length === 0) {
+                            regex!.lastIndex++;
+                        }
+                    }
+                    return columns;
+                },
+            });
+        }
 
-  /**
+        const needle = literal!;
+        const haystackNeedle = caseInsensitive ? needle.toLowerCase() : needle;
+
+        return Result.ok({
+            lineMatches(line: string) {
+                const haystack = caseInsensitive ? line.toLowerCase() : line;
+                return haystack.includes(haystackNeedle);
+            },
+            matchColumns(line: string) {
+                const haystack = caseInsensitive ? line.toLowerCase() : line;
+                const columns: number[] = [];
+                let searchFrom = 0;
+                while (searchFrom < haystack.length) {
+                    const columnIndex = haystack.indexOf(haystackNeedle, searchFrom);
+                    if (columnIndex === -1) {
+                        break;
+                    }
+                    columns.push(columnIndex + 1);
+                    searchFrom = columnIndex + Math.max(haystackNeedle.length, 1);
+                }
+                return columns;
+            },
+        });
+    },
+
+    buildExcerpt(lines: readonly string[], lineIndex: number, contextLines: number): string {
+        if (contextLines <= 0) {
+            return lines[lineIndex] ?? "";
+        }
+        const start = Math.max(0, lineIndex - contextLines);
+        const end = Math.min(lines.length - 1, lineIndex + contextLines);
+        return lines.slice(start, end + 1).join("\n");
+    },
+
+    /**
    * 在若干文件内容行中搜索 pattern，返回命中列表（不含条数/字节截断）。
    */
-  grepContents(rows: readonly VfsGrepContentRow[], pattern: string, options?: VfsGrepOptions): Result<VfsGrepMatch[], VfsGrepError> {
-    const matcherResult = VfsGrep.createLineMatcher(pattern, options);
-    if (!matcherResult.ok) return Result.err(matcherResult.error);
-    const matcher = matcherResult.value;
-    const invert = options?.invert === true;
-    const contextLines = Math.max(0, options?.contextLines ?? 0);
-    const onePerFile = options?.oneMatchPerFile === true;
-    const matches: VfsGrepMatch[] = [];
+    grepContents(rows: readonly VfsGrepContentRow[], pattern: string, options?: VfsGrepOptions): Result<VfsGrepMatch[], VfsGrepError> {
+        const matcherResult = VfsGrep.createLineMatcher(pattern, options);
+        if (!matcherResult.ok) return Result.err(matcherResult.error);
+        const matcher = matcherResult.value;
+        const invert = options?.invert === true;
+        const contextLines = Math.max(0, options?.contextLines ?? 0);
+        const onePerFile = options?.oneMatchPerFile === true;
+        const matches: VfsGrepMatch[] = [];
 
-    for (const row of rows) {
-      const lines = row.content.split("\n");
-      let fileMatched = false;
+        for (const row of rows) {
+            const lines = row.content.split("\n");
+            let fileMatched = false;
 
-      for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
-        if (onePerFile && fileMatched) {
-          break;
+            for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+                if (onePerFile && fileMatched) {
+                    break;
+                }
+
+                const line = lines[lineIndex]!;
+                const hit = matcher.lineMatches(line);
+                const shouldReport = invert ? !hit : hit;
+
+                if (!shouldReport) {
+                    continue;
+                }
+
+                if (invert) {
+                    matches.push({
+                        path: row.path,
+                        line: lineIndex + 1,
+                        column: 1,
+                        excerpt: VfsGrep.buildExcerpt(lines, lineIndex, contextLines),
+                    });
+                    fileMatched = true;
+                    if (onePerFile) {
+                        break;
+                    }
+                    continue;
+                }
+
+                const columns = matcher.matchColumns(line);
+                for (const column of columns) {
+                    matches.push({
+                        path: row.path,
+                        line: lineIndex + 1,
+                        column,
+                        excerpt: VfsGrep.buildExcerpt(lines, lineIndex, contextLines),
+                    });
+                    fileMatched = true;
+                    if (onePerFile) {
+                        break;
+                    }
+                }
+                if (onePerFile && fileMatched) {
+                    break;
+                }
+            }
         }
 
-        const line = lines[lineIndex]!;
-        const hit = matcher.lineMatches(line);
-        const shouldReport = invert ? !hit : hit;
-
-        if (!shouldReport) {
-          continue;
-        }
-
-        if (invert) {
-          matches.push({
-            path: row.path,
-            line: lineIndex + 1,
-            column: 1,
-            excerpt: VfsGrep.buildExcerpt(lines, lineIndex, contextLines),
-          });
-          fileMatched = true;
-          if (onePerFile) {
-            break;
-          }
-          continue;
-        }
-
-        const columns = matcher.matchColumns(line);
-        for (const column of columns) {
-          matches.push({
-            path: row.path,
-            line: lineIndex + 1,
-            column,
-            excerpt: VfsGrep.buildExcerpt(lines, lineIndex, contextLines),
-          });
-          fileMatched = true;
-          if (onePerFile) {
-            break;
-          }
-        }
-        if (onePerFile && fileMatched) {
-          break;
-        }
-      }
-    }
-
-    return Result.ok(matches);
-  },
+        return Result.ok(matches);
+    },
 } as const;

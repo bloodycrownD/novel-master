@@ -8,6 +8,6 @@ export { RollbackErrorGuards } from "../domain/message-checkpoint/logic/rollback
 export { MessageCheckpointFactory } from "../service/message-checkpoint/message-checkpoint-factory.js";
 export type { MessageCheckpointService } from "../service/message-checkpoint/message-checkpoint.port.js";
 export type {
-  MessageRollbackService,
-  RollbackOptions,
+    MessageRollbackService,
+    RollbackOptions,
 } from "../service/message-checkpoint/message-rollback.port.js";

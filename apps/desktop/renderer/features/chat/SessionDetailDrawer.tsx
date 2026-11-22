@@ -28,608 +28,608 @@
  * 回退到 agent pin 指定的模型）。
  */
 import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
+    useCallback,
+    useEffect,
+    useRef,
+    useState,
 } from "react";
 import type {
-  PromptAgentMetaResponse,
-  PromptChatTokenStatsResponse,
+    PromptAgentMetaResponse,
+    PromptChatTokenStatsResponse,
 } from "@shared/ipc-types";
 import { PickerModal } from "@/components/ui/PickerModal";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { coreT } from "@shared/logic/core-i18n";
 import { showToast } from "@/components/ui/show-toast";
 import {
-  ipcAgentListPicker,
-  ipcModelListPicker,
-  ipcPromptAgentMeta,
-  ipcPromptChatTokenLabel,
-  ipcSessionsRename,
-  ipcSessionsSetAgentBinding,
-  ipcSessionsSetModelOverride,
-  onAgentStream,
-  onPromptChatTokenUpdated,
+    ipcAgentListPicker,
+    ipcModelListPicker,
+    ipcPromptAgentMeta,
+    ipcPromptChatTokenLabel,
+    ipcSessionsRename,
+    ipcSessionsSetAgentBinding,
+    ipcSessionsSetModelOverride,
+    onAgentStream,
+    onPromptChatTokenUpdated,
 } from "@/ipc/client";
 import {
-  EVENT_AGENT_RUN_FINISHED,
-  EVENT_AGENT_STEP_COMMITTED,
-  type AgentRunFinishedPayload,
-  type AgentStepCommittedPayload,
+    EVENT_AGENT_RUN_FINISHED,
+    EVENT_AGENT_STEP_COMMITTED,
+    type AgentRunFinishedPayload,
+    type AgentStepCommittedPayload,
 } from "@shared/logic/events";
 import { useShellNav } from "@/providers/ShellNavProvider";
 import { runCompaction } from "./ConversationPanel";
 import { SessionSkillPanel } from "./SessionSkillPanel";
 
 interface SessionDetailDrawerProps {
-  open: boolean;
-  projectId: string;
-  sessionId: string;
-  sessionName: string;
-  onClose: () => void;
-  /** 重命名成功后通知父级同步导航处会话名。 */
-  onRenamed?: (newName: string) => void;
+    open: boolean;
+    projectId: string;
+    sessionId: string;
+    sessionName: string;
+    onClose: () => void;
+    /** 重命名成功后通知父级同步导航处会话名。 */
+    onRenamed?: (newName: string) => void;
 }
 
 export function SessionDetailDrawer({
-  open,
-  projectId,
-  sessionId,
-  sessionName,
-  onClose,
-  onRenamed,
+    open,
+    projectId,
+    sessionId,
+    sessionName,
+    onClose,
+    onRenamed,
 }: SessionDetailDrawerProps) {
-  const { notifyAgentConfigChanged, requestViewPrompt } = useShellNav();
-  const [meta, setMeta] = useState<PromptAgentMetaResponse | null>(null);
-  // meta 加载失败标记（au/B-3）：区分「加载中」（未落定）与「加载失败」
-  // （ok:false 已落定）——两态下 meta 同为 null，badge 与点击提示靠它分流。
-  const [metaLoadFailed, setMetaLoadFailed] = useState(false);
-  const [tokenStats, setTokenStats] =
-    useState<PromptChatTokenStatsResponse | null>(null);
-  const [agentPickerOpen, setAgentPickerOpen] = useState(false);
-  const [modelPickerOpen, setModelPickerOpen] = useState(false);
-  const [agentRows, setAgentRows] = useState<
-    Array<{ agentId: string; label: string }>
-  >([]);
-  const [modelRows, setModelRows] = useState<
-    Array<{ savedModelId: string; label: string }>
-  >([]);
-  const [compactOpen, setCompactOpen] = useState(false);
-  const [skillsPanelOpen, setSkillsPanelOpen] = useState(false);
+    const { notifyAgentConfigChanged, requestViewPrompt } = useShellNav();
+    const [meta, setMeta] = useState<PromptAgentMetaResponse | null>(null);
+    // meta 加载失败标记（au/B-3）：区分「加载中」（未落定）与「加载失败」
+    // （ok:false 已落定）——两态下 meta 同为 null，badge 与点击提示靠它分流。
+    const [metaLoadFailed, setMetaLoadFailed] = useState(false);
+    const [tokenStats, setTokenStats] =
+        useState<PromptChatTokenStatsResponse | null>(null);
+    const [agentPickerOpen, setAgentPickerOpen] = useState(false);
+    const [modelPickerOpen, setModelPickerOpen] = useState(false);
+    const [agentRows, setAgentRows] = useState<
+        Array<{ agentId: string; label: string }>
+    >([]);
+    const [modelRows, setModelRows] = useState<
+        Array<{ savedModelId: string; label: string }>
+    >([]);
+    const [compactOpen, setCompactOpen] = useState(false);
+    const [skillsPanelOpen, setSkillsPanelOpen] = useState(false);
 
-  // 聊天名行内编辑状态
-  const [editingName, setEditingName] = useState(false);
-  const [draftName, setDraftName] = useState(sessionName);
-  const nameInputRef = useRef<HTMLInputElement | null>(null);
-  // 防止 blur 与 keydown Enter 重复提交
-  const submittingRef = useRef(false);
+    // 聊天名行内编辑状态
+    const [editingName, setEditingName] = useState(false);
+    const [draftName, setDraftName] = useState(sessionName);
+    const nameInputRef = useRef<HTMLInputElement | null>(null);
+    // 防止 blur 与 keydown Enter 重复提交
+    const submittingRef = useRef(false);
 
-  // 子面板状态重置：组件 if (!open) return null 只是隐藏、并不卸载，
-  // skillsPanelOpen 会跨「关闭再打开」、跨会话切换残留
-  // （上个会话停在技能面板，重开抽屉仍停在原面板）。
-  // 打开抽屉或切换会话时统一拉回默认视图。
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-    setSkillsPanelOpen(false);
-    // 新一轮加载：失败标记随抽屉重开/会话切换重置，badge 回到「加载中…」语义。
-    setMetaLoadFailed(false);
-  }, [open, sessionId]);
-
-  const reload = useCallback(async () => {
-    const [metaRes, tokens] = await Promise.all([
-      ipcPromptAgentMeta({ projectId, sessionId }),
-      ipcPromptChatTokenLabel({ projectId, sessionId }),
-    ]);
-    if (metaRes.ok) {
-      setMeta(metaRes.data);
-      setMetaLoadFailed(false);
-    } else {
-      // 失败不再静默（au/B-3）：固定中文兜底文案，不透出 metaRes.error.message
-      // ——main 侧 formatIpcError 可能直出英文。meta 保持 null（锁定态）。
-      setMetaLoadFailed(true);
-      showToast(coreT({key: "ui.session.agent_info_load_failed"}));
-    }
-    // data 为 null = 读口本轮被抑制（run 在途）或中途弃权（r3-dt-align）：
-    // **保留旧标签**，不清空也不显示占位。run 结束后 main 那边会补跑一拍
-    // （终态钩子 → 防抖读口），所以旧标签只是短暂停留，不会过期。
-    if (tokens.ok && tokens.data != null) {
-      setTokenStats(tokens.data);
-    }
-  }, [projectId, sessionId]);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-    void reload();
-  }, [open, reload]);
-
-  // 订阅 agent stream 生命周期事件：每条消息落库（step committed）或一轮跑完
-  // （run finished）后 token 占用都会变，这里实时 reload 一下，免得用户发完
-  // 消息还得关掉抽屉再打开才能看到新计数。
-  useEffect(() => {
-    if (!open || sessionId == null) {
-      return;
-    }
-    return onAgentStream((envelope) => {
-      const { type, payload } = envelope;
-      if (type === EVENT_AGENT_STEP_COMMITTED) {
-        const p = payload as AgentStepCommittedPayload;
-        if (p.sessionId === sessionId) {
-          void reload();
+    // 子面板状态重置：组件 if (!open) return null 只是隐藏、并不卸载，
+    // skillsPanelOpen 会跨「关闭再打开」、跨会话切换残留
+    // （上个会话停在技能面板，重开抽屉仍停在原面板）。
+    // 打开抽屉或切换会话时统一拉回默认视图。
+    useEffect(() => {
+        if (!open) {
+            return;
         }
-        return;
-      }
-      if (type === EVENT_AGENT_RUN_FINISHED) {
-        const p = payload as AgentRunFinishedPayload;
-        if (p.sessionId === sessionId) {
-          void reload();
+        setSkillsPanelOpen(false);
+        // 新一轮加载：失败标记随抽屉重开/会话切换重置，badge 回到「加载中…」语义。
+        setMetaLoadFailed(false);
+    }, [open, sessionId]);
+
+    const reload = useCallback(async () => {
+        const [metaRes, tokens] = await Promise.all([
+            ipcPromptAgentMeta({ projectId, sessionId }),
+            ipcPromptChatTokenLabel({ projectId, sessionId }),
+        ]);
+        if (metaRes.ok) {
+            setMeta(metaRes.data);
+            setMetaLoadFailed(false);
+        } else {
+            // 失败不再静默（au/B-3）：固定中文兜底文案，不透出 metaRes.error.message
+            // ——main 侧 formatIpcError 可能直出英文。meta 保持 null（锁定态）。
+            setMetaLoadFailed(true);
+            showToast(coreT({key: "ui.session.agent_info_load_failed"}));
         }
-      }
-    });
-  }, [open, sessionId, reload]);
+        // data 为 null = 读口本轮被抑制（run 在途）或中途弃权（r3-dt-align）：
+        // **保留旧标签**，不清空也不显示占位。run 结束后 main 那边会补跑一拍
+        // （终态钩子 → 防抖读口），所以旧标签只是短暂停留，不会过期。
+        if (tokens.ok && tokens.data != null) {
+            setTokenStats(tokens.data);
+        }
+    }, [projectId, sessionId]);
 
-  // 回滚成功后 ConversationPanel 会 dispatch 一个 DOM CustomEvent，
-  // 这里订阅一下、按 sessionId 过滤，命中就 reload 抽屉里的 token 统计。
-  useEffect(() => {
-    if (!open || sessionId == null) {
-      return;
-    }
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent<{ sessionId: string }>).detail;
-      if (detail?.sessionId === sessionId) {
+    useEffect(() => {
+        if (!open) {
+            return;
+        }
         void reload();
-      }
+    }, [open, reload]);
+
+    // 订阅 agent stream 生命周期事件：每条消息落库（step committed）或一轮跑完
+    // （run finished）后 token 占用都会变，这里实时 reload 一下，免得用户发完
+    // 消息还得关掉抽屉再打开才能看到新计数。
+    useEffect(() => {
+        if (!open || sessionId == null) {
+            return;
+        }
+        return onAgentStream((envelope) => {
+            const { type, payload } = envelope;
+            if (type === EVENT_AGENT_STEP_COMMITTED) {
+                const p = payload as AgentStepCommittedPayload;
+                if (p.sessionId === sessionId) {
+                    void reload();
+                }
+                return;
+            }
+            if (type === EVENT_AGENT_RUN_FINISHED) {
+                const p = payload as AgentRunFinishedPayload;
+                if (p.sessionId === sessionId) {
+                    void reload();
+                }
+            }
+        });
+    }, [open, sessionId, reload]);
+
+    // 回滚成功后 ConversationPanel 会 dispatch 一个 DOM CustomEvent，
+    // 这里订阅一下、按 sessionId 过滤，命中就 reload 抽屉里的 token 统计。
+    useEffect(() => {
+        if (!open || sessionId == null) {
+            return;
+        }
+        const handler = (e: Event) => {
+            const detail = (e as CustomEvent<{ sessionId: string }>).detail;
+            if (detail?.sessionId === sessionId) {
+                void reload();
+            }
+        };
+        window.addEventListener('messages-rollback', handler);
+        return () => window.removeEventListener('messages-rollback', handler);
+    }, [open, sessionId, reload]);
+
+    // 两阶段读数的第二相（main 后台精确计数完成后的推送）：首帧估算档
+    // （`gpt ≈`）在收到精确档时升级为家族记号（`glm =` / `gpt =`）。只在当前
+    // 展示估算档（或还没有读数）时采纳——精确标签不回退、不覆盖更新的读数；
+    // 这条通道是「手动压缩后 chip 停在 gpt ≈」的修复点（一次性动作之后没有
+    // 「下一次触发」再让 renderer 自己去问）。
+    useEffect(() => {
+        if (!open || sessionId == null) {
+            return;
+        }
+        return onPromptChatTokenUpdated((payload) => {
+            if (payload.sessionId !== sessionId || payload.stats.estimated) {
+                return;
+            }
+            setTokenStats((prev) =>
+                prev != null && !prev.estimated ? prev : payload.stats,
+            );
+        });
+    }, [open, sessionId]);
+
+    // 置位（set floor）/ 手动压缩（manual compaction）改变了上下文范围，
+    // ConversationPanel 在这两条路径成功后会 dispatch context-changed（按 sessionId 过滤）。
+    // 这里订阅一下，命中就 reload 抽屉里的 token 统计。回滚仍走 messages-rollback，事件分开以免语义混淆。
+    useEffect(() => {
+        if (!open || sessionId == null) {
+            return;
+        }
+        const handler = (e: Event) => {
+            const detail = (e as CustomEvent<{ sessionId: string }>).detail;
+            if (detail?.sessionId === sessionId) {
+                void reload();
+            }
+        };
+        window.addEventListener('context-changed', handler);
+        return () => window.removeEventListener('context-changed', handler);
+    }, [open, sessionId, reload]);
+
+    // 外部传入的 sessionName 变化时同步草稿（非编辑态下）
+    useEffect(() => {
+        if (!editingName) {
+            setDraftName(sessionName);
+        }
+    }, [sessionName, editingName]);
+
+    // 进入编辑态时聚焦并全选
+    useEffect(() => {
+        if (editingName && nameInputRef.current) {
+            nameInputRef.current.focus();
+            nameInputRef.current.select();
+        }
+    }, [editingName]);
+
+    if (!open) {
+        return null;
+    }
+
+    const source = meta?.source ?? "none";
+    // 智能体卡锁定口径：仅在 meta 尚未加载完时锁定（防加载中被误点）；
+    // source='none'（session.agentId 指向已删 agent，handler 内层 catch 命中）时
+    // 放开为「待重选」——可点击弹 picker 重选，写入新 agentId 后悬空即解除，
+    // 避免会话被已删 agent 死锁。项目智能体已下线，不再有 project-custom 分支。
+    const agentLocked = meta == null;
+    // 已加载且解析失败 → 智能体已被删除，智能体卡处于待重选态（可点、带重选提示）。
+    const agentDeleted = meta != null && source === "none";
+    // model 卡维持 source 判定：source !== 'session' 即锁定（智能体没了，pin 的
+    // 模型无从解析，重选智能体后自然解锁；原 agent pin / 专属模型判定已废弃，
+    // 统一走 source 判定）
+    const modelLocked = source !== "session";
+
+    const openAgentPicker = async () => {
+        if (agentLocked) {
+            // meta 尚未加载完，先锁住防误点；已失败时给错误文案，不再误导
+            // 「加载中请稍候」永不发生（au/B-3）。
+            showToast( metaLoadFailed ? coreT({key: "ui.session.agent_info_load_failed"}) : coreT({key: "ui.session.agent_loading_guide"}) );
+            return;
+        }
+        // 原绑定智能体已被删除（agentDeleted）：卡片 badge 已提示「已删除 · 点击重选」，
+        // 点击直接弹 picker 重选，不再额外弹 toast。
+        const result = await ipcAgentListPicker();
+        if (!result.ok || result.data.rows.length === 0) {
+            showToast(coreT({key: "ui.session.no_agents"}));
+            return;
+        }
+        setAgentRows(result.data.rows);
+        setAgentPickerOpen(true);
     };
-    window.addEventListener('messages-rollback', handler);
-    return () => window.removeEventListener('messages-rollback', handler);
-  }, [open, sessionId, reload]);
 
-  // 两阶段读数的第二相（main 后台精确计数完成后的推送）：首帧估算档
-  // （`gpt ≈`）在收到精确档时升级为家族记号（`glm =` / `gpt =`）。只在当前
-  // 展示估算档（或还没有读数）时采纳——精确标签不回退、不覆盖更新的读数；
-  // 这条通道是「手动压缩后 chip 停在 gpt ≈」的修复点（一次性动作之后没有
-  // 「下一次触发」再让 renderer 自己去问）。
-  useEffect(() => {
-    if (!open || sessionId == null) {
-      return;
-    }
-    return onPromptChatTokenUpdated((payload) => {
-      if (payload.sessionId !== sessionId || payload.stats.estimated) {
-        return;
-      }
-      setTokenStats((prev) =>
-        prev != null && !prev.estimated ? prev : payload.stats,
-      );
-    });
-  }, [open, sessionId]);
-
-  // 置位（set floor）/ 手动压缩（manual compaction）改变了上下文范围，
-  // ConversationPanel 在这两条路径成功后会 dispatch context-changed（按 sessionId 过滤）。
-  // 这里订阅一下，命中就 reload 抽屉里的 token 统计。回滚仍走 messages-rollback，事件分开以免语义混淆。
-  useEffect(() => {
-    if (!open || sessionId == null) {
-      return;
-    }
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent<{ sessionId: string }>).detail;
-      if (detail?.sessionId === sessionId) {
-        void reload();
-      }
+    const openModelPicker = async () => {
+        if (modelLocked) {
+            showToast(coreT({key: "ui.session.agent_model_locked_hint"}));
+            return;
+        }
+        const result = await ipcModelListPicker();
+        if (!result.ok || result.data.rows.length === 0) {
+            showToast(coreT({key: "ui.session.no_models"}));
+            return;
+        }
+        setModelRows(result.data.rows);
+        setModelPickerOpen(true);
     };
-    window.addEventListener('context-changed', handler);
-    return () => window.removeEventListener('context-changed', handler);
-  }, [open, sessionId, reload]);
 
-  // 外部传入的 sessionName 变化时同步草稿（非编辑态下）
-  useEffect(() => {
-    if (!editingName) {
-      setDraftName(sessionName);
-    }
-  }, [sessionName, editingName]);
+    const startRename = () => {
+        setDraftName(sessionName);
+        setEditingName(true);
+    };
 
-  // 进入编辑态时聚焦并全选
-  useEffect(() => {
-    if (editingName && nameInputRef.current) {
-      nameInputRef.current.focus();
-      nameInputRef.current.select();
-    }
-  }, [editingName]);
+    const commitRename = async () => {
+        if (submittingRef.current) {
+            return;
+        }
+        const trimmed = draftName.trim();
+        // 空串或未改动 → 直接退出编辑，不调用 IPC
+        if (!trimmed || trimmed === sessionName) {
+            setEditingName(false);
+            setDraftName(sessionName);
+            return;
+        }
+        submittingRef.current = true;
+        const result = await ipcSessionsRename({ id: sessionId, title: trimmed });
+        submittingRef.current = false;
+        setEditingName(false);
+        if (result.ok) {
+            onRenamed?.(trimmed);
+            showToast(coreT({key: "ui.common.renamed"}));
+        } else {
+            showToast(result.error.message);
+            setDraftName(sessionName);
+        }
+    };
 
-  if (!open) {
-    return null;
-  }
+    const cancelRename = () => {
+        setEditingName(false);
+        setDraftName(sessionName);
+    };
 
-  const source = meta?.source ?? "none";
-  // 智能体卡锁定口径：仅在 meta 尚未加载完时锁定（防加载中被误点）；
-  // source='none'（session.agentId 指向已删 agent，handler 内层 catch 命中）时
-  // 放开为「待重选」——可点击弹 picker 重选，写入新 agentId 后悬空即解除，
-  // 避免会话被已删 agent 死锁。项目智能体已下线，不再有 project-custom 分支。
-  const agentLocked = meta == null;
-  // 已加载且解析失败 → 智能体已被删除，智能体卡处于待重选态（可点、带重选提示）。
-  const agentDeleted = meta != null && source === "none";
-  // model 卡维持 source 判定：source !== 'session' 即锁定（智能体没了，pin 的
-  // 模型无从解析，重选智能体后自然解锁；原 agent pin / 专属模型判定已废弃，
-  // 统一走 source 判定）
-  const modelLocked = source !== "session";
+    const barPct = tokenStats?.pct != null ? Math.min(100, Math.max(0, tokenStats.pct)) : tokenStats != null ? Math.min(100, Math.max(2, tokenStats.tokenCount > 0 ? 8 : 0)) : 0;
 
-  const openAgentPicker = async () => {
-    if (agentLocked) {
-      // meta 尚未加载完，先锁住防误点；已失败时给错误文案，不再误导
-      // 「加载中请稍候」永不发生（au/B-3）。
-      showToast( metaLoadFailed ? coreT({key: "ui.session.agent_info_load_failed"}) : coreT({key: "ui.session.agent_loading_guide"}) );
-      return;
-    }
-    // 原绑定智能体已被删除（agentDeleted）：卡片 badge 已提示「已删除 · 点击重选」，
-    // 点击直接弹 picker 重选，不再额外弹 toast。
-    const result = await ipcAgentListPicker();
-    if (!result.ok || result.data.rows.length === 0) {
-      showToast(coreT({key: "ui.session.no_agents"}));
-      return;
-    }
-    setAgentRows(result.data.rows);
-    setAgentPickerOpen(true);
-  };
-
-  const openModelPicker = async () => {
-    if (modelLocked) {
-      showToast(coreT({key: "ui.session.agent_model_locked_hint"}));
-      return;
-    }
-    const result = await ipcModelListPicker();
-    if (!result.ok || result.data.rows.length === 0) {
-      showToast(coreT({key: "ui.session.no_models"}));
-      return;
-    }
-    setModelRows(result.data.rows);
-    setModelPickerOpen(true);
-  };
-
-  const startRename = () => {
-    setDraftName(sessionName);
-    setEditingName(true);
-  };
-
-  const commitRename = async () => {
-    if (submittingRef.current) {
-      return;
-    }
-    const trimmed = draftName.trim();
-    // 空串或未改动 → 直接退出编辑，不调用 IPC
-    if (!trimmed || trimmed === sessionName) {
-      setEditingName(false);
-      setDraftName(sessionName);
-      return;
-    }
-    submittingRef.current = true;
-    const result = await ipcSessionsRename({ id: sessionId, title: trimmed });
-    submittingRef.current = false;
-    setEditingName(false);
-    if (result.ok) {
-      onRenamed?.(trimmed);
-      showToast(coreT({key: "ui.common.renamed"}));
-    } else {
-      showToast(result.error.message);
-      setDraftName(sessionName);
-    }
-  };
-
-  const cancelRename = () => {
-    setEditingName(false);
-    setDraftName(sessionName);
-  };
-
-  const barPct = tokenStats?.pct != null ? Math.min(100, Math.max(0, tokenStats.pct)) : tokenStats != null ? Math.min(100, Math.max(2, tokenStats.tokenCount > 0 ? 8 : 0)) : 0;
-
-  return (
-    <div className="session-detail-drawer" id="session-detail-drawer">
-      <div
-        className="session-detail-drawer__backdrop"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-      <div
-        className="session-detail-drawer__panel"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="session-detail-drawer__title"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="session-detail-drawer__head">
-          <h3 id="session-detail-drawer__title" className="session-detail-drawer__title">
-            {coreT({key: "ui.nav.session_detail"})}
-          </h3>
-          <button
-            type="button"
-            className="session-detail-drawer__close"
-            data-session-detail-action="close"
-            aria-label={coreT({key: "ui.common.close"})}
-            onClick={onClose}
-          >
-            ×
-          </button>
-        </div>
-
-        {skillsPanelOpen ? (
-          <SessionSkillPanel
-            projectId={projectId}
-            onClose={() => setSkillsPanelOpen(false)}
-          />
-        ) : (
-        <div className="session-detail-drawer__body">
-          {/* 聊天名：点击进入行内编辑 */}
-          <div className="session-detail-drawer__name-row">
-            {editingName ? (
-              <input
-                ref={nameInputRef}
-                className="session-detail-drawer__name-input"
-                data-session-detail-action="rename-input"
-                value={draftName}
-                placeholder={coreT({key: "ui.session.name_label"})}
-                aria-label={coreT({key: "ui.session.rename_title"})}
-                onChange={(e) => setDraftName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    void commitRename();
-                  } else if (e.key === "Escape") {
-                    e.preventDefault();
-                    cancelRename();
-                  }
-                }}
-                onBlur={() => void commitRename()}
-              />
-            ) : (
-              <button
-                type="button"
-                className="session-detail-drawer__name"
-                data-session-detail-action="rename"
-                onClick={startRename}
-              >
-                <span className="session-detail-drawer__name-text">
-                  {sessionName}
-                </span>
-              </button>
-            )}
-          </div>
-
-          <div className="session-detail-drawer__pick">
-            <button
-              type="button"
-              className="session-detail-pick"
-              data-session-detail-action="open-skills"
-              aria-label={coreT({key: "ui.session.view_skills_aria"})}
-              onClick={() => setSkillsPanelOpen(true)}
+    return (
+        <div className="session-detail-drawer" id="session-detail-drawer">
+            <div
+                className="session-detail-drawer__backdrop"
+                onClick={onClose}
+                aria-hidden="true"
+            />
+            <div
+                className="session-detail-drawer__panel"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="session-detail-drawer__title"
+                onClick={(e) => e.stopPropagation()}
             >
-              <span
-                className="session-detail-pick__icon session-detail-pick__icon--skills"
-                aria-hidden="true"
-              >
-                ⚡
-              </span>
-              <span className="session-detail-pick__body">
-                <span className="session-detail-pick__label">{coreT({key: "ui.nav.skills"})}</span>
-                <span className="session-detail-pick__value">
-                  {coreT({key: "ui.session.skills_value"})}
-                </span>
-              </span>
-              <span
-                className="session-detail-pick__chevron"
-                aria-hidden="true"
-              >
-                ›
-              </span>
-            </button>
-          </div>
-          <div className="session-detail-drawer__pick">
-            <button
-              type="button"
-              className={`session-detail-pick${
+                <div className="session-detail-drawer__head">
+                    <h3 id="session-detail-drawer__title" className="session-detail-drawer__title">
+                        {coreT({key: "ui.nav.session_detail"})}
+                    </h3>
+                    <button
+                        type="button"
+                        className="session-detail-drawer__close"
+                        data-session-detail-action="close"
+                        aria-label={coreT({key: "ui.common.close"})}
+                        onClick={onClose}
+                    >
+                        ×
+                    </button>
+                </div>
+
+                {skillsPanelOpen ? (
+                    <SessionSkillPanel
+                        projectId={projectId}
+                        onClose={() => setSkillsPanelOpen(false)}
+                    />
+                ) : (
+                <div className="session-detail-drawer__body">
+                    {/* 聊天名：点击进入行内编辑 */}
+                    <div className="session-detail-drawer__name-row">
+                        {editingName ? (
+                            <input
+                                ref={nameInputRef}
+                                className="session-detail-drawer__name-input"
+                                data-session-detail-action="rename-input"
+                                value={draftName}
+                                placeholder={coreT({key: "ui.session.name_label"})}
+                                aria-label={coreT({key: "ui.session.rename_title"})}
+                                onChange={(e) => setDraftName(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                        e.preventDefault();
+                                        void commitRename();
+                                    } else if (e.key === "Escape") {
+                                        e.preventDefault();
+                                        cancelRename();
+                                    }
+                                }}
+                                onBlur={() => void commitRename()}
+                            />
+                        ) : (
+                            <button
+                                type="button"
+                                className="session-detail-drawer__name"
+                                data-session-detail-action="rename"
+                                onClick={startRename}
+                            >
+                                <span className="session-detail-drawer__name-text">
+                                    {sessionName}
+                                </span>
+                            </button>
+                        )}
+                    </div>
+
+                    <div className="session-detail-drawer__pick">
+                        <button
+                            type="button"
+                            className="session-detail-pick"
+                            data-session-detail-action="open-skills"
+                            aria-label={coreT({key: "ui.session.view_skills_aria"})}
+                            onClick={() => setSkillsPanelOpen(true)}
+                        >
+                            <span
+                                className="session-detail-pick__icon session-detail-pick__icon--skills"
+                                aria-hidden="true"
+                            >
+                                ⚡
+                            </span>
+                            <span className="session-detail-pick__body">
+                                <span className="session-detail-pick__label">{coreT({key: "ui.nav.skills"})}</span>
+                                <span className="session-detail-pick__value">
+                                    {coreT({key: "ui.session.skills_value"})}
+                                </span>
+                            </span>
+                            <span
+                                className="session-detail-pick__chevron"
+                                aria-hidden="true"
+                            >
+                                ›
+                            </span>
+                        </button>
+                    </div>
+                    <div className="session-detail-drawer__pick">
+                        <button
+                            type="button"
+                            className={`session-detail-pick${
                 agentLocked ? " session-detail-pick--locked" : ""
               }`}
-              data-session-detail-action="switch-agent"
-              aria-label={
-                agentLocked
-                  ? metaLoadFailed
-                    ? coreT({key: "ui.session.switch_agent_error"})
-                    : coreT({key: "ui.session.switch_agent_loading"})
-                  : agentDeleted
-                    ? coreT({key: "ui.session.switch_agent_pending"})
-                    : coreT({key: "ui.session.switch_agent"})
-              }
-              aria-disabled={agentLocked}
-              onClick={() => void openAgentPicker()}
-            >
-              <span
-                className="session-detail-pick__icon session-detail-pick__icon--agent"
-                aria-hidden="true"
-              >
-                A
-              </span>
-              <span className="session-detail-pick__body">
-                <span className="session-detail-pick__label">Agent</span>
-                <span className="session-detail-pick__value">
-                  {meta?.agentName ?? "—"}
-                </span>
-                {agentDeleted ? (
-                  <span className="session-detail-pick__lock session-detail-pick__lock--reselect">
-                    <span
-                      className="session-detail-pick__lock-icon"
-                      aria-hidden="true"
-                    >
-                      ↻
-                    </span>
-                    {coreT({key: "ui.session.agent_deleted_hint"})}
-                  </span>
-                ) : agentLocked ? (
-                  // meta==null 的两态分流（au/B-3 三态可辨）：未落定 = 加载中，
-                  // ok:false 已落定 = 加载失败；两者都不是「已删待重选」。
-                  <span className="session-detail-pick__lock">
-                    <span
-                      className="session-detail-pick__lock-icon"
-                      aria-hidden="true"
-                    >
-                      {metaLoadFailed ? "⚠" : "…"}
-                    </span>
-                    {metaLoadFailed ? coreT({key: "ui.session.agent_info_load_failed"}) : coreT({key: "ui.common.loading"})}
-                  </span>
-                ) : null}
-              </span>
-              <span
-                className="session-detail-pick__chevron"
-                aria-hidden="true"
-              >
-                {agentLocked ? "" : "›"}
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`session-detail-pick${
+                            data-session-detail-action="switch-agent"
+                            aria-label={
+                                agentLocked
+                                    ? metaLoadFailed
+                                        ? coreT({key: "ui.session.switch_agent_error"})
+                                        : coreT({key: "ui.session.switch_agent_loading"})
+                                    : agentDeleted
+                                        ? coreT({key: "ui.session.switch_agent_pending"})
+                                        : coreT({key: "ui.session.switch_agent"})
+                            }
+                            aria-disabled={agentLocked}
+                            onClick={() => void openAgentPicker()}
+                        >
+                            <span
+                                className="session-detail-pick__icon session-detail-pick__icon--agent"
+                                aria-hidden="true"
+                            >
+                                A
+                            </span>
+                            <span className="session-detail-pick__body">
+                                <span className="session-detail-pick__label">Agent</span>
+                                <span className="session-detail-pick__value">
+                                    {meta?.agentName ?? "—"}
+                                </span>
+                                {agentDeleted ? (
+                                    <span className="session-detail-pick__lock session-detail-pick__lock--reselect">
+                                        <span
+                                            className="session-detail-pick__lock-icon"
+                                            aria-hidden="true"
+                                        >
+                                            ↻
+                                        </span>
+                                        {coreT({key: "ui.session.agent_deleted_hint"})}
+                                    </span>
+                                ) : agentLocked ? (
+                                    // meta==null 的两态分流（au/B-3 三态可辨）：未落定 = 加载中，
+                                    // ok:false 已落定 = 加载失败；两者都不是「已删待重选」。
+                                    <span className="session-detail-pick__lock">
+                                        <span
+                                            className="session-detail-pick__lock-icon"
+                                            aria-hidden="true"
+                                        >
+                                            {metaLoadFailed ? "⚠" : "…"}
+                                        </span>
+                                        {metaLoadFailed ? coreT({key: "ui.session.agent_info_load_failed"}) : coreT({key: "ui.common.loading"})}
+                                    </span>
+                                ) : null}
+                            </span>
+                            <span
+                                className="session-detail-pick__chevron"
+                                aria-hidden="true"
+                            >
+                                {agentLocked ? "" : "›"}
+                            </span>
+                        </button>
+                        <button
+                            type="button"
+                            className={`session-detail-pick${
                 modelLocked ? " session-detail-pick--locked" : ""
               }`}
-              data-session-detail-action="switch-model"
-              aria-label={modelLocked ? coreT({key: "ui.session.switch_model_locked_aria"}) : coreT({key: "ui.session.switch_model"})}
-              aria-disabled={modelLocked}
-              onClick={() => void openModelPicker()}
-            >
-              <span
-                className="session-detail-pick__icon session-detail-pick__icon--model"
-                aria-hidden="true"
-              >
-                M
-              </span>
-              <span className="session-detail-pick__body">
-                <span className="session-detail-pick__label">{coreT({key: "ui.common.model"})}</span>
-                <span className="session-detail-pick__value">
-                  {meta?.modelLabel ?? "—"}
-                </span>
-                {modelLocked ? (
-                  <span className="session-detail-pick__lock">
-                    <span
-                      className="session-detail-pick__lock-icon"
-                      aria-hidden="true"
-                    >
-                      🔒
-                    </span>
-                    {coreT({key: "ui.session.agent_locked"})}
-                  </span>
-                ) : null}
-              </span>
-              <span
-                className="session-detail-pick__chevron"
-                aria-hidden="true"
-              >
-                {modelLocked ? "" : "›"}
-              </span>
-            </button>
-          </div>
+                            data-session-detail-action="switch-model"
+                            aria-label={modelLocked ? coreT({key: "ui.session.switch_model_locked_aria"}) : coreT({key: "ui.session.switch_model"})}
+                            aria-disabled={modelLocked}
+                            onClick={() => void openModelPicker()}
+                        >
+                            <span
+                                className="session-detail-pick__icon session-detail-pick__icon--model"
+                                aria-hidden="true"
+                            >
+                                M
+                            </span>
+                            <span className="session-detail-pick__body">
+                                <span className="session-detail-pick__label">{coreT({key: "ui.common.model"})}</span>
+                                <span className="session-detail-pick__value">
+                                    {meta?.modelLabel ?? "—"}
+                                </span>
+                                {modelLocked ? (
+                                    <span className="session-detail-pick__lock">
+                                        <span
+                                            className="session-detail-pick__lock-icon"
+                                            aria-hidden="true"
+                                        >
+                                            🔒
+                                        </span>
+                                        {coreT({key: "ui.session.agent_locked"})}
+                                    </span>
+                                ) : null}
+                            </span>
+                            <span
+                                className="session-detail-pick__chevron"
+                                aria-hidden="true"
+                            >
+                                {modelLocked ? "" : "›"}
+                            </span>
+                        </button>
+                    </div>
 
-          {tokenStats ? (
-            <div className="session-detail-drawer__tokens">
-              {/* label 一行化：main 拼好的完整标签（源记号 + =/≈ + pct + 占比）
+                    {tokenStats ? (
+                        <div className="session-detail-drawer__tokens">
+                            {/* label 一行化：main 拼好的完整标签（源记号 + =/≈ + pct + 占比）
                   直接渲染，头部不再单独拼 pct，底部拼装行已随旧标签体系删除。 */}
-              <div className="session-detail-drawer__tokens-head">
-                <span className="session-detail-drawer__tokens-title">
-                  {coreT({key: "ui.session.context_usage"})}
-                </span>
-                <span className="session-detail-drawer__tokens-label">
-                  {tokenStats.label}
-                </span>
-              </div>
-              <div
-                className="session-detail-drawer__tokens-bar"
-                role="progressbar"
-                aria-valuenow={tokenStats.pct ?? undefined}
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-label={coreT({key: "ui.session.context_usage"})}
-              >
-                <div
-                  className="session-detail-drawer__tokens-bar-fill"
-                  style={{ width: `${barPct}%` }}
+                            <div className="session-detail-drawer__tokens-head">
+                                <span className="session-detail-drawer__tokens-title">
+                                    {coreT({key: "ui.session.context_usage"})}
+                                </span>
+                                <span className="session-detail-drawer__tokens-label">
+                                    {tokenStats.label}
+                                </span>
+                            </div>
+                            <div
+                                className="session-detail-drawer__tokens-bar"
+                                role="progressbar"
+                                aria-valuenow={tokenStats.pct ?? undefined}
+                                aria-valuemin={0}
+                                aria-valuemax={100}
+                                aria-label={coreT({key: "ui.session.context_usage"})}
+                            >
+                                <div
+                                    className="session-detail-drawer__tokens-bar-fill"
+                                    style={{ width: `${barPct}%` }}
+                                />
+                            </div>
+                        </div>
+                    ) : null}
+
+                    {/* 次要操作：弱化为底部文字链接 */}
+                    <div className="session-detail-drawer__secondary">
+                        <button
+                            type="button"
+                            className="session-detail-drawer__link"
+                            data-session-detail-action="view-prompt"
+                            onClick={() => {
+                                onClose();
+                                requestViewPrompt();
+                            }}
+                        >
+                            {coreT({key: "ui.nav.view_prompt"})}
+                        </button>
+                        <span className="session-detail-drawer__dot" aria-hidden="true">
+                            ·
+                        </span>
+                        <button
+                            type="button"
+                            className="session-detail-drawer__link"
+                            data-session-detail-action="compact"
+                            onClick={() => setCompactOpen(true)}
+                        >
+                            {coreT({key: "ui.session.compact_context"})}
+                        </button>
+                    </div>
+                </div>
+                )}
+
+                {/* 会话必须持有 agentId，agent picker 不允许 none */}
+                <PickerModal
+                    open={agentPickerOpen}
+                    title={coreT({key: "ui.session.agent_picker_title_aria", params: {name: meta?.agentName ?? "—"}})}
+                    rows={agentRows.map((r) => ({ id: r.agentId, label: r.label }))}
+                    currentId={meta?.agentId}
+                    onClose={() => setAgentPickerOpen(false)}
+                    onSelect={(agentId) => {
+                        if (agentId == null) {
+                            return;
+                        }
+                        void ipcSessionsSetAgentBinding({ sessionId, agentId }).then(() => {
+                            void reload();
+                            notifyAgentConfigChanged();
+                        });
+                    }}
                 />
-              </div>
+                {/* model 可清除会话覆盖 → 回退到 agent pin 指定的模型 */}
+                <PickerModal
+                    open={modelPickerOpen}
+                    title={coreT({key: "ui.session.model_picker_title_aria", params: {name: meta?.modelLabel ?? "—"}})}
+                    rows={modelRows.map((r) => ({ id: r.savedModelId, label: r.label }))}
+                    allowNone
+                    noneLabel={coreT({key: "ui.session.clear_model_override_aria"})}
+                    onClose={() => setModelPickerOpen(false)}
+                    onSelect={(savedModelId) => {
+                        void ipcSessionsSetModelOverride({
+                            sessionId,
+                            modelId: savedModelId,
+                        }).then(() => {
+                            void reload();
+                            notifyAgentConfigChanged();
+                        });
+                    }}
+                />
+
+                <ConfirmModal
+                    open={compactOpen}
+                    title={coreT({key: "ui.session.compact_context"})}
+                    message={coreT({key: "ui.session.compact_confirm_msg_desktop"})}
+                    onConfirm={() => {
+                        setCompactOpen(false);
+                        void runCompaction(projectId, sessionId);
+                    }}
+                    onCancel={() => setCompactOpen(false)}
+                />
             </div>
-          ) : null}
-
-          {/* 次要操作：弱化为底部文字链接 */}
-          <div className="session-detail-drawer__secondary">
-            <button
-              type="button"
-              className="session-detail-drawer__link"
-              data-session-detail-action="view-prompt"
-              onClick={() => {
-                onClose();
-                requestViewPrompt();
-              }}
-            >
-              {coreT({key: "ui.nav.view_prompt"})}
-            </button>
-            <span className="session-detail-drawer__dot" aria-hidden="true">
-              ·
-            </span>
-            <button
-              type="button"
-              className="session-detail-drawer__link"
-              data-session-detail-action="compact"
-              onClick={() => setCompactOpen(true)}
-            >
-              {coreT({key: "ui.session.compact_context"})}
-            </button>
-          </div>
         </div>
-        )}
-
-        {/* 会话必须持有 agentId，agent picker 不允许 none */}
-        <PickerModal
-          open={agentPickerOpen}
-          title={coreT({key: "ui.session.agent_picker_title_aria", params: {name: meta?.agentName ?? "—"}})}
-          rows={agentRows.map((r) => ({ id: r.agentId, label: r.label }))}
-          currentId={meta?.agentId}
-          onClose={() => setAgentPickerOpen(false)}
-          onSelect={(agentId) => {
-            if (agentId == null) {
-              return;
-            }
-            void ipcSessionsSetAgentBinding({ sessionId, agentId }).then(() => {
-              void reload();
-              notifyAgentConfigChanged();
-            });
-          }}
-        />
-        {/* model 可清除会话覆盖 → 回退到 agent pin 指定的模型 */}
-        <PickerModal
-          open={modelPickerOpen}
-          title={coreT({key: "ui.session.model_picker_title_aria", params: {name: meta?.modelLabel ?? "—"}})}
-          rows={modelRows.map((r) => ({ id: r.savedModelId, label: r.label }))}
-          allowNone
-          noneLabel={coreT({key: "ui.session.clear_model_override_aria"})}
-          onClose={() => setModelPickerOpen(false)}
-          onSelect={(savedModelId) => {
-            void ipcSessionsSetModelOverride({
-              sessionId,
-              modelId: savedModelId,
-            }).then(() => {
-              void reload();
-              notifyAgentConfigChanged();
-            });
-          }}
-        />
-
-        <ConfirmModal
-          open={compactOpen}
-          title={coreT({key: "ui.session.compact_context"})}
-          message={coreT({key: "ui.session.compact_confirm_msg_desktop"})}
-          onConfirm={() => {
-            setCompactOpen(false);
-            void runCompaction(projectId, sessionId);
-          }}
-          onCancel={() => setCompactOpen(false)}
-        />
-      </div>
-    </div>
-  );
+    );
 }

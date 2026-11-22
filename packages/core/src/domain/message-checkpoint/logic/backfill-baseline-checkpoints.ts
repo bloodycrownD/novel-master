@@ -25,30 +25,30 @@ import type { IntegrityRepairOperation } from "@/service/integrity-repair.js";
  * 建点也无法验证（不算确认），调用方据此决定是否写 backfill 游标。
  */
 interface BackfillBaselineResult {
-  readonly confirmedNoGap: boolean;
+    readonly confirmedNoGap: boolean;
 }
 
 /** backfill 段 0/段 1（短路判定 + 扫描）与 `BackfillBaselineCheckpoints.backfill` 入口的依赖。 */
 export type BackfillScanDeps = Pick<CheckpointRepoDeps, "entryRepo" | "checkpointRepo"> & {
-  readonly messageRepo: MessageRepository;
-  readonly projectId: string;
-  readonly sessionId: string;
-  readonly signal?: AbortSignal;
+    readonly messageRepo: MessageRepository;
+    readonly projectId: string;
+    readonly sessionId: string;
+    readonly signal?: AbortSignal;
 };
 
 /** backfill 段 2（补写）的依赖：只消费 checkpointRepo。 */
 export type BackfillWriteDeps = Pick<CheckpointRepoDeps, "checkpointRepo"> & {
-  readonly sessionId: string;
-  readonly scan: BackfillScanResult;
-  readonly signal?: AbortSignal;
+    readonly sessionId: string;
+    readonly scan: BackfillScanResult;
+    readonly signal?: AbortSignal;
 };
 
 /** backfill operation（detect + repair）的依赖。 */
 export type BackfillOperationDeps = Pick<CheckpointRepoDeps, "entryRepo" | "checkpointRepo"> & {
-  readonly messageRepo: MessageRepository;
-  readonly sessionKkv: SessionKkvRepository;
-  readonly projectId: string;
-  readonly sessionId: string;
+    readonly messageRepo: MessageRepository;
+    readonly sessionKkv: SessionKkvRepository;
+    readonly projectId: string;
+    readonly sessionId: string;
 };
 
 /**
@@ -58,14 +58,14 @@ export type BackfillOperationDeps = Pick<CheckpointRepoDeps, "entryRepo" | "chec
  * `filePointers` 是同一份 live head 指针快照，写阶段每条 checkpoint 共用。
  */
 interface BackfillScanResult {
-  /** 无 live 文件 → false（无法建点也无法验证，不算「确认」）。 */
-  readonly confirmedNoGap: boolean;
-  readonly gapMessageIds: ReadonlyArray<string>;
-  readonly filePointers: ReadonlyArray<{
-    readonly entryId: number;
-    readonly revisionVersion: number;
-    readonly path: string;
-  }>;
+    /** 无 live 文件 → false（无法建点也无法验证，不算「确认」）。 */
+    readonly confirmedNoGap: boolean;
+    readonly gapMessageIds: ReadonlyArray<string>;
+    readonly filePointers: ReadonlyArray<{
+        readonly entryId: number;
+        readonly revisionVersion: number;
+        readonly path: string;
+    }>;
 }
 
 /**
@@ -78,34 +78,34 @@ interface BackfillScanResult {
  *   跑完后补写游标。
  */
 export type BackfillShortCircuitDecision =
-  | {
-      readonly kind: "short-circuit";
-      readonly newCursor: number;
-      readonly previousCursor: number;
-    }
-  | {
-      readonly kind: "full-scan";
-      readonly count: number;
-    };
+    | {
+            readonly kind: "short-circuit";
+            readonly newCursor: number;
+            readonly previousCursor: number;
+        }
+    | {
+            readonly kind: "full-scan";
+            readonly count: number;
+        };
 
 export const BackfillBaselineCheckpoints = {
-  /**
+    /**
    * 定位「首个空窗」的下标（`messages` 升序）。
    *
    * 单查询替代原先从尾部逐条 `hasCheckpoint` 的倒扫（最坏 M 次 SQL 往返，
    * 而这段每轮发送都跑）。`findIndex` 命中不了时按「整表都是空窗」兜底
    * （宁可多补不可漏补）。
    */
-  async resolveFirstGapIndex(checkpointRepo: MessageCheckpointRepository, sessionId: string, messages: ReadonlyArray<ChatMessageHeader>): Promise<number> {
-    const lastCheckpointedId = await checkpointRepo.findLastCheckpointedMessageId(sessionId);
-    if (lastCheckpointedId == null) {
-      return 0;
-    }
-    const idx = messages.findIndex((m) => m.id === lastCheckpointedId);
-    return idx + 1;
-  },
+    async resolveFirstGapIndex(checkpointRepo: MessageCheckpointRepository, sessionId: string, messages: ReadonlyArray<ChatMessageHeader>): Promise<number> {
+        const lastCheckpointedId = await checkpointRepo.findLastCheckpointedMessageId(sessionId);
+        if (lastCheckpointedId == null) {
+            return 0;
+        }
+        const idx = messages.findIndex((m) => m.id === lastCheckpointedId);
+        return idx + 1;
+    },
 
-  /**
+    /**
    * backfill 两段式「无空窗」短路判定（只读，不写游标）。
    *
    * 前提是消息集只增不减（删除路径一律清游标兜底）：
@@ -122,115 +122,115 @@ export const BackfillBaselineCheckpoints = {
    *
    * 任何不确定都保守回退全量（宁误报勿漏报）。
    */
-  async decideShortCircuit(args: { readonly sessionKkv: SessionKkvRepository; readonly messageRepo: MessageRepository; readonly checkpointRepo: MessageCheckpointRepository; readonly sessionId: string }): Promise<BackfillShortCircuitDecision> {
-    const { sessionKkv, messageRepo, checkpointRepo, sessionId } = args;
+    async decideShortCircuit(args: { readonly sessionKkv: SessionKkvRepository; readonly messageRepo: MessageRepository; readonly checkpointRepo: MessageCheckpointRepository; readonly sessionId: string }): Promise<BackfillShortCircuitDecision> {
+        const { sessionKkv, messageRepo, checkpointRepo, sessionId } = args;
 
-    const cursorEntry = await sessionKkv.get(sessionId, SESSION_KKV_DOMAIN_BACKFILL_CURSOR, BACKFILL_CURSOR_LAST_SCANNED_COUNT_KEY);
-    let cursor: number | null = null;
-    if (cursorEntry != null) {
-      const parsed = Number.parseInt(cursorEntry.value, 10);
-      cursor = Number.isInteger(parsed) && parsed >= 0 ? parsed : null;
-    }
+        const cursorEntry = await sessionKkv.get(sessionId, SESSION_KKV_DOMAIN_BACKFILL_CURSOR, BACKFILL_CURSOR_LAST_SCANNED_COUNT_KEY);
+        let cursor: number | null = null;
+        if (cursorEntry != null) {
+            const parsed = Number.parseInt(cursorEntry.value, 10);
+            cursor = Number.isInteger(parsed) && parsed >= 0 ? parsed : null;
+        }
 
-    const count = await messageRepo.countBySession(sessionId);
+        const count = await messageRepo.countBySession(sessionId);
 
-    // 游标缺失即无短路资格（未扫过，或「会话有点却没游标」的矛盾态）——走全量。
-    if (cursor == null) {
-      return { kind: "full-scan", count };
-    }
+        // 游标缺失即无短路资格（未扫过，或「会话有点却没游标」的矛盾态）——走全量。
+        if (cursor == null) {
+            return { kind: "full-scan", count };
+        }
 
-    // 矛盾检测：游标 > 0 意味上次确认过无空窗、会话必有点；hasAny=false 即游标不可信。
-    if (cursor > 0) {
-      const hasAny = await checkpointRepo.hasAnyCheckpointForSession(sessionId);
-      if (!hasAny) {
+        // 矛盾检测：游标 > 0 意味上次确认过无空窗、会话必有点；hasAny=false 即游标不可信。
+        if (cursor > 0) {
+            const hasAny = await checkpointRepo.hasAnyCheckpointForSession(sessionId);
+            if (!hasAny) {
+                return { kind: "full-scan", count };
+            }
+        }
+
+        // 第一段 O(1)：消息总数恰等于上次确认无空窗时的总数 → 短路 no-op。
+        if (count === cursor) {
+            return { kind: "short-circuit", newCursor: cursor, previousCursor: cursor };
+        }
+
+        // count < 游标：消息数只可能因删除而减少——删除可疑态，回退全量自愈。
+        if (count < cursor) {
+            return { kind: "full-scan", count };
+        }
+
+        // 第二段 O(新增段)：按 seq 升序圈出游标行数之后的新增段。
+        const segment = await messageRepo.listBySessionOffset(sessionId, cursor);
+        // 计数比对等价性依赖 message_checkpoint 每 (session_id, message_id) 至多一行
+        // （insertCheckpoint 替换语义保证）：段内 checkpoint 行数 == 有 checkpoint 的消息数。
+        const checkpointIds = segment.map((m) => m.id);
+        const checkpointCount = await checkpointRepo.countCheckpointsForMessages(sessionId, checkpointIds);
+        if (segment.length > 0 && checkpointCount === segment.length) {
+            return { kind: "short-circuit", newCursor: count, previousCursor: cursor };
+        }
         return { kind: "full-scan", count };
-      }
-    }
+    },
 
-    // 第一段 O(1)：消息总数恰等于上次确认无空窗时的总数 → 短路 no-op。
-    if (count === cursor) {
-      return { kind: "short-circuit", newCursor: cursor, previousCursor: cursor };
-    }
-
-    // count < 游标：消息数只可能因删除而减少——删除可疑态，回退全量自愈。
-    if (count < cursor) {
-      return { kind: "full-scan", count };
-    }
-
-    // 第二段 O(新增段)：按 seq 升序圈出游标行数之后的新增段。
-    const segment = await messageRepo.listBySessionOffset(sessionId, cursor);
-    // 计数比对等价性依赖 message_checkpoint 每 (session_id, message_id) 至多一行
-    // （insertCheckpoint 替换语义保证）：段内 checkpoint 行数 == 有 checkpoint 的消息数。
-    const checkpointIds = segment.map((m) => m.id);
-    const checkpointCount = await checkpointRepo.countCheckpointsForMessages(sessionId, checkpointIds);
-    if (segment.length > 0 && checkpointCount === segment.length) {
-      return { kind: "short-circuit", newCursor: count, previousCursor: cursor };
-    }
-    return { kind: "full-scan", count };
-  },
-
-  /**
+    /**
    * 只读扫描段：定位空窗并取指针快照，**不写任何行**。
    *
    * 段与段之间没有锁（本仓单 `TdbcConnection` 串行化写，读可并发），所以这里
    * 允许读到一个稍旧的 head 快照——checkpoint 的语义本就是「某时刻的指针快照」，
    * 旧一版合法；写阶段会对空窗段做「连续前缀复核」闭合并发插点的 TOCTOU。
    */
-  async scanGap(args: BackfillScanDeps): Promise<BackfillScanResult> {
-    const { entryRepo, messageRepo, checkpointRepo, projectId, sessionId, signal } = args;
-    const empty: BackfillScanResult = {
-      confirmedNoGap: false,
-      gapMessageIds: [],
-      filePointers: [],
-    };
+    async scanGap(args: BackfillScanDeps): Promise<BackfillScanResult> {
+        const { entryRepo, messageRepo, checkpointRepo, projectId, sessionId, signal } = args;
+        const empty: BackfillScanResult = {
+            confirmedNoGap: false,
+            gapMessageIds: [],
+            filePointers: [],
+        };
 
-    const files = await SessionFiles.listHeads(entryRepo, projectId, sessionId);
-    if (files.length === 0) {
-      return empty;
-    }
+        const files = await SessionFiles.listHeads(entryRepo, projectId, sessionId);
+        if (files.length === 0) {
+            return empty;
+        }
 
-    // 头投影（id/seq/role/hidden，不解压 content）：本函数只需要消息 id 与
-    // 顺序，而 `listBySession` 会把**含 hidden** 的全会话正文逐条解压——它在
-    // 每轮发送前都跑一次（run-agent-turn 的 backfill 阶段），大会话上正是
-    // 「用户消息落库要等几秒」的主源（2026-09-30 实锤）。
-    const messages = await messageRepo.listMessageHeadersBySession(sessionId);
-    if (messages.length === 0) {
-      // 空会话恒无空窗。
-      return { confirmedNoGap: true, gapMessageIds: [], filePointers: [] };
-    }
+        // 头投影（id/seq/role/hidden，不解压 content）：本函数只需要消息 id 与
+        // 顺序，而 `listBySession` 会把**含 hidden** 的全会话正文逐条解压——它在
+        // 每轮发送前都跑一次（run-agent-turn 的 backfill 阶段），大会话上正是
+        // 「用户消息落库要等几秒」的主源（2026-09-30 实锤）。
+        const messages = await messageRepo.listMessageHeadersBySession(sessionId);
+        if (messages.length === 0) {
+            // 空会话恒无空窗。
+            return { confirmedNoGap: true, gapMessageIds: [], filePointers: [] };
+        }
 
-    // 弃权点（r3-run-4）：明确前移到定位空窗的那次单查询**之前**——
-    // 「入场即 aborted ⇒ 零定位查询」这条性质不能被稀释。
-    if (signal?.aborted === true) {
-      return empty;
-    }
+        // 弃权点（r3-run-4）：明确前移到定位空窗的那次单查询**之前**——
+        // 「入场即 aborted ⇒ 零定位查询」这条性质不能被稀释。
+        if (signal?.aborted === true) {
+            return empty;
+        }
 
-    const firstGapIndex = await BackfillBaselineCheckpoints.resolveFirstGapIndex(checkpointRepo, sessionId, messages);
-    if (firstGapIndex >= messages.length) {
-      // 无空窗：有文件、有消息、最后一个有 checkpoint 的消息之后没有缺口的。
-      return {
-        confirmedNoGap: true,
-        gapMessageIds: [],
-        filePointers: files.map((f) => ({
-          entryId: f.entryId,
-          revisionVersion: f.headVersion,
-          path: f.logicalPath,
-        })),
-      };
-    }
+        const firstGapIndex = await BackfillBaselineCheckpoints.resolveFirstGapIndex(checkpointRepo, sessionId, messages);
+        if (firstGapIndex >= messages.length) {
+            // 无空窗：有文件、有消息、最后一个有 checkpoint 的消息之后没有缺口的。
+            return {
+                confirmedNoGap: true,
+                gapMessageIds: [],
+                filePointers: files.map((f) => ({
+                    entryId: f.entryId,
+                    revisionVersion: f.headVersion,
+                    path: f.logicalPath,
+                })),
+            };
+        }
 
-    return {
-      confirmedNoGap: false,
-      gapMessageIds: messages.slice(firstGapIndex).map((m) => m.id),
-      filePointers: files.map((f) => ({
-        entryId: f.entryId,
-        revisionVersion: f.headVersion,
-        path: f.logicalPath,
-      })),
-    };
-  },
+        return {
+            confirmedNoGap: false,
+            gapMessageIds: messages.slice(firstGapIndex).map((m) => m.id),
+            filePointers: files.map((f) => ({
+                entryId: f.entryId,
+                revisionVersion: f.headVersion,
+                path: f.logicalPath,
+            })),
+        };
+    },
 
-  /**
+    /**
    * 写段：对扫描段算出的空窗段逐条补 baseline 快照。
    *
    * **连续前缀复核（TOCTOU 闭合）**：段 1 与段 2 之间可以有别的写插进来，
@@ -253,45 +253,45 @@ export const BackfillBaselineCheckpoints = {
    * 「查时」，并不真正消除它）。调用方按普通失败重试即可：backfill 幂等，
    * 下轮重新扫描拿到的是收敛后的空窗段。
    */
-  async writeGap(args: BackfillWriteDeps): Promise<BackfillBaselineResult> {
-    const { checkpointRepo, sessionId, scan, signal } = args;
-    const gap = scan.gapMessageIds;
-    if (gap.length === 0) {
-      return { confirmedNoGap: scan.confirmedNoGap };
-    }
+    async writeGap(args: BackfillWriteDeps): Promise<BackfillBaselineResult> {
+        const { checkpointRepo, sessionId, scan, signal } = args;
+        const gap = scan.gapMessageIds;
+        if (gap.length === 0) {
+            return { confirmedNoGap: scan.confirmedNoGap };
+        }
 
-    // 连续前缀复核：跳过「本来就是点」的连续前缀，剩下照写。
-    let start = 0;
-    while (start < gap.length) {
-      if (signal?.aborted === true) {
-        return { confirmedNoGap: false };
-      }
-      const has = await checkpointRepo.hasCheckpoint(sessionId, gap[start]!);
-      if (!has) {
-        break;
-      }
-      start += 1;
-    }
+        // 连续前缀复核：跳过「本来就是点」的连续前缀，剩下照写。
+        let start = 0;
+        while (start < gap.length) {
+            if (signal?.aborted === true) {
+                return { confirmedNoGap: false };
+            }
+            const has = await checkpointRepo.hasCheckpoint(sessionId, gap[start]!);
+            if (!has) {
+                break;
+            }
+            start += 1;
+        }
 
-    const now = Date.now();
-    for (let i = start; i < gap.length; i++) {
-      // 弃权点（r3-run-4）：同款，提前退出。**中途退出保留已写部分是有意的**——
-      // backfill 幂等（insertCheckpoint 不覆盖已有行），下轮补齐剩余空窗即可。
-      if (signal?.aborted === true) {
-        return { confirmedNoGap: false };
-      }
-      await checkpointRepo.insertCheckpoint({
-        sessionId,
-        messageId: gap[i]!,
-        createdAtMs: now,
-        files: scan.filePointers,
-      });
-    }
-    // 补完即无空窗（空窗段全部 insertCheckpoint，其前的本就有 checkpoint）。
-    return { confirmedNoGap: true };
-  },
+        const now = Date.now();
+        for (let i = start; i < gap.length; i++) {
+            // 弃权点（r3-run-4）：同款，提前退出。**中途退出保留已写部分是有意的**——
+            // backfill 幂等（insertCheckpoint 不覆盖已有行），下轮补齐剩余空窗即可。
+            if (signal?.aborted === true) {
+                return { confirmedNoGap: false };
+            }
+            await checkpointRepo.insertCheckpoint({
+                sessionId,
+                messageId: gap[i]!,
+                createdAtMs: now,
+                files: scan.filePointers,
+            });
+        }
+        // 补完即无空窗（空窗段全部 insertCheckpoint，其前的本就有 checkpoint）。
+        return { confirmedNoGap: true };
+    },
 
-  /**
+    /**
    * 从最后一个有 checkpoint 的消息之后，给所有空窗消息补 baseline 快照。
    *
    * - 已有 checkpoint 的消息不受影响（连续前缀复核只会跳过「本来就是点」的
@@ -304,13 +304,13 @@ export const BackfillBaselineCheckpoints = {
    *   会把游标写到 count，下一轮判定短路成「已确认」，剩下的空窗永远补不上。
    *   已 insert 的行随事务提交留下且不可覆盖（幂等），下轮接着补。
    */
-  async backfill(args: BackfillScanDeps): Promise<BackfillBaselineResult> {
-    const { entryRepo, messageRepo, checkpointRepo, projectId, sessionId, signal } = args;
-    const scan = await BackfillBaselineCheckpoints.scanGap({ entryRepo, messageRepo, checkpointRepo, projectId, sessionId, signal });
-    return BackfillBaselineCheckpoints.writeGap({ checkpointRepo, sessionId, scan, signal });
-  },
+    async backfill(args: BackfillScanDeps): Promise<BackfillBaselineResult> {
+        const { entryRepo, messageRepo, checkpointRepo, projectId, sessionId, signal } = args;
+        const scan = await BackfillBaselineCheckpoints.scanGap({ entryRepo, messageRepo, checkpointRepo, projectId, sessionId, signal });
+        return BackfillBaselineCheckpoints.writeGap({ checkpointRepo, sessionId, scan, signal });
+    },
 
-  /**
+    /**
    * 把 `BackfillBaselineCheckpoints.backfill` 包成 `backfill` 类型的 {@link IntegrityRepairOperation}。
    *
    * detect 与 {@link backfillMissingBaselines} 同款两段式判定（只读不写游标）：
@@ -322,41 +322,41 @@ export const BackfillBaselineCheckpoints = {
    * repair 直接调用 `BackfillBaselineCheckpoints.backfill`，幂等安全（已有 checkpoint
    * 不会被覆盖）；repair 不写游标——残留旧游标只导致下次判定保守回退，无正确性影响。
    */
-  createOperation(args: BackfillOperationDeps): IntegrityRepairOperation {
-    const { entryRepo, messageRepo, checkpointRepo, sessionKkv, projectId, sessionId } = args;
-    return {
-      name: `baseline-checkpoint-backfill:session=${sessionId}`,
-      kind: "backfill",
-      async detect() {
-        const files = await SessionFiles.listHeads(entryRepo, projectId, sessionId);
-        if (files.length === 0) {
-          return Result.ok({ needsRepair: false });
-        }
-        // 两段式判定先行：短路即确认无空窗，无需全量找空窗。
-        const decisionInput = { sessionKkv, messageRepo, checkpointRepo, sessionId };
-        const decision = await BackfillBaselineCheckpoints.decideShortCircuit(decisionInput);
-        if (decision.kind === "short-circuit") {
-          return Result.ok({ needsRepair: false });
-        }
-        // 回退全量分支同样只要 id 与顺序：用头投影，避免为了「找最后一个有
-        // checkpoint 的消息」把全会话正文解压一遍（见 BackfillBaselineCheckpoints.backfill 注释）。
-        const messages = await messageRepo.listMessageHeadersBySession(sessionId);
-        if (messages.length === 0) {
-          return Result.ok({ needsRepair: false });
-        }
-        const firstGapIndex = await BackfillBaselineCheckpoints.resolveFirstGapIndex(checkpointRepo, sessionId, messages);
-        if (firstGapIndex >= messages.length) {
-          return Result.ok({ needsRepair: false });
-        }
-        return Result.ok({
-          needsRepair: true,
-          details: `session=${sessionId} 在第 ${firstGapIndex + 1} 条消息处开始有空窗，共 ${messages.length - firstGapIndex} 条缺 baseline checkpoint`,
-        });
-      },
-      async repair() {
-        await BackfillBaselineCheckpoints.backfill({ entryRepo, messageRepo, checkpointRepo, projectId, sessionId });
-        return Result.ok(undefined);
-      },
-    };
-  },
+    createOperation(args: BackfillOperationDeps): IntegrityRepairOperation {
+        const { entryRepo, messageRepo, checkpointRepo, sessionKkv, projectId, sessionId } = args;
+        return {
+            name: `baseline-checkpoint-backfill:session=${sessionId}`,
+            kind: "backfill",
+            async detect() {
+                const files = await SessionFiles.listHeads(entryRepo, projectId, sessionId);
+                if (files.length === 0) {
+                    return Result.ok({ needsRepair: false });
+                }
+                // 两段式判定先行：短路即确认无空窗，无需全量找空窗。
+                const decisionInput = { sessionKkv, messageRepo, checkpointRepo, sessionId };
+                const decision = await BackfillBaselineCheckpoints.decideShortCircuit(decisionInput);
+                if (decision.kind === "short-circuit") {
+                    return Result.ok({ needsRepair: false });
+                }
+                // 回退全量分支同样只要 id 与顺序：用头投影，避免为了「找最后一个有
+                // checkpoint 的消息」把全会话正文解压一遍（见 BackfillBaselineCheckpoints.backfill 注释）。
+                const messages = await messageRepo.listMessageHeadersBySession(sessionId);
+                if (messages.length === 0) {
+                    return Result.ok({ needsRepair: false });
+                }
+                const firstGapIndex = await BackfillBaselineCheckpoints.resolveFirstGapIndex(checkpointRepo, sessionId, messages);
+                if (firstGapIndex >= messages.length) {
+                    return Result.ok({ needsRepair: false });
+                }
+                return Result.ok({
+                    needsRepair: true,
+                    details: `session=${sessionId} 在第 ${firstGapIndex + 1} 条消息处开始有空窗，共 ${messages.length - firstGapIndex} 条缺 baseline checkpoint`,
+                });
+            },
+            async repair() {
+                await BackfillBaselineCheckpoints.backfill({ entryRepo, messageRepo, checkpointRepo, projectId, sessionId });
+                return Result.ok(undefined);
+            },
+        };
+    },
 } as const;

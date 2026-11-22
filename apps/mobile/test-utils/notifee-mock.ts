@@ -6,34 +6,34 @@
  * 直接 import 本文件的 mock fn 后 clear/assert。
  */
 export const AuthorizationStatus = {
-  DENIED: 0,
-  AUTHORIZED: 1,
-  PROVISIONAL: 2,
+    DENIED: 0,
+    AUTHORIZED: 1,
+    PROVISIONAL: 2,
 } as const;
 
 export const AndroidImportance = {
-  NONE: 0,
-  MIN: 1,
-  LOW: 2,
-  DEFAULT: 3,
-  HIGH: 4,
+    NONE: 0,
+    MIN: 1,
+    LOW: 2,
+    DEFAULT: 3,
+    HIGH: 4,
 } as const;
 
 export const EventType = {
-  DISMISSED: 0,
-  PRESS: 1,
-  ACTION_PRESS: 2,
-  DELIVERED: 3,
-  APP_KILLED: 4,
+    DISMISSED: 0,
+    PRESS: 1,
+    ACTION_PRESS: 2,
+    DELIVERED: 3,
+    APP_KILLED: 4,
 } as const;
 
 export const displayNotification = jest.fn(async () => 'notification-id');
 export const createChannel = jest.fn(async () => 'channel-id');
 export const requestPermission = jest.fn(async () => ({
-  authorizationStatus: AuthorizationStatus.AUTHORIZED,
+    authorizationStatus: AuthorizationStatus.AUTHORIZED,
 }));
 export const getNotificationSettings = jest.fn(async () => ({
-  authorizationStatus: AuthorizationStatus.AUTHORIZED,
+    authorizationStatus: AuthorizationStatus.AUTHORIZED,
 }));
 export const openNotificationSettings = jest.fn(async () => undefined);
 export const stopForegroundService = jest.fn(async () => undefined);
@@ -45,15 +45,15 @@ export const onForegroundEvent = jest.fn(() => onForegroundEventUnsubscribe);
 export const onBackgroundEvent = jest.fn();
 
 const notifeeMock = {
-  displayNotification,
-  createChannel,
-  requestPermission,
-  getNotificationSettings,
-  openNotificationSettings,
-  stopForegroundService,
-  registerForegroundService,
-  onForegroundEvent,
-  onBackgroundEvent,
+    displayNotification,
+    createChannel,
+    requestPermission,
+    getNotificationSettings,
+    openNotificationSettings,
+    stopForegroundService,
+    registerForegroundService,
+    onForegroundEvent,
+    onBackgroundEvent,
 };
 
 export default notifeeMock;

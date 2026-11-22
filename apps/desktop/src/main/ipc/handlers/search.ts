@@ -10,156 +10,156 @@
  * （v3 拍板 A4：`testEngine` 已整链退役，desktop 无测试搜索入口。）
  */
 import type {
-  IpcResult,
-  SearchClearEngineKeyRequest,
-  SearchConfigDto,
-  SearchCreateCustomEngineRequest,
-  SearchDeleteCustomEngineRequest,
-  SearchResetPresetOverrideRequest,
-  SearchSaveEngineKeyRequest,
-  SearchSetEnabledRequest,
-  SearchSetEngineBaseUrlRequest,
-  SearchSetEngineOrderRequest,
-  SearchUpdateCustomEngineRequest,
-  SearchUpdatePresetOverrideRequest,
+    IpcResult,
+    SearchClearEngineKeyRequest,
+    SearchConfigDto,
+    SearchCreateCustomEngineRequest,
+    SearchDeleteCustomEngineRequest,
+    SearchResetPresetOverrideRequest,
+    SearchSaveEngineKeyRequest,
+    SearchSetEnabledRequest,
+    SearchSetEngineBaseUrlRequest,
+    SearchSetEngineOrderRequest,
+    SearchUpdateCustomEngineRequest,
+    SearchUpdatePresetOverrideRequest,
 } from "../../../../shared/ipc-types.js";
 import { DesktopRuntimeSingleton } from "../../runtime/desktop-runtime-singleton.js";
 import { FormatIpcError } from "../ipc-error.js";
 import { IpcResults } from "../ipc-result.js";
 
 export namespace Search {
-  export async function getConfig(): Promise<IpcResult<SearchConfigDto>> {
-    try {
-      const built = await DesktopRuntimeSingleton.get();
-      // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
-      if (!built.ok) return { ok: false, error: FormatIpcError.format(built.error) };
-      const rt = built.value;
-      return IpcResults.from(await rt.searchConfig.readConfig());
-    } catch (err) {
-      return { ok: false, error: FormatIpcError.format(err) };
+    export async function getConfig(): Promise<IpcResult<SearchConfigDto>> {
+        try {
+            const built = await DesktopRuntimeSingleton.get();
+            // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+            if (!built.ok) return { ok: false, error: FormatIpcError.format(built.error) };
+            const rt = built.value;
+            return IpcResults.from(await rt.searchConfig.readConfig());
+        } catch (err) {
+            return { ok: false, error: FormatIpcError.format(err) };
+        }
     }
-  }
 
-  export async function saveEngineKey(req: SearchSaveEngineKeyRequest): Promise<IpcResult<void>> {
-    try {
-      const built = await DesktopRuntimeSingleton.get();
-      // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
-      if (!built.ok) return { ok: false, error: FormatIpcError.format(built.error) };
-      const rt = built.value;
-      return IpcResults.from(await rt.searchConfig.saveEngineKey(req.engineId, req.apiKey));
-    } catch (err) {
-      return { ok: false, error: FormatIpcError.format(err) };
+    export async function saveEngineKey(req: SearchSaveEngineKeyRequest): Promise<IpcResult<void>> {
+        try {
+            const built = await DesktopRuntimeSingleton.get();
+            // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+            if (!built.ok) return { ok: false, error: FormatIpcError.format(built.error) };
+            const rt = built.value;
+            return IpcResults.from(await rt.searchConfig.saveEngineKey(req.engineId, req.apiKey));
+        } catch (err) {
+            return { ok: false, error: FormatIpcError.format(err) };
+        }
     }
-  }
 
-  export async function clearEngineKey(req: SearchClearEngineKeyRequest): Promise<IpcResult<void>> {
-    try {
-      const built = await DesktopRuntimeSingleton.get();
-      // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
-      if (!built.ok) return { ok: false, error: FormatIpcError.format(built.error) };
-      const rt = built.value;
-      return IpcResults.from(await rt.searchConfig.clearEngineKey(req.engineId));
-    } catch (err) {
-      return { ok: false, error: FormatIpcError.format(err) };
+    export async function clearEngineKey(req: SearchClearEngineKeyRequest): Promise<IpcResult<void>> {
+        try {
+            const built = await DesktopRuntimeSingleton.get();
+            // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+            if (!built.ok) return { ok: false, error: FormatIpcError.format(built.error) };
+            const rt = built.value;
+            return IpcResults.from(await rt.searchConfig.clearEngineKey(req.engineId));
+        } catch (err) {
+            return { ok: false, error: FormatIpcError.format(err) };
+        }
     }
-  }
 
-  export async function setEnabled(req: SearchSetEnabledRequest): Promise<IpcResult<void>> {
-    try {
-      const built = await DesktopRuntimeSingleton.get();
-      // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
-      if (!built.ok) return { ok: false, error: FormatIpcError.format(built.error) };
-      const rt = built.value;
-      return IpcResults.from(await rt.searchConfig.setEnabled(req.engineId, req.enabled));
-    } catch (err) {
-      return { ok: false, error: FormatIpcError.format(err) };
+    export async function setEnabled(req: SearchSetEnabledRequest): Promise<IpcResult<void>> {
+        try {
+            const built = await DesktopRuntimeSingleton.get();
+            // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+            if (!built.ok) return { ok: false, error: FormatIpcError.format(built.error) };
+            const rt = built.value;
+            return IpcResults.from(await rt.searchConfig.setEnabled(req.engineId, req.enabled));
+        } catch (err) {
+            return { ok: false, error: FormatIpcError.format(err) };
+        }
     }
-  }
 
-  export async function setEngineBaseUrl(req: SearchSetEngineBaseUrlRequest): Promise<IpcResult<void>> {
-    try {
-      const built = await DesktopRuntimeSingleton.get();
-      // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
-      if (!built.ok) return { ok: false, error: FormatIpcError.format(built.error) };
-      const rt = built.value;
-      // 空串 = 清除；非法 URL 形状由 core 校验后收进 Err（四期门⑦）
-      return IpcResults.from(await rt.searchConfig.setEngineBaseUrl(req.engineId, req.baseUrl));
-    } catch (err) {
-      return { ok: false, error: FormatIpcError.format(err) };
+    export async function setEngineBaseUrl(req: SearchSetEngineBaseUrlRequest): Promise<IpcResult<void>> {
+        try {
+            const built = await DesktopRuntimeSingleton.get();
+            // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+            if (!built.ok) return { ok: false, error: FormatIpcError.format(built.error) };
+            const rt = built.value;
+            // 空串 = 清除；非法 URL 形状由 core 校验后收进 Err（四期门⑦）
+            return IpcResults.from(await rt.searchConfig.setEngineBaseUrl(req.engineId, req.baseUrl));
+        } catch (err) {
+            return { ok: false, error: FormatIpcError.format(err) };
+        }
     }
-  }
 
-  export async function setEngineOrder(req: SearchSetEngineOrderRequest): Promise<IpcResult<void>> {
-    try {
-      const built = await DesktopRuntimeSingleton.get();
-      // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
-      if (!built.ok) return { ok: false, error: FormatIpcError.format(built.error) };
-      const rt = built.value;
-      // 合法性校验在 core setEngineOrder 内（未知 id / 重复项收进 Err 经 IpcResult 回传）
-      return IpcResults.from(await rt.searchConfig.setEngineOrder(req.engineOrder));
-    } catch (err) {
-      return { ok: false, error: FormatIpcError.format(err) };
+    export async function setEngineOrder(req: SearchSetEngineOrderRequest): Promise<IpcResult<void>> {
+        try {
+            const built = await DesktopRuntimeSingleton.get();
+            // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+            if (!built.ok) return { ok: false, error: FormatIpcError.format(built.error) };
+            const rt = built.value;
+            // 合法性校验在 core setEngineOrder 内（未知 id / 重复项收进 Err 经 IpcResult 回传）
+            return IpcResults.from(await rt.searchConfig.setEngineOrder(req.engineOrder));
+        } catch (err) {
+            return { ok: false, error: FormatIpcError.format(err) };
+        }
     }
-  }
 
-  export async function createCustomEngine(req: SearchCreateCustomEngineRequest): Promise<IpcResult<void>> {
-    try {
-      const built = await DesktopRuntimeSingleton.get();
-      // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
-      if (!built.ok) return { ok: false, error: FormatIpcError.format(built.error) };
-      const rt = built.value;
-      return IpcResults.from(await rt.searchConfig.createCustomEngine(req));
-    } catch (err) {
-      return { ok: false, error: FormatIpcError.format(err) };
+    export async function createCustomEngine(req: SearchCreateCustomEngineRequest): Promise<IpcResult<void>> {
+        try {
+            const built = await DesktopRuntimeSingleton.get();
+            // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+            if (!built.ok) return { ok: false, error: FormatIpcError.format(built.error) };
+            const rt = built.value;
+            return IpcResults.from(await rt.searchConfig.createCustomEngine(req));
+        } catch (err) {
+            return { ok: false, error: FormatIpcError.format(err) };
+        }
     }
-  }
 
-  export async function updateCustomEngine(req: SearchUpdateCustomEngineRequest): Promise<IpcResult<void>> {
-    try {
-      const built = await DesktopRuntimeSingleton.get();
-      // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
-      if (!built.ok) return { ok: false, error: FormatIpcError.format(built.error) };
-      const rt = built.value;
-      const { engineId, ...input } = req;
-      return IpcResults.from(await rt.searchConfig.updateCustomEngine(engineId, input));
-    } catch (err) {
-      return { ok: false, error: FormatIpcError.format(err) };
+    export async function updateCustomEngine(req: SearchUpdateCustomEngineRequest): Promise<IpcResult<void>> {
+        try {
+            const built = await DesktopRuntimeSingleton.get();
+            // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+            if (!built.ok) return { ok: false, error: FormatIpcError.format(built.error) };
+            const rt = built.value;
+            const { engineId, ...input } = req;
+            return IpcResults.from(await rt.searchConfig.updateCustomEngine(engineId, input));
+        } catch (err) {
+            return { ok: false, error: FormatIpcError.format(err) };
+        }
     }
-  }
 
-  export async function deleteCustomEngine(req: SearchDeleteCustomEngineRequest): Promise<IpcResult<void>> {
-    try {
-      const built = await DesktopRuntimeSingleton.get();
-      // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
-      if (!built.ok) return { ok: false, error: FormatIpcError.format(built.error) };
-      const rt = built.value;
-      return IpcResults.from(await rt.searchConfig.deleteCustomEngine(req.engineId));
-    } catch (err) {
-      return { ok: false, error: FormatIpcError.format(err) };
+    export async function deleteCustomEngine(req: SearchDeleteCustomEngineRequest): Promise<IpcResult<void>> {
+        try {
+            const built = await DesktopRuntimeSingleton.get();
+            // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+            if (!built.ok) return { ok: false, error: FormatIpcError.format(built.error) };
+            const rt = built.value;
+            return IpcResults.from(await rt.searchConfig.deleteCustomEngine(req.engineId));
+        } catch (err) {
+            return { ok: false, error: FormatIpcError.format(err) };
+        }
     }
-  }
 
-  export async function updatePresetOverride(req: SearchUpdatePresetOverrideRequest): Promise<IpcResult<void>> {
-    try {
-      const built = await DesktopRuntimeSingleton.get();
-      // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
-      if (!built.ok) return { ok: false, error: FormatIpcError.format(built.error) };
-      const rt = built.value;
-      return IpcResults.from(await rt.searchConfig.updatePresetOverride(req.engineId, req.patch));
-    } catch (err) {
-      return { ok: false, error: FormatIpcError.format(err) };
+    export async function updatePresetOverride(req: SearchUpdatePresetOverrideRequest): Promise<IpcResult<void>> {
+        try {
+            const built = await DesktopRuntimeSingleton.get();
+            // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+            if (!built.ok) return { ok: false, error: FormatIpcError.format(built.error) };
+            const rt = built.value;
+            return IpcResults.from(await rt.searchConfig.updatePresetOverride(req.engineId, req.patch));
+        } catch (err) {
+            return { ok: false, error: FormatIpcError.format(err) };
+        }
     }
-  }
 
-  export async function resetPresetOverride(req: SearchResetPresetOverrideRequest): Promise<IpcResult<void>> {
-    try {
-      const built = await DesktopRuntimeSingleton.get();
-      // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
-      if (!built.ok) return { ok: false, error: FormatIpcError.format(built.error) };
-      const rt = built.value;
-      return IpcResults.from(await rt.searchConfig.resetPresetOverride(req.engineId));
-    } catch (err) {
-      return { ok: false, error: FormatIpcError.format(err) };
+    export async function resetPresetOverride(req: SearchResetPresetOverrideRequest): Promise<IpcResult<void>> {
+        try {
+            const built = await DesktopRuntimeSingleton.get();
+            // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+            if (!built.ok) return { ok: false, error: FormatIpcError.format(built.error) };
+            const rt = built.value;
+            return IpcResults.from(await rt.searchConfig.resetPresetOverride(req.engineId));
+        } catch (err) {
+            return { ok: false, error: FormatIpcError.format(err) };
+        }
     }
-  }
 }

@@ -15,7 +15,7 @@ import { curlTool } from "./curl-tool.js";
 import { searchTool } from "./search/search-tool.js";
 
 export const BuiltinTools = {
-  /**
+    /**
    * 注册内置工具：6 个 vfs 工具 + 静态 `task` / `skill` / `agent` / `curl` /
    * `search` 工具（共 11 个）。
    *
@@ -29,14 +29,14 @@ export const BuiltinTools = {
    * 经 `ctx.fetchFn` 可选注入（缺省 globalThis.fetch）；search 另读
    * `ctx.search` 闭包解析引擎（未装配时 run 返回可读错误）。
    */
-  register(registry: ToolRegistry<BuiltinToolContext>): void {
-    for (const tool of FileTools.create()) {
-      registry.register(tool);
-    }
-    registry.register(subagentTool);
-    registry.register(skillTool);
-    registry.register(agentTool);
-    registry.register(curlTool);
-    registry.register(searchTool);
-  },
+    register(registry: ToolRegistry<BuiltinToolContext>): void {
+        for (const tool of FileTools.create()) {
+            registry.register(tool);
+        }
+        registry.register(subagentTool);
+        registry.register(skillTool);
+        registry.register(agentTool);
+        registry.register(curlTool);
+        registry.register(searchTool);
+    },
 } as const;

@@ -10,14 +10,14 @@
 import { SkspNodeFactory } from "@novel-master/core/sksp-node";
 
 const keyringOptions = {
-  service: "novel-master-linux",
-  label: "Secret Service",
-  displayName: "Linux Secret Service (GNOME Keyring / KWallet)",
-  platform: "linux",
-  open: async (service: string, user: string) => {
-    const { Entry } = await import("@napi-rs/keyring");
-    return new Entry(service, user);
-  },
+    service: "novel-master-linux",
+    label: "Secret Service",
+    displayName: "Linux Secret Service (GNOME Keyring / KWallet)",
+    platform: "linux",
+    open: async (service: string, user: string) => {
+        const { Entry } = await import("@napi-rs/keyring");
+        return new Entry(service, user);
+    },
 };
 
 const keyring = SkspNodeFactory.createKeyringMasterKey(keyringOptions);

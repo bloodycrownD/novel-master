@@ -16,10 +16,10 @@ import { MockOpSqliteAdapter } from "./mock-adapter.js";
 const driver = new OpSqliteDriver(new MockOpSqliteAdapter());
 
 NestedBatch.runParityTests({
-  createConnection: async () =>
-    driver.open({ filename: ":memory:", driver: OPSQLITE_DRIVER_NAME }),
+    createConnection: async () =>
+        driver.open({ filename: ":memory:", driver: OPSQLITE_DRIVER_NAME }),
 });
 
 describe("op-sqlite nested batch parity harness (mock adapter, Node CI)", () => {
-  /* parity suite registers nested describes */
+    /* parity suite registers nested describes */
 });

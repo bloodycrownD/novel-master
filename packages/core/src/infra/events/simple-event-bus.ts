@@ -11,61 +11,61 @@ const log = LogFactory.create("events.bus");
 type EventHandler<T = unknown> = (payload: T) => void;
 
 export interface EventSubscription {
-  unsubscribe(): void;
+    unsubscribe(): void;
 }
 
 /** 同步 handler 抛错时的回调（可选）。 */
 interface SimpleEventBusOptions {
-  /** handler 同步抛错时调用；默认走 core logger（scope `events.bus`） */
-  readonly onHandlerError?: (eventType: string, error: unknown) => void;
+    /** handler 同步抛错时调用；默认走 core logger（scope `events.bus`） */
+    readonly onHandlerError?: (eventType: string, error: unknown) => void;
 }
 
 /** 单进程同步 publish/subscribe 总线。 */
 export class SimpleEventBus {
-  private readonly handlers = new Map<string, Set<EventHandler>>();
-  private readonly onHandlerError: (eventType: string, error: unknown) => void;
+    private readonly handlers = new Map<string, Set<EventHandler>>();
+    private readonly onHandlerError: (eventType: string, error: unknown) => void;
 
-  constructor(options?: SimpleEventBusOptions) {
-    this.onHandlerError = options?.onHandlerError ?? ((eventType, err) => log.error("handler failed", { eventType, error: err }));
-  }
-
-  /** 注册 handler，返回用于取消订阅的对象。 */
-  subscribe<T>(eventType: string, handler: EventHandler<T>): EventSubscription {
-    let set = this.handlers.get(eventType);
-    if (set == null) {
-      set = new Set();
-      this.handlers.set(eventType, set);
+    constructor(options?: SimpleEventBusOptions) {
+        this.onHandlerError = options?.onHandlerError ?? ((eventType, err) => log.error("handler failed", { eventType, error: err }));
     }
-    set.add(handler as EventHandler);
-    return {
-      unsubscribe: () => {
-        set!.delete(handler as EventHandler);
-        if (set!.size === 0) {
-          this.handlers.delete(eventType);
+
+    /** 注册 handler，返回用于取消订阅的对象。 */
+    subscribe<T>(eventType: string, handler: EventHandler<T>): EventSubscription {
+        let set = this.handlers.get(eventType);
+        if (set == null) {
+            set = new Set();
+            this.handlers.set(eventType, set);
         }
-      },
-    };
-  }
-
-  /** 按注册顺序同步调用该事件类型的全部 handler。 */
-  publish<T>(eventType: string, payload: T): void {
-    const set = this.handlers.get(eventType);
-    if (set == null) {
-      return;
+        set.add(handler as EventHandler);
+        return {
+            unsubscribe: () => {
+                set!.delete(handler as EventHandler);
+                if (set!.size === 0) {
+                    this.handlers.delete(eventType);
+                }
+            },
+        };
     }
-    for (const handler of set) {
-      try {
-        handler(payload);
-      } catch (err) {
-        this.onHandlerError(eventType, err);
-      }
-    }
-  }
 
-  /** 移除全部 handler（测试用）。 */
-  clear(): void {
-    this.handlers.clear();
-  }
+    /** 按注册顺序同步调用该事件类型的全部 handler。 */
+    publish<T>(eventType: string, payload: T): void {
+        const set = this.handlers.get(eventType);
+        if (set == null) {
+            return;
+        }
+        for (const handler of set) {
+            try {
+                handler(payload);
+            } catch (err) {
+                this.onHandlerError(eventType, err);
+            }
+        }
+    }
+
+    /** 移除全部 handler（测试用）。 */
+    clear(): void {
+        this.handlers.clear();
+    }
 }
 
 // nm-style: keep-public — @novel-master/core/events 子入口再导出的公共类型契约（无生产直引）

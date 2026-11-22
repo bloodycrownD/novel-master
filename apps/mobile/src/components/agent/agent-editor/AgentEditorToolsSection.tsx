@@ -19,52 +19,52 @@ import {styles} from './agent-editor-form.styles';
 import {type AgentEditorTokens} from './agent-editor-types';
 
 type Props = {
-  tokens: AgentEditorTokens;
-  toolsMode: ToolsMode;
-  onToolsModeChange: (value: ToolsMode) => void;
-  toolsSelected: readonly string[];
-  onToolsSelectedChange: (value: string[]) => void;
-  /** 只读态（内置智能体详情）：模式下拉与工具选择器全禁用灰显。 */
-  readOnly?: boolean;
+    tokens: AgentEditorTokens;
+    toolsMode: ToolsMode;
+    onToolsModeChange: (value: ToolsMode) => void;
+    toolsSelected: readonly string[];
+    onToolsSelectedChange: (value: string[]) => void;
+    /** 只读态（内置智能体详情）：模式下拉与工具选择器全禁用灰显。 */
+    readOnly?: boolean;
 };
 
 export function AgentEditorToolsSection({
-  tokens,
-  toolsMode,
-  onToolsModeChange,
-  toolsSelected,
-  onToolsSelectedChange,
-  readOnly = false,
+    tokens,
+    toolsMode,
+    onToolsModeChange,
+    toolsSelected,
+    onToolsSelectedChange,
+    readOnly = false,
 }: Props) {
-  return (
-    <FormSectionCard title={coreT({key: "ui.agent.tools_section"})} tokens={tokens}>
-      <FormField label={coreT({key: "ui.agent.tools_mode_label"})} tokens={tokens}>
-        <FormSelectField
-          tokens={tokens}
-          value={toolsMode}
-          onChange={value => onToolsModeChange(value as ToolsMode)}
-          options={TOOL_MODE_OPTIONS}
-          sheetTitle={coreT({key: "ui.agent.tools_mode_picker_title"})}
-          disabled={readOnly}
-        />
-      </FormField>
-      {toolsMode !== 'default' ? (
-        <FormField
-          label={toolsMode === 'allow' ? coreT({key: "ui.agent.allowlist_label"}) : coreT({key: "ui.agent.denylist_label"})}
-          tokens={tokens}
-        >
-          <ToolPolicyPicker
-            tokens={tokens}
-            selected={toolsSelected}
-            onChange={onToolsSelectedChange}
-            disabled={readOnly}
-          />
-        </FormField>
-      ) : (
-        <Text style={[styles.hint, {color: tokens.textSecondary}]}>
-          {coreT({key: "ui.agent.builtin_tools_hint", params: {count: String(BUILTIN_TOOL_CATALOG.length)}})}
-        </Text>
-      )}
-    </FormSectionCard>
-  );
+    return (
+        <FormSectionCard title={coreT({key: "ui.agent.tools_section"})} tokens={tokens}>
+            <FormField label={coreT({key: "ui.agent.tools_mode_label"})} tokens={tokens}>
+                <FormSelectField
+                    tokens={tokens}
+                    value={toolsMode}
+                    onChange={value => onToolsModeChange(value as ToolsMode)}
+                    options={TOOL_MODE_OPTIONS}
+                    sheetTitle={coreT({key: "ui.agent.tools_mode_picker_title"})}
+                    disabled={readOnly}
+                />
+            </FormField>
+            {toolsMode !== 'default' ? (
+                <FormField
+                    label={toolsMode === 'allow' ? coreT({key: "ui.agent.allowlist_label"}) : coreT({key: "ui.agent.denylist_label"})}
+                    tokens={tokens}
+                >
+                    <ToolPolicyPicker
+                        tokens={tokens}
+                        selected={toolsSelected}
+                        onChange={onToolsSelectedChange}
+                        disabled={readOnly}
+                    />
+                </FormField>
+            ) : (
+                <Text style={[styles.hint, {color: tokens.textSecondary}]}>
+                    {coreT({key: "ui.agent.builtin_tools_hint", params: {count: String(BUILTIN_TOOL_CATALOG.length)}})}
+                </Text>
+            )}
+        </FormSectionCard>
+    );
 }

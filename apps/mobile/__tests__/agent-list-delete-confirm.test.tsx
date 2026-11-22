@@ -11,242 +11,242 @@ const agentId = 'agent-1730123456789';
 const agentName = '我的写作助手';
 
 const validWire = {
-  schemaVersion: 1,
-  name: agentName,
-  prompts: {system: 'hi', persist: {}, dynamic: {}},
-  runtime: {maxSteps: 5},
+    schemaVersion: 1,
+    name: agentName,
+    prompts: {system: 'hi', persist: {}, dynamic: {}},
+    runtime: {maxSteps: 5},
 };
 
 const mockRuntime = {
-  agentRegistry: {
-    listAgentIds: mockListAgentIds,
-    getRawWire: mockGetRawWire,
-  },
-  state: {getCurrentModelId: jest.fn().mockResolvedValue({ok: true, value: null})},
+    agentRegistry: {
+        listAgentIds: mockListAgentIds,
+        getRawWire: mockGetRawWire,
+    },
+    state: {getCurrentModelId: jest.fn().mockResolvedValue({ok: true, value: null})},
 };
 
 jest.mock('@/theme/ThemeProvider', () => ({
-  useTheme: () => ({
-    tokens: {
-      surfaceElevated: '#f5f5f5',
-      borderLight: '#eee',
-      primary: '#007aff',
-      text: '#111',
-      textSecondary: '#666',
-      textTertiary: '#999',
-      bgSecondary: '#eee',
-      warningMuted: '#fff3cd',
-      warning: '#856404',
-    },
-  }),
+    useTheme: () => ({
+        tokens: {
+            surfaceElevated: '#f5f5f5',
+            borderLight: '#eee',
+            primary: '#007aff',
+            text: '#111',
+            textSecondary: '#666',
+            textTertiary: '#999',
+            bgSecondary: '#eee',
+            warningMuted: '#fff3cd',
+            warning: '#856404',
+        },
+    }),
 }));
 
 const mockShowToast = jest.fn();
 
 jest.mock('@/errors/toast-message', () => {
-  const legacy = {
-  toastMessage: (_title: string, err: unknown) => String(err),
+    const legacy = {
+    toastMessage: (_title: string, err: unknown) => String(err),
 };
-  return {...legacy, ToastMessage: {toast: legacy.toastMessage}};
+    return {...legacy, ToastMessage: {toast: legacy.toastMessage}};
 });
 
 jest.mock('@/components/chrome/ToastHost', () => ({
-  useToast: () => ({showToast: mockShowToast}),
+    useToast: () => ({showToast: mockShowToast}),
 }));
 
 jest.mock('@/hooks/useRuntime', () => ({
-  useRuntime: () => mockRuntime,
+    useRuntime: () => mockRuntime,
 }));
 
 jest.mock('@/services/model-display-label', () => {
-  const legacy = {
-  resolveModelDisplayLabel: jest.fn().mockResolvedValue('gpt-4'),
+    const legacy = {
+    resolveModelDisplayLabel: jest.fn().mockResolvedValue('gpt-4'),
 };
-  return {...legacy, ModelDisplayLabel: {resolve: legacy.resolveModelDisplayLabel}};
+    return {...legacy, ModelDisplayLabel: {resolve: legacy.resolveModelDisplayLabel}};
 });
 
 jest.mock('@/hooks/useDismissOverlaysOnBlur', () => ({
-  useDismissOverlaysOnBlur: () => undefined,
+    useDismissOverlaysOnBlur: () => undefined,
 }));
 
 jest.mock('@/hooks/useBatchSelection', () => ({
-  useBatchSelection: () => ({
-    active: false,
-    selectedCount: 0,
-    selectedIds: new Set<string>(),
-    enter: jest.fn(),
-    exit: jest.fn(),
-    toggle: jest.fn(),
-    isSelected: () => false,
-  }),
+    useBatchSelection: () => ({
+        active: false,
+        selectedCount: 0,
+        selectedIds: new Set<string>(),
+        enter: jest.fn(),
+        exit: jest.fn(),
+        toggle: jest.fn(),
+        isSelected: () => false,
+    }),
 }));
 
 jest.mock('@react-navigation/native', () => {
-  const mockReact = require('react');
-  return {
-    useNavigation: () => ({navigate: jest.fn()}),
-    useFocusEffect: (cb: () => void | (() => void)) => {
-      mockReact.useEffect(() => cb(), []);
-    },
-  };
+    const mockReact = require('react');
+    return {
+        useNavigation: () => ({navigate: jest.fn()}),
+        useFocusEffect: (cb: () => void | (() => void)) => {
+            mockReact.useEffect(() => cb(), []);
+        },
+    };
 });
 
 jest.mock('@/components/batch/ManageHeader', () => {
-  const mockReact = require('react');
-  return {
-    ManageHeader: () => mockReact.createElement('View', null, 'ManageHeader'),
-  };
+    const mockReact = require('react');
+    return {
+        ManageHeader: () => mockReact.createElement('View', null, 'ManageHeader'),
+    };
 });
 
 jest.mock('@/components/batch/BatchCheckbox', () => ({
-  BatchCheckbox: () => null,
+    BatchCheckbox: () => null,
 }));
 
 jest.mock('@/components/ui/Buttons', () => ({
-  PrimaryButton: () => null,
+    PrimaryButton: () => null,
 }));
 
 jest.mock('@/components/ui/TextPromptModal', () => ({
-  TextPromptModal: () => null,
+    TextPromptModal: () => null,
 }));
 
 jest.mock('@/components/sheet/BottomSheetMenu', () => {
-  const mockReact = require('react');
-  return {
-    BottomSheetMenu: ({
-      visible,
-      onSelect,
-    }: {
-      visible: boolean;
-      onSelect: (action: string) => void;
-    }) => {
-      capturedMenuOnSelect = onSelect;
-      return visible
-        ? mockReact.createElement('View', {testID: 'bottom-sheet-menu'})
-        : null;
-    },
-  };
+    const mockReact = require('react');
+    return {
+        BottomSheetMenu: ({
+            visible,
+            onSelect,
+        }: {
+            visible: boolean;
+            onSelect: (action: string) => void;
+        }) => {
+            capturedMenuOnSelect = onSelect;
+            return visible
+                ? mockReact.createElement('View', {testID: 'bottom-sheet-menu'})
+                : null;
+        },
+    };
 });
 
 jest.mock('react-native', () => {
-  const mockReact = require('react');
-  return {
-    Alert: {alert: jest.fn()},
-    ActivityIndicator: () => mockReact.createElement('ActivityIndicator'),
-    FlatList: ({
-      data,
-      renderItem,
-      keyExtractor,
-    }: {
-      data: Array<{id: string}>;
-      renderItem: (info: {
-        item: {id: string};
-        index: number;
-      }) => React.ReactNode;
-      keyExtractor: (item: {id: string}) => string;
-    }) =>
-      mockReact.createElement(
-        'View',
-        {testID: 'agent-flat-list'},
-        data?.map((item, index) =>
-          mockReact.createElement(
-            'View',
-            {key: keyExtractor(item), testID: `agent-row-${item.id}`},
-            renderItem({item, index}),
-          ),
-        ),
-      ),
-    Pressable: ({
-      children,
-      onPress,
-      testID,
-    }: {
-      children?: React.ReactNode;
-      onPress?: (e?: {stopPropagation?: () => void}) => void;
-      testID?: string;
-    }) => mockReact.createElement('Pressable', {testID, onPress}, children),
-    RefreshControl: () => null,
-    StyleSheet: {create: (s: object) => s, hairlineWidth: 1},
-    Text: ({children, testID}: {children?: React.ReactNode; testID?: string}) =>
-      mockReact.createElement('Text', {testID}, children),
-    View: ({children, testID}: {children?: React.ReactNode; testID?: string}) =>
-      mockReact.createElement('View', {testID}, children),
-  };
+    const mockReact = require('react');
+    return {
+        Alert: {alert: jest.fn()},
+        ActivityIndicator: () => mockReact.createElement('ActivityIndicator'),
+        FlatList: ({
+            data,
+            renderItem,
+            keyExtractor,
+        }: {
+            data: Array<{id: string}>;
+            renderItem: (info: {
+                item: {id: string};
+                index: number;
+            }) => React.ReactNode;
+            keyExtractor: (item: {id: string}) => string;
+        }) =>
+            mockReact.createElement(
+                'View',
+                {testID: 'agent-flat-list'},
+                data?.map((item, index) =>
+                    mockReact.createElement(
+                        'View',
+                        {key: keyExtractor(item), testID: `agent-row-${item.id}`},
+                        renderItem({item, index}),
+                    ),
+                ),
+            ),
+        Pressable: ({
+            children,
+            onPress,
+            testID,
+        }: {
+            children?: React.ReactNode;
+            onPress?: (e?: {stopPropagation?: () => void}) => void;
+            testID?: string;
+        }) => mockReact.createElement('Pressable', {testID, onPress}, children),
+        RefreshControl: () => null,
+        StyleSheet: {create: (s: object) => s, hairlineWidth: 1},
+        Text: ({children, testID}: {children?: React.ReactNode; testID?: string}) =>
+            mockReact.createElement('Text', {testID}, children),
+        View: ({children, testID}: {children?: React.ReactNode; testID?: string}) =>
+            mockReact.createElement('View', {testID}, children),
+    };
 });
 
 import {AgentList} from '@/components/agent/AgentList';
 
 function findMenuDotsPressable(root: TestRenderer.ReactTestInstance) {
-  const dotText = root
-    .findAll(node => node.type === 'Text')
-    .find(node => node.children?.includes('⋮'));
-  if (dotText == null) {
-    return undefined;
-  }
-  let node: TestRenderer.ReactTestInstance | null = dotText;
-  while (node != null && node.type !== 'Pressable') {
-    node = node.parent;
-  }
-  return node ?? undefined;
+    const dotText = root
+        .findAll(node => node.type === 'Text')
+        .find(node => node.children?.includes('⋮'));
+    if (dotText == null) {
+        return undefined;
+    }
+    let node: TestRenderer.ReactTestInstance | null = dotText;
+    while (node != null && node.type !== 'Pressable') {
+        node = node.parent;
+    }
+    return node ?? undefined;
 }
 
 async function renderAndOpenDeleteMenu(wire: unknown) {
-  mockListAgentIds.mockResolvedValue([agentId]);
-  mockGetRawWire.mockResolvedValue(wire);
-  capturedMenuOnSelect = undefined;
+    mockListAgentIds.mockResolvedValue([agentId]);
+    mockGetRawWire.mockResolvedValue(wire);
+    capturedMenuOnSelect = undefined;
 
-  let tree!: TestRenderer.ReactTestRenderer;
-  await act(async () => {
-    tree = TestRenderer.create(<AgentList />);
-  });
-  await act(async () => {
-    await Promise.resolve();
-    await Promise.resolve();
-  });
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+        tree = TestRenderer.create(<AgentList />);
+    });
+    await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+    });
 
-  expect(
-    tree!.root.findByProps({testID: `agent-row-${agentId}`}),
-  ).toBeDefined();
+    expect(
+        tree!.root.findByProps({testID: `agent-row-${agentId}`}),
+    ).toBeDefined();
 
-  const menuDots = findMenuDotsPressable(tree!.root);
-  expect(menuDots).toBeDefined();
-  await act(async () => {
-    menuDots!.props.onPress?.({stopPropagation: jest.fn()});
-  });
-  expect(tree!.root.findByProps({testID: 'bottom-sheet-menu'})).toBeDefined();
-  expect(capturedMenuOnSelect).toBeDefined();
-  await act(async () => {
-    capturedMenuOnSelect?.('delete');
-  });
+    const menuDots = findMenuDotsPressable(tree!.root);
+    expect(menuDots).toBeDefined();
+    await act(async () => {
+        menuDots!.props.onPress?.({stopPropagation: jest.fn()});
+    });
+    expect(tree!.root.findByProps({testID: 'bottom-sheet-menu'})).toBeDefined();
+    expect(capturedMenuOnSelect).toBeDefined();
+    await act(async () => {
+        capturedMenuOnSelect?.('delete');
+    });
 }
 
 describe('AgentList delete confirm (T-AC3-1, T-AC3-3)', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    capturedMenuOnSelect = undefined;
-  });
-
-  it('单条删除确认展示 definition.name 而非裸 id', async () => {
-    await renderAndOpenDeleteMenu(validWire);
-
-    expect(Alert.alert).toHaveBeenCalledWith(
-      '删除 Agent',
-      `删除 Agent「${agentName}」？`,
-      expect.any(Array),
-    );
-  });
-
-  it('name 为空时回退 agentId', async () => {
-    await renderAndOpenDeleteMenu({
-      schemaVersion: 1,
-      name: '   ',
-      prompts: {blocks: {}},
+    beforeEach(() => {
+        jest.clearAllMocks();
+        capturedMenuOnSelect = undefined;
     });
 
-    expect(Alert.alert).toHaveBeenCalledWith(
-      '删除 Agent',
-      `删除 Agent「${agentId}」？`,
-      expect.any(Array),
-    );
-  });
+    it('单条删除确认展示 definition.name 而非裸 id', async () => {
+        await renderAndOpenDeleteMenu(validWire);
+
+        expect(Alert.alert).toHaveBeenCalledWith(
+            '删除 Agent',
+            `删除 Agent「${agentName}」？`,
+            expect.any(Array),
+        );
+    });
+
+    it('name 为空时回退 agentId', async () => {
+        await renderAndOpenDeleteMenu({
+            schemaVersion: 1,
+            name: '   ',
+            prompts: {blocks: {}},
+        });
+
+        expect(Alert.alert).toHaveBeenCalledWith(
+            '删除 Agent',
+            `删除 Agent「${agentId}」？`,
+            expect.any(Array),
+        );
+    });
 });

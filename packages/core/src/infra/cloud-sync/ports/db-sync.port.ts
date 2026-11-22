@@ -18,13 +18,13 @@ import { type Result } from "@/errors/either.js";
  * providerTablesRestored）——error-matrix-final R2 起全链路纯 Result，调用方判 key。
  */
 export interface DbSyncPort {
-  isAgentActive(): boolean;
-  exportSnapshotToPath(destPath: string): Promise<void>;
-  importSnapshot(
-    bytes: Uint8Array
-  ): Promise<Result<{ databaseReplaced: boolean }, AppError>>;
-  /** 从本地快照文件导入（可选；协调器在 Pull 时优先于内存路径） */
-  importSnapshotFromPath?(
-    path: string
-  ): Promise<Result<{ databaseReplaced: boolean }, AppError>>;
+    isAgentActive(): boolean;
+    exportSnapshotToPath(destPath: string): Promise<void>;
+    importSnapshot(
+        bytes: Uint8Array
+    ): Promise<Result<{ databaseReplaced: boolean }, AppError>>;
+    /** 从本地快照文件导入（可选；协调器在 Pull 时优先于内存路径） */
+    importSnapshotFromPath?(
+        path: string
+    ): Promise<Result<{ databaseReplaced: boolean }, AppError>>;
 }

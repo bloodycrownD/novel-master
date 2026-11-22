@@ -8,14 +8,14 @@
 import React, {useCallback, useEffect, useState, type ReactNode} from 'react';
 import {coreT} from '@/i18n/core';
 import {
-  ActivityIndicator,
-  FlatList,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  type StyleProp,
-  type ViewStyle,
+    ActivityIndicator,
+    FlatList,
+    Pressable,
+    StyleSheet,
+    Text,
+    View,
+    type StyleProp,
+    type ViewStyle,
 } from 'react-native';
 import type {Result} from '@novel-master/core/errors';
 import {AppError} from '@novel-master/core/errors';
@@ -24,192 +24,192 @@ import {useTheme} from '../../theme/ThemeProvider';
 import {ModalShell} from './ModalShell';
 
 export type PickerListLoadResult<T> = {
-  rows: T[];
-  selectedId?: string;
+    rows: T[];
+    selectedId?: string;
 };
 
 type PickerRowProps = {
-  testID?: string;
-  accessibilityLabel?: string;
-  /** 行常态透明度（如已关闭技能 0.55）；按压淡化优先于它。 */
-  opacity?: number;
+    testID?: string;
+    accessibilityLabel?: string;
+    /** 行常态透明度（如已关闭技能 0.55）；按压淡化优先于它。 */
+    opacity?: number;
 };
 
 type Props<T> = {
-  visible: boolean;
-  title: string;
-  subtitle?: string;
-  /** 每次打开时拉取行数据与当前选中 id（已知失败走 Result.err，渲染错误文案与重试）。 */
-  load: () => Promise<Result<PickerListLoadResult<T>, AppError>>;
-  keyExtractor: (item: T) => string;
-  /** 选中判定，默认 keyExtractor(item) === selectedId。 */
-  isSelected?: (
-    item: T,
-    index: number,
-    selectedId: string | undefined,
-  ) => boolean;
-  /** 行内容（不含行容器与按压反馈）。 */
-  renderRow: (item: T, selected: boolean) => ReactNode;
-  onPick: (item: T) => void;
-  emptyText: string;
-  onClose: () => void;
-  /** 行级 testID / accessibilityLabel / 透明度。 */
-  getRowProps?: (item: T) => PickerRowProps;
-  /** 叠加在默认 sheet 样式后的覆盖（如 maxHeight / 圆角还原旧观感）。 */
-  sheetStyle?: StyleProp<ViewStyle>;
-  /** 取消按钮文字色，默认 textSecondary。 */
-  cancelColor?: string;
+    visible: boolean;
+    title: string;
+    subtitle?: string;
+    /** 每次打开时拉取行数据与当前选中 id（已知失败走 Result.err，渲染错误文案与重试）。 */
+    load: () => Promise<Result<PickerListLoadResult<T>, AppError>>;
+    keyExtractor: (item: T) => string;
+    /** 选中判定，默认 keyExtractor(item) === selectedId。 */
+    isSelected?: (
+        item: T,
+        index: number,
+        selectedId: string | undefined,
+    ) => boolean;
+    /** 行内容（不含行容器与按压反馈）。 */
+    renderRow: (item: T, selected: boolean) => ReactNode;
+    onPick: (item: T) => void;
+    emptyText: string;
+    onClose: () => void;
+    /** 行级 testID / accessibilityLabel / 透明度。 */
+    getRowProps?: (item: T) => PickerRowProps;
+    /** 叠加在默认 sheet 样式后的覆盖（如 maxHeight / 圆角还原旧观感）。 */
+    sheetStyle?: StyleProp<ViewStyle>;
+    /** 取消按钮文字色，默认 textSecondary。 */
+    cancelColor?: string;
 };
 
 export function PickerListModal<T>({
-  visible,
-  title,
-  subtitle,
-  load,
-  keyExtractor,
-  isSelected,
-  renderRow,
-  onPick,
-  emptyText,
-  onClose,
-  getRowProps,
-  sheetStyle,
-  cancelColor,
+    visible,
+    title,
+    subtitle,
+    load,
+    keyExtractor,
+    isSelected,
+    renderRow,
+    onPick,
+    emptyText,
+    onClose,
+    getRowProps,
+    sheetStyle,
+    cancelColor,
 }: Props<T>) {
-  const {tokens} = useTheme();
-  const [rows, setRows] = useState<T[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | undefined>();
-  const [selectedId, setSelectedId] = useState<string | undefined>();
+    const {tokens} = useTheme();
+    const [rows, setRows] = useState<T[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | undefined>();
+    const [selectedId, setSelectedId] = useState<string | undefined>();
 
-  const reload = useCallback(async () => {
-    setLoading(true);
-    setError(undefined);
-    try {
-      const result = await load();
-      if (result.ok) {
-        setRows(result.value.rows);
-        setSelectedId(result.value.selectedId);
-      } else {
-        setRows([]);
-        setError(FormatError.format(result.error));
-      }
-    } catch (cause) {
-      // 未知异常仍走异常通道：渲染错误文案与「重试」，不吞错伪装成空列表。
-      setRows([]);
-      setError(FormatError.format(cause));
-    } finally {
-      setLoading(false);
-    }
-  }, [load]);
+    const reload = useCallback(async () => {
+        setLoading(true);
+        setError(undefined);
+        try {
+            const result = await load();
+            if (result.ok) {
+                setRows(result.value.rows);
+                setSelectedId(result.value.selectedId);
+            } else {
+                setRows([]);
+                setError(FormatError.format(result.error));
+            }
+        } catch (cause) {
+            // 未知异常仍走异常通道：渲染错误文案与「重试」，不吞错伪装成空列表。
+            setRows([]);
+            setError(FormatError.format(cause));
+        } finally {
+            setLoading(false);
+        }
+    }, [load]);
 
-  useEffect(() => {
-    if (visible) {
-      reload().catch(() => undefined);
-    }
-  }, [visible, reload]);
+    useEffect(() => {
+        if (visible) {
+            reload().catch(() => undefined);
+        }
+    }, [visible, reload]);
 
-  const isRowSelected = useCallback(
-    (item: T, index: number) =>
-      isSelected != null
-        ? isSelected(item, index, selectedId)
-        : keyExtractor(item) === selectedId,
-    [isSelected, keyExtractor, selectedId],
-  );
+    const isRowSelected = useCallback(
+        (item: T, index: number) =>
+            isSelected != null
+                ? isSelected(item, index, selectedId)
+                : keyExtractor(item) === selectedId,
+        [isSelected, keyExtractor, selectedId],
+    );
 
-  return (
-    <ModalShell
-      visible={visible}
-      onClose={onClose}
-      variant="bottom"
-      animationType="slide"
-      panelStyle={[styles.sheet, sheetStyle]}
-    >
-      <Text style={[styles.title, {color: tokens.text}]}>{title}</Text>
-      {subtitle != null ? (
-        <Text style={[styles.subtitle, {color: tokens.textSecondary}]}>
-          {subtitle}
-        </Text>
-      ) : null}
-      {loading ? (
-        <ActivityIndicator style={styles.loader} />
-      ) : error ? (
-        <View style={styles.center}>
-          <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text>
-          <Pressable onPress={() => reload().catch(() => undefined)}>
-            <Text style={{color: tokens.primary, fontWeight: '600'}}>{coreT({key: "ui.common.retry"})}</Text>
-          </Pressable>
-        </View>
-      ) : (
-        <FlatList
-          data={rows}
-          keyExtractor={keyExtractor}
-          style={styles.list}
-          ListEmptyComponent={
-            <Text style={[styles.empty, {color: tokens.textSecondary}]}>
-              {emptyText}
-            </Text>
-          }
-          renderItem={({item, index}) => {
-            const selected = isRowSelected(item, index);
-            const rowProps = getRowProps?.(item);
-            return (
-              <Pressable
-                style={({pressed}) => [
-                  styles.row,
-                  {borderBottomColor: tokens.border},
-                  selected && {backgroundColor: tokens.background},
-                  {opacity: pressed ? 0.85 : rowProps?.opacity ?? 1},
-                ]}
-                onPress={() => onPick(item)}
-                testID={rowProps?.testID}
-                accessibilityLabel={rowProps?.accessibilityLabel}
-              >
-                {renderRow(item, selected)}
-              </Pressable>
-            );
-          }}
-        />
-      )}
-      <Pressable onPress={onClose} style={styles.cancelBtn}>
-        <Text style={{color: cancelColor ?? tokens.textSecondary}}>{coreT({key: "ui.common.cancel"})}</Text>
-      </Pressable>
-    </ModalShell>
-  );
+    return (
+        <ModalShell
+            visible={visible}
+            onClose={onClose}
+            variant="bottom"
+            animationType="slide"
+            panelStyle={[styles.sheet, sheetStyle]}
+        >
+            <Text style={[styles.title, {color: tokens.text}]}>{title}</Text>
+            {subtitle != null ? (
+                <Text style={[styles.subtitle, {color: tokens.textSecondary}]}>
+                    {subtitle}
+                </Text>
+            ) : null}
+            {loading ? (
+                <ActivityIndicator style={styles.loader} />
+            ) : error ? (
+                <View style={styles.center}>
+                    <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text>
+                    <Pressable onPress={() => reload().catch(() => undefined)}>
+                        <Text style={{color: tokens.primary, fontWeight: '600'}}>{coreT({key: "ui.common.retry"})}</Text>
+                    </Pressable>
+                </View>
+            ) : (
+                <FlatList
+                    data={rows}
+                    keyExtractor={keyExtractor}
+                    style={styles.list}
+                    ListEmptyComponent={
+                        <Text style={[styles.empty, {color: tokens.textSecondary}]}>
+                            {emptyText}
+                        </Text>
+                    }
+                    renderItem={({item, index}) => {
+                        const selected = isRowSelected(item, index);
+                        const rowProps = getRowProps?.(item);
+                        return (
+                            <Pressable
+                                style={({pressed}) => [
+                                    styles.row,
+                                    {borderBottomColor: tokens.border},
+                                    selected && {backgroundColor: tokens.background},
+                                    {opacity: pressed ? 0.85 : rowProps?.opacity ?? 1},
+                                ]}
+                                onPress={() => onPick(item)}
+                                testID={rowProps?.testID}
+                                accessibilityLabel={rowProps?.accessibilityLabel}
+                            >
+                                {renderRow(item, selected)}
+                            </Pressable>
+                        );
+                    }}
+                />
+            )}
+            <Pressable onPress={onClose} style={styles.cancelBtn}>
+                <Text style={{color: cancelColor ?? tokens.textSecondary}}>{coreT({key: "ui.common.cancel"})}</Text>
+            </Pressable>
+        </ModalShell>
+    );
 }
 
 const styles = StyleSheet.create({
-  sheet: {
-    maxHeight: '70%',
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-    paddingTop: 16,
-    paddingBottom: 24,
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: '600',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 13,
-    textAlign: 'center',
-    marginBottom: 8,
-    paddingHorizontal: 16,
-  },
-  loader: {marginVertical: 24},
-  center: {alignItems: 'center', gap: 12, padding: 24},
-  error: {textAlign: 'center', lineHeight: 20},
-  empty: {textAlign: 'center', padding: 24},
-  list: {flexShrink: 1},
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: 8,
-  },
-  cancelBtn: {alignItems: 'center', paddingTop: 12},
+    sheet: {
+        maxHeight: '70%',
+        borderTopLeftRadius: 12,
+        borderTopRightRadius: 12,
+        paddingTop: 16,
+        paddingBottom: 24,
+    },
+    title: {
+        fontSize: 18,
+        fontWeight: '600',
+        textAlign: 'center',
+        marginBottom: 8,
+    },
+    subtitle: {
+        fontSize: 13,
+        textAlign: 'center',
+        marginBottom: 8,
+        paddingHorizontal: 16,
+    },
+    loader: {marginVertical: 24},
+    center: {alignItems: 'center', gap: 12, padding: 24},
+    error: {textAlign: 'center', lineHeight: 20},
+    empty: {textAlign: 'center', padding: 24},
+    list: {flexShrink: 1},
+    row: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 14,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        gap: 8,
+    },
+    cancelBtn: {alignItems: 'center', paddingTop: 12},
 });

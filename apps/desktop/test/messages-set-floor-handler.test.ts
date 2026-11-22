@@ -11,174 +11,174 @@ import { AgentRegistry } from "../src/main/ipc/handlers/agent-registry.js";
 import { Agent } from "../src/main/ipc/handlers/agent.js";
 import { Sessions } from "../src/main/ipc/handlers/sessions.js";
 import {
-  setupDesktopDbTestEnv,
-  teardownDesktopDbTestEnv,
+    setupDesktopDbTestEnv,
+    teardownDesktopDbTestEnv,
 } from "./desktop-db-test-env.js";
 
 /** Mirrors ConversationPanel handleConfirm set-floor toast selection. */
 function resolveSetFloorToastMessage(result: {
-  hiddenCount: number;
-  shownCount: number;
+    hiddenCount: number;
+    shownCount: number;
 }): string {
-  const changed = result.hiddenCount + result.shownCount;
-  return changed > 0 ? "已置位" : "上下文已是最新状态";
+    const changed = result.hiddenCount + result.shownCount;
+    return changed > 0 ? "已置位" : "上下文已是最新状态";
 }
 
 describe("handleMessagesSetFloor", () => {
-  let tempDir: string;
-  let projectId: string;
+    let tempDir: string;
+    let projectId: string;
 
-  before(async () => {
-    ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-set-floor-"));
+    before(async () => {
+        ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-set-floor-"));
 
-    const project = await Projects.create({ name: "set-floor-ipc" });
-    assert.equal(project.ok, true);
-    if (!project.ok) {
-      return;
-    }
-    projectId = project.data.id;
+        const project = await Projects.create({ name: "set-floor-ipc" });
+        assert.equal(project.ok, true);
+        if (!project.ok) {
+            return;
+        }
+        projectId = project.data.id;
 
-    // 新 core 下 session 创建要求 workspace 已配置 agent。
-    const blank = await AgentRegistry.createBlank();
-    assert.equal(blank.ok, true);
-    if (blank.ok) {
-      await Agent.setCurrent({ agentId: blank.data.agentId });
-    }
-  });
-
-  after(async () => {
-    await teardownDesktopDbTestEnv(tempDir);
-  });
-
-  async function createSession(title: string): Promise<string> {
-    const session = await Sessions.create({ projectId, title });
-    assert.equal(session.ok, true);
-    if (!session.ok) {
-      throw new Error("failed to create session");
-    }
-    return session.data.id;
-  }
-
-  async function appendMessage(
-    sessionId: string,
-    role: "user" | "assistant",
-    text: string
-  ): Promise<string> {
-    const result = await Messages.append({ sessionId, role, text });
-    assert.equal(result.ok, true);
-    if (!result.ok) {
-      throw new Error("failed to append message");
-    }
-    return result.data.id;
-  }
-
-  it("T-SF1/T-CR5: 置位成功仅清 file_cache（+rule_snapshot），保留 pending；不依赖 BlockStore capture", async () => {
-    const sessionId = await createSession("sf1");
-    const rtR = await DesktopRuntimeSingleton.get();
-    if (!rtR.ok) throw rtR.error;
-    const rt = rtR.value;
-    await appendMessage(sessionId, "user", "u1");
-    await appendMessage(sessionId, "assistant", "a1");
-    const anchorId = await appendMessage(sessionId, "user", "u2");
-    await appendMessage(sessionId, "assistant", "a2");
-    await rt.messages.hideRange(sessionId, 3, 4);
-
-    await rt.sessionKkv.set(
-      sessionId,
-      "file_cache",
-      "full:/a.md",
-      JSON.stringify({ body: "x", mtimeMs: 1 })
-    );
-    await rt.sessionKkv.set(sessionId, "rule_snapshot", "canon", "[]");
-    await rt.sessionKkv.set(
-      sessionId,
-      "user_vfs_pending",
-      "queue",
-      JSON.stringify([
-        {
-          actionXml: '<action name="mkdir"><path>/keep</path></action>',
-          tools: [{ id: "t1", name: "vfs_mkdir" }],
-          createdAtMs: 1,
-        },
-      ])
-    );
-
-    const result = await Messages.setFloor({
-      projectId,
-      sessionId,
-      messageId: anchorId,
+        // 新 core 下 session 创建要求 workspace 已配置 agent。
+        const blank = await AgentRegistry.createBlank();
+        assert.equal(blank.ok, true);
+        if (blank.ok) {
+            await Agent.setCurrent({ agentId: blank.data.agentId });
+        }
     });
 
-    assert.equal(result.ok, true);
-    if (result.ok) {
-      assert.equal(result.data.hiddenCount, 2);
-      assert.equal(result.data.shownCount, 2);
-    }
-
-    assert.equal(
-      await rt.sessionKkv.get(sessionId, "file_cache", "full:/a.md"),
-      null
-    );
-    assert.equal(
-      await rt.sessionKkv.get(sessionId, "rule_snapshot", "canon"),
-      null
-    );
-    assert.equal(
-      await rt.sessionKkv.get(sessionId, "user_vfs_pending", "queue"),
-      JSON.stringify([
-        {
-          actionXml: '<action name="mkdir"><path>/keep</path></action>',
-          tools: [{ id: "t1", name: "vfs_mkdir" }],
-          createdAtMs: 1,
-        },
-      ])
-    );
-
-    // 错误通道迁移二期后 messages.get 走 Result，解包取锚点。
-    const anchorResult = await rt.messages.get(anchorId);
-    if (!anchorResult.ok) throw anchorResult.error;
-    const anchor = anchorResult.value;
-    // 八期把 listBySession 改为 Outcome：completed 才取值，cancelled/replaced 不该出现在这里。
-    const messagesRead = await rt.messages.listBySession(sessionId);
-    if (messagesRead.kind !== "completed") throw new Error("listBySession 未 completed");
-    for (const m of messagesRead.value) {
-      if (m.seq < anchor.seq) {
-        assert.equal(m.hidden, true, `seq=${m.seq} 应为 hidden`);
-      } else {
-        assert.equal(m.hidden, false, `seq=${m.seq} 应为 visible`);
-      }
-    }
-  });
-
-  it("T-SF18: 幂等置位返回零变更 counts，Toast「上下文已是最新状态」", async () => {
-    const sessionId = await createSession("sf18");
-    await appendMessage(sessionId, "user", "u1");
-    await appendMessage(sessionId, "assistant", "a1");
-    const anchorId = await appendMessage(sessionId, "user", "u2");
-
-    const first = await Messages.setFloor({
-      projectId,
-      sessionId,
-      messageId: anchorId,
+    after(async () => {
+        await teardownDesktopDbTestEnv(tempDir);
     });
-    assert.equal(first.ok, true);
-    if (first.ok) {
-      assert.ok(first.data.hiddenCount + first.data.shownCount > 0);
+
+    async function createSession(title: string): Promise<string> {
+        const session = await Sessions.create({ projectId, title });
+        assert.equal(session.ok, true);
+        if (!session.ok) {
+            throw new Error("failed to create session");
+        }
+        return session.data.id;
     }
 
-    const second = await Messages.setFloor({
-      projectId,
-      sessionId,
-      messageId: anchorId,
-    });
-    assert.equal(second.ok, true);
-    if (second.ok) {
-      assert.equal(second.data.hiddenCount, 0);
-      assert.equal(second.data.shownCount, 0);
-      assert.equal(
-        resolveSetFloorToastMessage(second.data),
-        "上下文已是最新状态"
-      );
+    async function appendMessage(
+        sessionId: string,
+        role: "user" | "assistant",
+        text: string
+    ): Promise<string> {
+        const result = await Messages.append({ sessionId, role, text });
+        assert.equal(result.ok, true);
+        if (!result.ok) {
+            throw new Error("failed to append message");
+        }
+        return result.data.id;
     }
-  });
+
+    it("T-SF1/T-CR5: 置位成功仅清 file_cache（+rule_snapshot），保留 pending；不依赖 BlockStore capture", async () => {
+        const sessionId = await createSession("sf1");
+        const rtR = await DesktopRuntimeSingleton.get();
+        if (!rtR.ok) throw rtR.error;
+        const rt = rtR.value;
+        await appendMessage(sessionId, "user", "u1");
+        await appendMessage(sessionId, "assistant", "a1");
+        const anchorId = await appendMessage(sessionId, "user", "u2");
+        await appendMessage(sessionId, "assistant", "a2");
+        await rt.messages.hideRange(sessionId, 3, 4);
+
+        await rt.sessionKkv.set(
+            sessionId,
+            "file_cache",
+            "full:/a.md",
+            JSON.stringify({ body: "x", mtimeMs: 1 })
+        );
+        await rt.sessionKkv.set(sessionId, "rule_snapshot", "canon", "[]");
+        await rt.sessionKkv.set(
+            sessionId,
+            "user_vfs_pending",
+            "queue",
+            JSON.stringify([
+                {
+                    actionXml: '<action name="mkdir"><path>/keep</path></action>',
+                    tools: [{ id: "t1", name: "vfs_mkdir" }],
+                    createdAtMs: 1,
+                },
+            ])
+        );
+
+        const result = await Messages.setFloor({
+            projectId,
+            sessionId,
+            messageId: anchorId,
+        });
+
+        assert.equal(result.ok, true);
+        if (result.ok) {
+            assert.equal(result.data.hiddenCount, 2);
+            assert.equal(result.data.shownCount, 2);
+        }
+
+        assert.equal(
+            await rt.sessionKkv.get(sessionId, "file_cache", "full:/a.md"),
+            null
+        );
+        assert.equal(
+            await rt.sessionKkv.get(sessionId, "rule_snapshot", "canon"),
+            null
+        );
+        assert.equal(
+            await rt.sessionKkv.get(sessionId, "user_vfs_pending", "queue"),
+            JSON.stringify([
+                {
+                    actionXml: '<action name="mkdir"><path>/keep</path></action>',
+                    tools: [{ id: "t1", name: "vfs_mkdir" }],
+                    createdAtMs: 1,
+                },
+            ])
+        );
+
+        // 错误通道迁移二期后 messages.get 走 Result，解包取锚点。
+        const anchorResult = await rt.messages.get(anchorId);
+        if (!anchorResult.ok) throw anchorResult.error;
+        const anchor = anchorResult.value;
+        // 八期把 listBySession 改为 Outcome：completed 才取值，cancelled/replaced 不该出现在这里。
+        const messagesRead = await rt.messages.listBySession(sessionId);
+        if (messagesRead.kind !== "completed") throw new Error("listBySession 未 completed");
+        for (const m of messagesRead.value) {
+            if (m.seq < anchor.seq) {
+                assert.equal(m.hidden, true, `seq=${m.seq} 应为 hidden`);
+            } else {
+                assert.equal(m.hidden, false, `seq=${m.seq} 应为 visible`);
+            }
+        }
+    });
+
+    it("T-SF18: 幂等置位返回零变更 counts，Toast「上下文已是最新状态」", async () => {
+        const sessionId = await createSession("sf18");
+        await appendMessage(sessionId, "user", "u1");
+        await appendMessage(sessionId, "assistant", "a1");
+        const anchorId = await appendMessage(sessionId, "user", "u2");
+
+        const first = await Messages.setFloor({
+            projectId,
+            sessionId,
+            messageId: anchorId,
+        });
+        assert.equal(first.ok, true);
+        if (first.ok) {
+            assert.ok(first.data.hiddenCount + first.data.shownCount > 0);
+        }
+
+        const second = await Messages.setFloor({
+            projectId,
+            sessionId,
+            messageId: anchorId,
+        });
+        assert.equal(second.ok, true);
+        if (second.ok) {
+            assert.equal(second.data.hiddenCount, 0);
+            assert.equal(second.data.shownCount, 0);
+            assert.equal(
+                resolveSetFloorToastMessage(second.data),
+                "上下文已是最新状态"
+            );
+        }
+    });
 });

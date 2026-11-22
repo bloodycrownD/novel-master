@@ -13,7 +13,7 @@ import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revisi
 
 /** 共享底座：entry / revision / checkpoint 三个仓储。 */
 export type CheckpointRepoDeps = {
-  readonly entryRepo: VfsEntryRepository;
-  readonly revisionRepo: VfsRevisionRepository;
-  readonly checkpointRepo: MessageCheckpointRepository;
+    readonly entryRepo: VfsEntryRepository;
+    readonly revisionRepo: VfsRevisionRepository;
+    readonly checkpointRepo: MessageCheckpointRepository;
 };

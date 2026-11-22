@@ -26,295 +26,295 @@ type FileEditorRoute = RouteProp<RootStackParamList, 'FileEditor'>;
 
 /** Last-saved timestamp for the stats row (device local time). */
 function formatFileMtime(ms: number): string {
-  return new Date(ms).toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: 'numeric',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+    return new Date(ms).toLocaleString('zh-CN', {
+        year: 'numeric',
+        month: 'numeric',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+    });
 }
 
 export function FileEditorScreen() {
-  const {tokens} = useTheme();
-  const {showToast} = useToast();
-  const runtime = useRuntime();
-  const route = useRoute<FileEditorRoute>();
-  const {path, scopeKind, projectId, sessionId, skillRef} = route.params;
+    const {tokens} = useTheme();
+    const {showToast} = useToast();
+    const runtime = useRuntime();
+    const route = useRoute<FileEditorRoute>();
+    const {path, scopeKind, projectId, sessionId, skillRef} = route.params;
 
-  // 「session 域保存成功后刷新工作区列表」的回调走模块级单例（不可序列化，
-  // 不能进路由 params）。⚠️ 必须 useRef 惰性初始化：**不能**把 take 裸写在
-  // 渲染体里——本屏挂载后加载完成必然触发一次 setContent，那之后的任何一次
-  // 重渲染都会再 take 一次、拿到 null 覆盖局部变量 ⇒ 回调事实上永不生效，
-  // 正好复现原病灶。范式见 PromptEditorScreen。
-  const onSessionVfsSavedRef = useRef<(() => void) | null>(fileEditorOnSessionVfsSavedSlot.take());
+    // 「session 域保存成功后刷新工作区列表」的回调走模块级单例（不可序列化，
+    // 不能进路由 params）。⚠️ 必须 useRef 惰性初始化：**不能**把 take 裸写在
+    // 渲染体里——本屏挂载后加载完成必然触发一次 setContent，那之后的任何一次
+    // 重渲染都会再 take 一次、拿到 null 覆盖局部变量 ⇒ 回调事实上永不生效，
+    // 正好复现原病灶。范式见 PromptEditorScreen。
+    const onSessionVfsSavedRef = useRef<(() => void) | null>(fileEditorOnSessionVfsSavedSlot.take());
 
-  const [content, setContent] = useState('');
-  const [savedContent, setSavedContent] = useState('');
-  const [mtimeMs, setMtimeMs] = useState<number | undefined>();
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [previewMode, setPreviewMode] = useState(true);
-  const [editorFocused, setEditorFocused] = useState(false);
-  const [previewRenderKind, setPreviewRenderKind] = useState<'markdown' | 'txt'>('markdown');
-  const codeEditorRef = useRef<CodeEditorWebViewHandle>(null);
+    const [content, setContent] = useState('');
+    const [savedContent, setSavedContent] = useState('');
+    const [mtimeMs, setMtimeMs] = useState<number | undefined>();
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [previewMode, setPreviewMode] = useState(true);
+    const [editorFocused, setEditorFocused] = useState(false);
+    const [previewRenderKind, setPreviewRenderKind] = useState<'markdown' | 'txt'>('markdown');
+    const codeEditorRef = useRef<CodeEditorWebViewHandle>(null);
 
-  const isDirty = content !== savedContent;
-  useUnsavedGuard(isDirty);
+    const isDirty = content !== savedContent;
+    useUnsavedGuard(isDirty);
 
-  // physical = 全局文件浏览器只读分支：保存入口禁用，也不提供编辑切换。
-  const isReadOnly = scopeKind === 'physical';
+    // physical = 全局文件浏览器只读分支：保存入口禁用，也不提供编辑切换。
+    const isReadOnly = scopeKind === 'physical';
 
-  // 所有 scope 统一延迟挂重预览：推屏转场窗口内同步挂 WebView，Android 上
-  // 初始化/首帧合成可能被转场动画延迟或丢弃——physical 大文件冷启动卡转场
-  // 与会话入口 markdown 预览首进空白（切文本 tab 再切回=重挂才能恢复）同因。
-  const [heavyPreviewReady, setHeavyPreviewReady] = useState(false);
-  useEffect(() => {
-    if (heavyPreviewReady) {
-      return;
-    }
-    // 短延时让推屏转场先启动，之后才挂 WebView（避开转场窗口）。
-    const timer = setTimeout(() => setHeavyPreviewReady(true), 80);
-    return () => clearTimeout(timer);
-  }, [heavyPreviewReady]);
+    // 所有 scope 统一延迟挂重预览：推屏转场窗口内同步挂 WebView，Android 上
+    // 初始化/首帧合成可能被转场动画延迟或丢弃——physical 大文件冷启动卡转场
+    // 与会话入口 markdown 预览首进空白（切文本 tab 再切回=重挂才能恢复）同因。
+    const [heavyPreviewReady, setHeavyPreviewReady] = useState(false);
+    useEffect(() => {
+        if (heavyPreviewReady) {
+            return;
+        }
+        // 短延时让推屏转场先启动，之后才挂 WebView（避开转场窗口）。
+        const timer = setTimeout(() => setHeavyPreviewReady(true), 80);
+        return () => clearTimeout(timer);
+    }, [heavyPreviewReady]);
 
-  const resolveVfs = useCallback(() => {
-    switch (scopeKind) {
-      case 'physical':
-        // 全局文件浏览器：跨域拼接的只读物理树（无任何写方法）。
-        return runtime.physicalVfs();
-      case 'global':
-        return runtime.globalVfs();
-      case 'project':
-        if (!projectId) {
-          // nm-throw: keep — UI 回调解包边界：缺路由参数转 throw 交加载/保存 effect 的 catch toast
-          throw new Error('缺少 projectId');
+    const resolveVfs = useCallback(() => {
+        switch (scopeKind) {
+            case 'physical':
+                // 全局文件浏览器：跨域拼接的只读物理树（无任何写方法）。
+                return runtime.physicalVfs();
+            case 'global':
+                return runtime.globalVfs();
+            case 'project':
+                if (!projectId) {
+                    // nm-throw: keep — UI 回调解包边界：缺路由参数转 throw 交加载/保存 effect 的 catch toast
+                    throw new Error('缺少 projectId');
+                }
+                return runtime.projectVfs(projectId);
+            case 'session':
+                if (!projectId || !sessionId) {
+                    // nm-throw: keep — UI 回调解包边界：同上，交 effect catch toast
+                    throw new Error('缺少 projectId 或 sessionId');
+                }
+                return runtime.sessionVfs(projectId, sessionId);
+            case 'skill':
+                // 技能已重定位到独立 meta 域，路由 path 仍锚定 /meta/skills/{name}/ 前缀
+                if (!skillRef) {
+                    // nm-throw: keep — UI 回调解包边界：同上，交 effect catch toast
+                    throw new Error('缺少 skillRef');
+                }
+                if (skillRef.domain === 'global') {
+                    return runtime.globalMetaVfs();
+                }
+                if (!skillRef.projectId) {
+                    // nm-throw: keep — UI 回调解包边界：同上，交 effect catch toast
+                    throw new Error('项目域技能缺少 projectId');
+                }
+                return runtime.projectMetaVfs(skillRef.projectId);
         }
-        return runtime.projectVfs(projectId);
-      case 'session':
-        if (!projectId || !sessionId) {
-          // nm-throw: keep — UI 回调解包边界：同上，交 effect catch toast
-          throw new Error('缺少 projectId 或 sessionId');
-        }
-        return runtime.sessionVfs(projectId, sessionId);
-      case 'skill':
-        // 技能已重定位到独立 meta 域，路由 path 仍锚定 /meta/skills/{name}/ 前缀
-        if (!skillRef) {
-          // nm-throw: keep — UI 回调解包边界：同上，交 effect catch toast
-          throw new Error('缺少 skillRef');
-        }
-        if (skillRef.domain === 'global') {
-          return runtime.globalMetaVfs();
-        }
-        if (!skillRef.projectId) {
-          // nm-throw: keep — UI 回调解包边界：同上，交 effect catch toast
-          throw new Error('项目域技能缺少 projectId');
-        }
-        return runtime.projectMetaVfs(skillRef.projectId);
-    }
-  }, [runtime, scopeKind, projectId, sessionId, skillRef]);
+    }, [runtime, scopeKind, projectId, sessionId, skillRef]);
 
-  // 保存路径专用：physical 分支类型层面无写方法且保存已禁用，
-  // 其余分支均为单 scope 可写 VFS，收窄仅为满足写接口签名。
-  const resolveWritableVfs = useCallback(() => resolveVfs() as VfsService, [resolveVfs]);
+    // 保存路径专用：physical 分支类型层面无写方法且保存已禁用，
+    // 其余分支均为单 scope 可写 VFS，收窄仅为满足写接口签名。
+    const resolveWritableVfs = useCallback(() => resolveVfs() as VfsService, [resolveVfs]);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      try {
-        const vfs = resolveVfs();
-        const result = await vfs.read(path);
-        if (!result.ok) {
-          if (!cancelled) {
-            showToast(ToastMessage.toast(coreT({key: "ui.common.read_failed"}), result.error));
-          }
-          return;
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            setLoading(true);
+            try {
+                const vfs = resolveVfs();
+                const result = await vfs.read(path);
+                if (!result.ok) {
+                    if (!cancelled) {
+                        showToast(ToastMessage.toast(coreT({key: "ui.common.read_failed"}), result.error));
+                    }
+                    return;
+                }
+                if (cancelled) {
+                    return;
+                }
+                setContent(result.value.content);
+                setSavedContent(result.value.content);
+                setMtimeMs(result.value.mtimeMs);
+            } catch (error) {
+                if (!cancelled) {
+                    showToast(ToastMessage.toast(coreT({key: "ui.common.read_failed"}), error));
+                }
+            } finally {
+                if (!cancelled) {
+                    setLoading(false);
+                }
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [path, resolveVfs, showToast]);
+
+    // Reset preview tab default when opening a different file.
+    useEffect(() => {
+        setPreviewRenderKind(MarkdownPreview.isPath(path) ? 'markdown' : 'txt');
+    }, [path]);
+
+    // 技能辅助文件在详情页被删除时踢回，避免停留在已不存在的文件上
+    const handleSave = async () => {
+        if (isReadOnly) {
+            return;
         }
-        if (cancelled) {
-          return;
+        // 保存前先收口 web 侧合帧：change 上行是 rAF 合帧的，工具栏按压与
+        // contenteditable blur 的先后无保证——不同步 flush 的话，下面读到的
+        // `content` 可能还是滞后一帧的镜像（web/C-orch 收口点）。
+        // blur 触发的是 web 侧 blur handler 里的同步 flush，与 dismissEditor 同款。
+        codeEditorRef.current?.blur();
+        setSaving(true);
+        try {
+            const vfs = resolveWritableVfs();
+            if (scopeKind === 'session' && sessionId && userVfsUnifiedToolTurnFlag.isEnabled()) {
+                const saved = await VfsOperationsService.sessionSaveFile(runtime, sessionId, vfs, path, content, savedContent);
+                if (!saved.ok) {
+                    showToast(ToastMessage.toast(coreT({key: "ui.common.save_failed"}), saved.error));
+                    return;
+                }
+                setSavedContent(content);
+                const refreshed = await vfs.read(path);
+                if (!refreshed.ok) {
+                    showToast(ToastMessage.toast(coreT({key: "ui.common.save_failed"}), refreshed.error));
+                    return;
+                }
+                setMtimeMs(refreshed.value.mtimeMs);
+                onSessionVfsSavedRef.current?.();
+                showToast(coreT({key: "ui.common.saved"}));
+                return;
+            }
+
+            await vfs.write(path, content);
+            setSavedContent(content);
+            const refreshed = await vfs.read(path);
+            if (!refreshed.ok) {
+                showToast(ToastMessage.toast(coreT({key: "ui.common.save_failed"}), refreshed.error));
+                return;
+            }
+            setMtimeMs(refreshed.value.mtimeMs);
+            showToast(coreT({key: "ui.common.saved"}));
+        } catch (error) {
+            showToast(ToastMessage.toast(coreT({key: "ui.common.save_failed"}), error));
+        } finally {
+            setSaving(false);
         }
-        setContent(result.value.content);
-        setSavedContent(result.value.content);
-        setMtimeMs(result.value.mtimeMs);
-      } catch (error) {
-        if (!cancelled) {
-          showToast(ToastMessage.toast(coreT({key: "ui.common.read_failed"}), error));
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
     };
-  }, [path, resolveVfs, showToast]);
 
-  // Reset preview tab default when opening a different file.
-  useEffect(() => {
-    setPreviewRenderKind(MarkdownPreview.isPath(path) ? 'markdown' : 'txt');
-  }, [path]);
+    const dismissEditor = useCallback(() => {
+        codeEditorRef.current?.blur();
+        setEditorFocused(false);
+        Keyboard.dismiss();
+    }, []);
 
-  // 技能辅助文件在详情页被删除时踢回，避免停留在已不存在的文件上
-  const handleSave = async () => {
-    if (isReadOnly) {
-      return;
-    }
-    // 保存前先收口 web 侧合帧：change 上行是 rAF 合帧的，工具栏按压与
-    // contenteditable blur 的先后无保证——不同步 flush 的话，下面读到的
-    // `content` 可能还是滞后一帧的镜像（web/C-orch 收口点）。
-    // blur 触发的是 web 侧 blur handler 里的同步 flush，与 dismissEditor 同款。
-    codeEditorRef.current?.blur();
-    setSaving(true);
-    try {
-      const vfs = resolveWritableVfs();
-      if (scopeKind === 'session' && sessionId && userVfsUnifiedToolTurnFlag.isEnabled()) {
-        const saved = await VfsOperationsService.sessionSaveFile(runtime, sessionId, vfs, path, content, savedContent);
-        if (!saved.ok) {
-          showToast(ToastMessage.toast(coreT({key: "ui.common.save_failed"}), saved.error));
-          return;
+    const togglePreview = () => {
+        if (!previewMode) {
+            dismissEditor();
         }
-        setSavedContent(content);
-        const refreshed = await vfs.read(path);
-        if (!refreshed.ok) {
-          showToast(ToastMessage.toast(coreT({key: "ui.common.save_failed"}), refreshed.error));
-          return;
+        setPreviewMode(prev => !prev);
+    };
+
+    // 进入编辑态时默认未弹键盘，便于滑动浏览正文。
+    useEffect(() => {
+        if (!previewMode) {
+            setEditorFocused(false);
         }
-        setMtimeMs(refreshed.value.mtimeMs);
-        onSessionVfsSavedRef.current?.();
-        showToast(coreT({key: "ui.common.saved"}));
-        return;
-      }
+    }, [previewMode]);
 
-      await vfs.write(path, content);
-      setSavedContent(content);
-      const refreshed = await vfs.read(path);
-      if (!refreshed.ok) {
-        showToast(ToastMessage.toast(coreT({key: "ui.common.save_failed"}), refreshed.error));
-        return;
-      }
-      setMtimeMs(refreshed.value.mtimeMs);
-      showToast(coreT({key: "ui.common.saved"}));
-    } catch (error) {
-      showToast(ToastMessage.toast(coreT({key: "ui.common.save_failed"}), error));
-    } finally {
-      setSaving(false);
+    const annotateEnabled = FileAnnotateGate.shouldEnable({
+        previewMode,
+        scopeKind,
+        sessionId,
+    });
+
+    if (loading) {
+        return (
+            <View style={[styles.center, {backgroundColor: tokens.background}]}>
+                <ActivityIndicator color={tokens.primary} />
+            </View>
+        );
     }
-  };
 
-  const dismissEditor = useCallback(() => {
-    codeEditorRef.current?.blur();
-    setEditorFocused(false);
-    Keyboard.dismiss();
-  }, []);
-
-  const togglePreview = () => {
-    if (!previewMode) {
-      dismissEditor();
+    let statsRow: React.ReactNode = null;
+    if (mtimeMs != null) {
+        if (editorFocused && !previewMode) {
+            statsRow = (
+                <Pressable testID="file-editor-dismiss-stats" style={[styles.statsRow, {borderBottomColor: tokens.border}]} onPress={dismissEditor} accessibilityRole="button" accessibilityLabel={coreT({key: "ui.common.dismiss_keyboard"})}>
+                    <Text style={[styles.statsText, {color: tokens.textSecondary}]} numberOfLines={1}>
+                        {coreT({key: "ui.common.updated_at", params: {time: formatFileMtime(mtimeMs)}})} · {coreT({key: "ui.vfs.char_count", params: {count: Number.charCount(content.length)}})}{isDirty ? coreT({key: "ui.vfs.dirty_suffix"}) : ''}
+                    </Text>
+                </Pressable>
+            );
+        } else {
+            statsRow = (
+                <View style={[styles.statsRow, {borderBottomColor: tokens.border}]}>
+                    <Text style={[styles.statsText, {color: tokens.textSecondary}]} numberOfLines={1}>
+                        {coreT({key: "ui.common.updated_at", params: {time: formatFileMtime(mtimeMs)}})} · {coreT({key: "ui.vfs.char_count", params: {count: Number.charCount(content.length)}})}{isDirty ? coreT({key: "ui.vfs.dirty_suffix"}) : ''}
+                    </Text>
+                </View>
+            );
+        }
     }
-    setPreviewMode(prev => !prev);
-  };
 
-  // 进入编辑态时默认未弹键盘，便于滑动浏览正文。
-  useEffect(() => {
-    if (!previewMode) {
-      setEditorFocused(false);
-    }
-  }, [previewMode]);
-
-  const annotateEnabled = FileAnnotateGate.shouldEnable({
-    previewMode,
-    scopeKind,
-    sessionId,
-  });
-
-  if (loading) {
+    // 预览无软键盘；编辑态键盘抬升/裁切分支由 EditorScreenShell 统一处理。
     return (
-      <View style={[styles.center, {backgroundColor: tokens.background}]}>
-        <ActivityIndicator color={tokens.primary} />
-      </View>
-    );
-  }
-
-  let statsRow: React.ReactNode = null;
-  if (mtimeMs != null) {
-    if (editorFocused && !previewMode) {
-      statsRow = (
-        <Pressable testID="file-editor-dismiss-stats" style={[styles.statsRow, {borderBottomColor: tokens.border}]} onPress={dismissEditor} accessibilityRole="button" accessibilityLabel={coreT({key: "ui.common.dismiss_keyboard"})}>
-          <Text style={[styles.statsText, {color: tokens.textSecondary}]} numberOfLines={1}>
-            {coreT({key: "ui.common.updated_at", params: {time: formatFileMtime(mtimeMs)}})} · {coreT({key: "ui.vfs.char_count", params: {count: Number.charCount(content.length)}})}{isDirty ? coreT({key: "ui.vfs.dirty_suffix"}) : ''}
-          </Text>
-        </Pressable>
-      );
-    } else {
-      statsRow = (
-        <View style={[styles.statsRow, {borderBottomColor: tokens.border}]}>
-          <Text style={[styles.statsText, {color: tokens.textSecondary}]} numberOfLines={1}>
-            {coreT({key: "ui.common.updated_at", params: {time: formatFileMtime(mtimeMs)}})} · {coreT({key: "ui.vfs.char_count", params: {count: Number.charCount(content.length)}})}{isDirty ? coreT({key: "ui.vfs.dirty_suffix"}) : ''}
-          </Text>
-        </View>
-      );
-    }
-  }
-
-  // 预览无软键盘；编辑态键盘抬升/裁切分支由 EditorScreenShell 统一处理。
-  return (
-    <EditorScreenShell
-      tokens={tokens}
-      toolbarBorderColor={tokens.border}
-      save={{
-        testID: 'file-editor-save',
-        label: saving ? coreT({key: "ui.common.saving"}) : coreT({key: "ui.common.save"}),
-        disabled: saving || !isDirty || previewMode || isReadOnly,
-        onPress: () => handleSave().catch(() => undefined),
-      }}
-      title={isDirty ? coreT({key: "ui.common.unsaved_title"}) : Path.basename(path)}
-      titleDanger={isDirty}
-      titleFontSize={14}
-      titlePress={editorFocused && !previewMode ? {testID: 'file-editor-dismiss-toolbar', onPress: dismissEditor} : undefined}
-      toggle={isReadOnly ? undefined : {previewMode, onPress: togglePreview}}
-      toolbarExtra={statsRow}
-      segmented={{
-        options: [
-          {value: 'markdown', label: 'Markdown'},
-          {value: 'txt', label: coreT({key: "ui.common.text"})},
-        ],
-        value: previewRenderKind,
-        onChange: setPreviewRenderKind,
-      }}
-      previewMode={previewMode}
-      preview={
-        heavyPreviewReady ? (
-          <FileMarkdownPreview
-            path={path}
-            content={content}
+        <EditorScreenShell
             tokens={tokens}
-            previewFill
-            renderKind={previewRenderKind}
-            annotateEnabled={annotateEnabled}
-            sessionId={annotateEnabled ? sessionId : undefined}
-          />
-        ) : (
-          <View style={styles.previewLoading}>
-            <ActivityIndicator size="large" color={tokens.primary} />
-          </View>
-        )
-      }
-      editor={<CodeEditorWebView ref={codeEditorRef} testID="file-editor-input" value={content} path={path} onChange={setContent} onFocusChange={setEditorFocused} style={styles.editor} />}
-    />
-  );
+            toolbarBorderColor={tokens.border}
+            save={{
+                testID: 'file-editor-save',
+                label: saving ? coreT({key: "ui.common.saving"}) : coreT({key: "ui.common.save"}),
+                disabled: saving || !isDirty || previewMode || isReadOnly,
+                onPress: () => handleSave().catch(() => undefined),
+            }}
+            title={isDirty ? coreT({key: "ui.common.unsaved_title"}) : Path.basename(path)}
+            titleDanger={isDirty}
+            titleFontSize={14}
+            titlePress={editorFocused && !previewMode ? {testID: 'file-editor-dismiss-toolbar', onPress: dismissEditor} : undefined}
+            toggle={isReadOnly ? undefined : {previewMode, onPress: togglePreview}}
+            toolbarExtra={statsRow}
+            segmented={{
+                options: [
+                    {value: 'markdown', label: 'Markdown'},
+                    {value: 'txt', label: coreT({key: "ui.common.text"})},
+                ],
+                value: previewRenderKind,
+                onChange: setPreviewRenderKind,
+            }}
+            previewMode={previewMode}
+            preview={
+                heavyPreviewReady ? (
+                    <FileMarkdownPreview
+                        path={path}
+                        content={content}
+                        tokens={tokens}
+                        previewFill
+                        renderKind={previewRenderKind}
+                        annotateEnabled={annotateEnabled}
+                        sessionId={annotateEnabled ? sessionId : undefined}
+                    />
+                ) : (
+                    <View style={styles.previewLoading}>
+                        <ActivityIndicator size="large" color={tokens.primary} />
+                    </View>
+                )
+            }
+            editor={<CodeEditorWebView ref={codeEditorRef} testID="file-editor-input" value={content} path={path} onChange={setContent} onFocusChange={setEditorFocused} style={styles.editor} />}
+        />
+    );
 }
 
 const styles = StyleSheet.create({
-  center: {flex: 1, justifyContent: 'center', alignItems: 'center'},
-  statsRow: {
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  statsText: {fontSize: 12},
-  previewLoading: {flex: 1, justifyContent: 'center', alignItems: 'center'},
-  editor: {flex: 1, minHeight: 0},
+    center: {flex: 1, justifyContent: 'center', alignItems: 'center'},
+    statsRow: {
+        paddingHorizontal: 16,
+        paddingVertical: 6,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+    },
+    statsText: {fontSize: 12},
+    previewLoading: {flex: 1, justifyContent: 'center', alignItems: 'center'},
+    editor: {flex: 1, minHeight: 0},
 });

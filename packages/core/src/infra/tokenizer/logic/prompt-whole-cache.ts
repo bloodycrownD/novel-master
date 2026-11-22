@@ -41,9 +41,9 @@ const log = LogFactory.create("tokenizer.prompt-whole-cache");
 
 /** L1 缓存条目：一次整 prompt 本地计数的完整结果（口径三件套）。 */
 export interface PromptWholeCacheEntry {
-  readonly tokenCount: number;
-  readonly counterKind: TokenCounterKind;
-  readonly estimated: boolean;
+    readonly tokenCount: number;
+    readonly counterKind: TokenCounterKind;
+    readonly estimated: boolean;
 }
 
 /** 单会话 LRU 条数上限（同会话最近 32 个「内容×身份」组合）。 */
@@ -67,9 +67,9 @@ const buckets = new Map<string, Map<string, PromptWholeCacheEntry>>();
 
 /** record() 顺带收集的待持久化条目（读口计数后取走合并落库）。 */
 const pendingWrites: {
-  scope: string;
-  contentHash: string;
-  entry: PromptWholeCacheEntry;
+    scope: string;
+    contentHash: string;
+    entry: PromptWholeCacheEntry;
 }[] = [];
 
 /** 每会话已持久化的条目表（seed 时初始化；persist 合并去重后覆盖）。 */
@@ -93,28 +93,28 @@ const seededSessions = new Set<string>();
 
 /** 完整缓存键：`l1:${sessionId}:${scope}:${contentHash}`。 */
 function buildWholeCacheKey(sessionId: string, scope: string, contentHash: string): string {
-  return `l1:${sessionId}:${scope}:${contentHash}`;
+    return `l1:${sessionId}:${scope}:${contentHash}`;
 }
 
 /** 惰性取会话桶（不存在则建空桶并挂载）。 */
 function ensureBucket(sessionId: string): Map<string, PromptWholeCacheEntry> {
-  let bucket = buckets.get(sessionId);
-  if (bucket == null) {
-    bucket = new Map();
-    buckets.set(sessionId, bucket);
-  }
-  return bucket;
+    let bucket = buckets.get(sessionId);
+    if (bucket == null) {
+        bucket = new Map();
+        buckets.set(sessionId, bucket);
+    }
+    return bucket;
 }
 
 /** 桶超限时从最旧端淘汰，直至回到上限内。 */
 function evictToLimit(bucket: Map<string, PromptWholeCacheEntry>): void {
-  while (bucket.size > PROMPT_WHOLE_CACHE_LRU_PER_SESSION) {
-    const oldest = bucket.keys().next();
-    if (oldest.done === true) {
-      break;
+    while (bucket.size > PROMPT_WHOLE_CACHE_LRU_PER_SESSION) {
+        const oldest = bucket.keys().next();
+        if (oldest.done === true) {
+            break;
+        }
+        bucket.delete(oldest.value);
     }
-    bucket.delete(oldest.value);
-  }
 }
 
 /**
@@ -123,45 +123,45 @@ function evictToLimit(bucket: Map<string, PromptWholeCacheEntry>): void {
  */
 // nm-style: keep-local — payload 校验是独立的反序列化管线（版本/形状/字段三段守卫），内联会拆散 seed 的失败分支。
 function parsePersistPayload(raw: string | null | undefined): PersistItem[] | null {
-  if (raw == null || raw.length === 0) {
-    return null;
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-  if (parsed == null || typeof parsed !== "object") {
-    return null;
-  }
-  const { v, items } = parsed as { v?: unknown; items?: unknown };
-  if (v !== PERSIST_PAYLOAD_VERSION || !Array.isArray(items)) {
-    return null;
-  }
-  const out: PersistItem[] = [];
-  for (const item of items) {
-    if (!Array.isArray(item) || item.length !== 5) {
-      return null;
+    if (raw == null || raw.length === 0) {
+        return null;
     }
-    const [hash16, scope, count, kind, est] = item as [unknown, unknown, unknown, unknown, unknown];
-    if (
-      typeof hash16 !== "string" ||
-      !/^[0-9a-f]{16}$/.test(hash16) ||
-      typeof scope !== "string" ||
-      scope.length === 0 ||
-      typeof count !== "number" ||
-      !Number.isFinite(count) ||
-      count < 0 ||
-      typeof kind !== "string" ||
-      kind.length === 0 ||
-      est !== false
-    ) {
-      return null;
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(raw);
+    } catch {
+        return null;
     }
-    out.push([hash16, scope, count, kind, false]);
-  }
-  return out;
+    if (parsed == null || typeof parsed !== "object") {
+        return null;
+    }
+    const { v, items } = parsed as { v?: unknown; items?: unknown };
+    if (v !== PERSIST_PAYLOAD_VERSION || !Array.isArray(items)) {
+        return null;
+    }
+    const out: PersistItem[] = [];
+    for (const item of items) {
+        if (!Array.isArray(item) || item.length !== 5) {
+            return null;
+        }
+        const [hash16, scope, count, kind, est] = item as [unknown, unknown, unknown, unknown, unknown];
+        if (
+            typeof hash16 !== "string" ||
+            !/^[0-9a-f]{16}$/.test(hash16) ||
+            typeof scope !== "string" ||
+            scope.length === 0 ||
+            typeof count !== "number" ||
+            !Number.isFinite(count) ||
+            count < 0 ||
+            typeof kind !== "string" ||
+            kind.length === 0 ||
+            est !== false
+        ) {
+            return null;
+        }
+        out.push([hash16, scope, count, kind, false]);
+    }
+    return out;
 }
 
 /**
@@ -169,42 +169,42 @@ function parsePersistPayload(raw: string | null | undefined): PersistItem[] | nu
  * 旧条目。
  */
 export const promptWholeCache = {
-  /**
+    /**
    * 查一条整串计数。命中即把该键提升为会话桶内最新（LRU）；miss 返回
    * `undefined`，由调用方进入 L2 分块路径。
    */
-  lookup(sessionId: string, scope: string, contentHash: string): PromptWholeCacheEntry | undefined {
-    const bucket = buckets.get(sessionId);
-    if (bucket == null) {
-      return undefined;
-    }
-    const key = buildWholeCacheKey(sessionId, scope, contentHash);
-    const entry = bucket.get(key);
-    if (entry == null) {
-      return undefined;
-    }
-    // LRU 提升：删掉重插，移到迭代序末尾（最新端）。
-    bucket.delete(key);
-    bucket.set(key, entry);
-    return entry;
-  },
+    lookup(sessionId: string, scope: string, contentHash: string): PromptWholeCacheEntry | undefined {
+        const bucket = buckets.get(sessionId);
+        if (bucket == null) {
+            return undefined;
+        }
+        const key = buildWholeCacheKey(sessionId, scope, contentHash);
+        const entry = bucket.get(key);
+        if (entry == null) {
+            return undefined;
+        }
+        // LRU 提升：删掉重插，移到迭代序末尾（最新端）。
+        bucket.delete(key);
+        bucket.set(key, entry);
+        return entry;
+    },
 
-  /** 写一条整串计数（覆盖同键旧值并提升新鲜度），随后按会话级 LRU 淘汰。 */
-  record(sessionId: string, scope: string, contentHash: string, entry: PromptWholeCacheEntry): void {
-    const bucket = ensureBucket(sessionId);
-    const key = buildWholeCacheKey(sessionId, scope, contentHash);
-    bucket.delete(key);
-    bucket.set(key, entry);
-    evictToLimit(bucket);
-    if (entry.estimated === false) {
-      pendingWrites.push({ scope, contentHash, entry });
-      if (pendingWrites.length > PERSIST_MAX_ITEMS) {
-        pendingWrites.splice(0, pendingWrites.length - PERSIST_MAX_ITEMS);
-      }
-    }
-  },
+    /** 写一条整串计数（覆盖同键旧值并提升新鲜度），随后按会话级 LRU 淘汰。 */
+    record(sessionId: string, scope: string, contentHash: string, entry: PromptWholeCacheEntry): void {
+        const bucket = ensureBucket(sessionId);
+        const key = buildWholeCacheKey(sessionId, scope, contentHash);
+        bucket.delete(key);
+        bucket.set(key, entry);
+        evictToLimit(bucket);
+        if (entry.estimated === false) {
+            pendingWrites.push({ scope, contentHash, entry });
+            if (pendingWrites.length > PERSIST_MAX_ITEMS) {
+                pendingWrites.splice(0, pendingWrites.length - PERSIST_MAX_ITEMS);
+            }
+        }
+    },
 
-  /**
+    /**
    * 从 session KKV 载入该会话的持久化整串条目并 seed 回 L1（记入 `""`
    * 会话桶——驱动内部查 L1 用的就是这个桶；条目按内容指纹寻址，跨会话
    * 共享安全）。坏 JSON / 版本不符 / 字段非法一律静默忽略。返回载入条数。
@@ -218,103 +218,103 @@ export const promptWholeCache = {
    * 「这次读确实成功，或库里确实没这一行」时才有资格留下，一次瞬时读错不该
    * 锁死整个进程内该会话的 L1 续命。
    */
-  async seedFromKkv(sessionKkv: SessionKkvService | null | undefined, sessionId: string): Promise<number> {
-    if (sessionKkv == null) {
-      return 0;
-    }
-    if (seededSessions.has(sessionId)) {
-      return 0;
-    }
-    // 先登记再 await：并发调用也只发一次读（同一行读两遍没有意义）。
-    seededSessions.add(sessionId);
-    let raw: string | null;
-    try {
-      raw = await sessionKkv.get(sessionId, SESSION_KKV_DOMAIN_TOKEN_CHUNKS, PROMPT_WHOLE_CACHE_KEY);
-    } catch (error) {
-      log.warn("promptWhole KKV 读取失败，按无种子处理", { error });
-      // 撤销登记：读失败是瞬时的，不撤销则本进程内该会话永远失去 L1 种子。
-      seededSessions.delete(sessionId);
-      return 0;
-    }
-    const items = parsePersistPayload(raw);
-    if (items == null) {
-      persistedItems.delete(sessionId);
-      // 只有「行存在但坏」才撤销登记（与 L2 的 r3-l2-1 同款，别把刚修的 bug
-      // 复刻到 L1）：行不存在 = 该会话还没落过盘，本来就没东西可 seed，撤销
-      // 等于把 seed-once 整个废掉（此后每轮都白读一次）。
-      if (raw != null && raw.length > 0) {
-        seededSessions.delete(sessionId);
-      }
-      return 0;
-    }
-    for (const [hash16, scope, count, kind] of items) {
-      const bucket = ensureBucket("");
-      const key = buildWholeCacheKey("", scope, hash16);
-      bucket.delete(key);
-      bucket.set(key, { tokenCount: count, counterKind: kind as TokenCounterKind, estimated: false });
-      evictToLimit(bucket);
-    }
-    persistedItems.set(sessionId, items);
-    return items.length;
-  },
+    async seedFromKkv(sessionKkv: SessionKkvService | null | undefined, sessionId: string): Promise<number> {
+        if (sessionKkv == null) {
+            return 0;
+        }
+        if (seededSessions.has(sessionId)) {
+            return 0;
+        }
+        // 先登记再 await：并发调用也只发一次读（同一行读两遍没有意义）。
+        seededSessions.add(sessionId);
+        let raw: string | null;
+        try {
+            raw = await sessionKkv.get(sessionId, SESSION_KKV_DOMAIN_TOKEN_CHUNKS, PROMPT_WHOLE_CACHE_KEY);
+        } catch (error) {
+            log.warn("promptWhole KKV 读取失败，按无种子处理", { error });
+            // 撤销登记：读失败是瞬时的，不撤销则本进程内该会话永远失去 L1 种子。
+            seededSessions.delete(sessionId);
+            return 0;
+        }
+        const items = parsePersistPayload(raw);
+        if (items == null) {
+            persistedItems.delete(sessionId);
+            // 只有「行存在但坏」才撤销登记（与 L2 的 r3-l2-1 同款，别把刚修的 bug
+            // 复刻到 L1）：行不存在 = 该会话还没落过盘，本来就没东西可 seed，撤销
+            // 等于把 seed-once 整个废掉（此后每轮都白读一次）。
+            if (raw != null && raw.length > 0) {
+                seededSessions.delete(sessionId);
+            }
+            return 0;
+        }
+        for (const [hash16, scope, count, kind] of items) {
+            const bucket = ensureBucket("");
+            const key = buildWholeCacheKey("", scope, hash16);
+            bucket.delete(key);
+            bucket.set(key, { tokenCount: count, counterKind: kind as TokenCounterKind, estimated: false });
+            evictToLimit(bucket);
+        }
+        persistedItems.set(sessionId, items);
+        return items.length;
+    },
 
-  /**
+    /**
    * 取走 pending 写、合并进该会话的持久化表（新条目置顶、按 hash+scope 去重、
    * 上限 16 条）并覆盖写 KKV。payload 无变化（本轮全是 L1 命中、无新条目）
    * 时不写库。fire-and-forget：写失败只 warn（缓存持久化不打断计数路径）。
    */
-  persistPendingWrites(sessionKkv: SessionKkvService | null | undefined, sessionId: string): void {
-    const batch = pendingWrites.splice(0, pendingWrites.length);
-    if (sessionKkv == null || batch.length === 0) {
-      return;
-    }
-    const items = persistedItems.get(sessionId) ?? [];
-    const merged: PersistItem[] = [];
-    for (const write of batch) {
-      merged.unshift([write.contentHash, write.scope, write.entry.tokenCount, write.entry.counterKind, false]);
-    }
-    for (const item of items) {
-      if (merged.some(([hash16, scope]) => hash16 === item[0] && scope === item[1])) {
-        continue;
-      }
-      merged.push(item);
-    }
-    merged.splice(PERSIST_MAX_ITEMS);
-    const unchanged = merged.length === items.length && merged.every((item, i) => JSON.stringify(item) === JSON.stringify(items[i]));
-    if (unchanged) {
-      persistedItems.set(sessionId, merged);
-      return;
-    }
-    persistedItems.set(sessionId, merged);
-    const payload = JSON.stringify({ v: PERSIST_PAYLOAD_VERSION, items: merged });
-    const write = sessionKkv.set(sessionId, SESSION_KKV_DOMAIN_TOKEN_CHUNKS, PROMPT_WHOLE_CACHE_KEY, payload);
-    void write.catch((error) => {
-      log.warn("promptWhole KKV 写入失败", { error });
-    });
-  },
+    persistPendingWrites(sessionKkv: SessionKkvService | null | undefined, sessionId: string): void {
+        const batch = pendingWrites.splice(0, pendingWrites.length);
+        if (sessionKkv == null || batch.length === 0) {
+            return;
+        }
+        const items = persistedItems.get(sessionId) ?? [];
+        const merged: PersistItem[] = [];
+        for (const write of batch) {
+            merged.unshift([write.contentHash, write.scope, write.entry.tokenCount, write.entry.counterKind, false]);
+        }
+        for (const item of items) {
+            if (merged.some(([hash16, scope]) => hash16 === item[0] && scope === item[1])) {
+                continue;
+            }
+            merged.push(item);
+        }
+        merged.splice(PERSIST_MAX_ITEMS);
+        const unchanged = merged.length === items.length && merged.every((item, i) => JSON.stringify(item) === JSON.stringify(items[i]));
+        if (unchanged) {
+            persistedItems.set(sessionId, merged);
+            return;
+        }
+        persistedItems.set(sessionId, merged);
+        const payload = JSON.stringify({ v: PERSIST_PAYLOAD_VERSION, items: merged });
+        const write = sessionKkv.set(sessionId, SESSION_KKV_DOMAIN_TOKEN_CHUNKS, PROMPT_WHOLE_CACHE_KEY, payload);
+        void write.catch((error) => {
+            log.warn("promptWhole KKV 写入失败", { error });
+        });
+    },
 
-  /** 清掉一个会话的全部 L1 条目（会话删除 / 失效路径）。 */
-  clearSession(sessionId: string): void {
-    buckets.delete(sessionId);
-    persistedItems.delete(sessionId);
-  },
+    /** 清掉一个会话的全部 L1 条目（会话删除 / 失效路径）。 */
+    clearSession(sessionId: string): void {
+        buckets.delete(sessionId);
+        persistedItems.delete(sessionId);
+    },
 
-  /** 测试用：清空全部会话桶。 */
-  clearForTests(): void {
-    buckets.clear();
-    pendingWrites.length = 0;
-    persistedItems.clear();
-    // 一并复位 seed-once：否则「模拟进程重启后重新 seed」的后续用例会静默
-    // 按已 seed 处理（与 L2 clearForTests 同一份约定）。
-    seededSessions.clear();
-  },
+    /** 测试用：清空全部会话桶。 */
+    clearForTests(): void {
+        buckets.clear();
+        pendingWrites.length = 0;
+        persistedItems.clear();
+        // 一并复位 seed-once：否则「模拟进程重启后重新 seed」的后续用例会静默
+        // 按已 seed 处理（与 L2 clearForTests 同一份约定）。
+        seededSessions.clear();
+    },
 
-  /** 观测用：会话桶数与总条目数。 */
-  stats(): { sessions: number; entries: number } {
-    let entries = 0;
-    for (const bucket of buckets.values()) {
-      entries += bucket.size;
-    }
-    return { sessions: buckets.size, entries };
-  },
+    /** 观测用：会话桶数与总条目数。 */
+    stats(): { sessions: number; entries: number } {
+        let entries = 0;
+        for (const bucket of buckets.values()) {
+            entries += bucket.size;
+        }
+        return { sessions: buckets.size, entries };
+    },
 } as const;

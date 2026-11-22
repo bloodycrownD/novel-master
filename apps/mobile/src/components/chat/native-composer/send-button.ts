@@ -16,23 +16,23 @@ import type {ConversationDockAction} from '../ChatConversationBridge';
 
 /** 发送/终止钮形态：canSend=false 走 disabled，running 走 danger，否则 primary。 */
 type SendButtonState = {
-  readonly disabled: boolean;
-  readonly running: boolean;
-  readonly variant: 'disabled' | 'danger' | 'primary';
-  /** 上行动作（running 时是「终止」，否则「发送」）。 */
-  readonly action: ConversationDockAction;
+    readonly disabled: boolean;
+    readonly running: boolean;
+    readonly variant: 'disabled' | 'danger' | 'primary';
+    /** 上行动作（running 时是「终止」，否则「发送」）。 */
+    readonly action: ConversationDockAction;
 };
 
 export namespace SendButton {
-  export function resolve(input: {
-    readonly canSend: boolean;
-    readonly running: boolean;
-  }): SendButtonState {
-    return {
-      disabled: !input.canSend,
-      running: input.running,
-      variant: !input.canSend ? 'disabled' : input.running ? 'danger' : 'primary',
-      action: input.running ? 'terminate' : 'send',
-    };
-  }
+    export function resolve(input: {
+        readonly canSend: boolean;
+        readonly running: boolean;
+    }): SendButtonState {
+        return {
+            disabled: !input.canSend,
+            running: input.running,
+            variant: !input.canSend ? 'disabled' : input.running ? 'danger' : 'primary',
+            action: input.running ? 'terminate' : 'send',
+        };
+    }
 }

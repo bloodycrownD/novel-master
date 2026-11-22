@@ -9,42 +9,42 @@
 import {maintenanceBusy} from '@/services/db-maintenance-busy';
 
 describe('db-maintenance-busy 计数配对（ic-20）', () => {
-  afterEach(() => {
-    // 用例内 acquire 未配对释放时兜底清零，避免跨用例污染
-    while (maintenanceBusy.isBusy()) {
-      maintenanceBusy.release();
-    }
-  });
+    afterEach(() => {
+        // 用例内 acquire 未配对释放时兜底清零，避免跨用例污染
+        while (maintenanceBusy.isBusy()) {
+            maintenanceBusy.release();
+        }
+    });
 
-  it('初始态不 busy；acquire 后 busy，配对 release 后复位', () => {
-    expect(maintenanceBusy.isBusy()).toBe(false);
+    it('初始态不 busy；acquire 后 busy，配对 release 后复位', () => {
+        expect(maintenanceBusy.isBusy()).toBe(false);
 
-    maintenanceBusy.acquire();
-    expect(maintenanceBusy.isBusy()).toBe(true);
+        maintenanceBusy.acquire();
+        expect(maintenanceBusy.isBusy()).toBe(true);
 
-    maintenanceBusy.release();
-    expect(maintenanceBusy.isBusy()).toBe(false);
-  });
+        maintenanceBusy.release();
+        expect(maintenanceBusy.isBusy()).toBe(false);
+    });
 
-  it('嵌套 acquire（外层流程包底层函数）不互相提前清位', () => {
-    maintenanceBusy.acquire(); // 外层流程（如上层备份包装）
-    maintenanceBusy.acquire(); // 底层 exportDatabaseBackupToPath
-    expect(maintenanceBusy.isBusy()).toBe(true);
+    it('嵌套 acquire（外层流程包底层函数）不互相提前清位', () => {
+        maintenanceBusy.acquire(); // 外层流程（如上层备份包装）
+        maintenanceBusy.acquire(); // 底层 exportDatabaseBackupToPath
+        expect(maintenanceBusy.isBusy()).toBe(true);
 
-    maintenanceBusy.release(); // 底层先退出：外层窗口仍在
-    expect(maintenanceBusy.isBusy()).toBe(true);
+        maintenanceBusy.release(); // 底层先退出：外层窗口仍在
+        expect(maintenanceBusy.isBusy()).toBe(true);
 
-    maintenanceBusy.release(); // 外层在 rebootstrap 完成后释放
-    expect(maintenanceBusy.isBusy()).toBe(false);
-  });
+        maintenanceBusy.release(); // 外层在 rebootstrap 完成后释放
+        expect(maintenanceBusy.isBusy()).toBe(false);
+    });
 
-  it('release 多于 acquire 时不降到负语义（钳制 0，不影响后续配对）', () => {
-    maintenanceBusy.release();
-    expect(maintenanceBusy.isBusy()).toBe(false);
+    it('release 多于 acquire 时不降到负语义（钳制 0，不影响后续配对）', () => {
+        maintenanceBusy.release();
+        expect(maintenanceBusy.isBusy()).toBe(false);
 
-    maintenanceBusy.acquire();
-    expect(maintenanceBusy.isBusy()).toBe(true);
-    maintenanceBusy.release();
-    expect(maintenanceBusy.isBusy()).toBe(false);
-  });
+        maintenanceBusy.acquire();
+        expect(maintenanceBusy.isBusy()).toBe(true);
+        maintenanceBusy.release();
+        expect(maintenanceBusy.isBusy()).toBe(false);
+    });
 });

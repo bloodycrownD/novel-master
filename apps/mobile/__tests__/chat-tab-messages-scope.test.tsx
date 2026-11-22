@@ -20,150 +20,150 @@ import type {MobileNovelMasterRuntime} from '../src/runtime/types';
 import type {ChatMessageData} from '@novel-master/core/chat';
 
 function makeMessage(sid: string, seq: number): ChatMessageData {
-  return {
-    id: `${sid}-${seq}`,
-    sessionId: sid,
-    seq,
-    role: 'user',
-    content: `msg-${sid}-${seq}`,
-    createdAtMs: seq * 1000,
-  } as unknown as ChatMessageData;
+    return {
+        id: `${sid}-${seq}`,
+        sessionId: sid,
+        seq,
+        role: 'user',
+        content: `msg-${sid}-${seq}`,
+        createdAtMs: seq * 1000,
+    } as unknown as ChatMessageData;
 }
 
 function createHarness(tailImpl: (sid: string) => Promise<ChatMessageData[]>) {
-  const eventBus = new SimpleEventBus();
-  const runtime = {
-    eventBus,
-    abortRegistry: {
-      has: jest.fn(() => false),
-      abort: jest.fn(),
-      register: jest.fn(),
-      unregister: jest.fn(),
-    },
-    sessions: {get: jest.fn(async (sid: string) => ({id: sid}))},
-    projects: {get: jest.fn(async (pid: string) => ({id: pid}))},
-    messages: {
-      listBySessionTail: jest.fn(async (sid: string) => ({kind: 'completed' as const, value: await tailImpl(sid)})),
-      listBySessionPage: jest.fn(async () => ({kind: 'completed' as const, value: []})),
-    },
-  } as unknown as MobileNovelMasterRuntime;
-  const manager = new SessionStreamUnitManager({
-    runtime,
-  } as never);
-  manager.markHydrated();
-  return {manager, runtime};
+    const eventBus = new SimpleEventBus();
+    const runtime = {
+        eventBus,
+        abortRegistry: {
+            has: jest.fn(() => false),
+            abort: jest.fn(),
+            register: jest.fn(),
+            unregister: jest.fn(),
+        },
+        sessions: {get: jest.fn(async (sid: string) => ({id: sid}))},
+        projects: {get: jest.fn(async (pid: string) => ({id: pid}))},
+        messages: {
+            listBySessionTail: jest.fn(async (sid: string) => ({kind: 'completed' as const, value: await tailImpl(sid)})),
+            listBySessionPage: jest.fn(async () => ({kind: 'completed' as const, value: []})),
+        },
+    } as unknown as MobileNovelMasterRuntime;
+    const manager = new SessionStreamUnitManager({
+        runtime,
+    } as never);
+    manager.markHydrated();
+    return {manager, runtime};
 }
 
 describe('T-X: manager idle 消息路径的会话作用域守卫（串会话竞态）', () => {
-  beforeEach(() => {
-    SessionViewCache.clearAll();
-  });
-  afterEach(() => {
-    SessionViewCache.clearAll();
-  });
+    beforeEach(() => {
+        SessionViewCache.clearAll();
+    });
+    afterEach(() => {
+        SessionViewCache.clearAll();
+    });
 
-  it('在途 tail 加载期间并行查看另一会话：结果只落属主视图，不串进当前会话', async () => {
-    const messagesOfA = [makeMessage('sess-A', 1), makeMessage('sess-A', 2)];
-    const messagesOfB = [makeMessage('sess-B', 7)];
-    let releaseA: ((list: ChatMessageData[]) => void) | null = null;
-    const {manager} = createHarness(sid => {
-      if (sid === 'sess-A') {
-        return new Promise(resolve => {
-          releaseA = list => resolve(list ?? messagesOfA);
+    it('在途 tail 加载期间并行查看另一会话：结果只落属主视图，不串进当前会话', async () => {
+        const messagesOfA = [makeMessage('sess-A', 1), makeMessage('sess-A', 2)];
+        const messagesOfB = [makeMessage('sess-B', 7)];
+        let releaseA: ((list: ChatMessageData[]) => void) | null = null;
+        const {manager} = createHarness(sid => {
+            if (sid === 'sess-A') {
+                return new Promise(resolve => {
+                    releaseA = list => resolve(list ?? messagesOfA);
+                });
+            }
+            return Promise.resolve(messagesOfB);
         });
-      }
-      return Promise.resolve(messagesOfB);
+
+        // A 的 tail 加载发起后挂起（在途）；B 立即加载完成。
+        const pendingA = manager.loadSessionTailMessages('sess-A', {
+            projectId: 'proj-1',
+        });
+        await manager.loadSessionTailMessages('sess-B', {projectId: 'proj-1'});
+
+        // B 的快照只含 B 的行（在途的 A 尚未返回，也不得占位）。
+        expect(
+            manager
+                .readMessagesSnapshot('sess-B')
+                ?.messages.every(m => m.sessionId === 'sess-B'),
+        ).toBe(true);
+
+        // A 的 DB 结果此时才返回：只落 A 的 idle 视图与 view cache。
+        releaseA?.(messagesOfA);
+        await pendingA;
+        const snapA = manager.readMessagesSnapshot('sess-A');
+        expect(snapA?.messages).toEqual(messagesOfA);
+        expect(
+            manager
+                .readMessagesSnapshot('sess-B')
+                ?.messages.some(m => m.sessionId === 'sess-A'),
+        ).toBe(false);
+        // 属主缓存照常刷新（重进 A 水合即最终列表——消息不丢失）。
+        expect(
+            SessionViewCache.get(SessionViewCache.key('proj-1', 'sess-A'))?.messages,
+        ).toEqual(messagesOfA);
+        expect(
+            SessionViewCache.get(SessionViewCache.key('proj-1', 'sess-B'))?.messages,
+        ).toEqual(messagesOfB);
+        manager.dispose();
     });
 
-    // A 的 tail 加载发起后挂起（在途）；B 立即加载完成。
-    const pendingA = manager.loadSessionTailMessages('sess-A', {
-      projectId: 'proj-1',
+    it('在途分页期间切换查看另一会话：分页结果只 prepend 回属主视图', async () => {
+        const rowsB = [makeMessage('sess-B', 5), makeMessage('sess-B', 6)];
+        const olderB = [makeMessage('sess-B', 3)];
+        let releaseOlder: ((list: ChatMessageData[]) => void) | null = null;
+        const {manager} = createHarness(async () => []);
+        // listBySessionPage 受控（分页在途）
+        (
+            manager as unknown as {
+                runtime: {messages: {listBySessionPage: jest.Mock}};
+            }
+        ).runtime.messages.listBySessionPage.mockImplementation(
+            () =>
+                new Promise(resolve => {
+                    releaseOlder = (list: ChatMessageData[]) =>
+                        resolve({kind: 'completed' as const, value: list ?? []});
+                }),
+        );
+        // 预置 B 的 idle 视图（缓存水合路径）
+        SessionViewCache.set(SessionViewCache.key('proj-1', 'sess-B'), {
+            messages: rowsB,
+            hasMoreMessages: true,
+        });
+        manager.hydrateSessionMessages('sess-B', 'proj-1');
+        expect(manager.readMessagesSnapshot('sess-B')?.messages).toEqual(rowsB);
+
+        // B 的分页发起后挂起；期间 A 完成一轮 tail 加载（模拟切换查看）。
+        const pendingOlder = manager.loadOlderSessionMessages('sess-B', 'proj-1');
+        await manager.loadSessionTailMessages('sess-A', {projectId: 'proj-1'});
+
+        releaseOlder?.(olderB);
+        await pendingOlder;
+
+        // B 的更早行 prepend 进 B 的视图；A 的快照不含 B 的行。
+        const snapB = manager.readMessagesSnapshot('sess-B');
+        expect(snapB?.messages.map(m => m.seq)).toEqual([3, 5, 6]);
+        expect(
+            manager
+                .readMessagesSnapshot('sess-A')
+                ?.messages.some(m => m.sessionId === 'sess-B'),
+        ).toBe(false);
+        manager.dispose();
     });
-    await manager.loadSessionTailMessages('sess-B', {projectId: 'proj-1'});
 
-    // B 的快照只含 B 的行（在途的 A 尚未返回，也不得占位）。
-    expect(
-      manager
-        .readMessagesSnapshot('sess-B')
-        ?.messages.every(m => m.sessionId === 'sess-B'),
-    ).toBe(true);
+    it('readMessagesSnapshot：单元销毁沿把投影消息面交接进 idle，切换不断档', async () => {
+        // 建立带消息的 settled 单元（宽限 0 —— 立即销毁）后读取 idle 交接。
+        const finalRows = [makeMessage('sess-A', 9)];
+        const {manager, runtime} = createHarness(async () => finalRows);
+        (
+            runtime.messages as {listBySessionPage: jest.Mock}
+        ).listBySessionPage.mockImplementation(async () => ({kind: 'completed' as const, value: []}));
 
-    // A 的 DB 结果此时才返回：只落 A 的 idle 视图与 view cache。
-    releaseA?.(messagesOfA);
-    await pendingA;
-    const snapA = manager.readMessagesSnapshot('sess-A');
-    expect(snapA?.messages).toEqual(messagesOfA);
-    expect(
-      manager
-        .readMessagesSnapshot('sess-B')
-        ?.messages.some(m => m.sessionId === 'sess-A'),
-    ).toBe(false);
-    // 属主缓存照常刷新（重进 A 水合即最终列表——消息不丢失）。
-    expect(
-      SessionViewCache.get(SessionViewCache.key('proj-1', 'sess-A'))?.messages,
-    ).toEqual(messagesOfA);
-    expect(
-      SessionViewCache.get(SessionViewCache.key('proj-1', 'sess-B'))?.messages,
-    ).toEqual(messagesOfB);
-    manager.dispose();
-  });
-
-  it('在途分页期间切换查看另一会话：分页结果只 prepend 回属主视图', async () => {
-    const rowsB = [makeMessage('sess-B', 5), makeMessage('sess-B', 6)];
-    const olderB = [makeMessage('sess-B', 3)];
-    let releaseOlder: ((list: ChatMessageData[]) => void) | null = null;
-    const {manager} = createHarness(async () => []);
-    // listBySessionPage 受控（分页在途）
-    (
-      manager as unknown as {
-        runtime: {messages: {listBySessionPage: jest.Mock}};
-      }
-    ).runtime.messages.listBySessionPage.mockImplementation(
-      () =>
-        new Promise(resolve => {
-          releaseOlder = (list: ChatMessageData[]) =>
-            resolve({kind: 'completed' as const, value: list ?? []});
-        }),
-    );
-    // 预置 B 的 idle 视图（缓存水合路径）
-    SessionViewCache.set(SessionViewCache.key('proj-1', 'sess-B'), {
-      messages: rowsB,
-      hasMoreMessages: true,
+        // 水合 idle（缓存 miss → 回源 tail）。
+        await manager.loadSessionTailMessages('sess-A', {projectId: 'proj-1'});
+        expect(manager.readMessagesSnapshot('sess-A')?.messages).toEqual(finalRows);
+        manager.dispose();
     });
-    manager.hydrateSessionMessages('sess-B', 'proj-1');
-    expect(manager.readMessagesSnapshot('sess-B')?.messages).toEqual(rowsB);
-
-    // B 的分页发起后挂起；期间 A 完成一轮 tail 加载（模拟切换查看）。
-    const pendingOlder = manager.loadOlderSessionMessages('sess-B', 'proj-1');
-    await manager.loadSessionTailMessages('sess-A', {projectId: 'proj-1'});
-
-    releaseOlder?.(olderB);
-    await pendingOlder;
-
-    // B 的更早行 prepend 进 B 的视图；A 的快照不含 B 的行。
-    const snapB = manager.readMessagesSnapshot('sess-B');
-    expect(snapB?.messages.map(m => m.seq)).toEqual([3, 5, 6]);
-    expect(
-      manager
-        .readMessagesSnapshot('sess-A')
-        ?.messages.some(m => m.sessionId === 'sess-B'),
-    ).toBe(false);
-    manager.dispose();
-  });
-
-  it('readMessagesSnapshot：单元销毁沿把投影消息面交接进 idle，切换不断档', async () => {
-    // 建立带消息的 settled 单元（宽限 0 —— 立即销毁）后读取 idle 交接。
-    const finalRows = [makeMessage('sess-A', 9)];
-    const {manager, runtime} = createHarness(async () => finalRows);
-    (
-      runtime.messages as {listBySessionPage: jest.Mock}
-    ).listBySessionPage.mockImplementation(async () => ({kind: 'completed' as const, value: []}));
-
-    // 水合 idle（缓存 miss → 回源 tail）。
-    await manager.loadSessionTailMessages('sess-A', {projectId: 'proj-1'});
-    expect(manager.readMessagesSnapshot('sess-A')?.messages).toEqual(finalRows);
-    manager.dispose();
-  });
 });
 
 /**
@@ -176,14 +176,14 @@ describe('T-X: manager idle 消息路径的会话作用域守卫（串会话竞�
  * 「非空优先」表达式在、旧的 `??` 链不在。退回旧写法该用例立即红。
  */
 describe('P1-3: ChatTabProvider 的 streamRowIds 消费侧非空优先', () => {
-  const source = readFileSync(
-    join(__dirname, '../src/screens/tabs/chat-tab/ChatTabProvider.tsx'),
-    'utf8',
-  );
+    const source = readFileSync(
+        join(__dirname, '../src/screens/tabs/chat-tab/ChatTabProvider.tsx'),
+        'utf8',
+    );
 
-  it('单元空 Map 不用 ?? 遮蔽 idle 交接映射', () => {
-    expect(source).toContain('unitRowIds.size > 0');
-    expect(source).toContain('viewRowIds');
-    expect(source).not.toMatch(/unitRowIds\s*\?\?/);
-  });
+    it('单元空 Map 不用 ?? 遮蔽 idle 交接映射', () => {
+        expect(source).toContain('unitRowIds.size > 0');
+        expect(source).toContain('viewRowIds');
+        expect(source).not.toMatch(/unitRowIds\s*\?\?/);
+    });
 });

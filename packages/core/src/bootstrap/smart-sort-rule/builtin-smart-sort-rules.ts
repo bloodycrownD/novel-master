@@ -26,13 +26,13 @@ import { SMART_SORT_RULE_TABLE } from "./smart-sort-rule-schema.js";
  * nm-style: keep-public — 导出常量的声明类型，撤导出会触发声明发射对私有类型的引用错误。
  */
 export interface BuiltinSmartSortRuleSeedRow {
-  readonly ruleId: string;
-  readonly name: string;
-  readonly pattern: string;
-  readonly flags: string;
-  readonly captureKind: SmartSortCaptureKind;
-  readonly description: string;
-  readonly sortOrder: number;
+    readonly ruleId: string;
+    readonly name: string;
+    readonly pattern: string;
+    readonly flags: string;
+    readonly captureKind: SmartSortCaptureKind;
+    readonly description: string;
+    readonly sortOrder: number;
 }
 
 /** 序号字符类（附录 A 的 NUM：阿拉伯 + 中文数字大小写，两处捕获组共用）。 */
@@ -46,69 +46,69 @@ const NUM_CLASS = "[0-9〇零一二两三四五六七八九十百千万壹贰叁
  * 默认会整表重编号收敛。
  */
 export const BUILTIN_SMART_SORT_RULE_ROWS: readonly BuiltinSmartSortRuleSeedRow[] = [
-  {
-    ruleId: "builtin-zh-prologue",
-    name: "序章/开篇",
-    pattern: `^(序章?|楔子|引子|前言|开篇)`,
-    flags: "",
-    captureKind: "fixed_min",
-    description: "序章/楔子/引子等开篇文字，排在所有章节之前",
-    sortOrder: 1,
-  },
-  {
-    ruleId: "builtin-zh-finale",
-    name: "终章/收尾",
-    pattern: `^(终章|尾声|后记|完结|finale)`,
-    flags: "",
-    captureKind: "fixed_max",
-    description: "终章/尾声/后记等收尾文字，排在所有章节之后",
-    sortOrder: 2,
-  },
-  {
-    ruleId: "builtin-zh-extra",
-    name: "番外/外传",
-    pattern: `^(番外|外传|if篇?)`,
-    flags: "",
-    captureKind: "fixed_max",
-    description: "番外/外传等衍生内容，排在终章之后",
-    sortOrder: 3,
-  },
-  {
-    ruleId: "builtin-zh-volume-chapter",
-    name: "中文卷章复合",
-    pattern: `第[ \\t]{0,2}(${NUM_CLASS})[ \\t]{0,2}卷[ \\t]*[-—·.、]?[ \\t]*第[ \\t]{0,2}(${NUM_CLASS})[ \\t]{0,2}章`,
-    flags: "",
-    captureKind: "smart",
-    description: "匹配 第X卷…第Y章 复合结构，序号取 [卷,章]",
-    sortOrder: 4,
-  },
-  {
-    ruleId: "builtin-zh-chapter",
-    name: "中文序号章节",
-    pattern: `第[ \\t]{0,2}(${NUM_CLASS})[ \\t]{0,2}(?:章|节|集|部|篇|回|卷)`,
-    flags: "",
-    captureKind: "smart",
-    description: "匹配 第X章/节/集/部/篇/回/卷 形式的标题（X 支持中文与阿拉伯数字）",
-    sortOrder: 5,
-  },
-  {
-    ruleId: "builtin-en-chapter",
-    name: "英文章节",
-    pattern: `(?:chapter|section|part|episode)[ \\t]*[.．]?[ \\t]*([0-9]{1,6})`,
-    flags: "i",
-    captureKind: "smart",
-    description: "匹配 Chapter/Section/Part/Episode N 英文标题（忽略大小写）",
-    sortOrder: 6,
-  },
-  {
-    ruleId: "builtin-numeric",
-    name: "数字序号开头",
-    pattern: `^[ \\t]*([0-9]{1,6})[ \\t]*(?:[、.．\\-—_]|$)`,
-    flags: "",
-    captureKind: "smart",
-    description: "匹配数字序号开头的文件名，如 001、开端",
-    sortOrder: 7,
-  },
+    {
+        ruleId: "builtin-zh-prologue",
+        name: "序章/开篇",
+        pattern: `^(序章?|楔子|引子|前言|开篇)`,
+        flags: "",
+        captureKind: "fixed_min",
+        description: "序章/楔子/引子等开篇文字，排在所有章节之前",
+        sortOrder: 1,
+    },
+    {
+        ruleId: "builtin-zh-finale",
+        name: "终章/收尾",
+        pattern: `^(终章|尾声|后记|完结|finale)`,
+        flags: "",
+        captureKind: "fixed_max",
+        description: "终章/尾声/后记等收尾文字，排在所有章节之后",
+        sortOrder: 2,
+    },
+    {
+        ruleId: "builtin-zh-extra",
+        name: "番外/外传",
+        pattern: `^(番外|外传|if篇?)`,
+        flags: "",
+        captureKind: "fixed_max",
+        description: "番外/外传等衍生内容，排在终章之后",
+        sortOrder: 3,
+    },
+    {
+        ruleId: "builtin-zh-volume-chapter",
+        name: "中文卷章复合",
+        pattern: `第[ \\t]{0,2}(${NUM_CLASS})[ \\t]{0,2}卷[ \\t]*[-—·.、]?[ \\t]*第[ \\t]{0,2}(${NUM_CLASS})[ \\t]{0,2}章`,
+        flags: "",
+        captureKind: "smart",
+        description: "匹配 第X卷…第Y章 复合结构，序号取 [卷,章]",
+        sortOrder: 4,
+    },
+    {
+        ruleId: "builtin-zh-chapter",
+        name: "中文序号章节",
+        pattern: `第[ \\t]{0,2}(${NUM_CLASS})[ \\t]{0,2}(?:章|节|集|部|篇|回|卷)`,
+        flags: "",
+        captureKind: "smart",
+        description: "匹配 第X章/节/集/部/篇/回/卷 形式的标题（X 支持中文与阿拉伯数字）",
+        sortOrder: 5,
+    },
+    {
+        ruleId: "builtin-en-chapter",
+        name: "英文章节",
+        pattern: `(?:chapter|section|part|episode)[ \\t]*[.．]?[ \\t]*([0-9]{1,6})`,
+        flags: "i",
+        captureKind: "smart",
+        description: "匹配 Chapter/Section/Part/Episode N 英文标题（忽略大小写）",
+        sortOrder: 6,
+    },
+    {
+        ruleId: "builtin-numeric",
+        name: "数字序号开头",
+        pattern: `^[ \\t]*([0-9]{1,6})[ \\t]*(?:[、.．\\-—_]|$)`,
+        flags: "",
+        captureKind: "smart",
+        description: "匹配数字序号开头的文件名，如 001、开端",
+        sortOrder: 7,
+    },
 ];
 
 /** 内置规则幂等插入 SQL（模板内缩进是语句正文，勿改）。 */
@@ -120,16 +120,16 @@ const INSERT_OR_IGNORE_SMART_SORT_RULE_SQL = `INSERT OR IGNORE INTO ${SMART_SORT
  * 内置智能排序规则 seed 操作族。
  */
 export const BuiltinSmartSortRules = {
-  /**
+    /**
    * 幂等写入内置智能排序规则（按 rule_id 主键 INSERT OR IGNORE，不覆盖存量行）。
    *
    * 错误通道同 `BuiltinProviders.seed`：事务内 SQL 级异常靠 throw 回滚，
    * 域内没有可判失败，故不套 `Result`。
    */
-  async seed(conn: TdbcConnection): Promise<void> {
-    const now = Date.now();
-    for (const row of BUILTIN_SMART_SORT_RULE_ROWS) {
-      await conn.execute(INSERT_OR_IGNORE_SMART_SORT_RULE_SQL, [row.ruleId, row.name, row.pattern, row.flags, row.captureKind, row.description, row.sortOrder, now, now]);
-    }
-  },
+    async seed(conn: TdbcConnection): Promise<void> {
+        const now = Date.now();
+        for (const row of BUILTIN_SMART_SORT_RULE_ROWS) {
+            await conn.execute(INSERT_OR_IGNORE_SMART_SORT_RULE_SQL, [row.ruleId, row.name, row.pattern, row.flags, row.captureKind, row.description, row.sortOrder, now, now]);
+        }
+    },
 } as const;

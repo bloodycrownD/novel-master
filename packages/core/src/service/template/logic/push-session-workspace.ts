@@ -20,17 +20,17 @@ import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/
 
 /** session 工作区推送回 project 模板的集合。 */
 export const SessionWorkspacePush = {
-  /**
+    /**
    * 用当前 session 工作区整树覆盖 project 模板（文件 + workplace 规则）。
    */
-  async push(tx: TdbcConnection, projectId: string, sessionId: string): Promise<void> {
-    const vfs = new SqliteVfsEntryRepository(tx);
-    const revisions = new SqliteVfsRevisionRepository(tx);
-    const worktree = new SqliteWorkplaceRepository(tx);
-    await VfsTreeCopy.replaceSubtree(vfs, { scopeKey: `session:${projectId}:${sessionId}` }, "/", { scopeKey: `project:${projectId}` }, "/", {
-      revisions,
-      contentStore: new SqliteVfsContentStore(tx),
-    });
-    await worktree.copyScope(WorkplaceScope.key({ kind: "session", projectId, sessionId }), WorkplaceScope.key({ kind: "project", projectId }), WorkplacePathMap.mapSessionToProject);
-  },
+    async push(tx: TdbcConnection, projectId: string, sessionId: string): Promise<void> {
+        const vfs = new SqliteVfsEntryRepository(tx);
+        const revisions = new SqliteVfsRevisionRepository(tx);
+        const worktree = new SqliteWorkplaceRepository(tx);
+        await VfsTreeCopy.replaceSubtree(vfs, { scopeKey: `session:${projectId}:${sessionId}` }, "/", { scopeKey: `project:${projectId}` }, "/", {
+            revisions,
+            contentStore: new SqliteVfsContentStore(tx),
+        });
+        await worktree.copyScope(WorkplaceScope.key({ kind: "session", projectId, sessionId }), WorkplaceScope.key({ kind: "project", projectId }), WorkplacePathMap.mapSessionToProject);
+    },
 } as const;

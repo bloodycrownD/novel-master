@@ -9,39 +9,39 @@ import {  getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix
 novelMasterTestFixture();
 
 describe("KkvModelSuggestionRepository", () => {
-  it("fetch upserts to KKV and provider delete clears key", async () => {
-    const ctx = getNovelMasterTestContext();
-    const kkv = createKkvService(ctx.conn);
-    const repo = new KkvModelSuggestionRepository(kkv);
+    it("fetch upserts to KKV and provider delete clears key", async () => {
+        const ctx = getNovelMasterTestContext();
+        const kkv = createKkvService(ctx.conn);
+        const repo = new KkvModelSuggestionRepository(kkv);
 
-    await repo.upsert({
-      providerId: "openai",
-      vendorModelId: "gpt-4o",
-      displayName: "GPT-4o",
-      stale: false,
-      lastSeenAtMs: 1000,
+        await repo.upsert({
+            providerId: "openai",
+            vendorModelId: "gpt-4o",
+            displayName: "GPT-4o",
+            stale: false,
+            lastSeenAtMs: 1000,
+        });
+        await repo.upsert({
+            providerId: "openai",
+            vendorModelId: "gpt-4o-mini",
+            displayName: null,
+            stale: false,
+            lastSeenAtMs: 2000,
+        });
+
+        const list = unwrap(await repo.listByProvider("openai"));
+        assert.equal(list.length, 2);
+
+        const raw = unwrap(await kkv.get("nm-model-suggestions", "openai"));
+        assert.match(raw, /gpt-4o/);
+
+        await repo.markStaleExcept("openai", new Set(["gpt-4o"]));
+        const afterStale = unwrap(await repo.listByProvider("openai"));
+        const mini = afterStale.find((s) => s.vendorModelId === "gpt-4o-mini");
+        assert.equal(mini?.stale, true);
+
+        await repo.deleteByProvider("openai");
+        const keys = await kkv.listKeys("nm-model-suggestions");
+        assert.ok(!keys.includes("openai"));
     });
-    await repo.upsert({
-      providerId: "openai",
-      vendorModelId: "gpt-4o-mini",
-      displayName: null,
-      stale: false,
-      lastSeenAtMs: 2000,
-    });
-
-    const list = unwrap(await repo.listByProvider("openai"));
-    assert.equal(list.length, 2);
-
-    const raw = unwrap(await kkv.get("nm-model-suggestions", "openai"));
-    assert.match(raw, /gpt-4o/);
-
-    await repo.markStaleExcept("openai", new Set(["gpt-4o"]));
-    const afterStale = unwrap(await repo.listByProvider("openai"));
-    const mini = afterStale.find((s) => s.vendorModelId === "gpt-4o-mini");
-    assert.equal(mini?.stale, true);
-
-    await repo.deleteByProvider("openai");
-    const keys = await kkv.listKeys("nm-model-suggestions");
-    assert.ok(!keys.includes("openai"));
-  });
 });

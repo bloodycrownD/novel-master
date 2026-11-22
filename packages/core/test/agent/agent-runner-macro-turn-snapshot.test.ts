@@ -20,39 +20,39 @@ const PROJECT_ID = "p1";
 const SESSION_ID = "s1";
 
 function mockVfs(): VfsService {
-  const files = new Map<string, string>();
-  return {
-    async read(path: string) {
-      return { path, content: files.get(path) ?? "", version: 1, mtimeMs: 0 };
-    },
-    async write(path: string, content: string) {
-      files.set(path, content);
-      return { version: 1 };
-    },
-    async replace() {
-      return { version: 1, replacements: 1 };
-    },
-    async list() {
-      return [...files.keys()];
-    },
-    async glob() {
-      return [];
-    },
-    async grep() {
-      return [];
-    },
-    async delete() {
-      return { deleted: true };
-    },
-  } as unknown as VfsService;
+    const files = new Map<string, string>();
+    return {
+        async read(path: string) {
+            return { path, content: files.get(path) ?? "", version: 1, mtimeMs: 0 };
+        },
+        async write(path: string, content: string) {
+            files.set(path, content);
+            return { version: 1 };
+        },
+        async replace() {
+            return { version: 1, replacements: 1 };
+        },
+        async list() {
+            return [...files.keys()];
+        },
+        async glob() {
+            return [];
+        },
+        async grep() {
+            return [];
+        },
+        async delete() {
+            return { deleted: true };
+        },
+    } as unknown as VfsService;
 }
 
 function mockToolCtx(vfs: VfsService): BuiltinToolContext {
-  return {
-    vfs,
-    projectId: PROJECT_ID,
-    sessionId: SESSION_ID,
-  };
+    return {
+        vfs,
+        projectId: PROJECT_ID,
+        sessionId: SESSION_ID,
+    };
 }
 
 /**
@@ -61,181 +61,181 @@ function mockToolCtx(vfs: VfsService): BuiltinToolContext {
  * 回合内所有 step 复用同一份文本，保证每步请求是前一步的纯追加（提升前缀缓存命中）。
  */
 describe("AgentRunner macro turn snapshot", () => {
-  it("T-SNAP2: renderFileTree 只调一次且 dynamic 块仅 step0 注入（展开值取自回合快照）", async () => {
-    const session = new InMemoryAgentSession(SESSION_ID);
-    await session.append("user", TextBlocks.of("go"));
+    it("T-SNAP2: renderFileTree 只调一次且 dynamic 块仅 step0 注入（展开值取自回合快照）", async () => {
+        const session = new InMemoryAgentSession(SESSION_ID);
+        await session.append("user", TextBlocks.of("go"));
 
-    const definition: AgentDefinition = {
-      name: "snap-agent",
-      prompts: {
-        dynamicEnabled: true,
-        persist: [],
-        dynamic: [
-          {
-            name: "ctx",
-            type: "text",
-            role: "user",
-            content: "时间 {{$time}}\n树 {{$filetree}}",
-          },
-        ],
-      },
-    };
+        const definition: AgentDefinition = {
+            name: "snap-agent",
+            prompts: {
+                dynamicEnabled: true,
+                persist: [],
+                dynamic: [
+                    {
+                        name: "ctx",
+                        type: "text",
+                        role: "user",
+                        content: "时间 {{$time}}\n树 {{$filetree}}",
+                    },
+                ],
+            },
+        };
 
-    // 每次调用返回不同内容：若某 step 走了实时渲染，跨 step 文本必然不一致。
-    let renderCount = 0;
-    const renderFileTree = mock.fn(async () => Result.ok(`/tree-call-${++renderCount}`));
-    const workplace: WorkplaceService = {
-      scope: { kind: "session", projectId: PROJECT_ID, sessionId: SESSION_ID },
-      renderFileTree,
-      renderDisplay: async () => "",
-      buildListRows: async () => [],
-      materializePersistBlock: async () => ({ workplaceDisplay: "" }),
-      evaluateRuleView: async () => ({
-        rows: [],
-        displayByPath: new Map(),
-      }),
-    } as unknown as WorkplaceService;
+        // 每次调用返回不同内容：若某 step 走了实时渲染，跨 step 文本必然不一致。
+        let renderCount = 0;
+        const renderFileTree = mock.fn(async () => Result.ok(`/tree-call-${++renderCount}`));
+        const workplace: WorkplaceService = {
+            scope: { kind: "session", projectId: PROJECT_ID, sessionId: SESSION_ID },
+            renderFileTree,
+            renderDisplay: async () => "",
+            buildListRows: async () => [],
+            materializePersistBlock: async () => ({ workplaceDisplay: "" }),
+            evaluateRuleView: async () => ({
+                rows: [],
+                displayByPath: new Map(),
+            }),
+        } as unknown as WorkplaceService;
 
-    const histories: ModelRequestOptions[] = [];
-    const model: ModelRequestService = {
-      request: mock.fn(async (_modelId, _content, options) => {
-        histories.push(options);
-        if (histories.length < 2) {
-          return Result.ok({
-            assistantText: "",
-            blocks: [
-              {
-                type: "tool_use",
-                id: "tu1",
-                name: "write",
-                input: { path: "/out.txt", content: "x" },
-              },
-            ],
-            raw: {},
-          }) satisfies LlmChatResult;
+        const histories: ModelRequestOptions[] = [];
+        const model: ModelRequestService = {
+            request: mock.fn(async (_modelId, _content, options) => {
+                histories.push(options);
+                if (histories.length < 2) {
+                    return Result.ok({
+                        assistantText: "",
+                        blocks: [
+                            {
+                                type: "tool_use",
+                                id: "tu1",
+                                name: "write",
+                                input: { path: "/out.txt", content: "x" },
+                            },
+                        ],
+                        raw: {},
+                    }) satisfies LlmChatResult;
+                }
+                return Result.ok({
+                    assistantText: "ok",
+                    blocks: [{ type: "text", text: "ok" }],
+                    raw: {},
+                }) satisfies LlmChatResult;
+            }),
+        };
+
+        const registry = new ToolRegistry();
+        BuiltinTools.register(registry);
+        const runner = AgentServiceFactory.createRunner({
+            savedModels: noopSavedModelRepository(),
+            sessionKkv: createMemorySessionKkv(),
+            eventBus: new SimpleEventBus(),
+            workplace: () => workplace,
+            session,
+            modelRequests: model,
+            registry,
+            toolCtx: mockToolCtx(mockVfs()),
+        } as CreateAgentRunnerDeps);
+
+        unwrap(await runner.run({
+            maxSteps: 3,
+            definition,
+            sessionId: SESSION_ID,
+            projectId: PROJECT_ID,
+            savedModelId: RUN_MODEL_ID,
+            workspaceModelId: RUN_MODEL_ID,
+        }));
+
+        assert.equal(histories.length, 2);
+        // 快照只取一次：customAttach/dynamic/token 计数各链路共享，不重复渲染。
+        assert.equal(renderFileTree.mock.callCount(), 1);
+
+        const dynamicBodies: string[] = [];
+        // dynamic 一律 once 语义：仅 step 0 出现，step≥1 跳过。
+        for (const [index, opts] of histories.entries()) {
+            const hit = (opts.history ?? []).find((m) => m.id === "prompt:ctx");
+            if (index === 0) {
+                assert.notEqual(hit, undefined, "step0 应注入 dynamic 合成消息");
+                dynamicBodies.push(MessageBodyText.fromBlocks(hit!.content.blocks));
+            } else {
+                assert.equal(hit, undefined, "step≥1 不应重复注入 dynamic 块");
+            }
         }
-        return Result.ok({
-          assistantText: "ok",
-          blocks: [{ type: "text", text: "ok" }],
-          raw: {},
-        }) satisfies LlmChatResult;
-      }),
-    };
+        // $time 与 $filetree 均来自回合快照（单次渲染）。
+        assert.match(dynamicBodies[0]!, /\/tree-call-1/);
+    });
 
-    const registry = new ToolRegistry();
-    BuiltinTools.register(registry);
-    const runner = AgentServiceFactory.createRunner({
-      savedModels: noopSavedModelRepository(),
-      sessionKkv: createMemorySessionKkv(),
-      eventBus: new SimpleEventBus(),
-      workplace: () => workplace,
-      session,
-      modelRequests: model,
-      registry,
-      toolCtx: mockToolCtx(mockVfs()),
-    } as CreateAgentRunnerDeps);
+    it("T-SNAP3: 文本不含 $filetree 时不预取（renderFileTree 零调用）", async () => {
+        const session = new InMemoryAgentSession(SESSION_ID);
+        await session.append("user", TextBlocks.of("go"));
 
-    unwrap(await runner.run({
-      maxSteps: 3,
-      definition,
-      sessionId: SESSION_ID,
-      projectId: PROJECT_ID,
-      savedModelId: RUN_MODEL_ID,
-      workspaceModelId: RUN_MODEL_ID,
-    }));
+        const definition: AgentDefinition = {
+            name: "snap-agent",
+            prompts: {
+                customAttach: "常驻提示 {{$time}}",
+                dynamicEnabled: true,
+                persist: [],
+                dynamic: [
+                    {
+                        name: "ctx",
+                        type: "text",
+                        role: "user",
+                        content: "今天 {{$week_cn}}",
+                    },
+                ],
+            },
+        };
 
-    assert.equal(histories.length, 2);
-    // 快照只取一次：customAttach/dynamic/token 计数各链路共享，不重复渲染。
-    assert.equal(renderFileTree.mock.callCount(), 1);
+        const renderFileTree = mock.fn(async () => Result.ok("/tree"));
+        const workplace: WorkplaceService = {
+            scope: { kind: "session", projectId: PROJECT_ID, sessionId: SESSION_ID },
+            renderFileTree,
+            renderDisplay: async () => "",
+            buildListRows: async () => [],
+            materializePersistBlock: async () => ({ workplaceDisplay: "" }),
+            evaluateRuleView: async () => ({
+                rows: [],
+                displayByPath: new Map(),
+            }),
+        } as unknown as WorkplaceService;
 
-    const dynamicBodies: string[] = [];
-    // dynamic 一律 once 语义：仅 step 0 出现，step≥1 跳过。
-    for (const [index, opts] of histories.entries()) {
-      const hit = (opts.history ?? []).find((m) => m.id === "prompt:ctx");
-      if (index === 0) {
-        assert.notEqual(hit, undefined, "step0 应注入 dynamic 合成消息");
-        dynamicBodies.push(MessageBodyText.fromBlocks(hit!.content.blocks));
-      } else {
-        assert.equal(hit, undefined, "step≥1 不应重复注入 dynamic 块");
-      }
-    }
-    // $time 与 $filetree 均来自回合快照（单次渲染）。
-    assert.match(dynamicBodies[0]!, /\/tree-call-1/);
-  });
+        const captured: { options?: ModelRequestOptions } = {};
+        const model: ModelRequestService = {
+            request: mock.fn(async (_modelId, _content, options) => {
+                captured.options = options;
+                return Result.ok({
+                    assistantText: "ok",
+                    blocks: [{ type: "text", text: "ok" }],
+                    raw: {},
+                }) satisfies LlmChatResult;
+            }),
+        };
 
-  it("T-SNAP3: 文本不含 $filetree 时不预取（renderFileTree 零调用）", async () => {
-    const session = new InMemoryAgentSession(SESSION_ID);
-    await session.append("user", TextBlocks.of("go"));
+        const runner = AgentServiceFactory.createRunner({
+            savedModels: noopSavedModelRepository(),
+            sessionKkv: createMemorySessionKkv(),
+            eventBus: new SimpleEventBus(),
+            workplace: () => workplace,
+            session,
+            modelRequests: model,
+            registry: new ToolRegistry(),
+            toolCtx: mockToolCtx(mockVfs()),
+        } as CreateAgentRunnerDeps);
 
-    const definition: AgentDefinition = {
-      name: "snap-agent",
-      prompts: {
-        customAttach: "常驻提示 {{$time}}",
-        dynamicEnabled: true,
-        persist: [],
-        dynamic: [
-          {
-            name: "ctx",
-            type: "text",
-            role: "user",
-            content: "今天 {{$week_cn}}",
-          },
-        ],
-      },
-    };
+        unwrap(await runner.run({
+            maxSteps: 1,
+            definition,
+            sessionId: SESSION_ID,
+            projectId: PROJECT_ID,
+            savedModelId: RUN_MODEL_ID,
+            workspaceModelId: RUN_MODEL_ID,
+        }));
 
-    const renderFileTree = mock.fn(async () => Result.ok("/tree"));
-    const workplace: WorkplaceService = {
-      scope: { kind: "session", projectId: PROJECT_ID, sessionId: SESSION_ID },
-      renderFileTree,
-      renderDisplay: async () => "",
-      buildListRows: async () => [],
-      materializePersistBlock: async () => ({ workplaceDisplay: "" }),
-      evaluateRuleView: async () => ({
-        rows: [],
-        displayByPath: new Map(),
-      }),
-    } as unknown as WorkplaceService;
-
-    const captured: { options?: ModelRequestOptions } = {};
-    const model: ModelRequestService = {
-      request: mock.fn(async (_modelId, _content, options) => {
-        captured.options = options;
-        return Result.ok({
-          assistantText: "ok",
-          blocks: [{ type: "text", text: "ok" }],
-          raw: {},
-        }) satisfies LlmChatResult;
-      }),
-    };
-
-    const runner = AgentServiceFactory.createRunner({
-      savedModels: noopSavedModelRepository(),
-      sessionKkv: createMemorySessionKkv(),
-      eventBus: new SimpleEventBus(),
-      workplace: () => workplace,
-      session,
-      modelRequests: model,
-      registry: new ToolRegistry(),
-      toolCtx: mockToolCtx(mockVfs()),
-    } as CreateAgentRunnerDeps);
-
-    unwrap(await runner.run({
-      maxSteps: 1,
-      definition,
-      sessionId: SESSION_ID,
-      projectId: PROJECT_ID,
-      savedModelId: RUN_MODEL_ID,
-      workspaceModelId: RUN_MODEL_ID,
-    }));
-
-    // 不使用 $filetree 的 agent 不应白付一次全量 metadata 渲染。
-    assert.equal(renderFileTree.mock.callCount(), 0);
-    // customAttach 宏仍正常展开（extra-info 注入在最新 user 消息上）。
-    const userInput = (captured.options?.history ?? []).find(
-      (m) => m.role === "user" && m.id !== "prompt:ctx",
-    );
-    assert.notEqual(userInput, undefined);
-    assert.match(MessageBodyText.fromBlocks(userInput!.content.blocks), /<extra-info>/);
-  });
+        // 不使用 $filetree 的 agent 不应白付一次全量 metadata 渲染。
+        assert.equal(renderFileTree.mock.callCount(), 0);
+        // customAttach 宏仍正常展开（extra-info 注入在最新 user 消息上）。
+        const userInput = (captured.options?.history ?? []).find(
+            (m) => m.role === "user" && m.id !== "prompt:ctx",
+        );
+        assert.notEqual(userInput, undefined);
+        assert.match(MessageBodyText.fromBlocks(userInput!.content.blocks), /<extra-info>/);
+    });
 });

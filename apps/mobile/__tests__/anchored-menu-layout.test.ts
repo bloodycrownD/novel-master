@@ -8,78 +8,78 @@ import {describe, expect, it} from '@jest/globals';
 import {AnchoredMenuPlacement} from '@/webview-host/chat-transcript/anchored-menu-layout';
 
 describe('layoutAnchoredMenu', () => {
-  const anchor = {x: 40, y: 520, width: 200, height: 48};
-  const items = [
-    {label: '编辑'},
-    {label: '复制'},
-    {label: '置位'},
-    {label: '分叉'},
-    {label: '回滚'},
-  ];
+    const anchor = {x: 40, y: 520, width: 200, height: 48};
+    const items = [
+        {label: '编辑'},
+        {label: '复制'},
+        {label: '置位'},
+        {label: '分叉'},
+        {label: '回滚'},
+    ];
 
-  it('flips above when the bubble is near the bottom edge', () => {
-    const menuWidth = AnchoredMenuPlacement.computeAnchoredMenuWidth(items, 360);
-    const layout = AnchoredMenuPlacement.layoutAnchoredMenu(
-      anchor,
-      items.length,
-      menuWidth,
-      360,
-      640,
-    );
-    expect(layout.top).toBeLessThan(anchor.y);
-  });
+    it('flips above when the bubble is near the bottom edge', () => {
+        const menuWidth = AnchoredMenuPlacement.computeAnchoredMenuWidth(items, 360);
+        const layout = AnchoredMenuPlacement.layoutAnchoredMenu(
+            anchor,
+            items.length,
+            menuWidth,
+            360,
+            640,
+        );
+        expect(layout.top).toBeLessThan(anchor.y);
+    });
 
-  it('opens below when there is room under the bubble', () => {
-    const topAnchor = {x: 40, y: 80, width: 200, height: 48};
-    const menuWidth = AnchoredMenuPlacement.computeAnchoredMenuWidth(items, 360);
-    const layout = AnchoredMenuPlacement.layoutAnchoredMenu(
-      topAnchor,
-      items.length,
-      menuWidth,
-      360,
-      640,
-    );
-    expect(layout.top).toBeGreaterThanOrEqual(
-      topAnchor.y + topAnchor.height + 8,
-    );
-  });
+    it('opens below when there is room under the bubble', () => {
+        const topAnchor = {x: 40, y: 80, width: 200, height: 48};
+        const menuWidth = AnchoredMenuPlacement.computeAnchoredMenuWidth(items, 360);
+        const layout = AnchoredMenuPlacement.layoutAnchoredMenu(
+            topAnchor,
+            items.length,
+            menuWidth,
+            360,
+            640,
+        );
+        expect(layout.top).toBeGreaterThanOrEqual(
+            topAnchor.y + topAnchor.height + 8,
+        );
+    });
 
-  it('does not scroll for five items when viewport has room', () => {
-    const menuWidth = AnchoredMenuPlacement.computeAnchoredMenuWidth(items, 360);
-    const layout = AnchoredMenuPlacement.layoutAnchoredMenu(
-      {x: 40, y: 200, width: 200, height: 48},
-      items.length,
-      menuWidth,
-      360,
-      640,
-    );
-    expect(layout.scrollable).toBe(false);
-    expect(layout.maxHeight).toBe(AnchoredMenuPlacement.anchoredMenuContentHeight(items.length));
-  });
+    it('does not scroll for five items when viewport has room', () => {
+        const menuWidth = AnchoredMenuPlacement.computeAnchoredMenuWidth(items, 360);
+        const layout = AnchoredMenuPlacement.layoutAnchoredMenu(
+            {x: 40, y: 200, width: 200, height: 48},
+            items.length,
+            menuWidth,
+            360,
+            640,
+        );
+        expect(layout.scrollable).toBe(false);
+        expect(layout.maxHeight).toBe(AnchoredMenuPlacement.anchoredMenuContentHeight(items.length));
+    });
 
-  it('does not scroll five items in a short WebView-sized viewport when wedge fits', () => {
-    const menuWidth = AnchoredMenuPlacement.computeAnchoredMenuWidth(items, 360);
-    const layout = AnchoredMenuPlacement.layoutAnchoredMenu(
-      {x: 200, y: 316, width: 120, height: 40},
-      items.length,
-      menuWidth,
-      360,
-      469,
-    );
-    expect(layout.scrollable).toBe(false);
-    expect(layout.maxHeight).toBe(AnchoredMenuPlacement.anchoredMenuContentHeight(items.length));
-  });
+    it('does not scroll five items in a short WebView-sized viewport when wedge fits', () => {
+        const menuWidth = AnchoredMenuPlacement.computeAnchoredMenuWidth(items, 360);
+        const layout = AnchoredMenuPlacement.layoutAnchoredMenu(
+            {x: 200, y: 316, width: 120, height: 40},
+            items.length,
+            menuWidth,
+            360,
+            469,
+        );
+        expect(layout.scrollable).toBe(false);
+        expect(layout.maxHeight).toBe(AnchoredMenuPlacement.anchoredMenuContentHeight(items.length));
+    });
 
-  it('scrolls when content exceeds the height cap', () => {
-    const menuWidth = AnchoredMenuPlacement.computeAnchoredMenuWidth(items, 360);
-    const layout = AnchoredMenuPlacement.layoutAnchoredMenu(
-      {x: 40, y: 200, width: 200, height: 48},
-      10,
-      menuWidth,
-      360,
-      640,
-    );
-    expect(layout.scrollable).toBe(true);
-    expect(layout.maxHeight).toBe(288);
-  });
+    it('scrolls when content exceeds the height cap', () => {
+        const menuWidth = AnchoredMenuPlacement.computeAnchoredMenuWidth(items, 360);
+        const layout = AnchoredMenuPlacement.layoutAnchoredMenu(
+            {x: 40, y: 200, width: 200, height: 48},
+            10,
+            menuWidth,
+            360,
+            640,
+        );
+        expect(layout.scrollable).toBe(true);
+        expect(layout.maxHeight).toBe(288);
+    });
 });

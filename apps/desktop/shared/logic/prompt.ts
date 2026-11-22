@@ -4,9 +4,9 @@
  */
 
 export type {
-  DynamicPromptBlock,
-  PersistPromptBlock,
-  PersistTextPromptBlock,
+    DynamicPromptBlock,
+    PersistPromptBlock,
+    PersistTextPromptBlock,
 } from "@novel-master/core/prompt";
 
 export { ALLOWED_DYNAMIC_ROOT_MACROS, DEFAULT_SKILLS_INDEX_PREFIX } from "@novel-master/core/prompt";

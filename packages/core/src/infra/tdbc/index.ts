@@ -18,9 +18,9 @@ export { TdbcRegistry } from "./logic/registry.js";
 export { TdbcTemplate } from "./logic/template-helper.js";
 export { TdbcTransaction } from "./logic/transaction-helper.js";
 export type {
-  BatchResult,
-  ExecuteResult,
-  OpenOptions,
-  Row,
-  SqlValue,
+    BatchResult,
+    ExecuteResult,
+    OpenOptions,
+    Row,
+    SqlValue,
 } from "./types.js";

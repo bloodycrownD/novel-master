@@ -4,8 +4,8 @@
 import { ALLOWED_DYNAMIC_ROOT_MACROS } from "@shared/logic/prompt";
 
 type PromptInsertableMacro = {
-  readonly label: string;
-  readonly token: string;
+    readonly label: string;
+    readonly token: string;
 };
 
 export const PROMPT_INSERTABLE_MACROS: readonly PromptInsertableMacro[] = ALLOWED_DYNAMIC_ROOT_MACROS.map((key) => ({ label: `$${key}`, token: `{{$${key}}}` }));
@@ -13,51 +13,51 @@ export const PROMPT_INSERTABLE_MACROS: readonly PromptInsertableMacro[] = ALLOWE
 const ALLOWED_ROOT_MACRO_KEYS = new Set<string>(ALLOWED_DYNAMIC_ROOT_MACROS);
 
 type WhitelistMacroRange = {
-  readonly start: number;
-  readonly end: number;
-  readonly value: string;
+    readonly start: number;
+    readonly end: number;
+    readonly value: string;
 };
 
 function isWhitelistRootMacroInner(inner: string): boolean {
-  const trimmed = inner.trim();
-  if (!trimmed.startsWith("$")) {
-    return false;
-  }
-  const rest = trimmed.slice(1).trim();
-  if (rest.length === 0 || rest.startsWith(".") || rest.includes(".")) {
-    return false;
-  }
-  return ALLOWED_ROOT_MACRO_KEYS.has(rest);
+    const trimmed = inner.trim();
+    if (!trimmed.startsWith("$")) {
+        return false;
+    }
+    const rest = trimmed.slice(1).trim();
+    if (rest.length === 0 || rest.startsWith(".") || rest.includes(".")) {
+        return false;
+    }
+    return ALLOWED_ROOT_MACRO_KEYS.has(rest);
 }
 
 export function findWhitelistMacroRanges( text: string ): readonly WhitelistMacroRange[] {
-  const ranges: WhitelistMacroRange[] = [];
-  let index = 0;
-  while (index < text.length) {
-    const open = text.indexOf("{{", index);
-    if (open < 0) {
-      break;
+    const ranges: WhitelistMacroRange[] = [];
+    let index = 0;
+    while (index < text.length) {
+        const open = text.indexOf("{{", index);
+        if (open < 0) {
+            break;
+        }
+        const close = text.indexOf("}}", open + 2);
+        if (close < 0) {
+            break;
+        }
+        const value = text.slice(open, close + 2);
+        const inner = text.slice(open + 2, close);
+        if (isWhitelistRootMacroInner(inner)) {
+            ranges.push({ start: open, end: close + 2, value });
+        }
+        index = close + 2;
     }
-    const close = text.indexOf("}}", open + 2);
-    if (close < 0) {
-      break;
-    }
-    const value = text.slice(open, close + 2);
-    const inner = text.slice(open + 2, close);
-    if (isWhitelistRootMacroInner(inner)) {
-      ranges.push({ start: open, end: close + 2, value });
-    }
-    index = close + 2;
-  }
-  return ranges;
+    return ranges;
 }
 
 function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    return s
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
 }
 
 /** 白名单宏着色 HTML；value 仍为纯文本（无 span）。 */
