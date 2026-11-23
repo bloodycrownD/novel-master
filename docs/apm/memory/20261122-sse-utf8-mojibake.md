@@ -58,3 +58,4 @@
 - 读旧代码时「逻辑看着对」不够：这个分支漏项我昨天人工推演过两遍都说没问题。可靠做法是**逐字复刻 + 可执行断言**（`LegacyDecoderRegressionTest`）和**历史数据的可证伪预测**（码点分区 vs 基率）。
 - 在已发布版本上建 worktree 做 e2e 是用户给的方向，是对的：开发分支上早已被替换的旧逻辑只能这样拿到运行证据。worktree 依赖可从相邻 worktree 复制（根 + 六个嵌套 `*/node_modules`）再手建 workspace junction；根目录是 npm（`package-lock.json`），没有 yarn.lock，`yarn install` 会失败。
 - 真机降级跑旧版本前整库备份（`D:/tmp/pre-v1550-exp/`，integrity ok）；本例 v1.5.50..main 无功能性 schema 变更（DDL 搬迁逐字符同形）。
+- **改 core 源码后不重建 core dist，Metro 打出来的 bundle 里就没有这段改动**（Metro 与 apps 测试一样解析到 `packages/core/dist`）。`llm.fffd-sentinel` 哨兵 11-22 晚写进 `dispatch-sse-chunk.ts` 后未重建 dist，所以 22:30 那轮根因现场（落库 138 个替换符）它零输出——不是「没有坏点」也不是哨兵失灵；11-23 重建 dist 后阳性测试（mode G）立即报出 31 行。**观测点装上后必须做一次阳性验证**（构造一个必然命中的输入看它真的会报），否则「零触发」没有信息量。此前「智谱直连 3 轮 0 FFFD（哨兵静默）」的依据同样存疑。
