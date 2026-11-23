@@ -17,6 +17,10 @@
  */
 
 /** 单次 SSE 响应的分发状态：首包标记需要跨 chunk 复用。 */
+import { LogFactory } from "@/infra/log/logger.js";
+
+const log = LogFactory.create("llm.fffd-sentinel");
+
 interface SseDispatchState {
     /** 是否已投递过至少一个非空 chunk（首包日志只打一次）。 */
     firstChunkDelivered: boolean;
@@ -46,6 +50,11 @@ export const SseDispatch = {
             return;
         }
         emit(chunk);
+        if (chunk.includes("\uFFFD")) {
+            // FFFD 哨兵（乱码根因取证）：解码后文本出现替换符 = 「字节→字符串」层已产出损坏。
+            // 纯日志不改行为；根因定位后撤。nm-style: keep
+            log.info("utf8 sentinel", { count: (chunk.match(/\uFFFD/g) ?? []).length, head: chunk.slice(0, 32), tail: chunk.slice(-32), len: chunk.length });
+        }
         if (!state.firstChunkDelivered) {
             state.firstChunkDelivered = true;
             onFirstChunk?.(chunk.length);

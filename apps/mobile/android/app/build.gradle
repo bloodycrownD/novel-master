@@ -120,8 +120,14 @@ android {
                 taskName.contains('assembleRelease') || taskName.contains('bundleRelease')
             }
             reset()
-            include "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
-            universalApk true
+            // 默认只出 arm64-v8a（本地真机包）；发版 CI 传 -PabiSplits=all 开全架构+universal。
+            if ((findProperty('abiSplits') ?: '') == 'all') {
+                include "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
+                universalApk true
+            } else {
+                include "arm64-v8a"
+                universalApk false
+            }
         }
     }
     signingConfigs {
