@@ -44,13 +44,15 @@ node -e "require('fs').rmSync('D:/Dev/Js/novel-master/apps/mobile/android/build'
 
 # 5. 出包
 cd D:/Dev/Js/novel-master\apps\mobile\android
-gradlew.bat assembleRelease -PversionCode=129 --no-daemon
-#   成功标志：BUILD SUCCESSFUL（全量约 13-15 分钟；C++ 冷编占大头，改动小则 1-2 分钟增量）
+gradlew.bat assembleRelease -PversionCode=129 -PreactNativeArchitectures=arm64-v8a --no-daemon
+#   成功标志：BUILD SUCCESSFUL（splits 默认只出 arm64-v8a 单包，全量约 5-8 分钟、增量约 2 分钟；
+#   全架构+universal 由 -PabiSplits=all 开启——那是发版 CI 的参数，本地传了白编 4 个 ABI。
+#   C++ 冷编占大头，改动小则更快）
 ```
 
 ## 收 APK
 
-产物在 `app/build/outputs/apk/release/`（abi splits 自动产 5 架构）。交付两个到 Downloads：
+产物在 `app/build/outputs/apk/release/`（2026-11-23 起默认只产 arm64-v8a 单包；要 universal/全架构时加 `-PabiSplits=all`）。默认交付到 Downloads：
 
 ```js
 // collect-apk.mjs
