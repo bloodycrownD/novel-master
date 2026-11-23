@@ -28,3 +28,10 @@
 - `Utf8StreamingDecoder.kt`（commit `edf2ec963`）：WHATWG UTF-8 decoder 状态机（maximal subpart 每段恰 1 FFFD、越界字节前置回流重判、EOF 残尾 1 FFFD、carry 内聚），退役 `completeUtf8PrefixLength`+`readUtf8`。JVM 13 例全绿（两次红均为测试自身注入点数算错，decoder 无错）。
 - **真机终验逐字符一致**：mode G 注入流落库 1847/FFFD=60 == Node WHATWG oracle（1.0000）；干净流 1787=原文逐字零损失。三代对照：XHR 1628/FFFD0（无声丢段）→ Java REPLACE 1856/138（假标记）→ WHATWG 1847/60（精确）。spec Phase A/B/C/E 全完成，Phase D 剩 oracle/replay 收编进仓。
 - 新坑记录：① `adb install` streaming 在荣耀卡死（十几分钟无响应）→ 通道重启后 `adb push`（2.9s/191MB）+ `pm install -r -d` 稳定；② MSYS 对 `/data/...` 同样转换（push 目标被推进 git 安装目录）——**adb 设备侧路径一律 `MSYS_NO_PATHCONV=1`，此时本地路径须写 Windows 形式 `D:/...`**；③ `adb kill-server` 清空 reverse 映射（9753 probe 连不上时先查 reverse）；④ `adb input text` 在该荣耀上随机丢字且打不出大写（`modeG`→`modeatw`、`modeg`→`mg`）——关键注入用逐键 `input keyevent`（KEYCODE m=41/o=43/d=32/e=33/g=35），probe 判据改大小写不敏感；⑤ python heredoc 双层转义：工具层把 `\\uFFFD` 降级成 `\uFFFD`，python 单引号串又把它转义回 FFFD 字符本身——需要写字面反斜杠时用 `chr(92)+'uFFFD'` 拼接。
+
+### 2026-11-23 发版前考据：更正上文「从未接管」的范围（用户质疑后逐版本读码）
+
+- **上文「native transport 从未接管」「真机史上首次接管」只对开发态真机成立，范围写过宽了。** 实查 v1.5.34（乱码波 1 期间）/ v1.5.47（乱码波 2 期间）/ v1.5.50（最新发布）：三者的 Kotlin `@ReactMethod` 面均为 `sseConnect/sseAbort/request`、JS 探测均为同三方法、`setup-llm-fetch.ts` 均调用 `registerNativeSseTransportWith`——**已发布版本的 native 链路三处匹配，代码层面没有断点**（仍无 v1.5.50 真机 transport 日志作实证，那之前没这条日志）。
+- 四方法探测（`17cd4d55b`，11-17）只进了 p25…p34c 开发 tag 与 main，**无任何 v* 发布 tag**。它只在「JS 比 APK 新」的组合（Metro 热更 × 旧 debug APK）下让探测失败；正式包 JS 内嵌、APK 同版本构建（Kotlin 含 `requestAbort`），不受影响。「v1.5.51 不带探测修复会比 v1.5.50 更糟」是错的。
+- **对历史乱码的实际意义**：历史 154 处坏点 92% 为「孤立两字节 → 2×FFFD」形态，发生在 native 已接管的旧解码器路径上；WHATWG 解码器对同一形态**同样产 2 个 FFFD**（oracle 60=30×2）。本次两项修复（探测兼容、解码器 WHATWG 化）改善的是 malformed 的其他形态（旧解码器多标/错标的那部分，138→60），**不改变历史主流乱码形态的输出**。真实流里坏字节的来源至今未定（已排除：Kotlin 旧 carry 切分逻辑、VFS/压缩/hash 链；未排除：服务商/网关侧、请求方式差异）。
+- 教训：**「X 版本上是 Y」必须逐版本读码或拿该版本的运行证据，不能从一个 tag 的三行 grep 外推成「已发布版本上正常」**；同样不能从开发态真机的现象外推成「从未」。
