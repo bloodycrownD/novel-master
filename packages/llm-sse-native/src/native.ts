@@ -101,11 +101,8 @@ export namespace NativeSse {
    */
     export function registerWith(register: (transport: SseTransport) => void,): boolean {
         if (!isAvailable()) {
-            // 注册失败可见化（mobile-sse-utf8-decode-fix Step 1）：console.warn 进 logcat；
-            // 静默 return false 曾让「native 从未接管」隐蔽数月（真机 xhr ×100%）。
-            const runtime = (NativeModules as {LlmSseNative?: Partial<LlmSseNativeModule>}).LlmSseNative;
-            // eslint-disable-next-line no-console
-            console.warn("[nm-llm] native transport 注册失败", {platform: Platform.OS, capturedNull: nativeModule == null, captured: nativeModule == null ? null : {sseConnect: typeof nativeModule.sseConnect, sseAbort: typeof nativeModule.sseAbort}, runtimeNull: runtime == null});
+            // 失败诊断由装配点（apps/mobile setup-llm-fetch）经 logger 记录——本包不依赖
+            // core 运行时、没有日志通道；registerWith 只返回事实，不产生裸 console 日志。
             return false;
         }
         register(createTransport());

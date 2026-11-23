@@ -19,8 +19,11 @@
 
 import {NativeModules} from 'react-native';
 import {DebugFetch, LlmSseTransport, Registry} from '@novel-master/core/llm-protocol';
+import {LogFactory} from '@novel-master/core/log';
 import {NativeSse, type LlmSseNativeModule} from '@novel-master/llm-sse-native/native';
 import {LlmNativeFetchShim} from '../services/llm-native-fetch-shim';
+
+const log = LogFactory.create('llm.sse-native');
 
 /** 装配状态（模块内 holder，对象管理）：每进程注册一次 + 回落告警只打一次。 */
 const setupState = {
@@ -36,19 +39,19 @@ export const LlmFetchSetup = {
         }
         setupState.configured = true;
         const nativeRegistered = NativeSse.registerWith(LlmSseTransport.register);
-        // 注册结果可见化（mobile-sse-utf8-decode-fix Step 1）：成功/失败都落 logcat，
-        // 「从未接管」根因定位后此日志收敛为失败分支。
-        // eslint-disable-next-line no-console
-        console.warn(`[nm-llm] native SSE transport 注册结果: ${nativeRegistered ? '成功(registered)' : '失败(isAvailable=false)'}`);
-        if (!nativeRegistered) {
-            // eslint-disable-next-line no-console
-            console.warn('[nm-llm] 装配时 NativeModules.LlmSseNative:', NativeModules.LlmSseNative == null ? 'undefined' : Object.keys(NativeModules.LlmSseNative as object).join(','));
+        const nativeModule = NativeModules.LlmSseNative as LlmSseNativeModule | undefined;
+        // 注册结果落文件日志（native 未接管曾静默数月）：成功 info 一条；失败 warn 并带原生
+        // 方法面，一眼可辨是模块缺失还是方法面不全（如旧安装包缺方法）。
+        const methodFace = nativeModule == null ? 'module=undefined' : ['sseConnect', 'sseAbort', 'request', 'requestAbort'].filter((k) => typeof nativeModule[k as keyof LlmSseNativeModule] === 'function').join(',');
+        if (nativeRegistered) {
+            log.info('native SSE transport 注册结果: 成功(registered)', {methodFace});
+        } else {
+            log.warn(`native SSE transport 注册结果: 失败(isAvailable=false, methodFace=${methodFace})`);
         }
         // 装配工厂（原 createMobileLlmFetch）：native request 可用（Android 且已
         // autolink）→ 以它为底座的 fetch shim；不可用（iOS 工程 / Jest 环境）→ 回落
         // `globalThis.fetch`——发布面仅 Android，iOS 只是开发调试面，缺 native 不应
         // 炸掉全部非流式请求。调用时求值 native 底座。
-        const nativeModule = NativeModules.LlmSseNative as LlmSseNativeModule | undefined;
         const request = nativeModule == null || typeof nativeModule.request !== 'function' ? null : nativeModule.request.bind(nativeModule);
         // requestAbort 缺失（旧 native 构建）不阻塞装配：退化为仅本地取消，仍保留
         // native 连接池与整调用 callTimeout，比回落 globalThis.fetch 更接近生产行为。
@@ -59,7 +62,7 @@ export const LlmFetchSetup = {
         } else {
             if (!setupState.fallbackWarned) {
                 setupState.fallbackWarned = true;
-                console.warn('[nm-llm] LlmSseNative request 底座不可用，非流式请求回落 globalThis.fetch');
+                log.warn('LlmSseNative request 底座不可用，非流式请求回落 globalThis.fetch');
             }
             shim = globalThis.fetch;
         }
