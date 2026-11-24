@@ -7,7 +7,9 @@
  * `serverStatuses()` 读出（`snapshotTools()` 对失败的 server 只是跳过）：
  * - `disabled` / `unsupported`（stdio / sse 只归一不实现，Step 11）无连接态，
  *   两个方法里现算；
- * - `ready` / `failed` / `pending` 记在 {@link McpConnectionEntry.status}。
+ * - `ready` / `failed` / `pending` 记在 {@link McpConnectionEntry.status}；
+ *   同快照 slug 复合名撞名的 server 也标 `failed`（spec §六：`failed{protocol,
+ *   report}`，markSlugConflicts 在 snapshotTools 聚合出口检测并剔除涉事条目）。
  *
  * 单请求超时走官方 `RequestOptions.timeout`（= `timeoutMs`）；装配期预算
  * min(timeoutMs, 8000) 到点 abort 预算 signal，AbortRelayTransport 把它并进
@@ -20,6 +22,7 @@
 import { SdkError, SdkErrorCode } from "@modelcontextprotocol/client";
 import { AbortError } from "@/domain/abort/logic/create-abort-error.js";
 import { McpFailureClassifier } from "@/domain/mcp/logic/classify-mcp-failure.js";
+import { McpToolSlug } from "@/domain/mcp/logic/slugify-mcp-tool-name.js";
 import { McpFailureOps, type McpFailure } from "@/domain/mcp/model/mcp-failure.js";
 import { McpServerConfigOps, type McpServerConfig } from "@/domain/mcp/model/mcp-server-config.js";
 import type { McpServerStatus, McpToolSnapshot } from "@/domain/mcp/model/mcp-tool-snapshot.js";
@@ -160,10 +163,37 @@ export const McpConnectionManagerFactory = {
             return inflight;
         };
 
+        /**
+         * nm-style: keep-local — 直接读写 connections 闭包状态（status 覆写），是
+         * 连接状态机的收尾一步。spec §六：同一快照内 slug 复合名撞名（含单 server
+         * 内重名与跨 server id 归一撞名）时，涉事 server 标 `failed{protocol,
+         * report}` 并从返回快照剔除其全部条目——server 级失败只能从 `serverStatuses()`
+         * 读出（spec §五），不写状态 UI 就读不到，agent 里却一个工具都没有。TTL
+         * 缓存条目（client / snapshots / snapshotAt）原样保留：撞名是注册名冲突不是
+         * 连接故障，重置会破坏「子 run 复用快照不重复 tools/list」；检测在每次聚合
+         * 出口幂等重跑，状态与剔除结果稳定。
+         */
+        const markSlugConflicts = (snapshot: readonly McpToolSnapshot[]): readonly McpToolSnapshot[] => {
+            const byName = new Map<string, readonly McpToolSnapshot[]>();
+            for (const entry of snapshot) {
+                const name = McpToolSlug.toolName(entry.serverId, entry.toolName);
+                byName.set(name, [...(byName.get(name) ?? []), entry]);
+            }
+            const conflicts = [...byName].filter(([, group]) => group.length > 1);
+            if (conflicts.length === 0) return snapshot;
+            const conflictingServers = new Set(conflicts.flatMap(([, group]) => group.map((entry) => entry.serverId)));
+            for (const serverId of conflictingServers) {
+                const detail = conflicts.filter(([, group]) => group.some((entry) => entry.serverId === serverId)).map(([name, group]) => `${group.map((entry) => `${entry.serverId}:${entry.toolName}`).join(" / ")} 归一为同名注册名 ${name}`).join("；");
+                const entry = connections.get(serverId);
+                connections.set(serverId, { client: entry?.client ?? null, snapshots: entry?.snapshots ?? [], snapshotAt: entry?.snapshotAt ?? 0, status: { serverId, state: "failed", failure: { kind: "protocol", action: "report", detail: `工具注册名冲突：${detail}；涉事 server 的工具本轮不注册` } }, inflight: entry?.inflight ?? null });
+            }
+            return snapshot.filter((entry) => !conflictingServers.has(entry.serverId));
+        };
+
         /** nm-style: keep-public — McpConnectionManager port 契约的实现方法；生产消费在 Step 9 的 run-agent-turn 装配与双端 runtime/catalog（后续波次接线），本波次仅测试可达。 */
         const snapshotTools = async (): Promise<readonly McpToolSnapshot[]> => {
             const batches = await Promise.all(deps.listServers().map(snapshotFor));
-            return batches.flat();
+            return markSlugConflicts(batches.flat());
         };
 
         /** nm-style: keep-public — McpConnectionManager port 契约的实现方法；双端状态标签与「测试连接」的唯一读取面，生产消费在后续波次接线。 */
