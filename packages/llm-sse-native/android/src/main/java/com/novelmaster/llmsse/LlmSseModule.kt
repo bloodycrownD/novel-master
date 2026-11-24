@@ -276,6 +276,15 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
           result.putInt("status", response.code)
           result.putString("contentType", response.header("Content-Type"))
           result.putString("body", response.body?.string() ?: "")
+          // 全头表（键名小写）：MCP transport 要读 content-type / mcp-session-id /
+          // www-authenticate 等任意响应头，只回 contentType 不够（spec mcp-support
+          // Step 6）。旧 APK 构建无此字段，JS 侧按空对象处理。同名多值头后者覆盖
+          // 前者——消费面只读单值语义的头（Set-Cookie 合并不影响现有读取）。
+          val headers = Arguments.createMap()
+          for (i in 0 until response.headers.size) {
+            headers.putString(response.headers.name(i).lowercase(), response.headers.value(i))
+          }
+          result.putMap("headers", headers)
           promise.resolve(result)
         }
       } catch (t: Throwable) {

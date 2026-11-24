@@ -68,7 +68,9 @@ export interface LlmSseNativeModule {
     sseAbort(requestId: string): void;
     /**
    * 非流式请求-响应。`requestId` 只是取消路由键（JS 侧生成，与流式路径的
-   * requestId 各自独立命名空间），不影响请求/响应内容。
+   * requestId 各自独立命名空间），不影响请求/响应内容。`headers` 是键名小写
+   * 的全头表（spec mcp-support Step 6）；旧 APK 构建缺该字段，消费方按空对象
+   * 处理并以 `contentType` 兜底 content-type。
    */
     request(
         requestId: string,
@@ -77,7 +79,7 @@ export interface LlmSseNativeModule {
         headersKv: string[],
         body: string | null,
         callTimeoutMs: number,
-    ): Promise<{ status: number; contentType: string | null; body: string }>;
+    ): Promise<{ status: number; contentType: string | null; body: string; headers: Record<string, string> }>;
     /**
    * 取消进行中的 `request`：native 侧 `Call.cancel()` 真断连，原 promise 以
    * `code: "abort"` reject；`requestId` 不存在（已结束/从未发起）静默 no-op。

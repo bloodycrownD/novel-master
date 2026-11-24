@@ -59,11 +59,12 @@ interface LlmNativeRequestDeps {
 /** fetch 形状（与 core `FetchFn` 同构声明，不依赖 DOM lib）。 */
 type FetchLike = typeof globalThis.fetch;
 
-/** native 侧 request 的 resolve 形状。 */
+/** native 侧 request 的 resolve 形状（`headers` 为键名小写全头表；旧 APK 构建缺该字段）。 */
 interface NativeRequestResult {
     status: number;
     contentType: string | null;
     body: string;
+    headers?: Record<string, string>;
 }
 
 /** shim Response 的最小消费面（fetchJson / logging / 流式误用防御够用）。 */
@@ -82,26 +83,32 @@ interface ShimResponse {
 export namespace LlmNativeFetchShim {
     /**
    * nm-style: keep-local — 自引用工厂：`clone()` 需要递归重建同形响应，内联会丢失自引用。
-   * native request 只带回 Content-Type 一个响应头，headers.get 按需返回。
+   * native request 回传键名小写的全头表（spec mcp-support Step 6），headers.get
+   * 大小写不敏感地查表；旧 APK 构建缺 headers 字段时表为空，用 contentType 兜底
+   * 补齐 content-type——LLM 主通道的 Content-Type 消费（assertOk / provider 解析）不断。
    */
-    function make(status: number, contentType: string | null, bodyText: string): ShimResponse {
-        const headers = {
-            get(name: string): string | null {
-                return name.toLowerCase() === 'content-type' ? contentType : null;
-            },
-        };
+    function make(status: number, contentType: string | null, bodyText: string, headerTable: Record<string, string>): ShimResponse {
+        const headers = {...headerTable};
+        if (headers['content-type'] == null && contentType != null) {
+            headers['content-type'] = contentType;
+        }
         return {
             status,
             ok: status >= 200 && status < 300,
             statusText: '',
-            headers,
+            headers: {
+                get(name: string): string | null {
+                    return headers[name.toLowerCase()] ?? null;
+                },
+            },
             body: null,
             text: () => Promise.resolve(bodyText),
             // async 形状对齐 fetch Response 契约：JSON.parse 失败时返回 rejected
             // Promise，而不是同步 throw（调用方按 Promise reject 捕才捕得到）。
             json: async () => JSON.parse(bodyText),
             // logging 在 !ok 时会 clone().text() 打错误 body——body 文本在手，直接再造一份。
-            clone: () => make(status, contentType, bodyText),
+            // nm-style: keep-public — Response.clone 契约实现（DebugFetch 错误体打印消费），非可内联转手包装。
+            clone: () => make(status, contentType, bodyText, headers),
         };
     }
 
@@ -116,9 +123,10 @@ export namespace LlmNativeFetchShim {
    * 摘除（`once` 命中即摘，未命中在 native settle 时手动摘）。
    *
    * nm-style: keep-local — 取消赛跑协议：`settled` 双分支状态机 + once listener 摘除是独立不变量，内联会把竞态收口塞进 fetch 主体。
+   * 导出给 mcp-request-adapter 复用（同一 services 家族的原生取消赛跑协议，不写第二份）。
    */
     /** raceWithAbort 的参数对象（>4 参签名收口）：取消赛跑的材料同对象，字段名即文档。 */
-    type RaceWithAbortParams<T> = {
+    export type RaceWithAbortParams<T> = {
         /** native 请求 Promise（竞跑的一侧）。 */
         readonly call: Promise<T>;
         /** 取消信号源（竞跑的另一侧）。 */
@@ -126,12 +134,12 @@ export namespace LlmNativeFetchShim {
         /** native 取消路由键（abort 时传给 requestAbort）。 */
         readonly requestId: string;
         /** 真断连入口，旧 native 构建缺该方法时退化为仅本地取消。 */
-        readonly requestAbort: LlmNativeRequestAbortFn | undefined;
+        readonly requestAbort: LlmSseNativeModule['requestAbort'] | undefined;
         /** 本端取消标记：abort 分支置位，供调用方把 native "abort" reject 同归 AbortError。 */
         readonly cancelState: {userAborted: boolean};
     };
 
-    function raceWithAbort<T>(p: RaceWithAbortParams<T>): Promise<T> {
+    export function raceWithAbort<T>(p: RaceWithAbortParams<T>): Promise<T> {
         const {call, signal, requestId, requestAbort, cancelState} = p;
         return new Promise<T>((resolve, reject) => {
             let settled = false;
@@ -266,7 +274,8 @@ export namespace LlmNativeFetchShim {
                 // 迟到 settle 已在 race 内吞掉；本端标记不跨请求泄漏。
                 cancelState.userAborted = false;
             }
-            return make(result.status, result.contentType, result.body);
+            // 旧 APK 构建缺 headers 字段：按空对象处理，make 内由 contentType 兜底 content-type。
+            return make(result.status, result.contentType, result.body, result.headers ?? {});
         };
         // 结构形状已对齐 Response 消费面；ShimResponse → fetch Response 的收口转换。
         return fetchLike as unknown as FetchLike;

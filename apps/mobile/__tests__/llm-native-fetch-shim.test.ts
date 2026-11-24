@@ -45,9 +45,9 @@ function createDeferred<T>() {
     return {promise, resolve, reject};
 }
 
-/** 造一个记录调用参数的 mock native request。 */
+/** 造一个记录调用参数的 mock native request（headers 模拟新 APK 的键名小写全头表；缺省 = 旧 APK 不带该字段）。 */
 function createMockRequest(
-    result: {status: number; contentType: string | null; body: string} = {
+    result: {status: number; contentType: string | null; body: string; headers?: Record<string, string>} = {
         status: 200,
         contentType: 'application/json',
         body: '{"ok":true}',
@@ -155,6 +155,27 @@ describe('llm-native-fetch-shim (T-N4)', () => {
             expect(response.headers.get('x-other')).toBeNull();
             await expect(response.text()).resolves.toBe('{"data":[{"id":"m-1"}]}');
             await expect(response.json()).resolves.toEqual({data: [{id: 'm-1'}]});
+        });
+
+        it('T-M16b 回归：native 返回键名全小写的 headers 全头表时，headers.get("Content-Type") 仍命中（LLM 主通道）', async () => {
+            const request = createMockRequest({
+                status: 200,
+                contentType: null,
+                body: '{"ok":true}',
+                headers: {'content-type': 'application/json', 'mcp-session-id': 'session-1'},
+            });
+            const shim = LlmNativeFetchShim.create({request});
+
+            const response = await shim('https://api.example.com/v1/models', {
+                method: 'GET',
+            });
+
+            // Content-Type 白名单已退役：get 改为查全头表且大小写不敏感。
+            expect(response.headers.get('Content-Type')).toBe('application/json');
+            expect(response.headers.get('content-type')).toBe('application/json');
+            expect(response.headers.get('Mcp-Session-Id')).toBe('session-1');
+            expect(response.headers.get('x-missing')).toBeNull();
+            await expect(response.json()).resolves.toEqual({ok: true});
         });
 
         it('json() 对非法 body 返回 rejected Promise（不同步抛，符合 fetch 契约）', async () => {
