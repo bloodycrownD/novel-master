@@ -78,6 +78,10 @@
       "types": "./dist/public/format.d.ts",
       "import": "./dist/public/format.js"
     },
+    "./mcp": {
+      "types": "./dist/public/mcp.d.ts",
+      "import": "./dist/public/mcp.js"
+    },
     "./tdbc": {
       "types": "./dist/infra/tdbc/index.d.ts",
       "import": "./dist/infra/tdbc/index.js"
