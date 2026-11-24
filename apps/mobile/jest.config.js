@@ -244,6 +244,15 @@ module.exports = {
       repoRoot,
       'packages/core/dist/public/provider.js',
     ),
+    // MCP 工具名 slug（McpToolSlug）：agent 编辑器快照接线加载该子路径；同其它
+    // core 子路径直连 dist 真实文件（exports 只声明 import 条件，Jest 的 require
+    // 解析不到，漏写会在 jest-resolve 就抛）。注意：core/mcp 完整 barrel（public/mcp.js）
+    // 会经官方 client 拉起 pkce-challenge 的 ESM browser 产物，jest CJS 环境炸
+    // Unexpected token 'export'，故映射到 slug 定义文件本身。
+    '^@novel-master/core/mcp$': path.join(
+      repoRoot,
+      'packages/core/dist/domain/mcp/logic/slugify-mcp-tool-name.js',
+    ),
     '^@novel-master/cloud-sync-driver-s3$': path.join(
       repoRoot,
       'packages/cloud-sync-driver-s3/dist/index.js',

@@ -7,7 +7,7 @@
 import React from 'react';
 import {Text} from 'react-native';
 
-import {BUILTIN_TOOL_CATALOG, TOOL_MODE_OPTIONS, type ToolsMode} from '@/config-forms/agent';
+import {BUILTIN_TOOL_CATALOG, TOOL_MODE_OPTIONS, type AgentToolCatalogMcpTool, type ToolsMode} from '@/config-forms/agent';
 
 import {coreT} from '@/i18n/core';
 
@@ -24,6 +24,8 @@ type Props = {
     onToolsModeChange: (value: ToolsMode) => void;
     toolsSelected: readonly string[];
     onToolsSelectedChange: (value: string[]) => void;
+    /** 页面打开时刻的 MCP 工具快照（spec §九移动端直读 connection manager 缓存）；缺省 = mcp 分组只显示「未配置」占位。 */
+    mcpTools?: readonly AgentToolCatalogMcpTool[];
     /** 只读态（内置智能体详情）：模式下拉与工具选择器全禁用灰显。 */
     readOnly?: boolean;
 };
@@ -34,6 +36,7 @@ export function AgentEditorToolsSection({
     onToolsModeChange,
     toolsSelected,
     onToolsSelectedChange,
+    mcpTools,
     readOnly = false,
 }: Props) {
     return (
@@ -57,6 +60,7 @@ export function AgentEditorToolsSection({
                         tokens={tokens}
                         selected={toolsSelected}
                         onChange={onToolsSelectedChange}
+                        mcpTools={mcpTools}
                         disabled={readOnly}
                     />
                 </FormField>

@@ -5,15 +5,16 @@
  * 对象），各表单 section 子组件在 ./agent-editor/ 下，样式在
  * agent-editor-form.styles.ts。本文件只保留 Alert/导航/toast 编排与组装。
  */
-import React, {useCallback, useEffect} from 'react';
+import React, {useCallback, useEffect, useState} from 'react';
 import {Alert, Text, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 
 // nm-style: keep-local — 本文件的具名导入（core/config-forms 名称较长）单行化后均超 80 列，
 // prettier 必拆回；按可读性保留拆行。
-import {AgentEditorState, PROMPT_REGION_LABELS} from '@/config-forms/agent';
+import {AgentEditorState, PROMPT_REGION_LABELS, type AgentToolCatalogMcpTool} from '@/config-forms/agent';
 import {DefaultAgentDefinition, STORED_CONFIG_LABELS, StoredConfigLabels} from '@novel-master/core/stored-config-validity';
+import {McpToolSlug} from '@novel-master/core/mcp';
 import {BuiltinTools, ToolRegistry} from '@novel-master/core';
 
 import {FormField} from '../form/FormField';
@@ -62,6 +63,15 @@ export function AgentEditorForm(props: Props) {
     const {showToast} = useToast();
     const navigation = useNavigation<StackNav>();
     const runtime = useRuntime();
+    // MCP 工具快照（页面打开时刻经 AgentToolCatalog 组装 mcp 分组；spec §九）。
+    const [mcpTools, setMcpTools] = useState<readonly AgentToolCatalogMcpTool[]>([]);
+
+    // MCP 工具快照：页面打开时刻读一次 connection manager 缓存（spec §九移动端口径，
+    // TTL 内命中缓存不发请求），失败静默回落「未配置」占位，不阻断 agent 编辑。
+    // nm-style: keep-local — React hook：then/catch 链多行回调，单行化会破坏可读性
+    useEffect(() => {
+        runtime.mcp.connectionManager.snapshotTools().then(snapshots => setMcpTools(snapshots.map(entry => ({registeredName: McpToolSlug.toolName(entry.serverId, entry.toolName), serverName: entry.serverName, toolDescription: entry.toolDescription})))).catch(() => undefined);
+    }, []);
 
     const {
         form,
@@ -319,6 +329,7 @@ export function AgentEditorForm(props: Props) {
                     onToolsModeChange={value => patch({toolsMode: value})}
                     toolsSelected={form.toolsSelected}
                     onToolsSelectedChange={value => patch({toolsSelected: value})}
+                    mcpTools={mcpTools}
                     readOnly={readOnly}
                 />
 
