@@ -18,6 +18,42 @@ describe("common/json · Json.parseText", () => {
     });
 });
 
+describe("common/json · Json.prettyJson", () => {
+    it("对象 / 数组加两空格缩进，空容器留在同一行", () => {
+        assert.equal(Json.prettyJson('{"a":1,"b":[1,2],"c":{},"d":[]}', 300), '{\n  "a": 1,\n  "b": [\n    1,\n    2\n  ],\n  "c": {},\n  "d": []\n}');
+    });
+
+    it("超出安全整数范围的数字与短字符串逐字节保留", () => {
+        const big = "1798274923044444160";
+        assert.equal(Json.prettyJson(`{"id":${big},"s":"a,b:c{}[]"}`, 300), `{\n  "id": ${big},\n  "s": "a,b:c{}[]"\n}`);
+    });
+
+    it("不是 JSON 对象 / 数组时返回 null（标量、非法文本）", () => {
+        assert.equal(Json.prettyJson("123", 300), null);
+        assert.equal(Json.prettyJson("null", 300), null);
+        assert.equal(Json.prettyJson("{color:red}", 300), null);
+        assert.equal(Json.prettyJson("plain text", 300), null);
+    });
+
+    it("超过宽度的字符串值解码后展开：内嵌 JSON 递归缩进，普通文本按行输出", () => {
+        const out = Json.prettyJson(`{"r":"[{\\"t\\":\\"x\\"}]","n":"line1\\nline2"}`, 10);
+        assert.equal(out, `{
+  "r": "[
+  {
+    "t": "x"
+  }
+]",
+  "n": "line1
+line2"
+}`);
+    });
+
+    it("超过宽度的普通长字符串值按宽度折行", () => {
+        const out = Json.prettyJson(`{"s":"${"ab ".repeat(10)}"}`, 10);
+        assert.equal(out, `{\n  "s": "ab ab ab\nab ab ab\nab ab ab\nab "\n}`);
+    });
+});
+
 describe("common/json · Json.mergePatch", () => {
     it("深层合并对象，未出现的键保留现值", () => {
         const current = { name: "a", runtime: { maxSteps: 3, threshold: 2 }, prompts: { persist: [] } };

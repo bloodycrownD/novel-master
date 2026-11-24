@@ -814,9 +814,10 @@ describe("Builtin file tools V2 (integration)", () => {
             `savedPath 形状不对: ${rec.savedPath}`
         );
 
-        // /tmp 首次建目录：文件在真实 VFS 存在且全文一致。
+        // 落盘前折行：1023 字符的原行按 300 硬切成 4 行（末行 123），全文 62×4 = 248 行。
+        const expected = Array.from({ length: 62 }, () => ["x".repeat(300), "x".repeat(300), "x".repeat(300), "x".repeat(123)]).flat().join("\n");
         const saved = unwrap(await vfs.read(rec.savedPath!));
-        assert.equal(saved.content, body);
+        assert.equal(saved.content, expected);
 
         // 配套动作一：file_cache upsert（同会话后续 read 免重读盘）。
         assert.ok(
@@ -827,24 +828,24 @@ describe("Builtin file tools V2 (integration)", () => {
         // 配套动作二：/tmp 目录链补默认规则（rule_on）。
         assert.equal(unwrap(await workplace.getDirRule("/tmp"))?.ruleEnabled, true);
 
-        // read 工具分页读回：页 1（行 1-50）+ 页 2（行 51-62）拼回全文。
+        // read 工具分页读回：每页 150 行（300 字符/行远在 50KB 预算内），两页拼回全文，
+        // 不触发「被截行尾部不可续读」路径。
         const page1 = unwrap(await runner.call<{
             content: string;
             truncated: boolean;
             lastLineTruncated?: boolean;
             nextOffset?: number;
-        }>("read", { path: rec.savedPath! }, baseCtx));
+        }>("read", { path: rec.savedPath!, limit: 150 }, baseCtx));
         assert.equal(page1.truncated, true);
-        // 预算恰耗尽 → 末行整行丢弃，不是部分截断。
         assert.equal(page1.lastLineTruncated, undefined);
-        assert.equal(page1.nextOffset, 51);
+        assert.equal(page1.nextOffset, 151);
         const page2 = unwrap(await runner.call<{ content: string; truncated: boolean }>(
             "read",
-            { path: rec.savedPath!, offset: 51 },
+            { path: rec.savedPath!, offset: 151, limit: 150 },
             baseCtx,
         ));
         assert.equal(page2.truncated, false);
-        assert.equal(`${page1.content}\n${page2.content}`, body);
+        assert.equal(`${page1.content}\n${page2.content}`, expected);
     });
 
     it("wraps VfsError as FAILED and preserves cause", async () => {

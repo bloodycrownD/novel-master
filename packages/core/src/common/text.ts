@@ -252,6 +252,36 @@ export const Text = {
     stripLinePrefix: (body: string, pattern: RegExp): string => body.split("\n").map((line) => line.replace(pattern, "")).join("\n"),
 
     /**
+     * 把超过 `maxWidth` 的行折到宽度以内：在该行宽度内最后一个空白处断开，整段没有空白
+     * 则按宽度硬切（硬切点落在代理对中间时前移一位）。不超过宽度的行原样保留。
+     */
+    wrapLongLines: (text: string, maxWidth: number): string => {
+        const out: string[] = [];
+        for (const line of text.split("\n")) {
+            let rest = line;
+            while (rest.length > maxWidth) {
+                let cut = -1;
+                for (let i = maxWidth - 1; i > 0; i--) {
+                    if (/\s/.test(rest[i])) {
+                        cut = i;
+                        break;
+                    }
+                }
+                if (cut < 0) {
+                    cut = /[\uDC00-\uDFFF]/.test(rest[maxWidth]) ? maxWidth - 1 : maxWidth;
+                    out.push(rest.slice(0, cut));
+                    rest = rest.slice(cut);
+                } else {
+                    out.push(rest.slice(0, cut));
+                    rest = rest.slice(cut + 1);
+                }
+            }
+            out.push(rest);
+        }
+        return out.join("\n");
+    },
+
+    /**
      * HTML 转义：`&` `<` `>` `"` 四个实体（**不处理单引号**，与历史输出逐字节一致）。
      *
      * @remarks 入参取 `unknown`（WebView 侧原口径）：非字符串先 `String(value)` 化，

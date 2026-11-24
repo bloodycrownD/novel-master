@@ -131,3 +131,26 @@ describe("common/text · Text.decodeHtmlEntities", () => {
         assert.equal(Text.decodeHtmlEntities(123), "123");
     });
 });
+
+describe("common/text · Text.wrapLongLines", () => {
+    it("超过宽度的行在最后一个空白处折行，短行原样", () => {
+        const line = "x".repeat(50);
+        const words = `${"word ".repeat(200)}end`;
+        const lines = Text.wrapLongLines(`${line}\n${words}`, 300).split("\n");
+        assert.equal(lines[0], line);
+        assert.ok(lines.every((l) => l.length <= 300));
+        assert.equal(lines.slice(1).join(" "), words);
+    });
+
+    it("整行无空白时按宽度硬切，不切出半个代理对，去掉换行后与原文一致", () => {
+        const raw = "a".repeat(299) + "😀" + "b".repeat(300);
+        const lines = Text.wrapLongLines(raw, 300).split("\n");
+        assert.deepEqual(lines, ["a".repeat(299), "😀" + "b".repeat(298), "bb"]);
+        assert.equal(lines.join(""), raw);
+    });
+
+    it("不超过宽度的文本原样返回", () => {
+        const css = "{color:red;background:blue}";
+        assert.equal(Text.wrapLongLines(css, 300), css);
+    });
+});

@@ -22,6 +22,8 @@
 
 import type { BuiltinToolContext } from "./builtin-tool-context.js";
 import { Encoding } from "@/common/encoding.js";
+import { Json } from "@/common/json.js";
+import { Text } from "@/common/text.js";
 import { TOOL_OUTPUT_MAX_BYTES } from "../logic/tool-output-limits.js";
 import { FileTools } from "./vfs-tools.js";
 import { LogFactory } from "@/infra/log/logger.js";
@@ -31,11 +33,14 @@ const log = LogFactory.create("tool.overflow-sink");
 /** 落盘子目录（会话工作区 VFS 内，子代理时为父会话工作区）。 */
 const OVERFLOW_SINK_DIR = "/tmp";
 
+/** 非 JSON 落盘内容的折行宽度（字符）；50KB 一页约可读 150 行。 */
+const OVERFLOW_SINK_LINE_WIDTH = 300;
+
 /** `OverflowSink.sink` 入参。 */
 export interface SinkOversizedInput {
     /** 调用方工具名（文件名前缀，如 "curl" / "search"）。 */
     readonly tool: string;
-    /** 截断前的完整输出正文（原文落盘，不做任何截断）。 */
+    /** 截断前的完整输出正文（不做截断；落盘时 JSON 加缩进、其余按行宽 300 折行）。 */
     readonly content: string;
     /** 输出内容的 content-type（用于扩展名映射；缺省按 txt）。 */
     readonly contentType: string;
@@ -74,11 +79,13 @@ export const OverflowSink = {
         const month = String(now.getMonth() + 1).padStart(2, "0");
         const day = String(now.getDate()).padStart(2, "0");
         const savedPath = `${OVERFLOW_SINK_DIR}/${input.tool}-${now.getFullYear()}${month}${day}-${rand4}.${OverflowSink.extensionForContentType(input.contentType)}`;
-        await ctx.vfs.write(savedPath, input.content);
+        // 落盘前整理成多行：read 按行分页、超长行尾部不可续读，单行文件只能读到前 50KB。
+        const readable = Json.prettyJson(input.content, OVERFLOW_SINK_LINE_WIDTH) ?? Text.wrapLongLines(input.content, OVERFLOW_SINK_LINE_WIDTH);
+        await ctx.vfs.write(savedPath, readable);
         // 配套动作失败不阻断（照 write 工具口径）：file_cache 是加速缓存，
         // 目录规则是辅助展示配置——文件已落盘，返回路径仍有效。
         try {
-            await FileTools.upsertFileCacheAfterWrite(ctx, savedPath, input.content);
+            await FileTools.upsertFileCacheAfterWrite(ctx, savedPath, readable);
         } catch (error) {
             log.debug(`file_cache upsert 失败（${savedPath}）`, { error });
         }

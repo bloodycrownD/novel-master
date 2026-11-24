@@ -336,14 +336,15 @@ describe("search 工具：run 基础行为", () => {
         assert.equal(rec.engine, "bocha");
         assert.ok(rec.savedPath != null && /^\/tmp\/search-\d{8}-[0-9a-f]{4}\.json$/.test(rec.savedPath), `savedPath 形状不对: ${rec.savedPath}`);
         assert.ok(rec.message != null && rec.message.length > 0);
-        // 落盘内容 = 截断前的序列化全文，后续 read 可读回。
+        // 落盘内容 = 截断前的序列化全文经缩进展开，后续 read 可读回。
         const saved = files.get(rec.savedPath!);
         assert.ok(saved != null);
-        const parsed = JSON.parse(saved!) as { engine: string; results: unknown };
-        assert.equal(parsed.engine, "bocha");
-        // 模板引擎 results 为提取数组 JSON 文本；bocha 20 条 ~61KB 超引擎 50KB 预算已截断并标注。
-        assert.equal(typeof parsed.results, "string");
-        assert.ok((parsed.results as string).endsWith("已截断]"), `引擎侧截断标注：${(parsed.results as string).slice(-60)}`);
+        // results 是超长 JSON 字符串值（且已被引擎侧截断、不再是合法 JSON）：解码后按 300 字符折行。
+        const savedLines = saved!.split("\n");
+        assert.ok(savedLines.length > 20, `落盘应是多行，实际 ${savedLines.length} 行`);
+        assert.ok(savedLines.some((line) => line.trim().startsWith('"engine": "bocha"')), `engine 应独占一行:\n${saved!.slice(0, 200)}`);
+        assert.ok(savedLines.some((line) => line.startsWith('  "results": "[{"url":')), `results 应解码展开:\n${saved!.slice(0, 200)}`);
+        assert.ok(!savedLines.some((line) => line.length > 50_000), "不应残留读不完的超长行");
         const readBack = (await (
             vfs as never as {
                 read: (p: string) => Promise<{ content: string }>;

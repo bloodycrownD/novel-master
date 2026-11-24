@@ -238,11 +238,14 @@ describe("curl 工具", () => {
         // toolCtx.vfs 指向父会话 VFS（装配由 subsession-workspace-isolation
         // 的 T-SS-3 锁定），故子代理内 curl 落盘同样落父会话工作区。
         assert.equal(writes.length, 1);
-        assert.equal(files.get(rec.savedPath!), ascii);
+        // 落盘前折行：无空白的超长行按 300 字符硬切，去掉换行后与原文逐字一致。
+        const wrapped = files.get(rec.savedPath!)!;
+        assert.ok(wrapped.split("\n").every((line) => line.length <= 300));
+        assert.equal(wrapped.replace(/\n/g, ""), ascii);
         const readBack = (await vfs.read(rec.savedPath!)) as {
             content: string;
         };
-        assert.equal(readBack.content, ascii);
+        assert.equal(readBack.content, wrapped);
 
         // 多字节：中文字符 3 字节/字符，落盘的是序列化全文（无截断），
         // 不存在切半个字符问题（截断只发生在降级路径）；text/plain → txt。
@@ -265,7 +268,9 @@ describe("curl 工具", () => {
         assert.equal(rec2.truncated, true);
         assert.equal(rec2.originalBytes, 270_000);
         assert.ok(rec2.savedPath != null && /^\/tmp\/curl-\d{8}-[0-9a-f]{4}\.txt$/.test(rec2.savedPath));
-        assert.equal(cjkFiles.get(rec2.savedPath!), cjk);
+        const wrappedCjk = cjkFiles.get(rec2.savedPath!)!;
+        assert.ok(wrappedCjk.split("\n").every((line) => line.length <= 300));
+        assert.equal(wrappedCjk.replace(/\n/g, ""), cjk);
     });
 
     it("T-CT3 降级: 落盘失败（vfs 不可用）回退字节截断，不切半个字符、不丢正文", async () => {
