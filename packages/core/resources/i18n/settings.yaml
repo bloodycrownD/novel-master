@@ -85,6 +85,8 @@ zh-CN:
   mcp.toast.saved: 已保存
   mcp.toast.server_not_found.mobile: "未找到 MCP 服务器：{name}"
   mcp.toast.toggle_failed.mobile: 切换启用状态失败
+  mcp.validation.name_required: 请输入名称
+  mcp.validation.url_required: 请输入地址
   search.auth.api_key_label: API Key
   search.auth.base_url_hint.mobile: "含 http(s)://；留空保存即清除"
   search.auth.base_url_label.desktop: 实例 Base URL（服务模板中的 {{baseUrl}}；留空 = 清除）
@@ -318,6 +320,8 @@ en-US:
   mcp.toast.saved: Saved
   mcp.toast.server_not_found.mobile: "MCP server not found: {name}"
   mcp.toast.toggle_failed.mobile: Failed to toggle
+  mcp.validation.name_required: Name is required
+  mcp.validation.url_required: URL is required
   search.auth.api_key_label: API Key
   search.auth.base_url_hint.mobile: "Include http(s)://; leaving it empty on save clears it"
   search.auth.base_url_label.desktop: Instance Base URL (serves the {{baseUrl}} macro in the template; leave empty to clear)
