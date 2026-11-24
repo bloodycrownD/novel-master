@@ -48,6 +48,7 @@ import type { KkvService } from "@novel-master/core/kkv";
 import type { SessionKkvService } from "@novel-master/core/session-kkv";
 import type { SkillService } from "@novel-master/core/skills";
 import type { SearchConfigStore } from "@novel-master/core";
+import type { McpConfigStore, McpConnectionManager, McpOAuth } from "@novel-master/core/mcp";
 
 /** Open connection with domain services (main-process singleton host). */
 export interface DesktopNovelMasterRuntime {
@@ -109,4 +110,13 @@ export interface DesktopNovelMasterRuntime {
    * run-agent-turn 经结构化兼容读取本字段装配 search 闭包。
    */
     readonly searchConfig: SearchConfigStore;
+    /** MCP 配置存储（KKV `nm-mcp` + SKSP）：desktop 配置页 CRUD 的唯一接缝，写后自带读缓存刷新。 */
+    readonly mcpConfig: McpConfigStore;
+    /**
+   * MCP 连接管理器。字段名 `mcp` 与切片形状（`{ connectionManager }`）对齐
+   * core `AgentTurnRuntimePort.mcp`——run-agent-turn 装配期经它注册 `mcp__` 工具。
+   */
+    readonly mcp: { readonly connectionManager: McpConnectionManager };
+    /** MCP OAuth 双端回调接缝（spec §八）：desktop loopback handler 只调 start / handleCallback。 */
+    readonly mcpOAuth: McpOAuth;
 }

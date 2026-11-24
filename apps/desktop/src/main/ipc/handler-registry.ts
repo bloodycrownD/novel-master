@@ -15,6 +15,7 @@ import { Backup } from "./handlers/backup.js";
 import { DbMaintenance } from "./handlers/db-maintenance.js";
 import { CloudSync } from "./handlers/cloud-sync.js";
 import { Search } from "./handlers/search.js";
+import { Mcp } from "./handlers/mcp.js";
 import { AppInfo } from "./handlers/app-info.js";
 import { Shell } from "./handlers/shell.js";
 import { Preferences, PREFERENCE_FEATURES, type PreferenceFeature } from "./handlers/preferences.js";
@@ -258,6 +259,17 @@ export const HandlerRegistry = {
         HandlerRegistry.bindReq(IPC_CHANNELS.SEARCH_DELETE_CUSTOM_ENGINE, Search.deleteCustomEngine);
         HandlerRegistry.bindReq(IPC_CHANNELS.SEARCH_UPDATE_PRESET_OVERRIDE, Search.updatePresetOverride);
         HandlerRegistry.bindReq(IPC_CHANNELS.SEARCH_RESET_PRESET_OVERRIDE, Search.resetPresetOverride);
+
+        // MCP 配置（mcp-support Step 13/14）：CRUD / 测试连接 / OAuth 发起与回调 / 快照与状态读取
+        HandlerRegistry.bindNoArg(IPC_CHANNELS.MCP_LIST_SERVERS, Mcp.listServers);
+        HandlerRegistry.bindReq(IPC_CHANNELS.MCP_SAVE_SERVER, Mcp.saveServer);
+        HandlerRegistry.bindReq(IPC_CHANNELS.MCP_DELETE_SERVER, Mcp.deleteServer);
+        HandlerRegistry.bindReq(IPC_CHANNELS.MCP_IMPORT_EXTERNAL, Mcp.importExternal);
+        HandlerRegistry.bindReq(IPC_CHANNELS.MCP_TEST_CONNECTION, Mcp.testConnection);
+        HandlerRegistry.bindNoArg(IPC_CHANNELS.MCP_SERVER_STATUSES, Mcp.serverStatuses);
+        HandlerRegistry.bindNoArg(IPC_CHANNELS.MCP_TOOLS_SNAPSHOT, Mcp.toolsSnapshot);
+        HandlerRegistry.bindReq(IPC_CHANNELS.MCP_OAUTH_START, Mcp.oauthStart);
+        HandlerRegistry.bindNoArg(IPC_CHANNELS.MCP_OAUTH_STATUSES, Mcp.oauthStatuses);
 
         HandlerRegistry.bindEventReq(IPC_CHANNELS.SHELL_MENU_POPUP, Shell.menuPopup);
         HandlerRegistry.bindEventReq(IPC_CHANNELS.SHELL_SET_TITLEBAR_THEME, Shell.setTitleBarTheme);

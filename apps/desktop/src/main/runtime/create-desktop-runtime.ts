@@ -12,6 +12,7 @@ import { DefaultTokenCounterRegistry } from "@novel-master/core/tokenizer";
 import { SimpleEventBus } from "@novel-master/core/events";
 import { ChatServiceFactory } from "@novel-master/core/chat";
 import { PersistentStateFactory, SearchConfig, createPersistentPreferences } from "@novel-master/core";
+import { McpConfigStoreFactory, McpConnectionManagerFactory, McpOAuthFactory, type McpConfigStore, type McpRequestFn, type McpServerConfig } from "@novel-master/core/mcp";
 import { userVfsUnifiedToolTurnFlag } from "@novel-master/core/feature-flags";
 import { SmartSortRuleServiceFactory } from "@novel-master/core/smart-sort-rule";
 import { MessageCheckpointFactory } from "@novel-master/core/message-checkpoint";
@@ -62,6 +63,48 @@ export namespace DesktopRuntimeFactory {
         });
         // search 工具配置：KKV `nm-search` 模块 + SKSP key ref（与 mobile 同构，core 工厂统一逻辑）
         const searchConfig = SearchConfig.createStore({ kkv, secretStore });
+
+        // MCP 域装配（mcp-support Step 13/14）：配置 store 包一层读缓存——connection
+        // manager 的 listServers 是同步签名、KKV 读是异步，经缓存桥接；写方法成功后
+        // 重读刷新。配置 CRUD 全部经本实例（唯一写入口），缓存永不落后；装配期首读
+        // 失败不阻断启动（缓存空列表 = 本进程无 MCP 工具，配置页读时再刷新）。
+        const mcpBaseStore = McpConfigStoreFactory.create({ kkv, secretStore });
+        const mcpServersCache: { current: readonly McpServerConfig[] } = { current: [] };
+        const mcpConfig: McpConfigStore = {
+            list: async () => {
+                const result = await mcpBaseStore.list();
+                if (result.ok) mcpServersCache.current = result.value;
+                return result;
+            },
+            save: async (config) => {
+                const result = await mcpBaseStore.save(config);
+                if (result.ok) await mcpConfig.list();
+                return result;
+            },
+            remove: async (serverId) => {
+                const result = await mcpBaseStore.remove(serverId);
+                if (result.ok) await mcpConfig.list();
+                return result;
+            },
+            importExternal: async (raw) => {
+                const result = await mcpBaseStore.importExternal(raw);
+                if (result.ok) await mcpConfig.list();
+                return result;
+            },
+        };
+        await mcpConfig.list();
+        // 桌面请求函数：Node 22 全局 fetch → McpRequestFn（响应头收全头小写表、
+        // bodyText 完整读回——「原文透出」只在 transport 能看到 raw body 时成立）。
+        const mcpRequestFn: McpRequestFn = async (request) => {
+            const response = await fetch(request.url, { method: request.method, headers: { ...request.headers }, body: request.body, signal: request.signal ?? null });
+            const headers: Record<string, string> = {};
+            response.headers.forEach((value, key) => {
+                headers[key.toLowerCase()] = value;
+            });
+            return { status: response.status, headers, bodyText: await response.text() };
+        };
+        const mcpConnections = McpConnectionManagerFactory.create({ listServers: () => mcpServersCache.current, requestFn: mcpRequestFn, bearerToken: secretStore.get.bind(secretStore) });
+        const mcpOAuth = McpOAuthFactory.create({ listServers: () => mcpServersCache.current, secretStore });
 
         const providerBundle = ProviderServiceFactory.create(conn, secretStore);
         const tokenCounters = DefaultTokenCounterRegistry.create({
@@ -162,6 +205,9 @@ export namespace DesktopRuntimeFactory {
             smartSortRule,
             userVfsTurn,
             searchConfig,
+            mcpConfig,
+            mcp: { connectionManager: mcpConnections },
+            mcpOAuth,
         });
     }
 }

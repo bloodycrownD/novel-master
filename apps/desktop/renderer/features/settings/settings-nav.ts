@@ -1,6 +1,7 @@
 /** SETTINGS_NAV / SETTINGS_VIEWS — aligned with examples/desktop/shell.js */
 
 import { coreT } from "@shared/logic/core-i18n";
+import { mcpT } from "../../i18n/settings";
 
 export type SettingsViewId =
     | "workspace"
@@ -10,6 +11,8 @@ export type SettingsViewId =
     | "agentsSettings"
     | "searchEngines"
     | "searchEngineDetail"
+    | "mcpServers"
+    | "mcpServerDetail"
     | "agentEditor"
     | "providers"
     | "providerDetail"
@@ -30,6 +33,8 @@ export const SETTINGS_NAV = [
         items: [
             { id: "agentsSettings" as const, label: coreT({key: "ui.nav.agent_settings"}), icon: "🧠" },
             { id: "searchEngines" as const, label: coreT({key: "ui.nav.search_engines"}), icon: "🔍" },
+            // MCP 导航项文案走本地 mcpT：core ui 码表尚无 ui.nav.mcp_servers（core YAML 不在本迭代桌面范围内）
+            { id: "mcpServers" as const, label: mcpT({ key: "mcp.nav_label" }), icon: "🧩" },
             { id: "providers" as const, label: coreT({key: "ui.nav.providers"}), icon: "🔌" },
         ],
     },
@@ -60,6 +65,7 @@ export const SETTINGS_TOP_LEVEL: Partial<Record<SettingsViewId, string>> = {
     tokenUsageStats: coreT({key: "ui.nav.token_stats"}),
     agentsSettings: coreT({key: "ui.nav.agent_settings"}),
     searchEngines: coreT({key: "ui.nav.search_engines"}),
+    mcpServers: mcpT({ key: "mcp.nav_label" }),
     providers: coreT({key: "ui.nav.providers"}),
     smartSortRules: coreT({key: "ui.nav.settings_smart_sort"}),
     skillsManage: coreT({key: "ui.nav.skills_manage"}),
@@ -68,6 +74,7 @@ export const SETTINGS_TOP_LEVEL: Partial<Record<SettingsViewId, string>> = {
 export function getSettingsNavHighlightId(viewId: SettingsViewId): SettingsViewId {
     if (viewId === "agentEditor") return "agentsSettings";
     if (viewId === "searchEngineDetail") return "searchEngines";
+    if (viewId === "mcpServerDetail") return "mcpServers";
     if (
         viewId === "providerDetail" ||
         viewId === "modelSampling" ||
@@ -110,6 +117,8 @@ export interface SettingsNavState {
     readonly editingProviderId?: string;
     /** 搜索引擎详情页定位的引擎（EngineId 字符串）。 */
     editingEngineId?: string;
+    /** MCP 服务器详情页定位的 server（哨兵 = 新建）；列表页写入定位，与 editingEngineId 同款非 readonly。 */
+    editingMcpServerId?: string;
     readonly editingSavedModelId?: string;
     /** smartSortRuleEditor 页定位的规则（undefined = 新建）。 */
     readonly editingSmartSortRuleId?: string;

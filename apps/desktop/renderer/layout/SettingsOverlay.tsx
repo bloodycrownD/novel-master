@@ -1,5 +1,6 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode } from "react";
 import { coreT } from "@shared/logic/core-i18n";
+import { mcpT } from "../i18n/settings";
 import type { SkillRefDto } from "@shared/ipc-types";
 import {
     getSettingsNavHighlightId,
@@ -30,6 +31,8 @@ import { SkillsManageView } from "../features/settings/SkillsManageView";
 import { SkillDetailView } from "../features/settings/SkillDetailView";
 import { SearchEnginesView } from "../features/settings/SearchEnginesView";
 import { SearchEngineDetailView } from "../features/settings/SearchEngineDetailView";
+import { McpServersView } from "../features/settings/McpServersView";
+import { McpServerDetailView } from "../features/settings/McpServerDetailView";
 import { engineLabel, NEW_ENGINE_SENTINEL } from "../features/settings/search-engine-meta";
 import { OPEN_SETTINGS_VIEW_EVENT, type OpenSettingsViewDetail } from "../features/skills/skill-ui";
 
@@ -192,6 +195,8 @@ export const SettingsOverlay = forwardRef<SettingsOverlayHandle, SettingsOverlay
         // 详情页复用同一 viewId：哨兵值 = 新建自定义引擎（create 模式）
         const label = engineLabel(navState.editingEngineId);
         mainTitle = navState.editingEngineId === NEW_ENGINE_SENTINEL ? coreT({key: "ui.provider.custom_engine_create_title"}) : label ? `${coreT({key: "ui.nav.search_engines"})} · ${label}` : coreT({key: "ui.nav.search_engines"});
+    } else if (viewId === "mcpServerDetail") {
+        mainTitle = mcpT({ key: "mcp.nav_label" });
     } else if (viewId === "skillDetail") {
         mainTitle = navState.viewingSkillRef != null ? `${coreT({key: "ui.nav.skills"})} · ${navState.viewingSkillRef.name}` : coreT({key: "ui.nav.skill_detail"});
     }
@@ -221,6 +226,12 @@ export const SettingsOverlay = forwardRef<SettingsOverlayHandle, SettingsOverlay
             break;
         case "searchEngineDetail":
             content = <SearchEngineDetailView nav={nav} />;
+            break;
+        case "mcpServers":
+            content = <McpServersView nav={nav} />;
+            break;
+        case "mcpServerDetail":
+            content = <McpServerDetailView nav={nav} />;
             break;
         case "providers":
             content = <ProvidersView nav={nav} />;

@@ -136,6 +136,15 @@ import {
     type SearchSetEngineOrderRequest,
     type SearchUpdateCustomEngineRequest,
     type SearchUpdatePresetOverrideRequest,
+    type McpDeleteServerRequest,
+    type McpImportExternalRequest,
+    type McpOAuthStartRequest,
+    type McpOAuthStatusesDto,
+    type McpSaveServerRequest,
+    type McpServerConfig,
+    type McpServerStatus,
+    type McpTestConnectionRequest,
+    type McpToolSnapshotDto,
 } from "@shared/ipc-types";
 
 type InvokeFn = <T>(channel: string, arg?: unknown) => Promise<T>;
@@ -315,6 +324,15 @@ export function createInvokeClient(invoke: InvokeFn) {
         ipcSearchDeleteCustomEngine: withReq<SearchDeleteCustomEngineRequest, IpcResult<void>>(invoke, IPC_CHANNELS.SEARCH_DELETE_CUSTOM_ENGINE),
         ipcSearchUpdatePresetOverride: withReq<SearchUpdatePresetOverrideRequest, IpcResult<void>>(invoke, IPC_CHANNELS.SEARCH_UPDATE_PRESET_OVERRIDE),
         ipcSearchResetPresetOverride: withReq<SearchResetPresetOverrideRequest, IpcResult<void>>(invoke, IPC_CHANNELS.SEARCH_RESET_PRESET_OVERRIDE),
+        ipcMcpListServers: noArg<IpcResult<readonly McpServerConfig[]>>(invoke, IPC_CHANNELS.MCP_LIST_SERVERS),
+        ipcMcpSaveServer: withReq<McpSaveServerRequest, IpcResult<{ readonly serverId: string }>>(invoke, IPC_CHANNELS.MCP_SAVE_SERVER),
+        ipcMcpDeleteServer: withReq<McpDeleteServerRequest, IpcResult<void>>(invoke, IPC_CHANNELS.MCP_DELETE_SERVER),
+        ipcMcpImportExternal: withReq<McpImportExternalRequest, IpcResult<readonly McpServerConfig[]>>(invoke, IPC_CHANNELS.MCP_IMPORT_EXTERNAL),
+        ipcMcpTestConnection: withReq<McpTestConnectionRequest, IpcResult<McpServerStatus>>(invoke, IPC_CHANNELS.MCP_TEST_CONNECTION),
+        ipcMcpServerStatuses: noArg<IpcResult<readonly McpServerStatus[]>>(invoke, IPC_CHANNELS.MCP_SERVER_STATUSES),
+        ipcMcpToolsSnapshot: noArg<IpcResult<readonly McpToolSnapshotDto[]>>(invoke, IPC_CHANNELS.MCP_TOOLS_SNAPSHOT),
+        ipcMcpOAuthStart: withReq<McpOAuthStartRequest, IpcResult<{ readonly authorizeUrl: string }>>(invoke, IPC_CHANNELS.MCP_OAUTH_START),
+        ipcMcpOAuthStatuses: noArg<IpcResult<McpOAuthStatusesDto>>(invoke, IPC_CHANNELS.MCP_OAUTH_STATUSES),
         ipcShellMenuPopup: withReq<ShellMenuPopupRequest, IpcResult<null>>(invoke, IPC_CHANNELS.SHELL_MENU_POPUP),
         ipcShellSetTitleBarTheme: (theme: "light" | "dark") => invoke(IPC_CHANNELS.SHELL_SET_TITLEBAR_THEME, theme),
         ipcAppOpenExternal: (url: string) => {

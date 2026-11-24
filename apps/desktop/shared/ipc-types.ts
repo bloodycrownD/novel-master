@@ -7,6 +7,9 @@
  * 不另抄一份以免与 core 校验口径漂移。
  */
 import type { CustomEngineDef, SearchEngineTemplate } from "@novel-master/core";
+import type { McpAuthType, McpToolSnapshot, McpTransportType } from "@novel-master/core/mcp";
+// MCP 响应 DTO 直接引用 core 形状（照 SearchConfigDto 引用 core 模板族的口径）；re-export 供 renderer 侧 import（不直连 core）。
+export type { McpAuthType, McpServerConfig, McpServerStatus, McpToolSnapshot, McpTransportType } from "@novel-master/core/mcp";
 import type { ErrorKey } from "@novel-master/core/errors";
 
 export const IPC_CHANNELS = {
@@ -205,6 +208,16 @@ export const IPC_CHANNELS = {
     SEARCH_DELETE_CUSTOM_ENGINE: "nm:search/deleteCustomEngine",
     SEARCH_UPDATE_PRESET_OVERRIDE: "nm:search/updatePresetOverride",
     SEARCH_RESET_PRESET_OVERRIDE: "nm:search/resetPresetOverride",
+
+    MCP_LIST_SERVERS: "nm:mcp/listServers",
+    MCP_SAVE_SERVER: "nm:mcp/saveServer",
+    MCP_DELETE_SERVER: "nm:mcp/deleteServer",
+    MCP_IMPORT_EXTERNAL: "nm:mcp/importExternal",
+    MCP_TEST_CONNECTION: "nm:mcp/testConnection",
+    MCP_SERVER_STATUSES: "nm:mcp/serverStatuses",
+    MCP_TOOLS_SNAPSHOT: "nm:mcp/toolsSnapshot",
+    MCP_OAUTH_START: "nm:mcp/oauthStart",
+    MCP_OAUTH_STATUSES: "nm:mcp/oauthStatuses",
 
     SHELL_MENU_POPUP: "nm:shell/menuPopup",
     SHELL_SET_TITLEBAR_THEME: "nm:shell/setTitleBarTheme",
@@ -1829,6 +1842,49 @@ export type SearchUpdatePresetOverrideRequest = {
 export type SearchResetPresetOverrideRequest = {
     readonly engineId: string;
 };
+
+// —— MCP 服务器配置（mcp-support Step 13/14；core 类型只做 type 引用，运行期纯 JSON 形状）——
+
+/** MCP 配置保存（新建缺 id 由 main 生成；bearerToken undefined=保留、空串=清除、非空=覆盖，与 search 密钥语义同口径）。 */
+export type McpSaveServerRequest = {
+    readonly id?: string;
+    readonly name: string;
+    readonly transportType: McpTransportType;
+    readonly url?: string;
+    readonly timeoutMs?: number;
+    readonly authType: McpAuthType;
+    readonly enabled?: boolean;
+    readonly bearerToken?: string;
+};
+
+export type McpDeleteServerRequest = {
+    readonly serverId: string;
+};
+
+/** 外部格式导入（Claude Desktop 的 `{mcpServers:{...}}` / 数组 / 单对象）；main 侧 JSON.parse 后交 core store 归一。 */
+export type McpImportExternalRequest = {
+    readonly raw: string;
+};
+
+export type McpTestConnectionRequest = {
+    readonly serverId: string;
+};
+
+export type McpOAuthStartRequest = {
+    readonly serverId: string;
+};
+
+/**
+ * toolsSnapshot 快照条目：core `McpToolSnapshot` + main 侧算好的注册名。
+ * `registeredName` 即 `McpToolSlug.toolName`（`mcp__<server>__<tool>`，含截断短哈希），
+ * 形状是 shared catalog `AgentToolCatalogMcpTool` 的超集，renderer 直接喂 AgentToolCatalog。
+ */
+export type McpToolSnapshotDto = McpToolSnapshot & {
+    readonly registeredName: string;
+};
+
+/** OAuth 授权状态（serverId → 是否已持 token）；只含 auth.type==="oauth" 的 server。 */
+export type McpOAuthStatusesDto = Readonly<Record<string, boolean>>;
 
 export type ShellMenuId = "file" | "edit" | "view" | "window" | "help";
 
