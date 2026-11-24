@@ -1,6 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode } from "react";
 import { coreT } from "@shared/logic/core-i18n";
-import { mcpT } from "../i18n/settings";
 import type { SkillRefDto } from "@shared/ipc-types";
 import {
     getSettingsNavHighlightId,
@@ -196,7 +195,7 @@ export const SettingsOverlay = forwardRef<SettingsOverlayHandle, SettingsOverlay
         const label = engineLabel(navState.editingEngineId);
         mainTitle = navState.editingEngineId === NEW_ENGINE_SENTINEL ? coreT({key: "ui.provider.custom_engine_create_title"}) : label ? `${coreT({key: "ui.nav.search_engines"})} · ${label}` : coreT({key: "ui.nav.search_engines"});
     } else if (viewId === "mcpServerDetail") {
-        mainTitle = mcpT({ key: "mcp.nav_label" });
+        mainTitle = coreT({key: "ui.nav.mcp_servers"});
     } else if (viewId === "skillDetail") {
         mainTitle = navState.viewingSkillRef != null ? `${coreT({key: "ui.nav.skills"})} · ${navState.viewingSkillRef.name}` : coreT({key: "ui.nav.skill_detail"});
     }

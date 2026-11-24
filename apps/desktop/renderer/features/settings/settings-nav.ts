@@ -1,7 +1,6 @@
 /** SETTINGS_NAV / SETTINGS_VIEWS — aligned with examples/desktop/shell.js */
 
 import { coreT } from "@shared/logic/core-i18n";
-import { mcpT } from "../../i18n/settings";
 
 export type SettingsViewId =
     | "workspace"
@@ -33,8 +32,8 @@ export const SETTINGS_NAV = [
         items: [
             { id: "agentsSettings" as const, label: coreT({key: "ui.nav.agent_settings"}), icon: "🧠" },
             { id: "searchEngines" as const, label: coreT({key: "ui.nav.search_engines"}), icon: "🔍" },
-            // MCP 导航项文案走本地 mcpT：core ui 码表尚无 ui.nav.mcp_servers（core YAML 不在本迭代桌面范围内）
-            { id: "mcpServers" as const, label: mcpT({ key: "mcp.nav_label" }), icon: "🧩" },
+            // MCP 导航项文案走 core ui 码表的 ui.nav.mcp_servers（与移动端页头同源）
+            { id: "mcpServers" as const, label: coreT({key: "ui.nav.mcp_servers"}), icon: "🧩" },
             { id: "providers" as const, label: coreT({key: "ui.nav.providers"}), icon: "🔌" },
         ],
     },
@@ -65,7 +64,7 @@ export const SETTINGS_TOP_LEVEL: Partial<Record<SettingsViewId, string>> = {
     tokenUsageStats: coreT({key: "ui.nav.token_stats"}),
     agentsSettings: coreT({key: "ui.nav.agent_settings"}),
     searchEngines: coreT({key: "ui.nav.search_engines"}),
-    mcpServers: mcpT({ key: "mcp.nav_label" }),
+    mcpServers: coreT({key: "ui.nav.mcp_servers"}),
     providers: coreT({key: "ui.nav.providers"}),
     smartSortRules: coreT({key: "ui.nav.settings_smart_sort"}),
     skillsManage: coreT({key: "ui.nav.skills_manage"}),

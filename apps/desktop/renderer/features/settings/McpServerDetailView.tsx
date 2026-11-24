@@ -1,12 +1,12 @@
 /**
  * 设置 · MCP 服务器详情页（两级结构第二级，照搜索引擎详情页同构）：
  * `navState.editingMcpServerId` 定位单 server，编辑 + create 模式（哨兵复用本 viewId）。
- * 表单：名称 / 传输方式（HTTP / SSE / stdio——后两者只归一不可连，选项文案就地标注）/
- * URL / 请求超时 / 认证三态（无 / Bearer / OAuth 2.1）。Bearer 明文只在输入框停留，
- * 保存经 IPC 写 SKSP（留空保留、清除按钮传空串）；OAuth 区显示授权状态并在「发起授权」
- * 时走 main 侧 loopback 回调（invoke 挂起至浏览器授权完成）。测试连接先静默保存
- * （main 按已存配置测），结果读 `McpServerStatus`——失败时 `failure.detail` 原文展示。
- * 说明文字一组一条（表单尾部脚注），整组事实性说明不再按字段重复。
+ * 表单：名称 / 传输类型（HTTP / SSE / stdio——后两者只归一不可连，不可用原因由 server
+ * 状态位置的 `failure.detail` 事实提示承担）/ 地址 / 超时时间 / 认证三态（无 / Bearer /
+ * OAuth）。Bearer 明文只在输入框停留，保存经 IPC 写 SKSP（留空保留、清除按钮传空串）；
+ * OAuth 区显示授权状态并在「发起授权」时走 main 侧 loopback 回调（invoke 挂起至浏览器
+ * 授权完成）。测试连接先静默保存（main 按已存配置测），结果读 `McpServerStatus`——
+ * 失败时 `failure.detail` 原文展示。
  */
 import { useCallback, useEffect, useState } from "react";
 import type { McpAuthType, McpServerStatus, McpTransportType } from "@shared/ipc-types";
@@ -14,9 +14,10 @@ import { ipcMcpDeleteServer, ipcMcpListServers, ipcMcpOAuthStart, ipcMcpOAuthSta
 import { Button } from "@/components/ui/Button";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { toastSettingsSuccess } from "@/utils/settings-feedback";
-import { mcpT } from "../../i18n/settings";
+import { coreT } from "@shared/logic/core-i18n";
+import { settingsTranslator } from "../../i18n/settings";
 import type { SettingsNavHandle } from "./settings-nav";
-import { mcpStatusLabel, mcpStatusTagClass, NEW_MCP_SERVER_SENTINEL } from "./mcp-server-meta";
+import { mcpStatusLabel, NEW_MCP_SERVER_SENTINEL } from "./mcp-server-meta";
 import { SettingsField, SettingsFormSection, SettingsPanel, SettingsSection, SettingsStatus } from "./settings-ui";
 
 /** 表单草稿（timeout 以文本承载，提交时才数值化；空串 = 用默认）。 */
@@ -83,10 +84,10 @@ export function McpServerDetailView({ nav }: { nav: SettingsNavHandle }) {
     if (serverId == null) {
         return (
             <SettingsPanel>
-                <SettingsFormSection title={mcpT({ key: "mcp.nav_label" })}>
-                    <p className="settings-hint">{mcpT({ key: "mcp.list.empty" })}</p>
+                <SettingsFormSection title={coreT({ key: "ui.nav.mcp_servers" })}>
+                    <p className="settings-hint">{settingsTranslator({ key: "settings.mcp.list.empty" })}</p>
                     <Button variant="secondary" onClick={() => nav.pop()}>
-                        {mcpT({ key: "mcp.detail.back_to_list" })}
+                        {settingsTranslator({ key: "settings.mcp.detail.back_to_list.desktop" })}
                     </Button>
                 </SettingsFormSection>
             </SettingsPanel>
@@ -97,7 +98,7 @@ export function McpServerDetailView({ nav }: { nav: SettingsNavHandle }) {
     if (!isCreate && !loaded) {
         return (
             <SettingsPanel>
-                <p className="settings-hint">{mcpT({ key: "mcp.list.loading" })}</p>
+                <p className="settings-hint">{settingsTranslator({ key: "settings.mcp.list.loading.desktop" })}</p>
             </SettingsPanel>
         );
     }
@@ -143,53 +144,53 @@ export function McpServerDetailView({ nav }: { nav: SettingsNavHandle }) {
     return (
         <SettingsPanel>
             <SettingsFormSection
-                title={isCreate ? mcpT({ key: "mcp.list.add" }) : form.name}
+                title={isCreate ? settingsTranslator({ key: "settings.mcp.detail.create_action" }) : form.name}
                 footer={
-                    <Button variant="primary" disabled={busy} onClick={() => void save().then((id) => id != null && toastSettingsSuccess(mcpT({ key: "mcp.toast.saved" })))}>
-                        {saving ? mcpT({ key: "mcp.detail.saving" }) : isCreate ? mcpT({ key: "mcp.detail.create" }) : mcpT({ key: "mcp.detail.save" })}
+                    <Button variant="primary" disabled={busy} onClick={() => void save().then((id) => id != null && toastSettingsSuccess(settingsTranslator({ key: "settings.mcp.toast.saved" })))}>
+                        {saving ? settingsTranslator({ key: "settings.mcp.detail.saving.desktop" }) : isCreate ? settingsTranslator({ key: "settings.mcp.detail.create.desktop" }) : settingsTranslator({ key: "settings.mcp.detail.save_action" })}
                     </Button>
                 }
             >
-                <SettingsField label={mcpT({ key: "mcp.detail.name_label" })}>
-                    <input type="text" value={form.name} placeholder={mcpT({ key: "mcp.detail.name_placeholder" })} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                <SettingsField label={settingsTranslator({ key: "settings.mcp.detail.name_label" })}>
+                    <input type="text" value={form.name} placeholder={settingsTranslator({ key: "settings.mcp.detail.name_placeholder" })} onChange={(e) => setForm({ ...form, name: e.target.value })} />
                 </SettingsField>
-                <SettingsField label={mcpT({ key: "mcp.detail.transport_label" })}>
+                <SettingsField label={settingsTranslator({ key: "settings.mcp.detail.transport_label" })}>
                     <select value={form.transportType} onChange={(e) => setForm({ ...form, transportType: e.target.value as McpTransportType })}>
-                        <option value="http">{mcpT({ key: "mcp.transport.http" })}</option>
-                        <option value="sse">{mcpT({ key: "mcp.transport.sse" })}</option>
-                        <option value="stdio">{mcpT({ key: "mcp.transport.stdio" })}</option>
+                        <option value="http">{settingsTranslator({ key: "settings.mcp.detail.transport_http" })}</option>
+                        <option value="sse">{settingsTranslator({ key: "settings.mcp.detail.transport_sse" })}</option>
+                        <option value="stdio">{settingsTranslator({ key: "settings.mcp.detail.transport_stdio.desktop" })}</option>
                     </select>
                 </SettingsField>
                 {form.transportType !== "stdio" ? (
-                    <SettingsField label={mcpT({ key: "mcp.detail.url_label" })}>
-                        <input type="text" value={form.url} placeholder={mcpT({ key: "mcp.detail.url_placeholder" })} onChange={(e) => setForm({ ...form, url: e.target.value })} />
+                    <SettingsField label={settingsTranslator({ key: "settings.mcp.detail.url_label" })}>
+                        <input type="text" value={form.url} placeholder={settingsTranslator({ key: "settings.mcp.detail.url_placeholder" })} onChange={(e) => setForm({ ...form, url: e.target.value })} />
                     </SettingsField>
                 ) : null}
-                <SettingsField label={mcpT({ key: "mcp.detail.timeout_label" })}>
+                <SettingsField label={settingsTranslator({ key: "settings.mcp.detail.timeout_label" })}>
                     <input type="text" inputMode="numeric" value={form.timeoutText} placeholder="120000" onChange={(e) => setForm({ ...form, timeoutText: e.target.value })} />
-                    <span className="settings-hint">{mcpT({ key: "mcp.detail.timeout_hint" })}</span>
+                    <span className="settings-hint">{settingsTranslator({ key: "settings.mcp.detail.timeout_hint.desktop" })}</span>
                 </SettingsField>
-                <SettingsField label={mcpT({ key: "mcp.detail.auth_label" })}>
+                <SettingsField label={settingsTranslator({ key: "settings.mcp.detail.auth_label" })}>
                     <select value={form.authType} onChange={(e) => setForm({ ...form, authType: e.target.value as McpAuthType })}>
-                        <option value="none">{mcpT({ key: "mcp.auth.none" })}</option>
-                        <option value="bearer">{mcpT({ key: "mcp.auth.bearer" })}</option>
-                        <option value="oauth">{mcpT({ key: "mcp.auth.oauth" })}</option>
+                        <option value="none">{settingsTranslator({ key: "settings.mcp.detail.auth_none" })}</option>
+                        <option value="bearer">{settingsTranslator({ key: "settings.mcp.detail.auth_bearer.desktop" })}</option>
+                        <option value="oauth">{settingsTranslator({ key: "settings.mcp.detail.auth_oauth" })}</option>
                     </select>
                 </SettingsField>
                 {form.authType === "bearer" ? (
-                    <SettingsField label={mcpT({ key: "mcp.detail.token_label" })}>
+                    <SettingsField label={settingsTranslator({ key: "settings.mcp.detail.bearer_token_label.desktop" })}>
                         <input type="password" value={token} autoComplete="new-password" onChange={(e) => setToken(e.target.value)} />
                         {!isCreate ? (
-                            <Button variant="secondary" disabled={busy} onClick={() => void save(true).then((id) => id != null && toastSettingsSuccess(mcpT({ key: "mcp.toast.saved" })))}>
-                                {mcpT({ key: "mcp.detail.clear_token" })}
+                            <Button variant="secondary" disabled={busy} onClick={() => void save(true).then((id) => id != null && toastSettingsSuccess(settingsTranslator({ key: "settings.mcp.toast.saved" })))}>
+                                {settingsTranslator({ key: "settings.mcp.detail.clear_key.desktop" })}
                             </Button>
                         ) : null}
                     </SettingsField>
                 ) : null}
                 {form.authType === "oauth" ? (
-                    <SettingsSection title={mcpT({ key: "mcp.detail.oauth_section" })}>
-                        <SettingsField label={mcpT({ key: "mcp.detail.oauth_status_label" })} row>
-                            <span className={oauthAuthorized ? "settings-tag settings-tag--ok" : "settings-tag settings-tag--muted"}>{oauthAuthorized ? mcpT({ key: "mcp.oauth.authorized" }) : mcpT({ key: "mcp.oauth.not_authorized" })}</span>
+                    <SettingsSection title={settingsTranslator({ key: "settings.mcp.detail.oauth_section.desktop" })}>
+                        <SettingsField label={settingsTranslator({ key: "settings.mcp.detail.oauth_status_label" })} row>
+                            <span className={oauthAuthorized ? "settings-tag settings-tag--ok" : "settings-tag settings-tag--muted"}>{oauthAuthorized ? settingsTranslator({ key: "settings.mcp.detail.authorized" }) : settingsTranslator({ key: "settings.mcp.detail.not_authorized" })}</span>
                         </SettingsField>
                         {/* 发起授权：先保存（拿真 id）再走 main loopback——main 侧开系统浏览器，invoke 挂起至授权完成（busy 互斥态就地维护）。 */}
                         <Button
@@ -208,7 +209,7 @@ export function McpServerDetailView({ nav }: { nav: SettingsNavHandle }) {
                                     }
                                     setError(undefined);
                                     await reloadOAuth(id);
-                                    toastSettingsSuccess(mcpT({ key: "mcp.oauth.authorized" }));
+                                    toastSettingsSuccess(settingsTranslator({ key: "settings.mcp.toast.oauth_callback_ok" }));
                                 } catch (e) {
                                     setError(e instanceof Error ? e.message : String(e));
                                 } finally {
@@ -216,14 +217,13 @@ export function McpServerDetailView({ nav }: { nav: SettingsNavHandle }) {
                                 }
                             }}
                         >
-                            {authorizing ? mcpT({ key: "mcp.oauth.waiting" }) : mcpT({ key: "mcp.oauth.start" })}
+                            {authorizing ? settingsTranslator({ key: "settings.mcp.detail.authorizing.desktop" }) : settingsTranslator({ key: "settings.mcp.detail.reauthorize.desktop" })}
                         </Button>
                     </SettingsSection>
                 ) : null}
                 <SettingsStatus message={testStatus?.state === "ready" ? mcpStatusLabel(testStatus) : undefined} error={error} />
-                <p className="settings-hint">{mcpT({ key: "mcp.detail.group_hint" })}</p>
             </SettingsFormSection>
-            <SettingsSection title={mcpT({ key: "mcp.detail.test" })}>
+            <SettingsSection title={settingsTranslator({ key: "settings.mcp.detail.test_connection" })}>
                 {/* 测试连接：先静默保存（main 按已存配置测），失败态展示 failure.detail 原文（busy 互斥态就地维护）。 */}
                 <Button
                     variant="secondary"
@@ -249,27 +249,21 @@ export function McpServerDetailView({ nav }: { nav: SettingsNavHandle }) {
                         }
                     }}
                 >
-                    {testing ? mcpT({ key: "mcp.detail.testing" }) : mcpT({ key: "mcp.detail.test" })}
+                    {testing ? settingsTranslator({ key: "settings.mcp.detail.testing" }) : settingsTranslator({ key: "settings.mcp.detail.test_connection" })}
                 </Button>
-                {testStatus != null ? (
-                    <p className="settings-hint">
-                        <span className={mcpStatusTagClass(testStatus.state)}>{mcpStatusLabel(testStatus)}</span>
-                        {testStatus.failure?.detail != null ? ` ${testStatus.failure.detail}` : ""}
-                    </p>
-                ) : null}
             </SettingsSection>
             {!isCreate ? (
-                <SettingsSection title={mcpT({ key: "mcp.detail.delete_title" })}>
+                <SettingsSection title={settingsTranslator({ key: "settings.mcp.delete_title" })}>
                     <Button variant="danger" disabled={busy} onClick={() => setDeleteOpen(true)}>
-                        {mcpT({ key: "mcp.detail.delete_title" })}
+                        {settingsTranslator({ key: "settings.mcp.delete_title" })}
                     </Button>
                 </SettingsSection>
             ) : null}
             <ConfirmModal
                 open={deleteOpen}
-                title={mcpT({ key: "mcp.detail.delete_title" })}
-                message={mcpT({ key: "mcp.detail.delete_confirm", params: { name: form.name } })}
-                confirmLabel={mcpT({ key: "mcp.list.menu.delete" })}
+                title={settingsTranslator({ key: "settings.mcp.delete_title" })}
+                message={settingsTranslator({ key: "settings.mcp.delete_notice", params: { name: form.name } })}
+                confirmLabel={settingsTranslator({ key: "settings.mcp.list.menu.delete" })}
                 danger
                 busy={busy}
                 onConfirm={() => {
@@ -282,7 +276,7 @@ export function McpServerDetailView({ nav }: { nav: SettingsNavHandle }) {
                                 setError(res.error.message);
                                 return;
                             }
-                            toastSettingsSuccess(mcpT({ key: "mcp.toast.deleted" }));
+                            toastSettingsSuccess(settingsTranslator({ key: "settings.mcp.toast.deleted" }));
                             nav.pop();
                         } finally {
                             setSaving(false);

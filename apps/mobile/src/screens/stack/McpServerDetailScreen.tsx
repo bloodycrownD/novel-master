@@ -313,7 +313,7 @@ export function McpServerDetailScreen() {
                 <FormField label={settingsTranslator({key: 'settings.mcp.detail.url_label'})} tokens={tokens}>
                     <FormTextInput tokens={tokens} value={draft.url} onChangeText={text => patchDraft({url: text})} placeholder={settingsTranslator({key: 'settings.mcp.detail.url_placeholder'})} autoCapitalize="none" autoCorrect={false} multiline submitBehavior="blurAndSubmit" style={styles.urlInput} />
                 </FormField>
-                <FormField label={settingsTranslator({key: 'settings.mcp.detail.timeout_label'})} tokens={tokens} hint={settingsTranslator({key: 'settings.mcp.detail.timeout_hint'})}>
+                <FormField label={settingsTranslator({key: 'settings.mcp.detail.timeout_label'})} tokens={tokens} hint={settingsTranslator({key: 'settings.mcp.detail.timeout_hint.mobile'})}>
                     <FormTextInput tokens={tokens} value={draft.timeoutSeconds} onChangeText={text => patchDraft({timeoutSeconds: text})} keyboardType="number-pad" autoCapitalize="none" autoCorrect={false} />
                 </FormField>
             </FormSectionCard>
@@ -325,7 +325,7 @@ export function McpServerDetailScreen() {
                         onChange={value => patchDraft({authType: value as AuthTypeOption})}
                         options={[
                             {value: 'none', label: settingsTranslator({key: 'settings.mcp.detail.auth_none'})},
-                            {value: 'bearer', label: settingsTranslator({key: 'settings.mcp.detail.auth_bearer'})},
+                            {value: 'bearer', label: settingsTranslator({key: 'settings.mcp.detail.auth_bearer.mobile'})},
                             {value: 'oauth', label: settingsTranslator({key: 'settings.mcp.detail.auth_oauth'})},
                         ]}
                         sheetTitle={settingsTranslator({key: 'settings.mcp.detail.auth_label'})}
@@ -345,7 +345,7 @@ export function McpServerDetailScreen() {
                             <SecondaryButton
                                 tokens={tokens}
                                 fullWidth
-                                label={writeOp === 'clear_key' ? settingsTranslator({key: 'settings.mcp.detail.clearing_key'}) : settingsTranslator({key: 'settings.mcp.detail.clear_key'})}
+                                label={writeOp === 'clear_key' ? settingsTranslator({key: 'settings.mcp.detail.clearing_key'}) : settingsTranslator({key: 'settings.mcp.detail.clear_key.mobile'})}
                                 onPress={() => {
                                     void runWrite('clear_key', async id => {
                                         await runtime.secretStore.delete(McpSecretRefs.bearer(id));
@@ -368,7 +368,7 @@ export function McpServerDetailScreen() {
                         <SecondaryButton
                             tokens={tokens}
                             fullWidth
-                            label={settingsTranslator({key: 'settings.mcp.detail.reauthorize'})}
+                            label={settingsTranslator({key: 'settings.mcp.detail.reauthorize.mobile'})}
                             onPress={async () => {
                                 if (serverId == null) {
                                     return;

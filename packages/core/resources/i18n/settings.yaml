@@ -10,34 +10,45 @@ zh-CN:
   mcp.detail.api_key_placeholder.mobile: 留空保留已存密钥
   mcp.detail.api_key_saved_hint: 已保存；留空则保留原密钥
   mcp.detail.api_key_store_hint: 保存时写入本机密钥库
-  mcp.detail.auth_bearer: API Key
+  mcp.detail.auth_bearer.desktop: Bearer Token
+  mcp.detail.auth_bearer.mobile: API Key
   mcp.detail.auth_label: 认证方式
   mcp.detail.auth_none: 无
   mcp.detail.auth_oauth: OAuth
   mcp.detail.auth_section: 认证
   mcp.detail.authorized: 已授权
-  mcp.detail.clear_key: 清除密钥
+  mcp.detail.authorizing.desktop: 等待浏览器授权中…
+  mcp.detail.back_to_list.desktop: 返回列表
+  mcp.detail.bearer_token_label.desktop: Bearer Token（留空保留已存值）
+  mcp.detail.clear_key.desktop: 清除已存 Token
+  mcp.detail.clear_key.mobile: 清除密钥
   mcp.detail.clearing_key: 清除中…
   mcp.detail.connection_section: 连接
+  mcp.detail.create.desktop: 创建
   mcp.detail.create_action: 新建服务器
   mcp.detail.name_label: 名称
   mcp.detail.name_placeholder: 如 Acme 知识库
   mcp.detail.not_authorized: 未授权
+  mcp.detail.oauth_section.desktop: OAuth
   mcp.detail.oauth_status_label: 授权状态
-  mcp.detail.reauthorize: 重新授权
+  mcp.detail.reauthorize.desktop: 发起授权
+  mcp.detail.reauthorize.mobile: 重新授权
   mcp.detail.save_action: 保存
+  mcp.detail.saving.desktop: 保存中…
   mcp.detail.status_disabled: 已停用
   mcp.detail.status_pending: 未连接
   mcp.detail.status_ready: 连接正常
   mcp.detail.test_connection: 测试连接
   mcp.detail.testing: 测试中…
-  mcp.detail.timeout_hint: 单位：秒
+  mcp.detail.timeout_hint.desktop: 单位：毫秒
+  mcp.detail.timeout_hint.mobile: 单位：秒
   mcp.detail.timeout_label: 超时时间
   mcp.detail.tools_hint: 关闭的工具不会出现在 AI 的工具列表里
   mcp.detail.tools_section: 工具
   mcp.detail.transport_http: Streamable HTTP
   mcp.detail.transport_label: 传输类型
   mcp.detail.transport_sse: SSE
+  mcp.detail.transport_stdio.desktop: stdio
   mcp.detail.url_label: 地址
   mcp.detail.url_placeholder: https://example.com/mcp
   mcp.delete_notice: "「{name}」的配置与密钥会一并清除，不可恢复。"
@@ -56,14 +67,26 @@ zh-CN:
   mcp.help.dismiss: 关闭
   mcp.help.failure.body: 详情页点「测试连接」可以看到服务器返回的原文。
   mcp.help.failure.title: 连接失败时
+  mcp.help.import.body.desktop: "支持粘贴 Claude Desktop 格式的 {\"mcpServers\":{…}}；其中的 Authorization 头识别为 Bearer 密钥。"
+  mcp.help.import.title.desktop: 导入
   mcp.help.toggle.body: 关闭的服务器不参与连接，它的工具也不会出现在 AI 的工具列表里。
   mcp.help.toggle.title: 开关
+  mcp.help.tools.body.desktop: 服务器提供的工具以 mcp__服务器__工具 的命名出现在 agent 工具列表，受 agent 的工具白名单/黑名单约束。
+  mcp.help.tools.title.desktop: 工具接入
+  mcp.import.empty_result.desktop: 导入内容里没有可识别的 MCP 服务器
+  mcp.import.invalid_json.desktop: 粘贴内容不是合法 JSON
+  mcp.import.label.desktop: 粘贴外部配置 JSON
+  mcp.import.placeholder.desktop: '{"mcpServers": {"my-server": {"url": "https://…"}}}'
+  mcp.import.title.desktop: 从 JSON 导入
+  mcp.list.cancel.desktop: 取消
   mcp.list.cancel.mobile: 取消
   mcp.list.connected: 已连接
   mcp.list.create: 新建服务器
   mcp.list.deleting.mobile: 删除中…
   mcp.list.disconnected: 未连接
   mcp.list.empty: 还没有服务器；点「新建服务器」添加一个
+  mcp.list.import.desktop: 导入 JSON
+  mcp.list.loading.desktop: 加载中…
   mcp.list.menu.delete: 删除
   mcp.list.menu.move_down: 下移
   mcp.list.menu.move_up: 上移
@@ -72,6 +95,7 @@ zh-CN:
   mcp.toast.clear_key_failed.mobile: 清除密钥失败
   mcp.toast.deleted: 已删除
   mcp.toast.delete_failed.mobile: 删除失败
+  mcp.toast.imported.desktop: 已导入
   mcp.toast.key_cleared: 密钥已清除
   mcp.toast.load_failed.mobile: 加载失败
   mcp.toast.oauth_callback_failed.mobile: "授权失败：{reason}"
@@ -244,34 +268,45 @@ en-US:
   mcp.detail.api_key_placeholder.mobile: Leave empty to keep the saved key
   mcp.detail.api_key_saved_hint: Saved; leave empty to keep the current key
   mcp.detail.api_key_store_hint: Written to the local keystore when you save
-  mcp.detail.auth_bearer: API Key
+  mcp.detail.auth_bearer.desktop: Bearer Token
+  mcp.detail.auth_bearer.mobile: API Key
   mcp.detail.auth_label: Authentication method
   mcp.detail.auth_none: None
   mcp.detail.auth_oauth: OAuth
   mcp.detail.auth_section: Authentication
   mcp.detail.authorized: Authorized
-  mcp.detail.clear_key: Clear key
+  mcp.detail.authorizing.desktop: Waiting for browser authorization…
+  mcp.detail.back_to_list.desktop: Back to list
+  mcp.detail.bearer_token_label.desktop: Bearer Token (leave empty to keep the stored value)
+  mcp.detail.clear_key.desktop: Clear stored token
+  mcp.detail.clear_key.mobile: Clear key
   mcp.detail.clearing_key: Clearing…
   mcp.detail.connection_section: Connection
+  mcp.detail.create.desktop: Create
   mcp.detail.create_action: New server
   mcp.detail.name_label: Name
   mcp.detail.name_placeholder: e.g. Acme Knowledge Base
   mcp.detail.not_authorized: Not authorized
+  mcp.detail.oauth_section.desktop: OAuth
   mcp.detail.oauth_status_label: Authorization
-  mcp.detail.reauthorize: Re-authorize
+  mcp.detail.reauthorize.desktop: Start authorization
+  mcp.detail.reauthorize.mobile: Re-authorize
   mcp.detail.save_action: Save
+  mcp.detail.saving.desktop: Saving…
   mcp.detail.status_disabled: Disabled
   mcp.detail.status_pending: Not connected
   mcp.detail.status_ready: Connected
   mcp.detail.test_connection: Test connection
   mcp.detail.testing: Testing…
-  mcp.detail.timeout_hint: In seconds
+  mcp.detail.timeout_hint.desktop: In milliseconds
+  mcp.detail.timeout_hint.mobile: In seconds
   mcp.detail.timeout_label: Timeout
   mcp.detail.tools_hint: Tools turned off are not shown in the AI's tool list
   mcp.detail.tools_section: Tools
   mcp.detail.transport_http: Streamable HTTP
   mcp.detail.transport_label: Transport
   mcp.detail.transport_sse: SSE
+  mcp.detail.transport_stdio.desktop: stdio
   mcp.detail.url_label: URL
   mcp.detail.url_placeholder: https://example.com/mcp
   mcp.delete_notice: "The configuration and keys of \"{name}\" will be removed. This cannot be undone."
@@ -290,14 +325,26 @@ en-US:
   mcp.help.dismiss: Close
   mcp.help.failure.body: Tap "Test connection" on the detail page to see the server's raw response.
   mcp.help.failure.title: When connection fails
+  mcp.help.import.body.desktop: 'Paste a Claude Desktop style {"mcpServers":{…}} config; Authorization headers in it are recognized as Bearer tokens.'
+  mcp.help.import.title.desktop: Import
   mcp.help.toggle.body: A server that is off does not connect, and its tools do not appear in the AI's tool list.
   mcp.help.toggle.title: Switches
+  mcp.help.tools.body.desktop: Tools provided by servers appear in the agent tool list as mcp__server__tool, subject to each agent's tool allow/deny list.
+  mcp.help.tools.title.desktop: Tool access
+  mcp.import.empty_result.desktop: No recognizable MCP servers in the pasted content
+  mcp.import.invalid_json.desktop: The pasted content is not valid JSON
+  mcp.import.label.desktop: Paste external config JSON
+  mcp.import.placeholder.desktop: '{"mcpServers": {"my-server": {"url": "https://…"}}}'
+  mcp.import.title.desktop: Import from JSON
+  mcp.list.cancel.desktop: Cancel
   mcp.list.cancel.mobile: Cancel
   mcp.list.connected: Connected
   mcp.list.create: New server
   mcp.list.deleting.mobile: Deleting…
   mcp.list.disconnected: Not connected
   mcp.list.empty: No servers yet; tap "New server" to add one
+  mcp.list.import.desktop: Import JSON
+  mcp.list.loading.desktop: Loading…
   mcp.list.menu.delete: Delete
   mcp.list.menu.move_down: Move down
   mcp.list.menu.move_up: Move up
@@ -306,6 +353,7 @@ en-US:
   mcp.toast.clear_key_failed.mobile: Failed to clear key
   mcp.toast.deleted: Deleted
   mcp.toast.delete_failed.mobile: Failed to delete
+  mcp.toast.imported.desktop: Imported
   mcp.toast.key_cleared: Key cleared
   mcp.toast.load_failed.mobile: Failed to load
   mcp.toast.oauth_callback_failed.mobile: "Authorization failed: {reason}"

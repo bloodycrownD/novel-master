@@ -14,7 +14,8 @@ import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { ContextMenu } from "@/components/ui/ContextMenu";
 import { Switch } from "@/components/ui/Switch";
 import { toastSettingsSuccess } from "@/utils/settings-feedback";
-import { mcpT } from "../../i18n/settings";
+import { coreT } from "@shared/logic/core-i18n";
+import { settingsTranslator } from "../../i18n/settings";
 import type { SettingsNavHandle } from "./settings-nav";
 import { mcpStatusLabel, mcpStatusTagClass, NEW_MCP_SERVER_SENTINEL } from "./mcp-server-meta";
 import { SettingsListSection, SettingsPanel, SettingsStatus } from "./settings-ui";
@@ -80,7 +81,7 @@ export function McpServersView({ nav }: { nav: SettingsNavHandle }) {
                 return;
             }
             await reload();
-            toastSettingsSuccess(mcpT({ key: "mcp.toast.deleted" }));
+            toastSettingsSuccess(settingsTranslator({ key: "settings.mcp.toast.deleted" }));
         } catch (e) {
             setDeleteTarget(null);
             setError(e instanceof Error ? e.message : String(e));
@@ -96,7 +97,7 @@ export function McpServersView({ nav }: { nav: SettingsNavHandle }) {
         try {
             JSON.parse(importText);
         } catch {
-            setError(mcpT({ key: "mcp.import.invalid_json" }));
+            setError(settingsTranslator({ key: "settings.mcp.import.invalid_json.desktop" }));
             return;
         }
         setBusy(true);
@@ -110,11 +111,11 @@ export function McpServersView({ nav }: { nav: SettingsNavHandle }) {
             setImportOpen(false);
             setImportText("");
             if (res.data.length === 0) {
-                setError(mcpT({ key: "mcp.import.empty_result" }));
+                setError(settingsTranslator({ key: "settings.mcp.import.empty_result.desktop" }));
                 return;
             }
             await reload();
-            toastSettingsSuccess(mcpT({ key: "mcp.toast.imported" }));
+            toastSettingsSuccess(settingsTranslator({ key: "settings.mcp.toast.imported.desktop" }));
         } catch (e) {
             setError(e instanceof Error ? e.message : String(e));
         } finally {
@@ -122,12 +123,11 @@ export function McpServersView({ nav }: { nav: SettingsNavHandle }) {
         }
     };
 
-    /** 帮助弹窗分段（K-1 事实口径：只说这个选项是什么，不写建议句）。 */
+    /** 帮助弹窗分段（K-1 事实口径：只说这个选项是什么，不写建议句；传输类型的事实提示由 server 状态位置承担）。 */
     const helpSections: ReadonlyArray<{ title: string; body: string }> = [
-        { title: mcpT({ key: "mcp.list.help.transport.title" }), body: mcpT({ key: "mcp.list.help.transport.body" }) },
-        { title: mcpT({ key: "mcp.list.help.tools.title" }), body: mcpT({ key: "mcp.list.help.tools.body" }) },
-        { title: mcpT({ key: "mcp.list.help.auth.title" }), body: mcpT({ key: "mcp.list.help.auth.body" }) },
-        { title: mcpT({ key: "mcp.list.help.import.title" }), body: mcpT({ key: "mcp.list.help.import.body" }) },
+        { title: settingsTranslator({ key: "settings.mcp.help.tools.title.desktop" }), body: settingsTranslator({ key: "settings.mcp.help.tools.body.desktop" }) },
+        { title: settingsTranslator({ key: "settings.mcp.help.auth.title" }), body: settingsTranslator({ key: "settings.mcp.help.auth.body" }) },
+        { title: settingsTranslator({ key: "settings.mcp.help.import.title.desktop" }), body: settingsTranslator({ key: "settings.mcp.help.import.body.desktop" }) },
     ];
 
     return (
@@ -143,18 +143,18 @@ export function McpServersView({ nav }: { nav: SettingsNavHandle }) {
                                 nav.push("mcpServerDetail");
                             }}
                         >
-                            {mcpT({ key: "mcp.list.add" })}
+                            {settingsTranslator({ key: "settings.mcp.list.create" })}
                         </Button>
                         <Button variant="secondary" disabled={busy} onClick={() => setImportOpen(true)}>
-                            {mcpT({ key: "mcp.list.import" })}
+                            {settingsTranslator({ key: "settings.mcp.list.import.desktop" })}
                         </Button>
-                        <button type="button" className="icon-btn" aria-label={mcpT({ key: "mcp.list.help.title" })} onClick={() => setHelpOpen(true)}>
+                        <button type="button" className="icon-btn" aria-label={coreT({ key: "ui.nav.mcp_servers" })} onClick={() => setHelpOpen(true)}>
                             ?
                         </button>
                     </div>
                 }
             >
-                {servers == null && error == null ? <p className="settings-hint">{mcpT({ key: "mcp.list.loading" })}</p> : null}
+                {servers == null && error == null ? <p className="settings-hint">{settingsTranslator({ key: "settings.mcp.list.loading.desktop" })}</p> : null}
                 {(servers ?? []).map((server) => {
                     const status = statuses.find((entry) => entry.serverId === server.id);
                     return (
@@ -197,7 +197,7 @@ export function McpServersView({ nav }: { nav: SettingsNavHandle }) {
                         </div>
                     );
                 })}
-                {servers != null && servers.length === 0 ? <p className="settings-list__empty">{mcpT({ key: "mcp.list.empty" })}</p> : null}
+                {servers != null && servers.length === 0 ? <p className="settings-list__empty">{settingsTranslator({ key: "settings.mcp.list.empty" })}</p> : null}
             </SettingsListSection>
             <SettingsStatus error={error} />
             <ContextMenu
@@ -208,8 +208,8 @@ export function McpServersView({ nav }: { nav: SettingsNavHandle }) {
                     menu == null
                         ? []
                         : [
-                                { label: mcpT({ key: "mcp.list.menu.test" }), action: "test", disabled: busy },
-                                { label: mcpT({ key: "mcp.list.menu.delete" }), action: "delete", danger: true, disabled: busy },
+                                { label: settingsTranslator({ key: "settings.mcp.detail.test_connection" }), action: "test", disabled: busy },
+                                { label: settingsTranslator({ key: "settings.mcp.list.menu.delete" }), action: "delete", danger: true, disabled: busy },
                             ]
                 }
                 onSelect={(action) => {
@@ -222,9 +222,9 @@ export function McpServersView({ nav }: { nav: SettingsNavHandle }) {
             />
             <ConfirmModal
                 open={deleteTarget != null}
-                title={mcpT({ key: "mcp.detail.delete_title" })}
-                message={mcpT({ key: "mcp.list.delete_confirm", params: { name: deleteTarget?.name ?? "" } })}
-                confirmLabel={mcpT({ key: "mcp.list.menu.delete" })}
+                title={settingsTranslator({ key: "settings.mcp.delete_title" })}
+                message={settingsTranslator({ key: "settings.mcp.delete_notice", params: { name: deleteTarget?.name ?? "" } })}
+                confirmLabel={settingsTranslator({ key: "settings.mcp.list.menu.delete" })}
                 danger
                 busy={busy}
                 onConfirm={() => void removeServer()}
@@ -234,16 +234,16 @@ export function McpServersView({ nav }: { nav: SettingsNavHandle }) {
                 <div className="text-prompt-overlay" onClick={() => setImportOpen(false)}>
                     <div className="text-prompt-modal" role="dialog" aria-modal="true" aria-labelledby="mcp-import-title" onClick={(e) => e.stopPropagation()}>
                         <h3 id="mcp-import-title" className="text-prompt-modal__title">
-                            {mcpT({ key: "mcp.import.title" })}
+                            {settingsTranslator({ key: "settings.mcp.import.title.desktop" })}
                         </h3>
-                        <p className="settings-hint">{mcpT({ key: "mcp.import.label" })}</p>
-                        <textarea rows={8} value={importText} placeholder={mcpT({ key: "mcp.import.placeholder" })} onChange={(e) => setImportText(e.target.value)} />
+                        <p className="settings-hint">{settingsTranslator({ key: "settings.mcp.import.label.desktop" })}</p>
+                        <textarea rows={8} value={importText} placeholder={settingsTranslator({ key: "settings.mcp.import.placeholder.desktop" })} onChange={(e) => setImportText(e.target.value)} />
                         <div className="confirm-modal__actions">
                             <Button variant="secondary" onClick={() => setImportOpen(false)}>
-                                {mcpT({ key: "mcp.list.help.dismiss" })}
+                                {settingsTranslator({ key: "settings.mcp.list.cancel.desktop" })}
                             </Button>
                             <Button variant="primary" disabled={busy || importText.trim().length === 0} onClick={() => void runImport()}>
-                                {mcpT({ key: "mcp.list.import" })}
+                                {settingsTranslator({ key: "settings.mcp.list.import.desktop" })}
                             </Button>
                         </div>
                     </div>
@@ -253,7 +253,7 @@ export function McpServersView({ nav }: { nav: SettingsNavHandle }) {
                 <div className="text-prompt-overlay" onClick={() => setHelpOpen(false)}>
                     <div className="text-prompt-modal text-prompt-modal--wide" role="dialog" aria-modal="true" aria-labelledby="mcp-help-title" onClick={(e) => e.stopPropagation()}>
                         <h3 id="mcp-help-title" className="text-prompt-modal__title">
-                            {mcpT({ key: "mcp.list.help.title" })}
+                            {coreT({ key: "ui.nav.mcp_servers" })}
                         </h3>
                         {helpSections.map((section) => (
                             <p key={section.title} className="settings-hint">
@@ -263,7 +263,7 @@ export function McpServersView({ nav }: { nav: SettingsNavHandle }) {
                         ))}
                         <div className="confirm-modal__actions">
                             <Button variant="primary" onClick={() => setHelpOpen(false)}>
-                                {mcpT({ key: "mcp.list.help.dismiss" })}
+                                {settingsTranslator({ key: "settings.mcp.help.dismiss" })}
                             </Button>
                         </div>
                     </div>
