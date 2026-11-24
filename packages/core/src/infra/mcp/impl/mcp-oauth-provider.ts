@@ -11,9 +11,10 @@
  *
  * provider 契约方法沿 SDK 协议以 throw 报错（官方接口没有 Result 通道，与 zod
  * preprocess 同为边界例外）；{@link McpOAuthFactory.create} 产出的两个入口是
- * Result 边界，可预期失败收成 `INFRA_VALIDATION_FAILED`（detail 永远带原文），
- * SDK 抛出的非 OAuthError 异常收成 `INFRA_UNEXPECTED_ERROR`——MCP 域尚无专属
- * 错误码（error-codes.ts 本节点不改），后续接线波次如需专属码在此集中替换。
+ * Result 边界：配置守卫 / 回调校验与 SDK auth() 抛出的异常（不按 OAuthError
+ * 再分流）统一收成 `INFRA_VALIDATION_FAILED`（detail 永远带原文），
+ * `INFRA_UNEXPECTED_ERROR` 只在 auth() 未产生授权跳转的防御分支出现——MCP 域
+ * 尚无专属错误码（error-codes.ts 本节点不改），后续接线波次如需专属码在此集中替换。
  *
  * @module infra/mcp/impl/mcp-oauth-provider
  */
