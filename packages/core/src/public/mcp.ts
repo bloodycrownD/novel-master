@@ -9,3 +9,4 @@ export type {McpHttpRequest, McpHttpResponse, McpRequestFn} from "../infra/mcp/p
 export {McpConfigStoreFactory} from "../infra/mcp/impl/mcp-config-store.js";
 export {McpSecretRefs, type McpConfigStore} from "../domain/mcp/ports/mcp-config-store.port.js";
 export {McpOAuthFactory} from "../infra/mcp/impl/mcp-oauth-provider.js";
+export {McpToolSlug} from "../domain/mcp/logic/slugify-mcp-tool-name.js";
