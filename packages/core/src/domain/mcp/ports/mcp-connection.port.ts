@@ -1,0 +1,38 @@
+/**
+ * MCP 连接管理 port（spec §五/§八）：常驻懒连接、失败隔离、装配期工具快照，
+ * 以及双端共用的两个 OAuth 回调接缝。实现由 infra/mcp/impl/
+ * create-mcp-connection-manager（Step 8）装配；server 级失败只能从
+ * `serverStatuses()` 读出。
+ *
+ * @module domain/mcp/ports/mcp-connection.port
+ */
+
+import type { Result } from "@/errors/either.js";
+import type { AppError } from "@/errors/app-error.js";
+import type { McpFailure } from "../model/mcp-failure.js";
+import type { McpServerStatus, McpToolSnapshot } from "../model/mcp-tool-snapshot.js";
+
+/** MCP 连接管理器：懒连接 + 快照缓存（TTL 60s / invalidate 失效）+ 失败隔离。 */
+export interface McpConnectionManager {
+    /** 装配期调用（runAgentTurn 在 BuiltinTools.register 之后 await 一次）；带缓存，失败的 server 跳过。 */
+    snapshotTools(): Promise<readonly McpToolSnapshot[]>;
+    /** 同步读的 server 状态（UI 状态标签与「测试连接」唯一读取面）。 */
+    serverStatuses(): readonly McpServerStatus[];
+    /**
+     * 调用 MCP 工具；取消不进 Result——`signal` 中止时原样以 AbortError reject
+     * 透传（工具 run 负责转 TOOL_CANCELLED），已知失败沿 `Result.err` 带原文。
+     */
+    callTool(serverId: string, toolName: string, args: unknown, signal: AbortSignal): Promise<Result<unknown, McpFailure>>;
+    /** 失效某 server 的工具快照（配置保存或手动刷新时调；下次 snapshotTools 重拉）。 */
+    invalidate(serverId: string): void;
+    /** 关闭全部常驻连接（回合结束时调）。 */
+    closeAll(): Promise<void>;
+}
+
+/** OAuth 2.1 授权的 app → core 回调接缝（spec §八）：桌面 loopback / 移动 deep link 只调这两个入口。 */
+export interface McpOAuth {
+    /** 发起授权：`redirectUrl` 由调用方先定好（桌面先起本地 server 拿端口再调；start 不负责选端口）。 */
+    start(serverId: string, redirectUrl: string): Promise<Result<{ readonly authorizeUrl: string }, AppError>>;
+    /** 接住系统回调（code / state / error 原样透传），完成 token 交换；不自己拼请求。 */
+    handleCallback(serverId: string, callback: { readonly code?: string; readonly state?: string; readonly error?: string }): Promise<Result<void, AppError>>;
+}
