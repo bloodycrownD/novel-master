@@ -43,3 +43,22 @@ test("T-P4: trigger 文案边界——未选择与全选", () => {
     );
     assert.match(full, /全部工具（11\/11）/);
 });
+
+test("T-P4: mcpTools 快照并入可选计数（MCP 工具 + 内置 11）；缺省仍为 11", () => {
+    const withMcp = renderToStaticMarkup(
+        <ToolPolicyPicker
+            selected={["mcp__fs__read"]}
+            onChange={() => {}}
+            mcpTools={[
+                { registeredName: "mcp__fs__read", serverName: "fs", toolDescription: "Read files" },
+                { registeredName: "mcp__fs__write", serverName: "fs" },
+            ]}
+        />,
+    );
+    assert.match(withMcp, /已选工具（1\/13）/);
+
+    const unconfigured = renderToStaticMarkup(
+        <ToolPolicyPicker selected={[]} onChange={() => {}} mcpTools={[]} />,
+    );
+    assert.match(unconfigured, /未选择工具（0\/11）/);
+});

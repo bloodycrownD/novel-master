@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import { BUILTIN_TOOL_CATALOG } from "@shared/config-forms/agent";
+import { AgentToolCatalog, type AgentToolCatalogMcpTool } from "@shared/config-forms/agent";
 import { coreT } from "@shared/logic/core-i18n";
 import { BatchCheckbox } from "@/components/batch/BatchCheckbox";
 
 type Props = {
     selected: readonly string[];
     onChange: (selected: string[]) => void;
+    /** 页面打开时刻的 MCP 工具快照；缺省 = 未配置，mcp 分组只显示提示占位（不参与勾选与计数）。 */
+    mcpTools?: readonly AgentToolCatalogMcpTool[];
 };
-
-const TOTAL = BUILTIN_TOOL_CATALOG.length;
 
 /**
  * 工具白名单/黑名单选择器：trigger 按钮 + 模态弹层多选。
@@ -18,7 +18,7 @@ const TOTAL = BUILTIN_TOOL_CATALOG.length;
  * `.picker-modal` 样式的弹层（复用 desktop 现有模态外壳），内含搜索 + 多选 + 确定/取消。
  * 多选草稿存在组件内 Set，点确定才提交回 onChange 并关闭。
  */
-export function ToolPolicyPicker({ selected, onChange }: Props) {
+export function ToolPolicyPicker({ selected, onChange, mcpTools }: Props) {
     const [open, setOpen] = useState(false);
     const [draft, setDraft] = useState<readonly string[]>(selected);
     const [query, setQuery] = useState("");
@@ -36,18 +36,18 @@ export function ToolPolicyPicker({ selected, onChange }: Props) {
 
     const draftSet = useMemo(() => new Set(draft), [draft]);
 
+    // 页面打开时刻的 catalog 快照：mcp 分组由注入的 prop 同步组装（spec §九，不接 Promise）
+    const entries = useMemo(() => AgentToolCatalog.get({ mcpTools: () => mcpTools ?? [] }).flatMap((group) => group.entries), [mcpTools]);
+    const total = entries.filter((entry) => !entry.placeholder).length;
+
     // nm-style: keep-local — useMemo 的回调带 deps 时必须多行；单行化需改运行语义
     const filtered = useMemo(() => {
         const q = query.trim().toLowerCase();
         if (q === "") {
-            return BUILTIN_TOOL_CATALOG;
+            return entries;
         }
-        return BUILTIN_TOOL_CATALOG.filter(
-            (item) =>
-                item.name.toLowerCase().includes(q) ||
-                item.description.toLowerCase().includes(q)
-        );
-    }, [query]);
+        return entries.filter((item) => item.name.toLowerCase().includes(q) || item.description.toLowerCase().includes(q));
+    }, [entries, query]);
 
     const toggle = (name: string) => {
         if (draftSet.has(name)) {
@@ -68,10 +68,10 @@ export function ToolPolicyPicker({ selected, onChange }: Props) {
             >
                 <span className="tool-policy-picker__trigger-label">
                     {selected.length === 0
-                        ? coreT({key: "ui.agent.no_tools_selected", params: {total: TOTAL}})
-                        : selected.length >= TOTAL
-                        ? coreT({key: "ui.agent.all_tools_selected", params: {total: TOTAL}})
-                        : coreT({key: "ui.agent.selected_tools_aria", params: {selected: selected.length, total: TOTAL}})}
+                        ? coreT({key: "ui.agent.no_tools_selected", params: {total}})
+                        : selected.length >= total
+                        ? coreT({key: "ui.agent.all_tools_selected", params: {total}})
+                        : coreT({key: "ui.agent.selected_tools_aria", params: {selected: selected.length, total}})}
                 </span>
                 <span className="tool-policy-picker__trigger-caret" aria-hidden>
                     ▼
@@ -92,6 +92,17 @@ export function ToolPolicyPicker({ selected, onChange }: Props) {
                             />
                             <ul className="picker-modal__list tool-policy-picker__modal-list">
                                 {filtered.map((item) => {
+                                    if (item.placeholder) {
+                                        return (
+                                            <li key={item.name}>
+                                                <div className="picker-modal__item tool-policy-picker__modal-row tool-policy-picker__placeholder">
+                                                    <span className="tool-policy-picker__desc">
+                                                        {item.description}
+                                                    </span>
+                                                </div>
+                                            </li>
+                                        );
+                                    }
                                     const checked = draftSet.has(item.name);
                                     return (
                                         <li key={item.name}>

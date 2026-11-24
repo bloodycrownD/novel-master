@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { BUILTIN_TOOL_CATALOG } from "../../shared/config-forms/agent-tool-catalog.js";
+import { AgentToolCatalog, BUILTIN_TOOL_CATALOG } from "../../shared/config-forms/agent-tool-catalog.js";
 
 /**
  * T-AG5：catalog 计数同步锁。
@@ -49,4 +49,32 @@ test("BUILTIN_TOOL_CATALOG 条目字段完整（name/label/description）", () =
         assert.equal(typeof entry.description, "string");
         assert.ok(entry.description.length > 0);
     }
+});
+
+test("AgentToolCatalog.get 分组结构：builtin 照旧 + mcp 追加（spec §九）", () => {
+    const groups = AgentToolCatalog.get({ mcpTools: () => [] });
+    assert.deepEqual(groups.map((g) => g.id), ["builtin", "mcp"]);
+    assert.ok(groups[0].entries === BUILTIN_TOOL_CATALOG, "builtin 分组应复用静态常量原引用");
+});
+
+test("AgentToolCatalog.get 空快照回落「未配置 MCP 服务器」单项提示（不参与勾选与计数）", () => {
+    const mcp = AgentToolCatalog.get({ mcpTools: () => [] })[1].entries;
+    assert.equal(mcp.length, 1);
+    assert.equal(mcp[0].placeholder, true);
+    assert.equal(mcp[0].description, "未配置 MCP 服务器");
+});
+
+test("AgentToolCatalog.get 快照条目映射为 mcp__ 复合名条目（名字与描述取快照，不在 app 侧重算）", () => {
+    const mcp = AgentToolCatalog.get({
+        mcpTools: () => [
+            { registeredName: "mcp__fs__read", serverName: "fs", toolDescription: "Read files" },
+            { registeredName: "mcp__fs__write", serverName: "fs" },
+        ],
+    })[1].entries;
+    assert.equal(mcp.length, 2);
+    assert.equal(mcp[0].name, "mcp__fs__read");
+    assert.equal(mcp[0].label, "mcp__fs__read");
+    assert.equal(mcp[0].description, "[MCP:fs] Read files");
+    assert.equal(mcp[0].placeholder, undefined);
+    assert.equal(mcp[1].description, "[MCP:fs] mcp__fs__write", "toolDescription 缺省回落 registeredName");
 });

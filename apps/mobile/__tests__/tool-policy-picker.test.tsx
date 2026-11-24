@@ -112,6 +112,7 @@ function findAllPressablesByChildText(root: any, text: string): any[] {
 function renderPicker(props: {
     selected: string[];
     onChange: (s: string[]) => void;
+    mcpTools?: any[];
 }) {
     let renderer: any;
     act(() => {
@@ -121,6 +122,7 @@ function renderPicker(props: {
                     tokens={tokens}
                     selected={props.selected}
                     onChange={props.onChange}
+                    mcpTools={props.mcpTools}
                 />
             </FormOverlayProvider>,
         );
@@ -257,6 +259,37 @@ describe('ToolPolicyPicker (mobile) — T-P1/T-P2/T-P3', () => {
             );
         });
         expect(JSON.stringify(r2.toJSON())).toContain('全部工具（11/11）');
+    });
+
+    it('mcpTools 快照并入计数与列表；缺省（未配置）时 mcp 分组只显示提示占位', () => {
+        const onChange = jest.fn();
+        const renderer = renderPicker({
+            selected: ['mcp__fs__read'],
+            onChange,
+            mcpTools: [
+                {registeredName: 'mcp__fs__read', serverName: 'fs', toolDescription: 'Read files'},
+                {registeredName: 'mcp__fs__write', serverName: 'fs'},
+            ],
+        });
+        expect(JSON.stringify(renderer.toJSON())).toContain('已选工具（1/13）');
+
+        // 打开 sheet：MCP 工具行以复合名出现，描述带 [MCP:fs] 前缀
+        const trigger = findPressableByChildText(renderer.root, '已选工具（1/13）');
+        act(() => {
+            trigger.props.onPress();
+        });
+        let json = JSON.stringify(renderer.toJSON());
+        expect(json).toContain('mcp__fs__read');
+        expect(json).toContain('[MCP:fs] Read files');
+
+        // 未配置（不传 / 传空数组）：占位提示不参与计数（总数仍 11），sheet 里只显示提示文案
+        const empty = renderPicker({selected: [], onChange: jest.fn(), mcpTools: []});
+        expect(JSON.stringify(empty.toJSON())).toContain('未选择工具（0/11）');
+        const emptyTrigger = findPressableByChildText(empty.root, '未选择工具（0/11）');
+        act(() => {
+            emptyTrigger.props.onPress();
+        });
+        expect(JSON.stringify(empty.toJSON())).toContain('未配置 MCP 服务器');
     });
 });
 

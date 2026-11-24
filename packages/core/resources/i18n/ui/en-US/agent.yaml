@@ -122,6 +122,7 @@
     tool_desc_agent: Manage agent definitions (list/get/create/update; primary agent only)
     tool_desc_curl: "Send http/https requests to fetch or submit web/API content, with custom methods, headers and bodies; responses over 50KB are saved to the session workspace /tmp/ (readable via read)"
     tool_desc_search: "Web search: query pages serially through the enabled search engines and return raw engine results (JSON text); engines are managed under Settings → Search (only the built-in DuckDuckGo free search is enabled by default, no configuration needed)"
+    mcp_not_configured: No MCP servers configured
     # p27 R6 wave 3-2a: editor validations and failure titles (agent-editor-state shared validations + mobile editor toasts)
     name_required: Agent name is required
     assistant_text_required: Workplace assistant confirmation text is required
