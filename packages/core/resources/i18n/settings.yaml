@@ -53,13 +53,6 @@ zh-CN:
   mcp.detail.url_placeholder: https://example.com/mcp
   mcp.delete_notice: "「{name}」的配置与密钥会一并清除，不可恢复。"
   mcp.delete_title: 删除服务器
-  mcp.failure.auth: 认证失败
-  mcp.failure.network: 网络错误
-  mcp.failure.permission: 没有权限
-  mcp.failure.protocol: 协议错误
-  mcp.failure.rate_limit: 触发限流
-  mcp.failure.server: 服务器错误
-  mcp.failure.unknown: 未知错误
   mcp.help.auth.body: API Key 加密保存，保存后不再显示明文；OAuth 授权在系统浏览器里完成，结束后自动回到应用。
   mcp.help.auth.title: 认证
   mcp.help.context.body: 工具越多，占用的上下文越多。
@@ -311,13 +304,6 @@ en-US:
   mcp.detail.url_placeholder: https://example.com/mcp
   mcp.delete_notice: "The configuration and keys of \"{name}\" will be removed. This cannot be undone."
   mcp.delete_title: Delete server
-  mcp.failure.auth: Authentication failed
-  mcp.failure.network: Network error
-  mcp.failure.permission: Permission denied
-  mcp.failure.protocol: Protocol error
-  mcp.failure.rate_limit: Rate limited
-  mcp.failure.server: Server error
-  mcp.failure.unknown: Unknown error
   mcp.help.auth.body: API keys are stored encrypted and never shown again after saving; OAuth authorization happens in the system browser and returns to the app when done.
   mcp.help.auth.title: Authentication
   mcp.help.context.body: More tools take up more of the AI's context.

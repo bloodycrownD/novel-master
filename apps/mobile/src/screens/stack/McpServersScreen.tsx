@@ -4,16 +4,15 @@
  * 底部「新建服务器」入口；点击行进详情页。
  *
  * 状态标签读连接管理器的 `serverStatuses()`（spec §五：server 级状态唯一读取
- * 面），只有「已连接 / 未连接」两态；失败原文不铺在列表，详情页「测试连接」
- * 看。本页不主动发起连接（首次进入状态多为未连接，由详情页的连接/测试点亮）。
- * 长说明收进标题栏「?」帮助弹窗（四段；照 SearchEnginesScreen 先例）。
+ * 面），只有「已连接 / 未连接」两态；server 带失败时副标题直显 `failure.detail`
+ * 原文（不自写文案）。本页不主动发起连接（首次进入状态多为未连接，由详情页的
+ * 连接/测试点亮）。长说明收进标题栏「?」帮助弹窗（照 SearchEnginesScreen 先例）。
  */
 import React, {useCallback, useRef, useState} from 'react';
 import {ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Switch, Text, View} from 'react-native';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import type {McpFailureKind, McpServerConfig, McpServerStatus} from '@novel-master/core/mcp';
-import type {SettingsMessageKey} from '@novel-master/core/settings';
+import type {McpServerConfig, McpServerStatus} from '@novel-master/core/mcp';
 import {BottomSheetMenu} from '@/components/sheet/BottomSheetMenu';
 import {HelpSection} from '@/components/common/HelpSection';
 import {ConfigListCard} from '@/components/ui/ConfigListCard';
@@ -41,17 +40,6 @@ interface McpServerRow {
 }
 
 const EMPTY_ROWS: readonly McpServerRow[] = [];
-
-/** 失败 kind → 短文案（列表副标题用；原文进详情页）。 */
-const FAILURE_LABEL_KEYS: Record<McpFailureKind, SettingsMessageKey> = {
-    auth: 'settings.mcp.failure.auth',
-    permission: 'settings.mcp.failure.permission',
-    'rate-limit': 'settings.mcp.failure.rate_limit',
-    server: 'settings.mcp.failure.server',
-    protocol: 'settings.mcp.failure.protocol',
-    network: 'settings.mcp.failure.network',
-    unknown: 'settings.mcp.failure.unknown',
-};
 
 export function McpServersScreen() {
     const {tokens} = useTheme();
@@ -153,9 +141,9 @@ export function McpServersScreen() {
                     refreshControl={<RefreshControl refreshing={loading} onRefresh={reload} />}
                     renderItem={({item}) => {
                         const failure = item.status.failure;
-                        // 开关本身已表达启停态，副标题给地址；有失败时缀一句 kind 短文案（原文进详情页）。
+                        // 开关本身已表达启停态，副标题给地址；有失败时直显 failure.detail 原文（core 事实提示，不自写文案）。
                         const url = item.config.transport.type === 'stdio' ? null : item.config.transport.url;
-                        const failureText = failure == null ? null : settingsTranslator({key: FAILURE_LABEL_KEYS[failure.kind]});
+                        const failureText = failure?.detail ?? null;
                         const subtitle = [url, failureText].filter(part => part != null).join(' · ');
                         return (
                             <ConfigListCard

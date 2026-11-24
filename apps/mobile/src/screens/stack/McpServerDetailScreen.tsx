@@ -7,9 +7,10 @@
  * - 认证：方式 FormSelectField（无 / API Key / OAuth）。bearer 的密钥只经 SKSP
  *   写入（ref `mcp/{id}/bearer`），不回显明文；OAuth 显示授权状态与「重新授权」
  *   （McpOauthService.start → 系统浏览器，回调由 deep link service 接住）；
- * - 工具：测试连接（invalidate + 重拉快照）+ 失败原文（failure.detail，等宽
- *   块）+ 每个工具的启停开关（KKV `nm-mcp/disabledTools`，过滤发生在
- *   connectionManager 快照出口——开关真正决定工具是否注册进 agent）。
+ * - 工具：测试连接（invalidate + 重拉快照）+ server 状态行（不可用时直显
+ *   `failure.detail` 原文，可选中复制）+ 每个工具的启停开关（KKV
+ *   `nm-mcp/disabledTools`，过滤发生在 connectionManager 快照出口——开关
+ *   真正决定工具是否注册进 agent）。
  *
  * 界面说明文字按 Step 14 五条：一组只出现一次（工具组脚注），字段级 hint 只留
  * 单位与「已保存」事实。表单骨架照 SearchEngineDetailScreen 先例。
@@ -18,7 +19,7 @@ import {useCallback, useEffect, useRef, useState} from 'react';
 import {ActivityIndicator, Pressable, StyleSheet, Text, View} from 'react-native';
 import {useFocusEffect, useNavigation, useRoute, type RouteProp} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import {MCP_DEFAULT_TIMEOUT_MS, MCP_MIN_TIMEOUT_MS, McpSecretRefs, type McpFailureKind, type McpServerConfig, type McpServerStatus, type McpToolSnapshot} from '@novel-master/core/mcp';
+import {MCP_DEFAULT_TIMEOUT_MS, MCP_MIN_TIMEOUT_MS, McpSecretRefs, type McpServerConfig, type McpServerStatus, type McpToolSnapshot} from '@novel-master/core/mcp';
 import type {SettingsMessageKey} from '@novel-master/core/settings';
 import {FormChipGroup, type ChipOption} from '@/components/form/FormChipGroup';
 import {FormField} from '@/components/form/FormField';
@@ -61,17 +62,6 @@ const TRANSPORT_OPTIONS: ReadonlyArray<ChipOption<'http' | 'sse'>> = [
 ];
 
 const EMPTY_DRAFT: McpServerDraft = {name: '', transport: 'http', url: '', timeoutSeconds: '120', authType: 'none'};
-
-/** 失败 kind → 状态行短文案（原文在 raw 块）。 */
-const FAILURE_LABEL_KEYS: Record<McpFailureKind, SettingsMessageKey> = {
-    auth: 'settings.mcp.failure.auth',
-    permission: 'settings.mcp.failure.permission',
-    'rate-limit': 'settings.mcp.failure.rate_limit',
-    server: 'settings.mcp.failure.server',
-    protocol: 'settings.mcp.failure.protocol',
-    network: 'settings.mcp.failure.network',
-    unknown: 'settings.mcp.failure.unknown',
-};
 
 /** 在途写操作（互斥：同刻只允许一个；null = 空闲）。 */
 type WriteOp = 'save' | 'clear_key' | 'delete';
@@ -285,7 +275,8 @@ export function McpServerDetailScreen() {
         if (status.state === 'disabled') {
             return {text: settingsTranslator({key: 'settings.mcp.detail.status_disabled'}), color: tokens.textSecondary};
         }
-        return {text: status.failure == null ? settingsTranslator({key: 'settings.mcp.detail.status_pending'}) : settingsTranslator({key: FAILURE_LABEL_KEYS[status.failure.kind]}), color: tokens.danger};
+        // 状态不可用：状态位置直显 core 事实提示（failure.detail），不自写文案。
+        return {text: status.failure?.detail ?? settingsTranslator({key: 'settings.mcp.detail.status_pending'}), color: tokens.danger};
     })();
 
     return (
@@ -408,8 +399,7 @@ export function McpServerDetailScreen() {
                     }
                     tokens={tokens}
                 >
-                    {statusLine != null ? <Text style={[styles.statusLine, {color: statusLine.color}]}>{statusLine.text}</Text> : null}
-                    {status?.failure != null ? <Text style={[styles.rawBlock, {backgroundColor: tokens.bgSecondary, color: tokens.text}]} selectable>{status.failure.detail}</Text> : null}
+                    {statusLine != null ? <Text selectable style={[styles.statusLine, {color: statusLine.color}]}>{statusLine.text}</Text> : null}
                     {tools.length === 0 ? null : (
                         <View style={styles.toolList}>
                             {tools.map(tool => (
@@ -474,14 +464,6 @@ const styles = StyleSheet.create({
     // textarea：起始与单行输入框同高（44），内容折行时随行数自动长高。
     urlInput: {minHeight: 44},
     statusLine: {fontSize: 14, lineHeight: 20},
-    // 失败原文块（等宽）：可选中复制，方便贴给服务端排查。
-    rawBlock: {
-        fontFamily: 'monospace',
-        fontSize: 12,
-        lineHeight: 17,
-        borderRadius: 12,
-        padding: 12,
-    },
     toolList: {gap: 4},
     stateTag: {
         paddingHorizontal: 8,

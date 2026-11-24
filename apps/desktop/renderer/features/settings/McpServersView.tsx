@@ -1,10 +1,11 @@
 /**
  * 设置 · MCP 服务器列表页（两级结构第一级，照搜索引擎配置页同构）：
  * 配置行来自 `ipcMcpListServers`（core 归一配置），状态标签来自 `ipcMcpServerStatuses`
- * （core 连接管理器同步读，错误原文 `failure.detail` 在详情页展示）。每行 = 名称 +
- * 状态标签 + 启用开关 + ⋮ 菜单（测试连接 / 删除）；点击行进详情页；页首「添加服务器」
- * 进详情页 create 模式（`NEW_MCP_SERVER_SENTINEL` 哨兵，不新增 viewId）、「导入 JSON」
- * 弹粘贴窗。详细说明收进页首「?」帮助弹窗，页内不铺长文案（双端同构口径）。
+ * （core 连接管理器同步读；server 带失败时状态位置直显 `failure.detail` 原文，不自写
+ * 文案）。每行 = 名称 + 状态 + 启用开关 + ⋮ 菜单（测试连接 / 删除）；点击行进详情页；
+ * 页首「新建服务器」进详情页 create 模式（`NEW_MCP_SERVER_SENTINEL` 哨兵，不新增
+ * viewId）、「导入 JSON」弹粘贴窗。详细说明收进页首「?」帮助弹窗，页内不铺长文案
+ * （双端同构口径）。
  */
 import { useCallback, useEffect, useState } from "react";
 import type { IpcResult, McpServerConfig, McpServerStatus } from "@shared/ipc-types";
@@ -168,7 +169,14 @@ export function McpServersView({ nav }: { nav: SettingsNavHandle }) {
                                 }}
                             >
                                 <span className="settings-list-item__label">{server.name}</span>
-                                <span className="settings-list-item__meta">{status != null ? <span className={mcpStatusTagClass(status.state)}>{mcpStatusLabel(status)}</span> : null}</span>
+                                <span className="settings-list-item__meta">
+                                    {status == null
+                                        ? null
+                                        : status.failure != null
+                                          ? // 状态不可用：状态位置直显 core 事实提示（failure.detail），不自写文案（超长由 meta 的 ellipsis 截断，原文进详情页）
+                                            <span style={{ color: "var(--warning, #b45309)" }}>{status.failure.detail}</span>
+                                          : <span className={mcpStatusTagClass(status.state)}>{mcpStatusLabel(status)}</span>}
+                                </span>
                                 <span className="settings-list-item__chevron" aria-hidden="true">
                                     ›
                                 </span>
