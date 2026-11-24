@@ -85,12 +85,16 @@ function resolveZodModule(moduleName) {
   const withoutExt = rel.replace(/\.(js|mjs|cjs)$/, '');
   const candidates = [
     path.resolve(zodRoot, `${withoutExt}.cjs`),
+    // `zod/v4` 这类目录子入口（@modelcontextprotocol/core 的 auth/schemas chunk 引用）
+    // 的 require 条件是 <子目录>/index.cjs；existsSync 会命中目录本身，Metro
+    // 随后把目录当文件求 SHA-1 直接炸，所以与 isFile 同口径只认文件。
+    path.resolve(zodRoot, withoutExt, 'index.cjs'),
     path.resolve(zodRoot, `${rel}.cjs`),
     path.resolve(zodRoot, rel),
   ];
 
   for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) {
+    if (isFile(candidate)) {
       return candidate;
     }
   }
