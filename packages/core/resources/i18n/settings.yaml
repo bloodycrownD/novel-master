@@ -67,8 +67,7 @@ zh-CN:
   mcp.import.label.desktop: 粘贴外部配置 JSON
   mcp.import.placeholder.desktop: '{"mcpServers": {"my-server": {"url": "https://…"}}}'
   mcp.import.title.desktop: 从 JSON 导入
-  mcp.list.cancel.desktop: 取消
-  mcp.list.cancel.mobile: 取消
+  mcp.list.cancel: 取消
   mcp.list.connected: 已连接
   mcp.list.create: 新建服务器
   mcp.list.deleting.mobile: 删除中…
@@ -314,8 +313,7 @@ en-US:
   mcp.import.label.desktop: Paste external config JSON
   mcp.import.placeholder.desktop: '{"mcpServers": {"my-server": {"url": "https://…"}}}'
   mcp.import.title.desktop: Import from JSON
-  mcp.list.cancel.desktop: Cancel
-  mcp.list.cancel.mobile: Cancel
+  mcp.list.cancel: Cancel
   mcp.list.connected: Connected
   mcp.list.create: New server
   mcp.list.deleting.mobile: Deleting…

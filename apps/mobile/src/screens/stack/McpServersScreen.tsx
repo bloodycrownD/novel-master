@@ -223,7 +223,7 @@ export function McpServersScreen() {
                 <Text style={[styles.confirmBody, {color: tokens.textSecondary}]}>{deleteNotice}</Text>
                 <View style={styles.confirmActions}>
                     <View style={styles.confirmAction}>
-                        <SecondaryButton tokens={tokens} fullWidth label={settingsTranslator({key: 'settings.mcp.list.cancel.mobile'})} onPress={() => setPendingDelete(undefined)} disabled={deleting} />
+                        <SecondaryButton tokens={tokens} fullWidth label={settingsTranslator({key: 'settings.mcp.list.cancel'})} onPress={() => setPendingDelete(undefined)} disabled={deleting} />
                     </View>
                     <View style={styles.confirmAction}>
                         <SecondaryButton

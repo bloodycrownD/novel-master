@@ -435,7 +435,7 @@ export function McpServerDetailScreen() {
                 <Text style={[styles.confirmBody, {color: tokens.textSecondary}]}>{settingsTranslator({key: 'settings.mcp.delete_notice', params: {name: title}})}</Text>
                 <View style={styles.confirmActions}>
                     <View style={styles.confirmAction}>
-                        <SecondaryButton tokens={tokens} fullWidth label={settingsTranslator({key: 'settings.mcp.list.cancel.mobile'})} onPress={() => setConfirmDelete(false)} disabled={writeOp != null} />
+                        <SecondaryButton tokens={tokens} fullWidth label={settingsTranslator({key: 'settings.mcp.list.cancel'})} onPress={() => setConfirmDelete(false)} disabled={writeOp != null} />
                     </View>
                     <View style={styles.confirmAction}>
                         <SecondaryButton

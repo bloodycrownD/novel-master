@@ -248,7 +248,7 @@ export function McpServersView({ nav }: { nav: SettingsNavHandle }) {
                         <textarea rows={8} value={importText} placeholder={settingsTranslator({ key: "settings.mcp.import.placeholder.desktop" })} onChange={(e) => setImportText(e.target.value)} />
                         <div className="confirm-modal__actions">
                             <Button variant="secondary" onClick={() => setImportOpen(false)}>
-                                {settingsTranslator({ key: "settings.mcp.list.cancel.desktop" })}
+                                {settingsTranslator({ key: "settings.mcp.list.cancel" })}
                             </Button>
                             <Button variant="primary" disabled={busy || importText.trim().length === 0} onClick={() => void runImport()}>
                                 {settingsTranslator({ key: "settings.mcp.list.import.desktop" })}
