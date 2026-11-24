@@ -55,14 +55,14 @@ export const McpConfigStoreFactory = {
                 const current = await readConfigs(kkv);
                 if (!current.ok) return Result.err(current.error);
                 const next = current.value.some((existing) => existing.id === config.id) ? current.value.map((existing) => (existing.id === config.id ? config : existing)) : [...current.value, config];
-                Kkv.setJson(kkv, KKV_MODULE, KEY_SERVERS, next);
+                await Kkv.setJson(kkv, KKV_MODULE, KEY_SERVERS, next);
                 return Result.ok(undefined);
             },
             async remove(serverId) {
                 const current = await readConfigs(kkv);
                 if (!current.ok) return Result.err(current.error);
                 const remaining = current.value.filter((config) => config.id !== serverId);
-                if (remaining.length !== current.value.length) Kkv.setJson(kkv, KKV_MODULE, KEY_SERVERS, remaining);
+                if (remaining.length !== current.value.length) await Kkv.setJson(kkv, KKV_MODULE, KEY_SERVERS, remaining);
                 // SKSP refs 无条件清（幂等）：KKV 损坏回空列表后残留的 ref 也顺手收走。
                 await Promise.all([secretStore.delete(McpSecretRefs.bearer(serverId)), secretStore.delete(McpSecretRefs.headers(serverId)), secretStore.delete(McpSecretRefs.oauth(serverId))]);
                 return Result.ok(undefined);
@@ -81,7 +81,7 @@ export const McpConfigStoreFactory = {
                 const byId = new Map(current.value.map((config) => [config.id, config]));
                 for (const outcome of outcomes) byId.set(outcome.config.id, outcome.config);
                 const merged = [...byId.values()];
-                Kkv.setJson(kkv, KKV_MODULE, KEY_SERVERS, merged);
+                await Kkv.setJson(kkv, KKV_MODULE, KEY_SERVERS, merged);
                 return Result.ok(merged);
             },
         };

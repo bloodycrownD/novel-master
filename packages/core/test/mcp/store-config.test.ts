@@ -142,6 +142,31 @@ describe("mcp-config-store", () => {
         assert.ok(AppErrorOps.is(unwrapErr(imported), "KKV_CONFLICT"));
     });
 
+    it("KKV set 失败不被吞：save / remove / importExternal 的写失败以 reject 冒出，不静默返回 ok", async () => {
+        const deps = makeDeps();
+        const store = McpConfigStoreFactory.create(deps);
+        unwrap(await store.save(httpConfig("seed")));
+        deps.kkv.set = async () => {
+            throw new AppError("KKV_CONFLICT", { detail: "injected write failure" });
+        };
+        const isInjected = (error: unknown): boolean => AppErrorOps.is(error, "KKV_CONFLICT");
+        await assert.rejects(store.save(httpConfig("zhiyu")), isInjected);
+        await assert.rejects(store.remove("seed"), isInjected);
+        await assert.rejects(store.importExternal({ mcpServers: { zhiyu: { url: "https://mcp.zhiyu.example/mcp" } } }), isInjected);
+    });
+
+    it("save 在 KKV 落盘完成后才返回：写后紧跟 list 读到新值（真异步 set 抓未 await）", async () => {
+        const deps = makeDeps();
+        const store = McpConfigStoreFactory.create(deps);
+        const map = deps.kkv.map;
+        deps.kkv.set = async (module, key, value) => {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            map.set(`${module}/${key}`, value);
+        };
+        unwrap(await store.save(httpConfig("zhiyu")));
+        assert.deepEqual(unwrap(await store.list()), [httpConfig("zhiyu")]);
+    });
+
     it("importExternal 按 id upsert 合并：现有列表保序、同 id 覆盖、新 id 追加队尾", async () => {
         const deps = makeDeps();
         const store = McpConfigStoreFactory.create(deps);
