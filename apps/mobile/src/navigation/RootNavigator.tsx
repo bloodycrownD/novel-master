@@ -30,6 +30,8 @@ import {CloudSyncConfigScreen} from '../screens/stack/CloudSyncConfigScreen';
 import {CloudSyncStorageScreen} from '../screens/stack/CloudSyncStorageScreen';
 import {SearchEnginesScreen} from '../screens/stack/SearchEnginesScreen';
 import {SearchEngineDetailScreen} from '../screens/stack/SearchEngineDetailScreen';
+import {McpServersScreen} from '../screens/stack/McpServersScreen';
+import {McpServerDetailScreen} from '../screens/stack/McpServerDetailScreen';
 import {StorageConfigScreen} from '../screens/stack/StorageConfigScreen';
 import {CloudSyncProgressScreen} from '../screens/stack/CloudSyncProgressScreen';
 import {ChatConfigScreen} from '../screens/stack/ChatConfigScreen';
@@ -122,6 +124,8 @@ const CloudSyncConfigStackScreen = withStackLayout('CloudSyncConfig', CloudSyncC
 const CloudSyncStorageStackScreen = withStackLayout('CloudSyncStorage', CloudSyncStorageScreen);
 const SearchEnginesStackScreen = withStackLayout('SearchEngines', SearchEnginesScreen);
 const SearchEngineDetailStackScreen = withStackLayout('SearchEngineDetail', SearchEngineDetailScreen);
+const McpServersStackScreen = withStackLayout('McpServers', McpServersScreen);
+const McpServerDetailStackScreen = withStackLayout('McpServerDetail', McpServerDetailScreen);
 const GlobalTemplateStackScreen = withStackLayout('GlobalTemplate', GlobalTemplateScreen);
 const SmartSortRulesStackScreen = withStackLayout('SmartSortRules', SmartSortRulesScreen);
 const SmartSortRuleEditorStackScreen = withStackLayout('SmartSortRuleEditor', SmartSortRuleEditorScreen);
@@ -185,6 +189,8 @@ export function RootNavigator() {
                         <Stack.Screen name="CloudSyncStorage" component={CloudSyncStorageStackScreen} />
                         <Stack.Screen name="SearchEngines" component={SearchEnginesStackScreen} />
                         <Stack.Screen name="SearchEngineDetail" component={SearchEngineDetailStackScreen} />
+                        <Stack.Screen name="McpServers" component={McpServersStackScreen} />
+                        <Stack.Screen name="McpServerDetail" component={McpServerDetailStackScreen} />
                         <Stack.Screen name="GlobalTemplate" component={GlobalTemplateStackScreen} />
                         <Stack.Screen name="SmartSortRules" component={SmartSortRulesStackScreen} />
                         <Stack.Screen name="SmartSortRuleEditor" component={SmartSortRuleEditorStackScreen} />

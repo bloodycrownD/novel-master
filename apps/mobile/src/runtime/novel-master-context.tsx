@@ -19,6 +19,7 @@ import {createSessionRunStateService} from '@novel-master/core/session-run-state
 import {StreamTokenEstimator} from '@/services/stream-token-estimator';
 import {AppToast} from '@/services/app-toast';
 import {AgentFinishedNotification} from '@/services/agent-finished-notification';
+import {McpOauthService} from '@/services/mcp-oauth.service';
 import {AppUiPrefIo} from '@/storage/app-ui-pref-io';
 import {APP_UI_KEY_MESSAGE_NOTIFICATION} from '@/storage/app-ui-keys';
 import {Tokens} from '../theme/tokens';
@@ -325,6 +326,16 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
         // （fire-and-forget；retry 重建 runtime 后本 effect 重跑，dispose 全停
         // → 重新拉起的秒级闪断 PRD 已接受）。
         void NovelMasterContextHelpers.ensureKeepAliveResidentBoot(appUiRef.current);
+    }, [runtime]);
+
+    // MCP OAuth deep link 监听（spec mcp-support Step 13）：runtime 就绪后挂全局
+    // url 监听（含冷启动 getInitialURL 兜进程被回收后的浏览器回跳）；retry 换新
+    // runtime 时本 effect 重跑，先解绑旧监听再对新 runtime 重挂。
+    useEffect(() => {
+        if (runtime == null) {
+            return;
+        }
+        return McpOauthService.listen(runtime);
     }, [runtime]);
 
     const refreshScope = useCallback(async () => {

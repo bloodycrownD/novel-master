@@ -32,6 +32,8 @@ export const PAGE_HEADER_CONFIG: Record<HeaderPageKey, PageHeaderConfig> = {
     CloudSyncStorage: {title: coreT({key: "ui.nav.cloud_storage_setup"}), showBack: true, showNav: false},
     SearchEngines: {title: coreT({key: "ui.nav.search_engines"}), showBack: true, showNav: false},
     SearchEngineDetail: {title: coreT({key: "ui.nav.search_engines"}), showBack: true, showNav: false},
+    McpServers: {title: coreT({key: "ui.nav.mcp_servers"}), showBack: true, showNav: false},
+    McpServerDetail: {title: coreT({key: "ui.nav.mcp_servers"}), showBack: true, showNav: false},
     GlobalTemplate: {title: coreT({key: "ui.nav.file_browser"}), showBack: true, showNav: false},
     SmartSortRules: {title: coreT({key: "ui.nav.smart_sort_rules"}), showBack: true, showNav: false},
     SmartSortRuleEditor: {title: coreT({key: "ui.nav.rule_editor"}), showBack: true, showNav: false},

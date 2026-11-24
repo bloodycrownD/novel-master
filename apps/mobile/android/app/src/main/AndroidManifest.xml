@@ -27,6 +27,15 @@
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent-filter>
+        <!-- MCP OAuth deep link 回调（spec mcp-support §八）：系统浏览器授权完成后
+             经 nm://oauth/callback 回跳；scheme/host/path 与 services/mcp-oauth.service
+             的 MCP_OAUTH_REDIRECT_URL 逐字一致。 -->
+        <intent-filter>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="nm" android:host="oauth" android:path="/callback" />
+        </intent-filter>
       </activity>
 
       <!-- notifee 前台服务覆写：声明 dataSync 类型（Android 14+ 必需；

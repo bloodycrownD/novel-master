@@ -22,10 +22,14 @@ import {createKkvService} from '@novel-master/core/kkv';
 import {SessionKkvServiceFactory} from '@novel-master/core/session-kkv';
 import {SkillsServiceFactory} from '@novel-master/core/skills';
 import {SkspFactory, SkspRegistry} from '@novel-master/core/sksp';
+import {NativeModules} from 'react-native';
+import type {LlmSseNativeModule} from '@novel-master/llm-sse-native/native';
 import {MobileDb} from '../db/connection';
 import {Result, AppError} from '@novel-master/core/errors';
 import {MobileSksp} from './mobile-sksp';
 import {LlmFetchSetup} from './setup-llm-fetch';
+import {McpRuntimeFactory} from '../services/mcp-config.store';
+import {McpRequestAdapter} from '../services/mcp-request-adapter';
 import {rollbackTimingLog} from '../debug/run-timing';
 import {YieldQuantum} from '../services/yield-quantum';
 import type {MobileRuntimeCore} from './types';
@@ -101,6 +105,18 @@ export const MobileRuntimeFactory = {
         // search 配置依赖 kkv + secretStore，在两者之后装配。
         const searchConfig = SearchConfig.createStore({kkv, secretStore});
 
+        // MCP 接入切片（spec mcp-support Step 13/14）：请求适配 = 原生 request（整调用
+        // callTimeout 由工厂按各 server 的 timeoutMs 选建；iOS / Jest 原生未注册时
+        // adapter 内部回落 fetch），配置镜像 + 连接管理器 + OAuth 同厂装配。
+        const nativeLlmModule = NativeModules.LlmSseNative as LlmSseNativeModule | undefined;
+        const nativeRequest = nativeLlmModule != null && typeof nativeLlmModule.request === 'function' ? nativeLlmModule.request.bind(nativeLlmModule) : null;
+        const nativeRequestAbort = nativeLlmModule != null && typeof nativeLlmModule.requestAbort === 'function' ? nativeLlmModule.requestAbort.bind(nativeLlmModule) : null;
+        const mcp = await McpRuntimeFactory.create({
+            kkv,
+            secretStore,
+            requestFnFor: timeoutMs => McpRequestAdapter.create({request: nativeRequest, ...(nativeRequestAbort == null ? {} : {requestAbort: nativeRequestAbort}), timeoutMs}),
+        });
+
         const eventBus = new SimpleEventBus();
         const compactionConditions = CompactionFactory.createConditionsStore(conn);
 
@@ -144,6 +160,7 @@ export const MobileRuntimeFactory = {
             agentAbortRegistry,
             streamRegistry,
             searchConfig,
+            mcp,
             tokenCounters,
             projects,
             sessions,

@@ -43,6 +43,10 @@ export type RootStackParamList = {
     SearchEngines: undefined;
     /** 搜索引擎详情：单引擎表单；无参数 = 新建自定义引擎（create 模式）。 */
     SearchEngineDetail: {engineId: string} | undefined;
+    /** MCP 服务器列表（spec mcp-support Step 14，无参数）。 */
+    McpServers: undefined;
+    /** MCP 服务器详情：连接/认证/工具分组表单；无参数 = 新建服务器（create 模式）。 */
+    McpServerDetail: {serverId: string} | undefined;
     GlobalTemplate: undefined;
     /** 智能排序规则列表（spec smart-filename-sort Step 13）。 */
     SmartSortRules: undefined;

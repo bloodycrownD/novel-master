@@ -44,6 +44,7 @@ const CONFIG_MENU: Array<{
     {icon: '🤖', label: coreT({key: "ui.nav.agent_settings"}), route: 'AgentsSettings'},
     {icon: '🔌', label: coreT({key: "ui.nav.providers"}), route: 'Providers'},
     {icon: '🔍', label: coreT({key: "ui.nav.search_engines"}), route: 'SearchEngines'},
+    {icon: '🛰️', label: coreT({key: "ui.nav.mcp_servers"}), route: 'McpServers'},
     {icon: '🧩', label: coreT({key: "ui.nav.skills_manage"}), route: 'SkillsSettings'},
     {icon: '💬', label: coreT({key: "ui.chat_config.title"}), route: 'ChatConfig'},
     {icon: '💾', label: coreT({key: "ui.nav.storage"}), route: 'StorageConfig'},

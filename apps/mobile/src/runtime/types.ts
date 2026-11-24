@@ -49,6 +49,7 @@ import type {KkvService} from '@novel-master/core/kkv';
 import type {SessionKkvService} from '@novel-master/core/session-kkv';
 import type {SkillService} from '@novel-master/core/skills';
 import type {SearchConfigStore} from '@novel-master/core';
+import type {McpRuntimeSlice} from '@/services/mcp-config.store';
 import type {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
 
 /** Open connection with domain services (no CLI scope resolver or mock LLM). */
@@ -105,6 +106,12 @@ export interface MobileNovelMasterRuntime {
     readonly streamRegistry: AgentStreamRegistry;
     /** 搜索引擎配置存储（search 工具 run 内现读引擎与 key；搜索配置页（列表+详情）消费）。 */
     readonly searchConfig: SearchConfigStore;
+    /**
+   * MCP 接入切片（spec mcp-support Step 13/14）：配置镜像 + 连接管理器（快照出口
+   * 已按 per-server 工具禁用清单过滤，run 装配期经 core AgentTurnRuntimePort.mcp
+   * 消费）+ OAuth 回调接缝。字段名与 core port 切片同名（runtime 对象直接当 port 传）。
+   */
+    readonly mcp: McpRuntimeSlice;
     readonly tokenCounters: TokenCounterRegistry;
     readonly userVfsTurn: UserVfsTurnService;
     /**
