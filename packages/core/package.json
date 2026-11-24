@@ -159,6 +159,7 @@
     "test:collect-guard": "node scripts/collect-check.mjs"
   },
   "dependencies": {
+    "@modelcontextprotocol/client": "^2.4.0",
     "@noble/hashes": "^2.2.0",
     "diff": "^7.0.0",
     "fast-xml-parser": "^5.7.3",

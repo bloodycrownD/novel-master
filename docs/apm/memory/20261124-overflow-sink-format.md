@@ -30,3 +30,11 @@ prettyJson 应该放 json 域，不是 text 工具域；wrapLongLines 同意留�
 
 assistant:
 已调整：`prettyJson` 移到 `common/json.ts` 的 `Json` namespace；入口 `Text.readableLines` 删除（单行转手 wrapper），调用方 `OverflowSink.sink` 直接写 `Json.prettyJson(content, 300) ?? Text.wrapLongLines(content, 300)`。依赖方向单向：json.ts 引 text.ts（长字符串里的非 JSON 文本折行），text.ts 不引 json.ts，避免 common 内循环依赖。测试随迁：`json.test.ts` 新增 5 例，`text.test.ts` 改为直接测 `Text.wrapLongLines`。core `test/common` 96 条、`test/tool` 392 条全绿，tsc 0，lint 0，nm-style check --changed PASS（上一轮两条 INLINE_CANDIDATE 随之消失），core dist 已重建。
+
+user:
+提交 push 吧，可以发布。（随后调用 novel-master-publish skill）
+
+assistant:
+已提交 db2d52e46（feat）与 a7bade0dc（docs）并推送 main。随后按 publish checklist 发 v1.5.52：CHANGELOG 新增 1.5.52 段（变更：超大网页与搜索结果落盘文件整理成多行；说明：1.5.51 安卓包未产出、本版恢复），desktop / mobile package.json 与 build.gradle 默认 versionName 升到 1.5.52，desktop 774 条、mobile 2385 条测试全绿（mobile 用 --maxWorkers=2），typecheck 均过，提交 7f3950754 后推 tag v1.5.52 与 main。
+
+坑：main 上还有一个「Deploy Docs to GitHub Pages」workflow（publish skill 写着 release.yml 是唯一 workflow，已过时）。发版提交那次它红了——upload-pages-artifact 刚上传完 deploy-pages 就查不到产物（Found 0，平台侧传播延迟）。`gh run rerun --failed` 只重跑 deploy 步骤，会再上传一份产物，变成「两个同名产物」继续红。正确做法：删掉该 run 的全部 github-pages 产物后 `gh run rerun <id>`（整跑），一次过。

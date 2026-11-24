@@ -81,3 +81,111 @@ user:
 
 修完 write-after-read 确认 11/11 落位，`result-refactor-ready: yes`。**教训**：throw vs Either 的取舍不该按「谁省样板」论证，应先查项目既定错误通道规范；取消属预期事件，默认走 Either，只有「协议本身只有 throw 通道」（Promise.race / fetch / 事务回滚）才是例外。
 
+
+user（2026-11-24）:
+你看看最近的 spec，是不是有个 mcp spec？
+
+assistant:
+有，`docs/iterations/mcp-support/spec.md`（312 行，2026-11-13，只有 spec、没有 prd）。实现状态：零代码——`packages/core/src/domain/mcp` 与 `infra/mcp` 目录不存在，各 package.json 没有 `@modelcontextprotocol/client` 依赖，`register-builtin-tools.ts` 里没有 mcp。即 spec 写完后尚未动工。
+
+同轮：v1.5.52 Release 跑完，五个产物齐全（arm64-v8a / armeabi-v7a / universal / x86 / x86_64 APK + macOS dmg + Windows setup.exe），安卓包恢复产出。
+
+user:
+桌面端 stdio 也不做，和手机端一样就行。resources、prompts、sampling 是什么？
+
+assistant:
+已改 spec（`docs/iterations/mcp-support/spec.md`，15 处）：设计目标、需求来源补记 2026-11-24 拍板；依赖表删掉 desktop 的 `@modelcontextprotocol/client/stdio` 行，硬规则改为「任何地方都不 import ./stdio / cross-spawn」；配置联合类型里 stdio 收成 `{type:"stdio"}`（command/args/env/cwd 归一时丢弃），与 sse 同口径「只归一、不实现传输」；最终结构删 `stdio-transport.factory.ts`；Step 11 由 phase-mcp-stdio 改为 phase-mcp-unsupported；删 stdio 进程泄漏风险行；测试 T-M1 扩成六种写法，新增 T-M11a / T-M11b。
+
+注意：spec 的红线是「内部码只有 7 个」，不可用的传输类型没有新开 kind，归到既有的 `kind:"server"` + `action:"fix-config"`——这是我的选择，待用户确认（也可考虑 `protocol` 或新开一个配置类 kind）。
+
+resources / prompts / sampling 解释见回复（MCP 三种非工具能力，spec 首版都不做）。
+
+user:
+两个任务：①派子代理检查 spec（代码变动较大，需要更新）；②用 HTML 做一个 MCP 配置 demo，想看手机上的效果。
+
+assistant:
+【任务① spec-check-loop】第 1 轮派 1 全局 judge + 2 模块审查者（core / 接入与双端），三方 No-Go，P0 归并后四条：
+- Tool 契约过时：`Tool.run` 已是 `Promise<Result<Output, AppError>>`，spec 还写 `throw toolFailed(...)`，且 `toolFailed` 全仓不存在。
+- 移动端传输底座自相矛盾：原生底座（流式 emitHeaders 与 Kotlin 非流式 request）都只回 Content-Type、shim 的 response.body 恒 null，拿不到 Mcp-Session-Id，原 Step 6 只扩了流式路径。
+- `ToolCallOutcome` 类型不存在。
+- server 级失败没有读取出口。
+
+doc-fix（我做的设计决定，用户尚未逐条确认）：
+- 移动端改用 RN `globalThis.fetch`，整包响应后解析，**不改 llm-sse-native**，Step 6 从「原生层回传全头」改成「移动端 transport 注入 RN fetch」。第 2 轮接入审查者实测核实：mobile 无全局 fetch 替换，RN 0.85.3 的 fetch 是 whatwg-fetch 3.6.20，支持 signal、响应头完整、非 2xx 响应体可读。风险表留了回落方案。
+- `callTool` 直接收 `AbortSignal`；取消不进 Result，`AbortError` 透传，`run` 转成 `TOOL_CANCELLED`（在 runner 直通名单里）。
+- 新增 `serverStatuses()` + `McpServerStatus` 作为 server 级失败与状态的唯一出口。
+- 业务码映射到既有 7 个 kind（401→auth、403→permission、429→rate-limit、其余→server），不新开 kind；stdio / sse 不可用归 `server` + `fix-config`。
+- 删 `tools/list_changed` 通知失效（请求-响应 transport 收不到推送），只留 TTL 与 invalidate。
+- `timeoutMs` 是单请求上限（默认 30000），装配期单 server 最多等 8 秒，超时记 pending。
+- OAuth：`codeVerifier` 与 `state` 落 SKSP；回调接缝 `McpOAuth.start(serverId, redirectUrl)` / `handleCallback`；桌面先起 loopback 拿端口再 start。
+- 超大结果走 `OverflowSink`；子 agent 复用同一快照；配置写路径返回 Result.err；catalog 验收改为「结构与条目逐字对齐」。
+- 现状约束里的符号名与行号全部按当前代码更新。
+
+第 2 轮：全局 judge Go，接入与双端 ready: yes，core 报 3 条 P1（测试签名位置参数、桌面 OAuth 随机端口与 start 签名冲突、取消通道）已修；另补 catalog `deps.mcpTools()` 同步返回缓存快照、Step 7 冒烟加中止场景。第 3 轮终态 judge 已派出。
+
+【任务② HTML demo】产出 `docs/iterations/mcp-support/demo/mcp-mobile-demo.html`（单文件，无依赖），照 `apps/mobile/src/theme/tokens.ts` 的实际取值还原 iOS 风格：列表页（状态标签 + 开关 + 全局开关）与详情页（连接状态卡 / 启用开关 / 名称 / 传输类型胶囊 / 地址 / 超时 / 认证方式 / 工具勾选），支持深浅色切换与三种「测试连接」结果（正常 / 令牌过期 200+code 401 / 网关错误页），另有 stdio 不可用的详情页。可用 hash 直达：`#detail-zhipu`、`#detail-acme-dark-auth` 等。
+
+踩坑：
+- `<button>` 里不能嵌 `<button>`，HTML 解析器会把外层提前闭合，行内开关掉到下一行。可点击的列表行用 `<div role="button">`。
+- Edge headless=new 有最小窗口宽度 500 左右，`--window-size=390` 会把页面右侧裁掉，看起来像内容溢出；改成 600 宽让手机画面居中即可。
+- 调用无头浏览器截图时输出路径用正斜杠，Bash 里反斜杠加变量会被降级成字面量文件名。
+- 我这边 Read 工具读不到 PNG 的画面内容，改用图像分析工具核对截图。
+
+【spec-check-loop 收口】第 3 轮终态 judge 报 No-Go：我上一轮用脚本给「四、非标错误归一」加子条目时，`text.replace(re, () => "$1\n   - ...")` 回调返回串里的 `$1` 被当成字面量，「body 形状」判定规则整条正文被吞、编号断层（T-M5 / T-M6a / T-M8 的验收对象因此失去定义）。已按原文恢复并顺带修 T-M11a 主语与 Step 7 多余括号。第 4 轮终态 judge：Go（execute-ready），无 P0 / P1，全文无替换残留。
+
+现状：共 4 轮审查，spec 已达 execute-ready，等用户确认后才能开工；spec 与 demo、记忆文件均未提交。待用户确认的设计决定是「移动端改用 RN `globalThis.fetch`、不改 llm-sse-native」。
+
+user:
+【移动端改用 RN 自带的 fetch，不再改原生网络层】为什么呢？我记得当初实现模型请求时好像就有问题才选的 native 实现。再搜一下历史和记忆。
+
+assistant:
+用户记得对。查到三处出处：`docs/Iterations/llm-stream-native/prd.md`（2026-09-25）、`docs/Iterations/mobile-perf-2026-09/features/llm-stream-timeout/spec.md`（回炉版）、`docs/apm/memory/20260923-mobile-perf-issues-batch.md`、`docs/apm/memory/20260928-subagent-stream-config-brainstorm.md`。当初离开 RN 自带网络栈的原因：
+1. RN 0.85.3 Android 的 OkHttpClientProvider 四类超时（connect / read / write / call）全是 0，XHR 与 fetch 一视同仁，Promise 永不 settle，agent-runner 的 await 挂死、finally 不执行、abortRegistry 不清扫，同一会话门锁死。非流式的 chatNonStream / listModels 就是因此被「收编」进原生 request（600s callTimeout）。
+2. OkHttp 4.9.2 连接池死连接复用黑洞：静默半开连接上「空闲大于 10 秒」才做 1ms 探测，探测成功后请求写进 TCP 缓冲被判「成功」然后永久阻塞；靠整调用 callTimeout 兜底。
+3. 流式专属：XHR 增量投递事件风暴 + `_response +=` 超线性（与 MCP 无关）。
+
+结论：我在 spec 里拍的「移动端用 RN `globalThis.fetch`」只解决了「拿不拿得到响应头」，没有面对「零超时 + 死连接」这两条有案底的问题，仅靠 AbortSignal 定时器兜底不等于恢复确定性超时语义。更好的做法：MCP 的移动端请求走**已有的原生 `request`**（非流式请求-响应，已带 callTimeout 与 `requestAbort` 真断连，非 2xx 的 status 与完整 body 已原样带回），只补一处「返回全部响应头」（Kotlin `request` 返回值 + types.ts 签名 + 一个 MCP 专用适配），不动流式路径；原生未注册时回落 fetch。待用户确认后改 spec（第 4 轮的 Go 是建立在这个被质疑的决定上的，需重审）。
+
+user:
+改 spec 吧，然后异步审查，我还有些 UI 问题需要你调整。
+
+assistant:
+已改 spec（移动端改走原生 `request`）：设计目标 4 改为只依赖极小的请求函数 `McpRequestFn`（桌面 Node fetch 适配 / 移动端原生 `request` 适配 / 原生未注册回落 fetch）；现状约束新增「RN 自带网络栈两条案底」与「原生 request 现有契约」；Step 6 改为 `phase-native-request-headers`（Kotlin `request` 返回值带全头、types.ts 签名、shim 的 `headers.get` 查全头；流式路径与 `SseTransport.post` 不动）；新增 `apps/mobile/src/services/mcp-request-adapter.ts`；Step 7 冒烟在原生分支下跑；`timeoutMs` 默认 120000；新增 T-M16b；变更点清单 / 最终项目结构 / 风险表同步。第 5 轮审查（全局 judge + 接入与双端模块审查者）已异步派出，结果待回报。UI 调整需求待用户提出。
+
+【第 5 轮审查】全局 judge：Go（execute-ready）；接入与双端模块审查者：ready yes。核实结论：Kotlin `request` 是独立 `@ReactMethod`，与流式只共享 `buildRequest` / `clientWithCallTimeout`，返回值加 `headers` 键对 LLM 消费方零影响；旧 APK 配新 JS、新 APK 配旧 JS 都安全；原生 `request` 用 `response.body?.string()` 整包读到流关闭，不关流时阻塞到 callTimeout；两条案底转述与历史文档一致。遗留小项已全部改进 spec：两处「注入标准 fetch」的旧措辞；`RawMcpResponse.contentType` 的来源；shim 改动标为顺带并要求回归用例（`headers.get("Content-Type")` 大小写不敏感）；`timeoutMs` 钳到 `>= 1000`（原生对 `<= 0` 落回 600 秒）；装配期 8 秒预算到点调 `requestAbort` 收割；原生 reject code（network / timeout / abort / invalid）映射；现状约束里流式 headers 与非流式 request 两句拆开。终态确认轮已异步派出。
+
+user（UI 反馈）:
+① 全局开关移除；② 传输类型支持什么就做什么，sse / streamable 就够了，不展示 stdio；③ 超时时间用 input 不用选择；④ 「启用这台服务器」开关没用，删除。建议看搜索页面怎么实现的来参考，现在的页面和 nm 手机端差距较大。
+
+assistant:
+对照实读了 `apps/mobile/src/screens/stack/SearchEnginesScreen.tsx`、`SearchEngineDetailScreen.tsx` 与 ConfigListCard / card-styles / FormSectionCard / FormChipGroup / FormSelectField / FormTextInput / ApiKeyStatusTag，重写 demo：列表页改成每行一张独立卡片（无图标、无顶部说明块），右侧「状态标签 + Switch + ⋮ + ›」，Switch 开启色是 primary 蓝而不是绿，说明文案收进页头「?」帮助弹窗，底部 SecondaryButton「新建服务器」，行菜单（上移 / 下移 / 删除）与删除确认弹窗；详情页改成分组卡片「连接 / 认证 / 工具」：认证方式用带 ▼ 的选择行 + 底部弹层（照 FormSelectField），地址用多行输入框（minHeight 88），超时时间普通输入框；「启用这台服务器」与全局开关、stdio 胶囊都已去掉，第三台示例改成 SSE 传输的旧服务。文件仍是 `docs/Iterations/mcp-support/demo/mcp-mobile-demo.html`，新增 `#tall` 用于截整页长图。
+
+观察（未改，属 app 现有 token）：深色主题下字段提示字用 textTertiary `#48484A`，在深灰卡片上对比度偏低；搜索配置页也是同一取值。
+
+【第 6 轮终态 judge】Go（execute-ready）：第 5 轮遗留六处修订全部落实，与代码事实、风险表、测试用例三方自洽，无 P0 / P1，无替换残留与旧决定残留。顺手清掉了两处 doc-fix 拼接出的「。；」。
+
+现状：spec 共 6 轮审查收敛到 execute-ready，待用户确认后开工；spec、demo、记忆文件均未提交。
+
+user:
+三个工具的明细展示可以保留，这个还是展示下比较好。
+
+assistant:
+把工具卡片补回完整明细：标题带数量「工具（3）」、右上「测试连接」、状态行，每个工具一行（名称 + 描述 + 右侧蓝色 Switch，可逐个关闭），列表下方一行说明「关闭的工具不会提供给 AI。工具越多占用的上下文越多」；没有工具的服务器显示「连接成功后会在这里列出服务器提供的工具」。开关沿用 app 的 Switch 形态（蓝色），没有用复选框。我对「明细」的理解是每个工具的名称、描述与启停；若用户指的是别的内容待纠正。
+
+user:
+「已授权 / 密钥已设置」改成「已连接 / 未连接」；「旧版文件服务」又是啥？这不是 demo 吗？
+
+assistant:
+状态标签统一成「已连接 / 未连接」（智谱 = 已连接，Acme = 未连接），详情页 OAuth 卡片里那一行也从「授权状态」改成「连接状态」。第三台「旧版文件服务」是我为了演示「SSE 传输不可用」凭空造的示例数据，用户质疑后已删除，列表只剩两台示例。demo 里的服务器、地址、工具都是假数据，不是真实配置。
+
+user:
+「关闭的工具不会提供给 AI。工具越多占用的上下文越多，只留下用得到的。」这种莫名其妙的解释都是干啥的？移除。
+
+assistant:
+demo 里我自己加的说教式说明全部移除：工具卡片下的那句、无工具时的占位句、原文框下的「以上是服务器返回的原文」、OAuth 的「授权在系统浏览器里完成」、传输类型下的整段说明；字段提示只留必要的事实（超时「单位：秒」、密钥「已加密保存」、授权日期）。
+
+user:
+（iOS 说明文字三个特点那段）这个记到 spec 吧，我之后想优化 UI，因为当前 nm 其实也很多地方说明文字不合理。
+
+assistant:
+已记两处：`docs/Iterations/mcp-support/spec.md` 的 Step 14 下面加了「界面说明文字」五条（只说事实不讲道理 / 一组只出现一次 / 只在必要时出现 / 长说明收进「?」帮助弹窗 / 同时适用于 MCP 配置页与 demo，nm 既有页面另立迭代）；`docs/apm/RULE.md` 末尾新增「界面说明文字约定」一节，含「用户计划另立迭代清理 nm 既有页面说明文字」「做 demo 不要凭空编造带情境的示例条目」。既有页面的文案清理尚未立项。

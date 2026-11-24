@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MCP 服务器 · 移动端 demo</title>
+<style>
+    :root {
+        --background: #F2F2F7; --bg-secondary: #E5E5EA; --surface: #FFFFFF; --surface-elevated: #FFFFFF;
+        --text: #000000; --text-secondary: #8E8E93; --text-tertiary: #C7C7CC;
+        --border: #C6C6C8; --border-light: #E5E5EA;
+        --primary: #007AFF; --success: #34C759; --warning: #FF9500; --danger: #FF3B30;
+    }
+    html[data-theme="dark"] {
+        --background: #000000; --bg-secondary: #1C1C1E; --surface: #1C1C1E; --surface-elevated: #2C2C2E;
+        --text: #FFFFFF; --text-secondary: #98989D; --text-tertiary: #48484A;
+        --border: #38383A; --border-light: #2C2C2E;
+        --primary: #0A84FF; --success: #30D158; --warning: #FF9F0A; --danger: #FF453A;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body { margin: 0; font-family: -apple-system, "SF Pro Text", Roboto, sans-serif; background: #6b7280; color: var(--text); }
+    .toolbar { position: sticky; top: 0; z-index: 20; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; padding: 10px 12px; background: rgba(0, 0, 0, 0.78); color: #fff; font-size: 13px; }
+    .toolbar .label { opacity: 0.75; margin-left: 6px; }
+    .toolbar button { font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.3); background: transparent; color: #fff; }
+    .toolbar button.active { background: var(--primary); border-color: var(--primary); }
+    .stage { display: flex; justify-content: center; padding: 20px 0 40px; }
+    .phone { position: relative; width: 100%; max-width: 390px; height: 800px; max-height: calc(100vh - 60px); min-height: 560px; overflow: hidden; background: var(--background); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35); }
+    .screen { position: absolute; inset: 0; display: none; flex-direction: column; background: var(--background); }
+    .screen.active { display: flex; }
+    /* 整页铺开（仅用于截长图核对）：叠加 #tall。 */
+    .phone.tall { height: auto; max-height: none; }
+    .phone.tall .screen { position: static; }
+    .phone.tall .scroll { flex: none; overflow: visible; }
+    @media (max-width: 480px) { body { background: var(--background); } .stage { padding: 0; } .phone { max-width: none; height: 100vh; max-height: none; box-shadow: none; } }
+
+    /* 页头：返回 + 居中标题 + 右侧图标 */
+    .header { position: relative; flex: none; height: 44px; margin-top: env(safe-area-inset-top); display: flex; align-items: center; justify-content: center; }
+    .header .title { font-size: 18px; font-weight: 600; }
+    .header .icon-btn { position: absolute; top: 2px; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border: 0; background: transparent; border-radius: 10px; color: var(--primary); }
+    .header .icon-btn.left { left: 4px; } .header .icon-btn.right { right: 4px; color: var(--text); }
+    .header svg { width: 24px; height: 24px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+    .scroll { flex: 1; overflow-y: auto; }
+    .list { padding: 8px 0 24px; }
+    .form { padding: 16px 0 24px; }
+    .bottom-bar { flex: none; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid var(--border-light); }
+    .bottom-bar.hairline-strong { border-top-color: var(--border); }
+
+    /* 卡片：radius 16 / padding 16 / margin 0 5 12 / hairline 边 / 浅阴影 */
+    .card { margin: 0 5px 12px; padding: 16px; background: var(--surface-elevated); border: 1px solid var(--border-light); border-radius: 16px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08); }
+    .card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+    .card-title { flex: 1; font-size: 17px; font-weight: 600; }
+    .card-hint { font-size: 13px; line-height: 18px; color: var(--text-secondary); margin-bottom: 12px; }
+    .card-body { display: flex; flex-direction: column; gap: 10px; }
+    .text-btn { font: inherit; font-size: 14px; font-weight: 600; background: transparent; border: 0; color: var(--primary); padding: 0; }
+
+    /* 列表行（ConfigListCard） */
+    .row-card { margin: 0 5px 12px; padding: 16px; display: flex; align-items: center; gap: 12px; width: 100%; background: var(--surface-elevated); border: 1px solid var(--border-light); border-radius: 16px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08); font: inherit; color: var(--text); text-align: left; }
+    .row-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+    .row-title { font-size: 16px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .row-sub { font-size: 13px; line-height: 18px; color: var(--text-secondary); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+    .row-meta { display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .menu-dots { font-size: 18px; padding: 0 4px; color: var(--text-secondary); }
+    .chevron { font-size: 22px; font-weight: 300; color: var(--text-tertiary); }
+
+    .tag { font-size: 12px; font-weight: 600; padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
+    .tag.set { color: var(--success); background: rgba(52, 199, 89, 0.1); }
+    .tag.not-set { color: var(--text); background: rgba(142, 142, 147, 0.1); }
+
+    /* 开关：开 = primary */
+    .switch { position: relative; flex: none; width: 51px; height: 31px; border-radius: 999px; background: var(--border); border: 0; padding: 0; transition: background 0.2s; }
+    .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 50%; background: #fff; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25); transition: left 0.2s; }
+    .switch.on { background: var(--primary); }
+    .switch.on::after { left: 22px; }
+
+    /* 表单 */
+    .field { display: flex; flex-direction: column; gap: 6px; }
+    .field-label { font-size: 13px; font-weight: 500; color: var(--text-secondary); }
+    .field-hint { font-size: 12px; line-height: 16px; color: var(--text-tertiary); }
+    .input { width: 100%; font: inherit; font-size: 16px; color: var(--text); background: var(--bg-secondary); border: 1px solid var(--border-light); border-radius: 12px; padding: 12px 14px; }
+    .input::placeholder { color: var(--text-secondary); }
+    .input.multiline { min-height: 88px; resize: none; }
+    .input:disabled { opacity: 0.55; }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip { font: inherit; font-size: 16px; padding: 8px 14px; border-radius: 20px; background: var(--bg-secondary); color: var(--text); border: 1px solid var(--border-light); }
+    .chip.on { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .chip:disabled { opacity: 0.55; }
+    .select { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 12px 14px; background: var(--bg-secondary); border: 1px solid var(--border-light); border-radius: 12px; font-size: 16px; }
+    .select span { flex: 1; } .select i { font-style: normal; font-size: 12px; color: var(--text-secondary); }
+    .select.empty span { color: var(--text-secondary); }
+    .btn { font: inherit; font-size: 14px; font-weight: 600; width: 100%; padding: 14px 8px; border-radius: 8px; border: 0; }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-secondary { background: var(--bg-secondary); color: var(--text); }
+    .btn:disabled { opacity: 0.45; }
+    .btn-row { display: flex; gap: 12px; }
+
+    /* 工具行 */
+    .tool-row { display: flex; align-items: flex-start; gap: 12px; padding: 4px 0; }
+    .tool-row + .tool-row { border-top: 1px solid var(--border-light); padding-top: 10px; }
+    .tool-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+    .tool-name { font-size: 15px; font-weight: 500; }
+    .tool-desc { font-size: 13px; line-height: 18px; color: var(--text-secondary); }
+    .status-line { font-size: 14px; line-height: 20px; }
+    .raw { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 17px; white-space: pre-wrap; word-break: break-all; background: var(--bg-secondary); border-radius: 12px; padding: 10px 12px; max-height: 170px; overflow: auto; }
+    .t-ok { color: var(--success); } .t-warn { color: var(--warning); } .t-danger { color: var(--danger); }
+    .oauth-line { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 16px; font-weight: 500; }
+
+    /* 居中弹窗（ModalShell center） */
+    .modal-backdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.4); display: none; align-items: center; padding: 0 12px; }
+    .modal-backdrop.show { display: flex; }
+    .modal { width: 100%; background: var(--surface-elevated); border: 1px solid var(--border-light); border-radius: 16px; padding: 20px 20px 8px; max-height: 86%; overflow-y: auto; }
+    .modal-title { font-size: 17px; font-weight: 600; margin-bottom: 14px; }
+    .modal-body { font-size: 14px; line-height: 21px; color: var(--text-secondary); margin-bottom: 8px; }
+    .help-section-title { font-size: 15px; font-weight: 600; margin: 12px 0 4px; }
+    .modal-close { width: 100%; border: 0; border-top: 1px solid var(--border); background: transparent; color: var(--primary); font: inherit; font-size: 14px; font-weight: 600; padding: 10px 0; margin-top: 2px; }
+
+    /* 底部弹层菜单 */
+    .sheet-backdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.4); display: none; align-items: flex-end; }
+    .sheet-backdrop.show { display: flex; }
+    .sheet { width: 100%; background: var(--surface-elevated); border-top-left-radius: 12px; border-top-right-radius: 12px; padding-top: 8px; padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
+    .sheet-title { font-size: 16px; font-weight: 600; text-align: center; padding: 12px 0; }
+    .sheet .row { width: 100%; display: flex; align-items: center; gap: 8px; padding: 14px 20px; border: 0; border-bottom: 1px solid var(--border-light); background: transparent; font: inherit; font-size: 16px; color: var(--text); text-align: left; }
+    .sheet .row.danger { color: var(--danger); }
+    .sheet .row.selected { background: var(--bg-secondary); }
+    .sheet .row:disabled { opacity: 0.45; }
+    .sheet .check { margin-left: auto; color: var(--primary); }
+    .toast { position: absolute; top: calc(env(safe-area-inset-top) + 56px); left: 24px; right: 24px; z-index: 30; padding: 12px 16px; background: var(--surface-elevated); border: 1px solid var(--border-light); border-radius: 8px; font-size: 14px; text-align: center; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+    .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div class="toolbar">
+    <span class="label">主题</span>
+    <button id="theme-btn" onclick="toggleTheme()">切到深色</button>
+    <span class="label">「测试连接」演示</span>
+    <button data-case="ok" class="active" onclick="setCase(this)">正常</button>
+    <button data-case="auth" onclick="setCase(this)">令牌过期</button>
+    <button data-case="gateway" onclick="setCase(this)">网关错误页</button>
+</div>
+
+<div class="stage">
+<div class="phone" id="phone">
+
+<!-- ===== 列表页：每行一张卡片，行内开关 + ⋮ + ›，底部新建入口，说明收进「?」 ===== -->
+<section class="screen active" id="screen-list">
+    <div class="header">
+        <button class="icon-btn left" aria-label="返回"><svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
+        <span class="title">MCP 服务器</span>
+        <button class="icon-btn right" aria-label="帮助" onclick="openModal('help')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 1 1 5.8 1c0 2-3 2-3 4"/><path d="M12 17h.01"/></svg></button>
+    </div>
+    <div class="scroll">
+        <div class="list" id="server-list"></div>
+    </div>
+    <div class="bottom-bar hairline-strong"><button class="btn btn-secondary" onclick="toast('新建服务器（demo 未实现）')">新建服务器</button></div>
+</section>
+
+<!-- ===== 详情页：分组卡片 + 底部保存 ===== -->
+<section class="screen" id="screen-detail">
+    <div class="header">
+        <button class="icon-btn left" aria-label="返回" onclick="go('screen-list')"><svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
+        <span class="title" id="detail-title">服务器</span>
+    </div>
+    <div class="scroll"><div class="form" id="detail-body"></div></div>
+    <div class="bottom-bar"><button class="btn btn-primary" onclick="toast('已保存')">保存</button></div>
+</section>
+
+<!-- 帮助弹窗 -->
+<div class="modal-backdrop" id="modal-help" onclick="closeModal(event)">
+    <div class="modal" onclick="event.stopPropagation()">
+        <div class="modal-title">使用说明</div>
+        <div class="help-section-title">开关</div>
+        <div class="modal-body">关闭的服务器不参与连接，它的工具也不会出现在 AI 的工具列表里。</div>
+        <div class="help-section-title">认证</div>
+        <div class="modal-body">API Key 加密保存，保存后不再显示明文；OAuth 授权在系统浏览器里完成，结束后自动回到应用。</div>
+        <div class="help-section-title">连接失败时</div>
+        <div class="modal-body">详情页点「测试连接」可以看到服务器返回的原文，方便判断是密钥、地址还是服务端的问题。</div>
+        <div class="help-section-title">上下文占用</div>
+        <div class="modal-body">工具越多，占用 AI 的上下文越多，建议只开启用得到的服务器。</div>
+        <button class="modal-close" onclick="closeModal()">关闭</button>
+    </div>
+</div>
+
+<!-- 删除确认 -->
+<div class="modal-backdrop" id="modal-delete" onclick="closeModal(event)">
+    <div class="modal" onclick="event.stopPropagation()">
+        <div class="modal-title">删除服务器</div>
+        <div class="modal-body" id="delete-notice">删除后不可恢复。</div>
+        <div class="btn-row" style="margin-bottom:12px">
+            <button class="btn btn-secondary" onclick="closeModal()">取消</button>
+            <button class="btn btn-secondary" onclick="closeModal(); toast('已删除（demo）')">删除</button>
+        </div>
+    </div>
+</div>
+
+<!-- 认证方式选择（底部弹层） -->
+<div class="sheet-backdrop" id="sheet-auth" onclick="closeSheet(event)">
+    <div class="sheet" onclick="event.stopPropagation()">
+        <div class="sheet-title">认证方式</div>
+        <button class="row" data-auth="none" onclick="pickAuth('none')"><span class="rowText">无</span><span class="check">✓</span></button>
+        <button class="row" data-auth="bearer" onclick="pickAuth('bearer')"><span class="rowText">API Key</span><span class="check">✓</span></button>
+        <button class="row" data-auth="oauth" onclick="pickAuth('oauth')"><span class="rowText">OAuth</span><span class="check">✓</span></button>
+    </div>
+</div>
+
+<!-- 行菜单 -->
+<div class="sheet-backdrop" id="sheet-menu" onclick="closeSheet(event)">
+    <div class="sheet" onclick="event.stopPropagation()">
+        <div class="sheet-title" id="menu-title">服务器</div>
+        <button class="row" onclick="closeSheet(); toast('已上移（demo）')">上移</button>
+        <button class="row" onclick="closeSheet(); toast('已下移（demo）')">下移</button>
+        <button class="row danger" onclick="closeSheet(); openModal('delete')">删除</button>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+</div>
+</div>
+
+<script>
+    // 与列表页一致：开关本身表达启停态，副标题只说「还缺什么才能用」，没问题就给地址。
+    const SERVERS = [
+        { id: "zhipu", name: "智谱 Web Search", url: "https://open.bigmodel.cn/api/mcp/web_search/mcp", auth: "oauth", connected: true, issue: "", enabled: true, tools: [
+            { name: "web_search", desc: "联网搜索，返回标题、摘要与链接" },
+            { name: "web_reader", desc: "读取网页正文，转为 Markdown" },
+            { name: "get_weather", desc: "查询城市实时天气" } ] },
+        { id: "acme", name: "Acme 知识库", url: "https://kb.acme.internal/mcp", auth: "bearer", connected: false, issue: "令牌已过期，需要重新授权", enabled: true, tools: [
+            { name: "search_docs", desc: "在知识库里做语义检索" },
+            { name: "read_page", desc: "按页面 id 读取一篇文档" } ] },
+    ];
+
+    const AUTH_LABEL = { none: "无", bearer: "API Key", oauth: "OAuth" };
+    const TEST_CASES = {
+        ok: { line: "连接正常 · 3 个工具", cls: "t-ok", raw: null },
+        auth: { line: "认证失败：服务器返回业务码 401，令牌已过期", cls: "t-danger", raw: 'HTTP 200 · application/json\n{"code":401,"msg":"令牌已过期"}' },
+        gateway: { line: "服务器错误：网关返回了错误页，可以稍后重试", cls: "t-danger", raw: "HTTP 200 · text/html\n<title>502 Bad Gateway</title>\n<html><head><title>502 Bad Gateway</title></head><body><center><h1>502 Bad Gateway</h1></center><hr><center>nginx</center></body></html>" },
+    };
+
+    let currentCase = "ok";
+    let currentServer = "zhipu";
+    let transport = { zhipu: "http", acme: "http" };
+
+    function field(label, inner, hint) { return `<div class="field"><span class="field-label">${label}</span>${inner}${hint ? `<span class="field-hint">${hint}</span>` : ""}</div>`; }
+    function input(value, extra) { return `<input class="input" value="${value}" ${extra || ""}>`; }
+
+    function renderList() {
+        document.getElementById("server-list").innerHTML = SERVERS.map((s) => {
+            const hint = s.issue ? `${s.url} · ${s.issue}` : s.url;
+            return `<div class="row-card" role="button" tabindex="0" onclick="openDetail('${s.id}')">
+                <div class="row-info"><span class="row-title">${s.name}</span><span class="row-sub">${hint}</span></div>
+                <div class="row-meta"><span class="tag ${s.connected ? "set" : "not-set"}">${s.connected ? "已连接" : "未连接"}</span>
+                    <button class="switch ${s.enabled ? "on" : ""}" aria-label="启用" onclick="event.stopPropagation(); toggleSwitch(this)"></button></div>
+                <button class="menu-dots" aria-label="菜单" onclick="event.stopPropagation(); openMenu('${s.id}')">⋮</button>
+                <span class="chevron">›</span>
+            </div>`;
+        }).join("");
+    }
+
+    function toolsCard(s) {
+        const c = TEST_CASES[currentCase];
+        const rows = s.tools.map((t) => `<div class="tool-row"><div class="tool-main"><span class="tool-name">${t.name}</span><span class="tool-desc">${t.desc}</span></div><button class="switch ${t.enabled === false ? "" : "on"}" aria-label="启用工具" onclick="toggleSwitch(this)"></button></div>`).join("");
+        return `<div class="card">
+            <div class="card-head"><span class="card-title">工具${s.tools.length ? `（${s.tools.length}）` : ""}</span><button class="text-btn" onclick="toast(currentCase === 'ok' ? '连接正常' : '连接失败')">测试连接</button></div>
+            <div class="status-line ${c.cls}">${c.line}</div>
+            ${c.raw ? `<div class="raw">${c.raw}</div>` : ""}
+            ${rows ? `<div style="height:10px"></div>${rows}` : ``}
+        </div>`;
+    }
+
+    function authCard(s) {
+        let body;
+        if (s.auth === "none") body = "";
+        if (s.auth === "bearer") body = field("API Key", `<input class="input" type="password" value="sk-acme-4f2a9c77e1">`, "已加密保存")
+            + `<button class="btn btn-secondary" onclick="toast('密钥已清除')">清除密钥</button>`;
+        if (s.auth === "oauth") body = `<div class="oauth-line"><span>连接状态</span><span class="tag set">已连接</span></div><div class="field-hint">2026-11-20 授权</div>
+            <button class="btn btn-secondary" onclick="toast('已打开系统浏览器进行授权（demo）')">重新授权</button>`;
+        return `<div class="card"><div class="card-head"><span class="card-title">认证</span></div><div class="card-body">
+            ${field("认证方式", `<div class="select ${s.auth === "none" ? "empty" : ""}" onclick="openSheet('sheet-auth')"><span>${AUTH_LABEL[s.auth]}</span><i>▼</i></div>`)}${body}
+        </div></div>`;
+    }
+
+    function renderDetail() {
+        const s = SERVERS.find((x) => x.id === currentServer);
+        const type = transport[s.id];
+        document.getElementById("detail-title").textContent = s.name;
+        document.querySelectorAll("#sheet-auth .row").forEach((r) => r.classList.toggle("selected", r.dataset.auth === s.auth));
+        document.getElementById("detail-body").innerHTML = `
+            <div class="card"><div class="card-head"><span class="card-title">连接</span></div><div class="card-body">
+                ${field("名称", input(s.name))}
+                ${field("传输类型", `<div class="chips">
+                    <button class="chip ${type === "http" ? "on" : ""}" onclick="pickType('http')">Streamable HTTP</button>
+                    <button class="chip ${type === "sse" ? "on" : ""}" onclick="pickType('sse')">SSE</button></div>`)}
+                ${field("地址", `<textarea class="input multiline">${s.url}</textarea>`)}
+                ${field("超时时间", input("120", 'inputmode="numeric"'), "单位：秒")}
+            </div></div>
+            ${authCard(s)}
+            ${toolsCard(s)}`;
+    }
+
+    function go(id) { document.querySelectorAll(".screen").forEach((s) => s.classList.toggle("active", s.id === id)); }
+    function openDetail(id) { currentServer = id; renderDetail(); go("screen-detail"); }
+    function pickType(v) { transport[currentServer] = v; renderDetail(); }
+    function pickAuth(v) { SERVERS.find((x) => x.id === currentServer).auth = v; closeSheet(); renderDetail(); }
+    function setCase(btn) { currentCase = btn.dataset.case; document.querySelectorAll(".toolbar button[data-case]").forEach((b) => b.classList.toggle("active", b === btn)); renderList(); if (document.getElementById("screen-detail").classList.contains("active")) renderDetail(); }
+    function toggleSwitch(el) { el.classList.toggle("on"); }
+    function toggleTheme() { const root = document.documentElement; const dark = root.dataset.theme === "dark"; root.dataset.theme = dark ? "light" : "dark"; document.getElementById("theme-btn").textContent = dark ? "切到深色" : "切到浅色"; }
+    function openModal(name) { document.getElementById("modal-" + name).classList.add("show"); }
+    function closeModal(event) { if (event && event.target.closest(".modal") && event.type === "click" && !event.target.closest(".modal-close") && !event.target.closest(".btn")) return; document.querySelectorAll(".modal-backdrop").forEach((m) => m.classList.remove("show")); }
+    function openSheet(id) { document.getElementById(id).classList.add("show"); }
+    function closeSheet(event) { if (event && event.target.closest(".sheet") && event.target.closest(".row")) return; document.getElementById("sheet-auth").classList.remove("show"); document.getElementById("sheet-menu").classList.remove("show"); }
+    function openMenu(id) { document.getElementById("menu-title").textContent = SERVERS.find((x) => x.id === id).name; document.getElementById("delete-notice").textContent = `「${SERVERS.find((x) => x.id === id).name}」的配置与密钥会一并清除，不可恢复。`; openSheet("sheet-menu"); }
+    let toastTimer = 0;
+    function toast(message) { const el = document.getElementById("toast"); el.textContent = message; el.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove("show"), 1800); }
+
+    // 直达：#detail-zhipu / #detail-acme，可叠加 dark、auth / gateway。
+    const hash = location.hash;
+    if (hash.includes("dark")) toggleTheme();
+    if (hash.includes("tall")) document.getElementById("phone").classList.add("tall");
+    for (const c of ["auth", "gateway"]) {
+        if (hash.includes(c)) {
+            currentCase = c;
+            document.querySelectorAll(".toolbar button[data-case]").forEach((b) => b.classList.toggle("active", b.dataset.case === c));
+        }
+    }
+    renderList();
+    const target = /detail-(\w+)/.exec(hash);
+    if (target && SERVERS.some((s) => s.id === target[1])) openDetail(target[1]);
+</script>
+</body>
+</html>
