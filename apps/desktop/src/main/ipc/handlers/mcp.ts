@@ -6,13 +6,15 @@
  * 「测试连接」= invalidate + snapshotTools 重拉后读 serverStatuses（状态与错误原文
  * 的唯一读取面，detail 原文透出）；OAuth 桌面侧只经 `McpOAuth.start` / `handleCallback`
  * 两个入口——本文件负责 loopback 回调 server（127.0.0.1 随机端口，先起 server 拿到
- * redirectUrl 再调 start），不自己拼 token 请求。
+ * redirectUrl 再调 start）与打开系统浏览器（拿到 authorizeUrl 后 shell.openExternal），
+ * 不自己拼 token 请求。
  *
  * store 方法 throw 的失败（SKSP / KKV infra）在编排边界经 FormatIpcError 收进
  * IpcResult；store 方法自身的已知失败沿 Result 上行、就地短路（与 search handler 同构）。
  */
 import * as nodeHttp from "node:http";
 import type { AddressInfo } from "node:net";
+import { shell } from "electron";
 import type {
     IpcResult,
     McpDeleteServerRequest,
@@ -191,8 +193,9 @@ export namespace Mcp {
 
     /**
      * 发起 OAuth 授权：先起 loopback server 拿 redirectUrl，再调 `McpOAuth.start`
-     * （start 不负责选端口，spec §八端口时序）；authorizeUrl 交 renderer 开浏览器。
-     * invoke 挂起至回调完成——返回值即授权成败（等待 / 交换任一环失败都以 err 收口）。
+     * （start 不负责选端口，spec §八端口时序）；拿到 authorizeUrl 后 main 侧
+     * shell.openExternal 打开系统浏览器。invoke 挂起至回调完成——返回值即授权
+     * 成败（浏览器打不开 / 等待 / 交换任一环失败都以 err 收口）。
      */
     export async function oauthStart(req: McpOAuthStartRequest): Promise<IpcResult<{ readonly authorizeUrl: string }>> {
         try {
@@ -209,6 +212,9 @@ export namespace Mcp {
             try {
                 const started = await rt.mcpOAuth.start(req.serverId, loopback.redirectUrl);
                 if (!started.ok) return { ok: false, error: FormatIpcError.format(started.error) };
+                // 浏览器由 main 侧打开（spec §八桌面口径）；openExternal 的 reject 走 catch
+                // 立即收口，不让用户对着 5 分钟超时干等。
+                await shell.openExternal(started.value.authorizeUrl);
                 const callback = await Promise.race([loopback.waitCallback(), timeoutPromise]);
                 const handled = await rt.mcpOAuth.handleCallback(req.serverId, callback);
                 if (!handled.ok) return { ok: false, error: FormatIpcError.format(handled.error) };

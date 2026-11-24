@@ -191,7 +191,7 @@ export function McpServerDetailView({ nav }: { nav: SettingsNavHandle }) {
                         <SettingsField label={mcpT({ key: "mcp.detail.oauth_status_label" })} row>
                             <span className={oauthAuthorized ? "settings-tag settings-tag--ok" : "settings-tag settings-tag--muted"}>{oauthAuthorized ? mcpT({ key: "mcp.oauth.authorized" }) : mcpT({ key: "mcp.oauth.not_authorized" })}</span>
                         </SettingsField>
-                        {/* 发起授权：先保存（拿真 id）再走 main loopback——invoke 挂起至浏览器授权完成（busy 互斥态就地维护）。 */}
+                        {/* 发起授权：先保存（拿真 id）再走 main loopback——main 侧开系统浏览器，invoke 挂起至授权完成（busy 互斥态就地维护）。 */}
                         <Button
                             variant="secondary"
                             disabled={busy}
