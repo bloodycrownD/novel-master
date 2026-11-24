@@ -16,7 +16,6 @@ zh-CN:
   mcp.detail.auth_oauth: OAuth
   mcp.detail.auth_section: 认证
   mcp.detail.authorized: 已授权
-  mcp.detail.authorizing.mobile: 正在打开系统浏览器…
   mcp.detail.clear_key: 清除密钥
   mcp.detail.clearing_key: 清除中…
   mcp.detail.connection_section: 连接
@@ -251,7 +250,6 @@ en-US:
   mcp.detail.auth_oauth: OAuth
   mcp.detail.auth_section: Authentication
   mcp.detail.authorized: Authorized
-  mcp.detail.authorizing.mobile: Opening the system browser…
   mcp.detail.clear_key: Clear key
   mcp.detail.clearing_key: Clearing…
   mcp.detail.connection_section: Connection
