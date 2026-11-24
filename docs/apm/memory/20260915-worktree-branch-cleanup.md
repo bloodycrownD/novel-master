@@ -26,3 +26,11 @@ assistant:
 两处共 5 个 worktree（nm-worktree 下 mc5/tcs，nm 下 despa/r1r2/tsi），全部无未提交改动；除 feat/transcript-session-isolation（tsi）外四个分支均已合入 main，tsi 分支上还有 9 个未合回的提交（转录域会话隔离轮，dev-ready）。本次只删 worktree、不动分支——删除 worktree 不影响分支与提交，需要时可 `git worktree add <路径> feat/transcript-session-isolation` 拉回。
 
 删除过程踩坑：git worktree remove 多个报 Permission denied / Directory not empty，实为残留 Metro dev server 锁目录（tcs 端口 8084、tsi 端口 8081、despa 端口 18081——外层 cmd 持日志文件、内层 cmd 的 CWD 钉住 apps\mobile、连带 jest-worker 树），另有一个僵死 git grep 进程（CWD 指向早已不存在的 nm-worktree\upfx）。按命令行路径定位进程树根 taskkill /T /F（主仓 8082/8083 的 Metro 与其它项目进程未动）后 rmdir /s /q 收尾 + prune，两处父目录一并删除，git worktree list 只剩主仓。教训已补进 RULE.md worktree 条目；scripts/worktree-force-clean.ps1 只管删目录+prune，不含杀进程一步。
+
+user:
+帮我清理下worktree，有些应该已经合并了（附路径 D:\worktree，2026-11-24）。
+
+assistant:
+D:\worktree 下三项：p27-backlog 已合入 main（c2995bc9f，main..HEAD 为 0），删 worktree + `git branch -d` 删分支；web-search-curl 是已不在 worktree 列表里的空目录，rmdir；transcript-rn（memory/transcript-legendlist-fullrender）有 98 个未合入 main 的提交，保留未动。
+
+坑：`git worktree remove --force` 报 Directory not empty 且只删了一半，留下 11G 的 node_modules（Windows 下删不动）。确认里面仅 3 个符号链接且都指向 worktree 自身（已删）而非主仓后，rm -rf 收尾 + prune。
