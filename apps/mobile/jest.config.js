@@ -17,10 +17,13 @@ module.exports = {
   // （createVfsService → content store → pack-codec）会拉到 fossil-delta，
   // 在 Jest 里炸 ESM 语法，须纳入 babel transform（vfs-content-pack Step 11
   // 接线时补；主入口 core-shim 不经此链路，别按 shim 口径排查）。
+  // jose@6 纯 ESM（exports 只有 default 条件、无 require 产物）：官方 MCP client
+  // 经 core/mcp barrel 以动态 import 引它（privateKeyJwt 签名时才加载），
+  // 防御性纳入 transform——不转译则任何触到动态 import 的路径必炸。
   transformIgnorePatterns: [
     // @react-navigation 系列发布 ESM（module 字段）；RichDocumentWebView
     // 自注册 BackHandler 引入 useFocusEffect 后须纳入 babel transform
-    'node_modules/(?!((jest-)?react-native|@react-native(-community|-documents)?|@react-navigation|@noble/hashes|sanitize-html|htmlparser2|domhandler|domutils|dom-serializer|domelementtype|entities|react-native-blob-util|@op-engineering|fossil-delta)/)',
+    'node_modules/(?!((jest-)?react-native|@react-native(-community|-documents)?|@react-navigation|@noble/hashes|sanitize-html|htmlparser2|domhandler|domutils|dom-serializer|domelementtype|entities|react-native-blob-util|@op-engineering|fossil-delta|jose)/)',
   ],
   // __tests__/helpers 下是测试辅助函数（如 read-webview-dist），不是测试套件，
   // 别让 Jest 当测试跑而报 "must contain at least one test"。不带 <rootDir>/
@@ -244,14 +247,24 @@ module.exports = {
       repoRoot,
       'packages/core/dist/public/provider.js',
     ),
-    // MCP 工具名 slug（McpToolSlug）：agent 编辑器快照接线加载该子路径；同其它
-    // core 子路径直连 dist 真实文件（exports 只声明 import 条件，Jest 的 require
-    // 解析不到，漏写会在 jest-resolve 就抛）。注意：core/mcp 完整 barrel（public/mcp.js）
-    // 会经官方 client 拉起 pkce-challenge 的 ESM browser 产物，jest CJS 环境炸
-    // Unexpected token 'export'，故映射到 slug 定义文件本身。
+    // MCP 子入口（spec Step 13/14）：完整 barrel 直连 dist 真实文件（exports 只声明
+    // import 条件，Jest 的 require 解析不到，漏写会在 jest-resolve 就抛）。此前曾映射到
+    // slug 定义文件本身（当时 barrel 链炸 pkce-challenge ESM，只放行 McpToolSlug 绕过），
+    // 但 mcp-config.store 等生产代码消费宽 barrel 的其余导出（McpConfigStoreFactory 等），
+    // 窄映射让它们在 Jest 下全部 undefined——炸点已由 ^pkce-challenge$ 钉死映射修复
+    // （见下），barrel 恢复完整放行。
     '^@novel-master/core/mcp$': path.join(
       repoRoot,
-      'packages/core/dist/domain/mcp/logic/slugify-mcp-tool-name.js',
+      'packages/core/dist/public/mcp.js',
+    ),
+    // pkce-challenge 的 exports 顶层只有 workerd/browser/node/default 四个条件、没有
+    // require，RN preset 的 customExportConditions（['require','react-native']）命中
+    // 不到 node，落 default 的 ESM browser 产物、jest CJS 环境炸 Unexpected token
+    // 'export'——官方 client 的 OAuth chunk 静态 require 它，加载期即触发。钉死到
+    // node CJS 产物（导出面 generateChallenge/default/verifyChallenge 与 ESM 一致）。
+    '^pkce-challenge$': path.join(
+      repoRoot,
+      'node_modules/pkce-challenge/dist/index.node.cjs',
     ),
     '^@novel-master/cloud-sync-driver-s3$': path.join(
       repoRoot,

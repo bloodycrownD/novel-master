@@ -169,7 +169,7 @@ jest.mock('@/services/agent-yaml.service', () => ({
 
 // runtime 直接 mock 在 hook 层（照 agent-editor-form 系列先例）：mcp 切片是接线
 // 断言的数据源；真实 context 会拉起整个 runtime 模块图（create-mobile-runtime →
-// mcp-config.store，后者消费宽的 core/mcp barrel，jest 映射只放行 McpToolSlug）。
+// mcp-config.store → 宽的 core/mcp barrel，含官方 OAuth client 依赖链）。
 jest.mock('@/hooks/useRuntime', () => ({
     useRuntime: () => mockRuntime,
 }));
