@@ -587,6 +587,7 @@ const UI_MESSAGE_KEYS = [
     "ui.nav.cloud_storage",
     "ui.nav.cloud_storage_setup",
     "ui.nav.search_engines",
+    "ui.nav.mcp_servers",
     "ui.nav.file_browser",
     "ui.nav.smart_sort_rules",
     "ui.nav.rule_editor",

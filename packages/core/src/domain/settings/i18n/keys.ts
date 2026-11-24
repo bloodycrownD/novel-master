@@ -1,13 +1,15 @@
 /**
- * 搜索配置（settings.search.*）消息 key 契约。
+ * settings 域消息 key 契约（settings.search.* / settings.mcp.* / settings.long_task.*）。
  *
  * 文案本体在 `resources/i18n/settings.yaml 的 settings 段（gen-i18n-catalog.mjs 生成 generated-settings-catalog.ts）`；本文件只定义 key 与
  * descriptor 类型，不包含任何用户可见文本。
  *
  * key 形态：`settings.search.<area>.<name>`（area ∈ list / detail / auth / params /
- * help / validation / toast / empty / meta / curl）与 `settings.long_task.*`
- * （桌面长任务取消入口）。双端逐字相同的文案共用同一个 key；仅一端有的（或两端
- * 措辞不同的）在末尾带 `.desktop` / `.mobile` 区分。
+ * help / validation / toast / empty / meta / curl）、`settings.mcp.<area>.<name>`
+ * （area ∈ detail / failure / help / list / toast / validation，另有顶层
+ * delete_notice / delete_title）与 `settings.long_task.*`（桌面长任务取消入口）。
+ * 双端逐字相同的文案共用同一个 key；仅一端有的（或两端措辞不同的）在末尾带
+ * `.desktop` / `.mobile` 区分。
  *
  * @module domain/settings/i18n/keys
  */
@@ -161,6 +163,88 @@ const SETTINGS_MESSAGE_KEYS = [
     "settings.search.curl.command_label.desktop",
     "settings.search.curl.parse_action.desktop",
     "settings.search.curl.key_detected.desktop",
+
+    // —— mcp：MCP 服务器配置页（双端共用；spec mcp-support Step 14） ——
+    "settings.mcp.detail.api_key_label",
+    "settings.mcp.detail.api_key_placeholder.mobile",
+    "settings.mcp.detail.api_key_saved_hint",
+    "settings.mcp.detail.api_key_store_hint",
+    "settings.mcp.detail.auth_bearer",
+    "settings.mcp.detail.auth_label",
+    "settings.mcp.detail.auth_none",
+    "settings.mcp.detail.auth_oauth",
+    "settings.mcp.detail.auth_section",
+    "settings.mcp.detail.authorized",
+    "settings.mcp.detail.clear_key",
+    "settings.mcp.detail.clearing_key",
+    "settings.mcp.detail.connection_section",
+    "settings.mcp.detail.create_action",
+    "settings.mcp.detail.name_label",
+    "settings.mcp.detail.name_placeholder",
+    "settings.mcp.detail.not_authorized",
+    "settings.mcp.detail.oauth_status_label",
+    "settings.mcp.detail.reauthorize",
+    "settings.mcp.detail.save_action",
+    "settings.mcp.detail.status_disabled",
+    "settings.mcp.detail.status_pending",
+    "settings.mcp.detail.status_ready",
+    "settings.mcp.detail.test_connection",
+    "settings.mcp.detail.testing",
+    "settings.mcp.detail.timeout_hint",
+    "settings.mcp.detail.timeout_label",
+    "settings.mcp.detail.tools_hint",
+    "settings.mcp.detail.tools_section",
+    "settings.mcp.detail.transport_http",
+    "settings.mcp.detail.transport_label",
+    "settings.mcp.detail.transport_sse",
+    "settings.mcp.detail.url_label",
+    "settings.mcp.detail.url_placeholder",
+    "settings.mcp.delete_notice",
+    "settings.mcp.delete_title",
+    "settings.mcp.failure.auth",
+    "settings.mcp.failure.network",
+    "settings.mcp.failure.permission",
+    "settings.mcp.failure.protocol",
+    "settings.mcp.failure.rate_limit",
+    "settings.mcp.failure.server",
+    "settings.mcp.failure.unknown",
+    "settings.mcp.help.auth.body",
+    "settings.mcp.help.auth.title",
+    "settings.mcp.help.context.body",
+    "settings.mcp.help.context.title",
+    "settings.mcp.help.dismiss",
+    "settings.mcp.help.failure.body",
+    "settings.mcp.help.failure.title",
+    "settings.mcp.help.toggle.body",
+    "settings.mcp.help.toggle.title",
+    "settings.mcp.list.cancel.mobile",
+    "settings.mcp.list.connected",
+    "settings.mcp.list.create",
+    "settings.mcp.list.deleting.mobile",
+    "settings.mcp.list.disconnected",
+    "settings.mcp.list.empty",
+    "settings.mcp.list.menu.delete",
+    "settings.mcp.list.menu.move_down",
+    "settings.mcp.list.menu.move_up",
+    "settings.mcp.list.retry.mobile",
+    "settings.mcp.list.tool_count",
+    "settings.mcp.toast.clear_key_failed.mobile",
+    "settings.mcp.toast.deleted",
+    "settings.mcp.toast.delete_failed.mobile",
+    "settings.mcp.toast.key_cleared",
+    "settings.mcp.toast.load_failed.mobile",
+    "settings.mcp.toast.oauth_callback_failed.mobile",
+    "settings.mcp.toast.oauth_callback_ok",
+    "settings.mcp.toast.oauth_no_pending.mobile",
+    "settings.mcp.toast.oauth_start_failed.mobile",
+    "settings.mcp.toast.oauth_started",
+    "settings.mcp.toast.order_failed.mobile",
+    "settings.mcp.toast.save_failed.mobile",
+    "settings.mcp.toast.saved",
+    "settings.mcp.toast.server_not_found.mobile",
+    "settings.mcp.toast.toggle_failed.mobile",
+    "settings.mcp.validation.name_required",
+    "settings.mcp.validation.url_required",
     "settings.long_task.cancel",
     "settings.long_task.cancelled",
     "settings.long_task.maintenance_uninterruptible",
