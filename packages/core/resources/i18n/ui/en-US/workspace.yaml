@@ -15,6 +15,7 @@
     cloud_storage: Cloud storage settings
     cloud_storage_setup: Cloud storage setup
     search_engines: Search engines
+    mcp_servers: MCP servers
     file_browser: File browser
     smart_sort_rules: Smart sort rules
     rule_editor: Rule details

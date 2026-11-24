@@ -5,6 +5,86 @@ zh-CN:
   long_task.cancel: 取消
   long_task.cancelled: 已取消
   long_task.maintenance_uninterruptible: 正在整理，无法中断
+  # —— mcp：MCP 服务器配置页（双端共用；spec mcp-support Step 14） ——
+  mcp.detail.api_key_label: API Key
+  mcp.detail.api_key_placeholder.mobile: 留空保留已存密钥
+  mcp.detail.api_key_saved_hint: 已保存；留空则保留原密钥
+  mcp.detail.api_key_store_hint: 保存时写入本机密钥库
+  mcp.detail.auth_bearer: API Key
+  mcp.detail.auth_label: 认证方式
+  mcp.detail.auth_none: 无
+  mcp.detail.auth_oauth: OAuth
+  mcp.detail.auth_section: 认证
+  mcp.detail.authorized: 已授权
+  mcp.detail.authorizing.mobile: 正在打开系统浏览器…
+  mcp.detail.clear_key: 清除密钥
+  mcp.detail.clearing_key: 清除中…
+  mcp.detail.connection_section: 连接
+  mcp.detail.create_action: 新建服务器
+  mcp.detail.name_label: 名称
+  mcp.detail.name_placeholder: 如 Acme 知识库
+  mcp.detail.not_authorized: 未授权
+  mcp.detail.oauth_status_label: 授权状态
+  mcp.detail.reauthorize: 重新授权
+  mcp.detail.save_action: 保存
+  mcp.detail.status_disabled: 已停用
+  mcp.detail.status_pending: 未连接
+  mcp.detail.status_ready: 连接正常
+  mcp.detail.test_connection: 测试连接
+  mcp.detail.testing: 测试中…
+  mcp.detail.timeout_hint: 单位：秒
+  mcp.detail.timeout_label: 超时时间
+  mcp.detail.tools_hint: 关闭的工具不会出现在 AI 的工具列表里
+  mcp.detail.tools_section: 工具
+  mcp.detail.transport_http: Streamable HTTP
+  mcp.detail.transport_label: 传输类型
+  mcp.detail.transport_sse: SSE
+  mcp.detail.url_label: 地址
+  mcp.detail.url_placeholder: https://example.com/mcp
+  mcp.delete_notice: "「{name}」的配置与密钥会一并清除，不可恢复。"
+  mcp.delete_title: 删除服务器
+  mcp.failure.auth: 认证失败
+  mcp.failure.network: 网络错误
+  mcp.failure.permission: 没有权限
+  mcp.failure.protocol: 协议错误
+  mcp.failure.rate_limit: 触发限流
+  mcp.failure.server: 服务器错误
+  mcp.failure.unknown: 未知错误
+  mcp.help.auth.body: API Key 加密保存，保存后不再显示明文；OAuth 授权在系统浏览器里完成，结束后自动回到应用。
+  mcp.help.auth.title: 认证
+  mcp.help.context.body: 工具越多，占用的上下文越多。
+  mcp.help.context.title: 上下文占用
+  mcp.help.dismiss: 关闭
+  mcp.help.failure.body: 详情页点「测试连接」可以看到服务器返回的原文。
+  mcp.help.failure.title: 连接失败时
+  mcp.help.toggle.body: 关闭的服务器不参与连接，它的工具也不会出现在 AI 的工具列表里。
+  mcp.help.toggle.title: 开关
+  mcp.list.cancel.mobile: 取消
+  mcp.list.connected: 已连接
+  mcp.list.create: 新建服务器
+  mcp.list.deleting.mobile: 删除中…
+  mcp.list.disconnected: 未连接
+  mcp.list.empty: 还没有服务器；点「新建服务器」添加一个
+  mcp.list.menu.delete: 删除
+  mcp.list.menu.move_down: 下移
+  mcp.list.menu.move_up: 上移
+  mcp.list.retry.mobile: 重试
+  mcp.list.tool_count: "{count} 个工具"
+  mcp.toast.clear_key_failed.mobile: 清除密钥失败
+  mcp.toast.deleted: 已删除
+  mcp.toast.delete_failed.mobile: 删除失败
+  mcp.toast.key_cleared: 密钥已清除
+  mcp.toast.load_failed.mobile: 加载失败
+  mcp.toast.oauth_callback_failed.mobile: "授权失败：{reason}"
+  mcp.toast.oauth_callback_ok: 授权完成
+  mcp.toast.oauth_no_pending.mobile: 没有进行中的授权
+  mcp.toast.oauth_start_failed.mobile: 授权发起失败
+  mcp.toast.oauth_started: 已打开系统浏览器进行授权
+  mcp.toast.order_failed.mobile: 调整顺序失败
+  mcp.toast.save_failed.mobile: 保存失败
+  mcp.toast.saved: 已保存
+  mcp.toast.server_not_found.mobile: "未找到 MCP 服务器：{name}"
+  mcp.toast.toggle_failed.mobile: 切换启用状态失败
   search.auth.api_key_label: API Key
   search.auth.base_url_hint.mobile: "含 http(s)://；留空保存即清除"
   search.auth.base_url_label.desktop: 实例 Base URL（服务模板中的 {{baseUrl}}；留空 = 清除）
@@ -159,6 +239,85 @@ en-US:
   long_task.cancel: Cancel
   long_task.cancelled: Cancelled
   long_task.maintenance_uninterruptible: Maintenance in progress; cannot be interrupted
+  mcp.detail.api_key_label: API Key
+  mcp.detail.api_key_placeholder.mobile: Leave empty to keep the saved key
+  mcp.detail.api_key_saved_hint: Saved; leave empty to keep the current key
+  mcp.detail.api_key_store_hint: Written to the local keystore when you save
+  mcp.detail.auth_bearer: API Key
+  mcp.detail.auth_label: Authentication method
+  mcp.detail.auth_none: None
+  mcp.detail.auth_oauth: OAuth
+  mcp.detail.auth_section: Authentication
+  mcp.detail.authorized: Authorized
+  mcp.detail.authorizing.mobile: Opening the system browser…
+  mcp.detail.clear_key: Clear key
+  mcp.detail.clearing_key: Clearing…
+  mcp.detail.connection_section: Connection
+  mcp.detail.create_action: New server
+  mcp.detail.name_label: Name
+  mcp.detail.name_placeholder: e.g. Acme Knowledge Base
+  mcp.detail.not_authorized: Not authorized
+  mcp.detail.oauth_status_label: Authorization
+  mcp.detail.reauthorize: Re-authorize
+  mcp.detail.save_action: Save
+  mcp.detail.status_disabled: Disabled
+  mcp.detail.status_pending: Not connected
+  mcp.detail.status_ready: Connected
+  mcp.detail.test_connection: Test connection
+  mcp.detail.testing: Testing…
+  mcp.detail.timeout_hint: In seconds
+  mcp.detail.timeout_label: Timeout
+  mcp.detail.tools_hint: Tools turned off are not shown in the AI's tool list
+  mcp.detail.tools_section: Tools
+  mcp.detail.transport_http: Streamable HTTP
+  mcp.detail.transport_label: Transport
+  mcp.detail.transport_sse: SSE
+  mcp.detail.url_label: URL
+  mcp.detail.url_placeholder: https://example.com/mcp
+  mcp.delete_notice: "The configuration and keys of \"{name}\" will be removed. This cannot be undone."
+  mcp.delete_title: Delete server
+  mcp.failure.auth: Authentication failed
+  mcp.failure.network: Network error
+  mcp.failure.permission: Permission denied
+  mcp.failure.protocol: Protocol error
+  mcp.failure.rate_limit: Rate limited
+  mcp.failure.server: Server error
+  mcp.failure.unknown: Unknown error
+  mcp.help.auth.body: API keys are stored encrypted and never shown again after saving; OAuth authorization happens in the system browser and returns to the app when done.
+  mcp.help.auth.title: Authentication
+  mcp.help.context.body: More tools take up more of the AI's context.
+  mcp.help.context.title: Context usage
+  mcp.help.dismiss: Close
+  mcp.help.failure.body: Tap "Test connection" on the detail page to see the server's raw response.
+  mcp.help.failure.title: When connection fails
+  mcp.help.toggle.body: A server that is off does not connect, and its tools do not appear in the AI's tool list.
+  mcp.help.toggle.title: Switches
+  mcp.list.cancel.mobile: Cancel
+  mcp.list.connected: Connected
+  mcp.list.create: New server
+  mcp.list.deleting.mobile: Deleting…
+  mcp.list.disconnected: Not connected
+  mcp.list.empty: No servers yet; tap "New server" to add one
+  mcp.list.menu.delete: Delete
+  mcp.list.menu.move_down: Move down
+  mcp.list.menu.move_up: Move up
+  mcp.list.retry.mobile: Retry
+  mcp.list.tool_count: "{count} tools"
+  mcp.toast.clear_key_failed.mobile: Failed to clear key
+  mcp.toast.deleted: Deleted
+  mcp.toast.delete_failed.mobile: Failed to delete
+  mcp.toast.key_cleared: Key cleared
+  mcp.toast.load_failed.mobile: Failed to load
+  mcp.toast.oauth_callback_failed.mobile: "Authorization failed: {reason}"
+  mcp.toast.oauth_callback_ok: Authorization complete
+  mcp.toast.oauth_no_pending.mobile: No authorization in progress
+  mcp.toast.oauth_start_failed.mobile: Failed to start authorization
+  mcp.toast.oauth_started: Opened the system browser for authorization
+  mcp.toast.order_failed.mobile: Failed to reorder
+  mcp.toast.save_failed.mobile: Failed to save
+  mcp.toast.saved: Saved
+  mcp.toast.server_not_found.mobile: "MCP server not found: {name}"
+  mcp.toast.toggle_failed.mobile: Failed to toggle
   search.auth.api_key_label: API Key
   search.auth.base_url_hint.mobile: "Include http(s)://; leaving it empty on save clears it"
   search.auth.base_url_label.desktop: Instance Base URL (serves the {{baseUrl}} macro in the template; leave empty to clear)
