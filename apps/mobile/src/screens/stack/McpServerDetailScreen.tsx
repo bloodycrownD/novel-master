@@ -19,6 +19,7 @@ import {ActivityIndicator, Pressable, StyleSheet, Text, View} from 'react-native
 import {useFocusEffect, useNavigation, useRoute, type RouteProp} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {MCP_DEFAULT_TIMEOUT_MS, MCP_MIN_TIMEOUT_MS, McpSecretRefs, type McpFailureKind, type McpServerConfig, type McpServerStatus, type McpToolSnapshot} from '@novel-master/core/mcp';
+import type {SettingsMessageKey} from '@novel-master/core/settings';
 import {FormChipGroup, type ChipOption} from '@/components/form/FormChipGroup';
 import {FormField} from '@/components/form/FormField';
 import {FormSectionCard} from '@/components/form/FormSectionCard';
@@ -62,7 +63,7 @@ const TRANSPORT_OPTIONS: ReadonlyArray<ChipOption<'http' | 'sse'>> = [
 const EMPTY_DRAFT: McpServerDraft = {name: '', transport: 'http', url: '', timeoutSeconds: '120', authType: 'none'};
 
 /** 失败 kind → 状态行短文案（原文在 raw 块）。 */
-const FAILURE_LABEL_KEYS: Record<McpFailureKind, string> = {
+const FAILURE_LABEL_KEYS: Record<McpFailureKind, SettingsMessageKey> = {
     auth: 'settings.mcp.failure.auth',
     permission: 'settings.mcp.failure.permission',
     'rate-limit': 'settings.mcp.failure.rate_limit',
@@ -247,7 +248,7 @@ export function McpServerDetailScreen() {
         try {
             await go(serverId);
         } catch (cause) {
-            const failKeys: Record<WriteOp, string> = {save: 'settings.mcp.toast.save_failed.mobile', clear_key: 'settings.mcp.toast.clear_key_failed.mobile', delete: 'settings.mcp.toast.delete_failed.mobile'};
+            const failKeys: Record<WriteOp, SettingsMessageKey> = {save: 'settings.mcp.toast.save_failed.mobile', clear_key: 'settings.mcp.toast.clear_key_failed.mobile', delete: 'settings.mcp.toast.delete_failed.mobile'};
             showToast(ToastMessage.toast(settingsTranslator({key: failKeys[op]}), cause));
         } finally {
             setWriteOp(null);

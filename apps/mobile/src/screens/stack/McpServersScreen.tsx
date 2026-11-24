@@ -13,6 +13,7 @@ import {ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Swit
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {McpFailureKind, McpServerConfig, McpServerStatus} from '@novel-master/core/mcp';
+import type {SettingsMessageKey} from '@novel-master/core/settings';
 import {BottomSheetMenu} from '@/components/sheet/BottomSheetMenu';
 import {HelpSection} from '@/components/common/HelpSection';
 import {ConfigListCard} from '@/components/ui/ConfigListCard';
@@ -28,6 +29,7 @@ import {listScreenStyles} from '../shared/list-screen-styles';
 import {useTheme} from '@/theme/ThemeProvider';
 import {useToast} from '@/components/chrome/ToastHost';
 import {ToastMessage} from '@/errors/toast-message';
+import {coreT} from '@/i18n/core';
 import {settingsTranslator} from '@/i18n/settings';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -41,7 +43,7 @@ interface McpServerRow {
 const EMPTY_ROWS: readonly McpServerRow[] = [];
 
 /** 失败 kind → 短文案（列表副标题用；原文进详情页）。 */
-const FAILURE_LABEL_KEYS: Record<McpFailureKind, string> = {
+const FAILURE_LABEL_KEYS: Record<McpFailureKind, SettingsMessageKey> = {
     auth: 'settings.mcp.failure.auth',
     permission: 'settings.mcp.failure.permission',
     'rate-limit': 'settings.mcp.failure.rate_limit',
@@ -83,7 +85,7 @@ export function McpServersScreen() {
     // 详情页返回时列表页重新聚焦须重挂，否则「?」按钮丢失）。
     const syncHeaderOverride = useCallback(() => {
         setStackOverride({
-            title: settingsTranslator({key: 'ui.nav.mcp_servers'}),
+            title: coreT({key: 'ui.nav.mcp_servers'}),
             showMenu: true,
             menuIcon: <HelpIcon color={tokens.text} />,
             onMenu: () => setHelpVisible(true),
@@ -263,7 +265,7 @@ export function McpServersScreen() {
             </ModalShell>
             {/* 使用说明弹窗：开关 / 认证 / 连接失败时 / 上下文占用，无输入不避键盘。 */}
             <ModalShell visible={helpVisible} onClose={() => setHelpVisible(false)} variant="center" animationType="fade" panelStyle={styles.helpPanel}>
-                <Text style={[styles.helpTitle, {color: tokens.text}]}>{settingsTranslator({key: 'ui.nav.mcp_servers'})}</Text>
+                <Text style={[styles.helpTitle, {color: tokens.text}]}>{coreT({key: 'ui.nav.mcp_servers'})}</Text>
                 <HelpSection tokens={tokens} title={settingsTranslator({key: 'settings.mcp.help.toggle.title'})} body={settingsTranslator({key: 'settings.mcp.help.toggle.body'})} />
                 <HelpSection tokens={tokens} title={settingsTranslator({key: 'settings.mcp.help.auth.title'})} body={settingsTranslator({key: 'settings.mcp.help.auth.body'})} />
                 <HelpSection tokens={tokens} title={settingsTranslator({key: 'settings.mcp.help.failure.title'})} body={settingsTranslator({key: 'settings.mcp.help.failure.body'})} />

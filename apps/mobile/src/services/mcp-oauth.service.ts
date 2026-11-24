@@ -62,7 +62,7 @@ const handleCallbackUrl = async (runtime: MobileNovelMasterRuntime, url: string)
     }
     // 授权成功后旧连接可能还挂着过期令牌：失效让下次连接用新 token 重连。
     runtime.mcp.connectionManager.invalidate(serverId);
-    AppToast.show(settingsTranslator({key: 'settings.mcp.toast.oauth_callback_ok.mobile'}));
+    AppToast.show(settingsTranslator({key: 'settings.mcp.toast.oauth_callback_ok'}));
 };
 
 export const McpOauthService = {
@@ -116,7 +116,11 @@ export const McpOauthService = {
         }
         try {
             const parsed: unknown = JSON.parse(raw);
-            return parsed != null && typeof parsed === 'object' && parsed.tokens != null;
+            if (parsed == null || typeof parsed !== 'object') {
+                return false;
+            }
+            const record = parsed as Record<string, unknown>;
+            return record.tokens != null;
         } catch {
             return false;
         }
