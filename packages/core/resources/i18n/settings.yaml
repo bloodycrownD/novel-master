@@ -55,11 +55,7 @@ zh-CN:
   mcp.delete_title: 删除服务器
   mcp.help.auth.body: API Key 加密保存，保存后不再显示明文；OAuth 授权在系统浏览器里完成，结束后自动回到应用。
   mcp.help.auth.title: 认证
-  mcp.help.context.body: 工具越多，占用的上下文越多。
-  mcp.help.context.title: 上下文占用
   mcp.help.dismiss: 关闭
-  mcp.help.failure.body: 详情页点「测试连接」可以看到服务器返回的原文。
-  mcp.help.failure.title: 连接失败时
   mcp.help.import.body.desktop: "支持粘贴 Claude Desktop 格式的 {\"mcpServers\":{…}}；其中的 Authorization 头识别为 Bearer 密钥。"
   mcp.help.import.title.desktop: 导入
   mcp.help.toggle.body: 关闭的服务器不参与连接，它的工具也不会出现在 AI 的工具列表里。
@@ -306,11 +302,7 @@ en-US:
   mcp.delete_title: Delete server
   mcp.help.auth.body: API keys are stored encrypted and never shown again after saving; OAuth authorization happens in the system browser and returns to the app when done.
   mcp.help.auth.title: Authentication
-  mcp.help.context.body: More tools take up more of the AI's context.
-  mcp.help.context.title: Context usage
   mcp.help.dismiss: Close
-  mcp.help.failure.body: Tap "Test connection" on the detail page to see the server's raw response.
-  mcp.help.failure.title: When connection fails
   mcp.help.import.body.desktop: 'Paste a Claude Desktop style {"mcpServers":{…}} config; Authorization headers in it are recognized as Bearer tokens.'
   mcp.help.import.title.desktop: Import
   mcp.help.toggle.body: A server that is off does not connect, and its tools do not appear in the AI's tool list.

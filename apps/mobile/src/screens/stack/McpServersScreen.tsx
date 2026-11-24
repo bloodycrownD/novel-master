@@ -251,13 +251,11 @@ export function McpServersScreen() {
                     </View>
                 </View>
             </ModalShell>
-            {/* 使用说明弹窗：开关 / 认证 / 连接失败时 / 上下文占用，无输入不避键盘。 */}
+            {/* 使用说明弹窗：开关 / 认证（只讲事实的两段；失败原文已由状态位置直显，不再收录入口说明），无输入不避键盘。 */}
             <ModalShell visible={helpVisible} onClose={() => setHelpVisible(false)} variant="center" animationType="fade" panelStyle={styles.helpPanel}>
                 <Text style={[styles.helpTitle, {color: tokens.text}]}>{coreT({key: 'ui.nav.mcp_servers'})}</Text>
                 <HelpSection tokens={tokens} title={settingsTranslator({key: 'settings.mcp.help.toggle.title'})} body={settingsTranslator({key: 'settings.mcp.help.toggle.body'})} />
                 <HelpSection tokens={tokens} title={settingsTranslator({key: 'settings.mcp.help.auth.title'})} body={settingsTranslator({key: 'settings.mcp.help.auth.body'})} />
-                <HelpSection tokens={tokens} title={settingsTranslator({key: 'settings.mcp.help.failure.title'})} body={settingsTranslator({key: 'settings.mcp.help.failure.body'})} />
-                <HelpSection tokens={tokens} title={settingsTranslator({key: 'settings.mcp.help.context.title'})} body={settingsTranslator({key: 'settings.mcp.help.context.body'})} />
                 <Pressable onPress={() => setHelpVisible(false)} style={[styles.helpCloseRow, {borderTopColor: tokens.border}]}>
                     <Text style={{color: tokens.primary, fontWeight: '600'}}>{settingsTranslator({key: 'settings.mcp.help.dismiss'})}</Text>
                 </Pressable>
