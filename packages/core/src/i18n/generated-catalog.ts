@@ -1364,7 +1364,7 @@ const ZH_CN: MessageCatalog<CoreMessageKey> = {
   "ui.nav.cloud_storage": "云存储配置",
   "ui.nav.cloud_storage_setup": "云端存储设置",
   "ui.nav.search_engines": "搜索配置",
-  "ui.nav.mcp_servers": "MCP 服务器",
+  "ui.nav.mcp_servers": "MCP 配置",
   "ui.nav.file_browser": "文件浏览器",
   "ui.nav.smart_sort_rules": "智能排序规则",
   "ui.nav.rule_editor": "规则详情",
