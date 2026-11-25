@@ -24,6 +24,17 @@ date: 2026-11-13
 
 2026-11-24 补充拍板：桌面端也不做 stdio，传输与移动端完全一致，两端只差 OAuth 回调方式（桌面 loopback / 移动 deep link）。
 
+## 开发期变更（2026-11-25，真机测试中拍板；与下文冲突时以本节为准）
+
+以下条目已实现并提交在 `feat/mcp-support`，下文各章里与之矛盾的旧表述尚未逐句回改。
+
+1. **服务器模型**：`McpServerConfig` 去掉 `name`，改为 `description`（选填、可空）；`id` 由用户填写，规则 `^[A-Za-z0-9_]+$`（`McpServerConfigOps.isValidId`，经 `public/mcp.ts` 导出；桌面 renderer 有一份同值的跨 bundle 副本 `shared/logic/mcp-id.ts`，改正则要两处同步）。新建时必填且不可与已有 ID 重复；两端不再生成随机 id。
+2. **换 ID**：编辑时可以改 ID，存储层走 `rename`（SKSP 的 bearer / headers / oauth 先写新 ref、KKV 原位替换、最后清旧 ref；oauth 搬迁失败回到未授权）。换 ID 时同步改写所有智能体工具允许 / 禁止名单里的 `mcp__<旧ID>__<工具>` 为新前缀（`McpToolRefs.rewriteAgentTools`），改写失败回滚。
+3. **导入 JSON 整个移除**（两端都不要）：界面入口、IPC 通道、core 的 `importExternal` 与外部 JSON 归一解析（`McpConfigParser.parse`）及对应测试、文案一并删除。§七里「配置导入 / 外部 JSON 归一 / importExternal」相关内容作废；T-M1~T-M4 中针对外部 JSON 解析的用例作废。
+4. **界面文案与布局**：传输类型选项标签为 `HTTP` / `SSE`（不再写 Streamable HTTP），提示语同步为「请改用 HTTP 传输」；设置入口与页头标题为「MCP 配置」；详情页不再有「删除服务器」，删除只在列表行菜单；列表行菜单没有上移 / 下移；列表标题为 ID、副标题为描述（不显示 URL；不可用时仍直显 `failure.detail`）；工具描述限两行、点描述文字展开 / 收起（`FormSwitchRow.descriptionLines`）；工具数量显示在连接状态行。
+5. **工具结果**：渲染出的文本是 JSON 时先经 `Json.prettyJson(text, 300)` 整理成多行再交给模型，非 JSON 原样；超 50KB 落盘口径不变。`structuredContent` 仍不读取（用户确认暂不做）。
+6. **桌面端详情页没有工具列表**，每工具启停目前只在移动端有——双端是否对齐待定。
+7. **移动端传输**：走原生非流式 `request`（补回传全部响应头），不是 RN `fetch`；详见「三、HTTP transport」与 Step 6。
 ## 现状约束（探索结论）
 
 **工具系统**：
