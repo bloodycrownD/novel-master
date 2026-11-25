@@ -50,6 +50,8 @@ export interface McpRuntimeSlice {
     readonly rename: (serverId: string, config: McpServerConfig) => Promise<void>;
     /** 行开关：按 id 改 enabled 落库（列表页乐观更新的写通道）。 */
     readonly setEnabled: (serverId: string, enabled: boolean) => Promise<void>;
+    /** 主动连接某台服务器（打开开关 / 保存后调用）：失效快照缓存后重拉，结果进 serverStatuses()。 */
+    readonly connect: (serverId: string) => Promise<void>;
     /** 上移 / 下移（delta = -1/+1）：整表重排落库。 */
     readonly reorder: (serverId: string, delta: -1 | 1) => Promise<void>;
     /** 删除 server（core 口径连带清 SKSP bearer/headers/oauth refs）+ 镜像与连接缓存同步失效。 */
@@ -212,6 +214,10 @@ export const McpRuntimeFactory = {
                     return;
                 }
                 await persistServers(state.servers.map(candidate => (candidate.id === serverId ? {...candidate, enabled} : candidate)), serverId);
+            },
+            connect: async (serverId: string) => {
+                baseManager.invalidate(serverId);
+                await baseManager.snapshotTools();
             },
             reorder: async (serverId: string, delta: -1 | 1) => {
                 const ids = state.servers.map(candidate => candidate.id);

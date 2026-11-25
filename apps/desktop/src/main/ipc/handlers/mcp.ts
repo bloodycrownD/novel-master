@@ -151,6 +151,8 @@ export namespace Mcp {
                 else await rt.secretStore.set(McpSecretRefs.bearer(id), req.bearerToken);
             }
             rt.mcp.connectionManager.invalidate(id);
+            // 保存后自动连接（列表开关与详情保存同一条路）：失败原因经 serverStatuses 的 failure.detail 带出，不影响保存结果。
+            if (config.enabled) await rt.mcp.connectionManager.snapshotTools().catch(() => undefined);
             return IpcResults.ok({ serverId: id, ...(oauthMigrated === undefined ? {} : { oauthMigrated }) });
         } catch (err) {
             return { ok: false, error: FormatIpcError.format(err) };

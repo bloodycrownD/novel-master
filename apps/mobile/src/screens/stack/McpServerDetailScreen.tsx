@@ -237,6 +237,8 @@ export function McpServerDetailScreen() {
             if (renamed && draft.authType === 'bearer' && keyDraft.length > 0) {
                 await runtime.secretStore.set(McpSecretRefs.bearer(id), keyDraft);
             }
+            // 保存后自动连接：启用中的服务器不必再点「测试连接」。
+            if (config.enabled) await mcp.connect(config.id).catch(() => undefined);
             showToast(settingsTranslator({key: 'settings.mcp.toast.saved'}));
             if (isCreate || renamed) {
                 // 新建 / 换 ID 后 route 参数已失效（新 id 不在 route 上），回列表看新条目

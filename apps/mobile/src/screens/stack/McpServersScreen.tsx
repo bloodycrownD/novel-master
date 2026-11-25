@@ -153,6 +153,10 @@ export function McpServersScreen() {
                                                 setRows(current => current.map(row => (row.config.id === item.config.id ? {config: {...row.config, enabled: next}, status: row.status} : row)));
                                                 try {
                                                     await mcp.setEnabled(item.config.id, next);
+                                                    // 打开开关即自动连接，连上后该行状态与副标题跟着更新；失败原因由状态里的 failure.detail 带出。
+                                                    if (next) await mcp.connect(item.config.id).catch(() => undefined);
+                                                    const status = mcp.connectionManager.serverStatuses().find(candidate => candidate.serverId === item.config.id);
+                                                    if (status != null) setRows(current => current.map(row => (row.config.id === item.config.id ? {config: row.config, status} : row)));
                                                 } catch (cause) {
                                                     setRows(current => current.map(row => (row.config.id === item.config.id ? {config: {...row.config, enabled: !next}, status: row.status} : row)));
                                                     showToast(ToastMessage.toast(settingsTranslator({key: 'settings.mcp.toast.toggle_failed.mobile'}), cause));
