@@ -59,6 +59,8 @@ export interface McpConnectionManagerDeps {
     readonly requestFn: McpRequestFn;
     /** SKSP 读 bearer 明文（`mcp/{serverId}/bearer` 的 secretRef → token；读失败按无 token 处理）。 */
     readonly bearerToken: (secretRef: string) => Promise<string | null>;
+    /** 某 server 被用户关掉的工具名清单（配置页每工具开关）；快照出口过滤，被关的工具不注册进 agent。 */
+    readonly disabledTools: (serverId: string) => readonly string[];
     /** 时钟（TTL 判定与 lastConnectedAt）；缺省 Date.now。 */
     readonly now?: () => number;
     /** 装配期单 server 预算上限（生产固定 8000；测试注入小值）。 */
@@ -68,9 +70,13 @@ export interface McpConnectionManagerDeps {
 /** auth 失败的 action 按 server 鉴权配置细化（bearer → fix-config，其余 → reauthorize；spec §四固定映射的收尾一步）。 */
 const withAuthAction = (config: McpServerConfig, failure: McpFailure): McpFailure => ({...failure, action: McpFailureClassifier.actionForKind(failure.kind, config.auth.type)});
 
-/** 任意错误 → McpFailure：transport 错误按 raw 四层分类；官方超时归 network/retry；其余按文本归 unknown。 */
+/** 任意错误 → McpFailure：transport 错误里没有响应的（网络层失败）直接归 network / retry，有响应的按 raw 四层分类；官方超时归 network/retry；其余按文本归 unknown。 */
 const failureOf = (config: McpServerConfig, error: unknown): McpFailure => {
-    if (error instanceof McpTransportError) return withAuthAction(config, McpFailureClassifier.classify({ status: error.raw?.status, contentType: error.raw?.contentType, body: error.raw?.body ?? error.message, wwwAuthenticate: error.wwwAuthenticate }));
+    if (error instanceof McpTransportError) {
+        // 没有响应的（请求函数自身失败，如网络断开）直接归 network / retry；有响应的按 raw 四层分类。
+        if (error.raw == null) return withAuthAction(config, { kind: "network", action: "retry", detail: error.message });
+        return withAuthAction(config, McpFailureClassifier.classify({ status: error.raw.status, contentType: error.raw.contentType, body: error.raw.body ?? error.message, wwwAuthenticate: error.wwwAuthenticate }));
+    }
     if (SdkError.isInstance(error)) {
         const kind = error.code === SdkErrorCode.RequestTimeout ? "network" : "protocol";
         return withAuthAction(config, { kind, action: kind === "network" ? "retry" : "report", detail: error.message });
@@ -86,6 +92,13 @@ export const McpConnectionManagerFactory = {
         const budgetCeiling = deps.assemblyBudgetMs ?? MCP_ASSEMBLY_BUDGET_MS;
         const connections = new Map<string, McpConnectionEntry>();
         const connecting = new Map<string, Promise<OfficialMcpClient>>();
+        /** 按 server 的代际：invalidate / closeAll 递增，在途结果写回前校验——代际已变即属于旧配置，丢弃。 */
+        const generations = new Map<string, number>();
+        const generationOf = (serverId: string): number => generations.get(serverId) ?? 0;
+        const isStale = (serverId: string, generation: number): boolean => generationOf(serverId) !== generation;
+        const closeClient = async (client: OfficialMcpClient | null): Promise<void> => {
+            if (client !== null) await client.close().catch(() => undefined);
+        };
 
         /**
          * nm-style: keep-local — single-flight 建连，直接读写 connecting/connections 闭包状态。
@@ -95,6 +108,7 @@ export const McpConnectionManagerFactory = {
          * 已建立，此窗口仅在装配 pending 后首调出现）。
          */
         const connectOnce = async (config: McpServerConfig, signal: AbortSignal): Promise<OfficialMcpClient> => {
+            const generation = generationOf(config.id);
             const held = connections.get(config.id)?.client;
             if (held !== null && held !== undefined) return held;
             const inflight = connecting.get(config.id);
@@ -115,20 +129,26 @@ export const McpConnectionManagerFactory = {
             connecting.set(config.id, pending);
             try {
                 const client = await pending;
-                connecting.delete(config.id);
+                // 只清自己登记的那一条：invalidate 之后新一代可能已登记新的在途握手。
+                if (connecting.get(config.id) === pending) connecting.delete(config.id);
+                if (isStale(config.id, generation)) {
+                    await closeClient(connections.get(config.id)?.client === client ? null : client);
+                    throw new McpTransportError(`MCP 服务器 ${config.id} 的连接已被更新的配置取代`);
+                }
                 const settled = connections.get(config.id);
                 // 快照拉取已先行登记「连接中」条目时只补 client，不覆盖其状态。
                 if (settled == null) connections.set(config.id, { client, snapshots: [], snapshotAt: 0, status: { serverId: config.id, state: "ready", lastConnectedAt: now() }, inflight: null });
                 else if (settled.client == null) connections.set(config.id, { ...settled, client });
                 return client;
             } catch (error: unknown) {
-                connecting.delete(config.id);
+                if (connecting.get(config.id) === pending) connecting.delete(config.id);
                 throw error;
             }
         };
 
         /** nm-style: keep-local — 直接读写 connections 闭包状态（快照条目），是连接状态机的组成部分。单 server 快照拉取：全程受装配预算约束（connect + listTools），失败记状态并返回空，不拖累其他 server。 */
         const fetchSnapshot = async (config: McpServerConfig, holder: { inflight: Promise<readonly McpToolSnapshot[]> | null }): Promise<readonly McpToolSnapshot[]> => {
+            const generation = generationOf(config.id);
             const budgetMs = Math.min(config.timeoutMs, budgetCeiling);
             const controller = new AbortController();
             const timer = setTimeout(() => controller.abort(), budgetMs);
@@ -136,11 +156,16 @@ export const McpConnectionManagerFactory = {
             try {
                 if (client === null) client = await connectOnce(config, controller.signal);
                 const tools = await client.listTools(controller.signal);
+                if (isStale(config.id, generation)) {
+                    await closeClient(client);
+                    return [];
+                }
                 const snapshots = tools.map((tool) => ({ serverId: config.id, toolName: tool.name, ...(tool.description === undefined ? {} : {toolDescription: tool.description}) }));
                 const snapshotAt = now();
                 connections.set(config.id, { client, snapshots, snapshotAt, status: { serverId: config.id, state: "ready", toolCount: snapshots.length, lastConnectedAt: snapshotAt }, inflight: holder.inflight });
                 return snapshots;
             } catch (error: unknown) {
+                if (isStale(config.id, generation)) return [];
                 const timedOut = controller.signal.aborted || RequestAbort.isAbortLikeError(error);
                 // 一次尝试到此即 failed（预算内未完成，或握手 / tools/list 出错）：界面不自动重试，重试入口是「测试连接」与装配期。
                 const status: McpServerStatus = timedOut
@@ -201,7 +226,7 @@ export const McpConnectionManagerFactory = {
         /** nm-style: keep-public — McpConnectionManager port 契约的实现方法；生产消费在 Step 9 的 run-agent-turn 装配与双端 runtime/catalog（后续波次接线），本波次仅测试可达。 */
         const snapshotTools = async (): Promise<readonly McpToolSnapshot[]> => {
             const batches = await Promise.all(deps.listServers().map(snapshotFor));
-            return markSlugConflicts(batches.flat());
+            return markSlugConflicts(batches.flat().filter((entry) => !deps.disabledTools(entry.serverId).includes(entry.toolName)));
         };
 
         /** nm-style: keep-public — McpConnectionManager port 契约的实现方法；双端状态标签与「测试连接」的唯一读取面，生产消费在后续波次接线。 */
@@ -216,6 +241,7 @@ export const McpConnectionManagerFactory = {
             if (config === undefined) return Result.err({ kind: "protocol", action: "report", detail: `MCP 服务器 ${serverId} 不在当前配置中` });
             if (!config.enabled) return Result.err({ kind: "server", action: "fix-config", detail: `MCP 服务器 ${config.id} 已停用` });
             if (!McpServerConfigOps.isTransportSupported(config)) return Result.err(McpFailureOps.unsupportedTransport(config.transport.type));
+            const generation = generationOf(config.id);
             try {
                 const client = await connectOnce(config, signal);
                 const result = await client.callTool(toolName, args, signal);
@@ -224,21 +250,25 @@ export const McpConnectionManagerFactory = {
                 // 取消是控制流不是失败：AbortError 原样 reject 透传（signal 已中止时官方可能包成 SdkError，兜底转回 AbortError）。
                 if (RequestAbort.isAbortLikeError(error) || signal.aborted) throw RequestAbort.isAbortLikeError(error) ? error : AbortError.create();
                 const failure = failureOf(config, error);
+                // 期间 invalidate / closeAll 过：这次失败属于旧配置，不写回状态。
+                if (isStale(config.id, generation)) return Result.err(failure);
                 const entry = connections.get(config.id);
                 connections.set(config.id, { client: entry?.client ?? null, snapshots: entry?.snapshots ?? [], snapshotAt: entry?.snapshotAt ?? 0, status: { serverId: config.id, state: "failed", failure }, inflight: entry?.inflight ?? null });
                 return Result.err(failure);
             }
         };
 
-        /** nm-style: keep-public — McpConnectionManager port 契约的实现方法（配置保存/手动刷新的失效入口），生产消费在后续波次接线。 */
+        /** nm-style: keep-public — McpConnectionManager port 契约的实现方法（配置保存/手动刷新的失效入口）：递增代际让在途结果作废，再清表。生产消费在后续波次接线。 */
         const invalidate = (serverId: string): void => {
+            generations.set(serverId, generationOf(serverId) + 1);
             connections.delete(serverId);
             connecting.delete(serverId);
         };
 
-        /** nm-style: keep-public — McpConnectionManager port 契约的实现方法（回合收尾关闭常驻连接），生产消费在后续波次接线；直接读写 connections 闭包状态。 */
+        /** nm-style: keep-public — McpConnectionManager port 契约的实现方法（应用退出时关闭常驻连接）；直接读写 connections 闭包状态。 */
         const closeAll = async (): Promise<void> => {
             const clients = [...connections.values()].flatMap((entry) => (entry.client === null ? [] : [entry.client]));
+            for (const serverId of new Set([...connections.keys(), ...generations.keys()])) generations.set(serverId, generationOf(serverId) + 1);
             connections.clear();
             connecting.clear();
             await Promise.allSettled(clients.map((client) => client.close()));

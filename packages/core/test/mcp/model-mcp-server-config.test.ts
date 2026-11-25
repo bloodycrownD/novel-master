@@ -93,14 +93,20 @@ describe("parse-mcp-server-config", () => {
 });
 
 describe("McpServerConfigOps.isValidId", () => {
-    it("合法：英文字母 / 数字 / 下划线的组合", () => {
-        for (const id of ["a", "Z", "_", "notes_db", "Acme2_kb", "a1_b2_C3"]) {
+    it("合法：英文字母 / 数字，单个下划线分隔", () => {
+        for (const id of ["a", "Z", "notes_db", "Acme2_kb", "a1_b2_C3"]) {
             assert.equal(McpServerConfigOps.isValidId(id), true, `id=${id}`);
         }
     });
 
     it("非法：空串 / 连字符 / 空格 / 中文 / 点 / 其它符号", () => {
         for (const id of ["", "a-b", "a b", "知识库", "a.b", "mcp:abc", "a/b", "a+b"]) {
+            assert.equal(McpServerConfigOps.isValidId(id), false, `id=${id}`);
+        }
+    });
+
+    it("非法：连续下划线或首尾下划线（`__` 是工具名里 ID 与工具名的分隔符，ID 里不能出现）", () => {
+        for (const id of ["_", "a__b", "_a", "a_", "__"]) {
             assert.equal(McpServerConfigOps.isValidId(id), false, `id=${id}`);
         }
     });

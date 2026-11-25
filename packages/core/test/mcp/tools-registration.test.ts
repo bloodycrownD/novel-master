@@ -150,7 +150,7 @@ describe("撞名 server 标 failed{protocol,report}（spec §六，连接管理�
             return { status: 500, headers: { "content-type": "text/plain" }, bodyText: `mock: 未覆盖的方法 ${message.method}` };
         };
         const listServers = (): readonly McpServerConfig[] => servers.map((server) => ({ id: server.id, description: "", enabled: true, transport: { type: "http", url: `https://mcp.${server.id}.example.com/mcp` }, timeoutMs: 120_000, auth: { type: "none" } }));
-        return { manager: McpConnectionManagerFactory.create({ listServers, requestFn, bearerToken: async () => null, assemblyBudgetMs: 2_000 }), listCalls: () => listCount };
+        return { manager: McpConnectionManagerFactory.create({ listServers, requestFn, bearerToken: async () => null, disabledTools: () => [], assemblyBudgetMs: 2_000 }), listCalls: () => listCount };
     };
 
     it("T-M20: 同快照 slug 撞名时涉事 server 标 failed{protocol,report}、撞名工具不进快照不注册，其余 server 照常", async () => {

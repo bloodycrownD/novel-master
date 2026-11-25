@@ -32,6 +32,13 @@ export interface McpConfigStore {
     create(config: McpServerConfig): Promise<Result<void, AppError>>;
     /** 换 ID 保存：新 id 与其它 server 撞名时拒绝；成功 = 新配置原位落库 + SKSP 密钥（bearer / headers / oauth）迁到新 ref + 清旧条目与旧 ref（先写新后清旧，不留旧删新未写的中间态）。 */
     rename(oldId: string, config: McpServerConfig): Promise<Result<McpRenameOutcome, AppError>>;
-    /** 删除 server，并连带清掉它的 SKSP refs（bearer / headers / oauth）。 */
+    /** 删除 server，并连带清掉它的 SKSP refs（bearer / headers / oauth）与工具禁用清单。 */
     remove(serverId: string): Promise<Result<void, AppError>>;
+    /** 读每工具启停表：`{ [serverId]: 被关掉的工具名[] }`（读路径容错，损坏值回空表）。 */
+    listDisabledTools(): Promise<Result<McpDisabledTools, AppError>>;
+    /** 关闭 / 恢复某 server 的某个工具（清空时移除该 server 的条目）。 */
+    setToolDisabled(serverId: string, toolName: string, disabled: boolean): Promise<Result<void, AppError>>;
 }
+
+/** 每工具启停表：键是 serverId，值是被用户关掉的工具名。 */
+export type McpDisabledTools = Readonly<Record<string, readonly string[]>>;

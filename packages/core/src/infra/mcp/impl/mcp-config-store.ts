@@ -20,7 +20,7 @@
 import { Kkv } from "@/common/kkv.js";
 import { McpConfigParser } from "@/domain/mcp/logic/parse-mcp-server-config.js";
 import type { McpServerConfig } from "@/domain/mcp/model/mcp-server-config.js";
-import { McpSecretRefs, type McpConfigStore, type McpRenameOutcome } from "@/domain/mcp/ports/mcp-config-store.port.js";
+import { McpSecretRefs, type McpConfigStore, type McpDisabledTools, type McpRenameOutcome } from "@/domain/mcp/ports/mcp-config-store.port.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
@@ -39,16 +39,25 @@ const readConfigs = async (kkv: KkvService): Promise<Result<McpServerConfig[], A
     return Result.ok([...McpConfigParser.parse(raw.value)]);
 };
 
+/** 读每工具启停表：键缺失或损坏 → 空表（等价于全部工具启用）；infra 失败沿 err 接力。 */
+const readDisabledTools = async (kkv: KkvService): Promise<Result<Record<string, string[]>, AppError>> => {
+    const raw = await Kkv.getOptional(kkv, McpConfigStoreFactory.KKV_MODULE, McpConfigStoreFactory.KEY_DISABLED_TOOLS);
+    if (!raw.ok) return Result.err(raw.error);
+    return Result.ok(McpConfigParser.parseDisabledTools(raw.value));
+};
+
 export const McpConfigStoreFactory = {
     /** KKV 模块名（nm-search / nm-cloud-sync 命名先例）。 */
     KKV_MODULE: "nm-mcp",
     /** KKV 键：归一配置列表（单键存 `McpServerConfig[]`）。 */
     KEY_SERVERS: "servers",
+    /** KKV 键：每工具启停表（`{ [serverId]: 被关掉的工具名[] }`）。 */
+    KEY_DISABLED_TOOLS: "disabledTools",
 
     /** 构造 MCP 配置存储：绑定 kkv + secretStore，读归一复用 McpConfigParser。 */
     create(deps: McpConfigStoreDeps): McpConfigStore {
         const { kkv, secretStore } = deps;
-        const { KKV_MODULE, KEY_SERVERS } = McpConfigStoreFactory;
+        const { KKV_MODULE, KEY_SERVERS, KEY_DISABLED_TOOLS } = McpConfigStoreFactory;
         return {
             list() {
                 return readConfigs(kkv);
@@ -102,6 +111,27 @@ export const McpConfigStoreFactory = {
                 if (remaining.length !== current.value.length) await Kkv.setJson(kkv, KKV_MODULE, KEY_SERVERS, remaining);
                 // SKSP refs 无条件清（幂等）：KKV 损坏回空列表后残留的 ref 也顺手收走。
                 await Promise.all([secretStore.delete(McpSecretRefs.bearer(serverId)), secretStore.delete(McpSecretRefs.headers(serverId)), secretStore.delete(McpSecretRefs.oauth(serverId))]);
+                // 工具禁用表同清：server 删了，它的清单不该残留（幂等）。
+                const disabled = await readDisabledTools(kkv);
+                if (disabled.ok && disabled.value[serverId] != null) {
+                    const nextTable = {...disabled.value};
+                    delete nextTable[serverId];
+                    await Kkv.setJson(kkv, KKV_MODULE, KEY_DISABLED_TOOLS, nextTable);
+                }
+                return Result.ok(undefined);
+            },
+            async listDisabledTools(): Promise<Result<McpDisabledTools, AppError>> {
+                return readDisabledTools(kkv);
+            },
+            async setToolDisabled(serverId, toolName, disabled) {
+                const current = await readDisabledTools(kkv);
+                if (!current.ok) return Result.err(current.error);
+                const names = current.value[serverId] ?? [];
+                const next = disabled ? [...new Set([...names, toolName])] : names.filter((name) => name !== toolName);
+                const nextTable = {...current.value};
+                if (next.length === 0) delete nextTable[serverId];
+                else nextTable[serverId] = next;
+                await Kkv.setJson(kkv, KKV_MODULE, KEY_DISABLED_TOOLS, nextTable);
                 return Result.ok(undefined);
             },
         };

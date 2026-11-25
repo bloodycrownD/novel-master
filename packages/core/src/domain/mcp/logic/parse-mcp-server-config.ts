@@ -73,4 +73,15 @@ export const McpConfigParser = {
             };
         }).filter((config): config is McpServerConfig => config != null);
     },
+
+    /**
+     * 解析 KKV 存储值（`disabledTools` 键的 JSON 字符串 / 已解析的对象）。容错归一，永不 throw：
+     * 值不是字符串数组的条目跳过，整体损坏回空表（等价于全部工具启用）。
+     */
+    parseDisabledTools: (raw: unknown): Record<string, string[]> => {
+        const text = typeof raw === "string" ? Json.parseText(raw) : null;
+        const value: unknown = text == null ? raw : text.ok ? text.value : null;
+        if (!Guards.isRecord(value)) return {};
+        return Object.fromEntries(Object.entries(value).filter((entry): entry is [string, string[]] => Array.isArray(entry[1]) && entry[1].every((name) => typeof name === "string")));
+    },
 } as const;

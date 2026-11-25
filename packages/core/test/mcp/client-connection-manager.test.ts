@@ -6,8 +6,8 @@ import { McpConnectionManagerFactory } from "../../src/infra/mcp/impl/create-mcp
 import type { McpConnectionManager } from "../../src/domain/mcp/ports/mcp-connection.port.js";
 import type { McpHttpRequest, McpHttpResponse, McpRequestFn } from "../../src/infra/mcp/ports/mcp-transport.port.js";
 
-/** mock 服务器模式：ok 正常回握与工具清单；http500 回 500 错误页；hang 永不响应（直到 signal 中止）。 */
-type StubMode = "ok" | "http500" | "hang";
+/** mock 服务器模式：ok 正常回握与工具清单；http500 回 500 错误页；hang 永不响应（直到 signal 中止）；gate 握手请求挂起到 release 才正常回复。 */
+type StubMode = "ok" | "http500" | "hang" | "gate";
 
 interface StubSpec {
     readonly id: string;
@@ -24,7 +24,12 @@ interface RecordedRequest {
 
 interface Harness {
     readonly manager: McpConnectionManager;
+    readonly requestFn: McpRequestFn;
     readonly callsOf: (serverId: string) => readonly RecordedRequest[];
+    /** 放行 gate 模式 server 的握手请求。 */
+    readonly release: (serverId: string) => void;
+    /** 等 gate 模式 server 的握手请求真正挂起（请求已发出）后再放行，避免测试里的时序竞态。 */
+    readonly gateReady: (serverId: string) => Promise<void>;
 }
 
 const urlOf = (id: string): string => `https://mcp.${id}.example.com/mcp`;
@@ -36,6 +41,8 @@ const jsonReply = (id: number | string | undefined, result: unknown): McpHttpRes
 /** T-M18 / T-M18a / T-M19 / T-M11a / T-M11b 的公共 harness：按 URL 路由的 mock requestFn（模拟移动端原生 request 适配——中止以 AbortError reject）。 */
 const makeHarness = (specs: readonly StubSpec[], options: { readonly now?: () => number; readonly assemblyBudgetMs?: number } = {}): Harness => {
     const requests = new Map<string, RecordedRequest[]>();
+    const gates = new Map<string, () => void>();
+    const gateArrived = new Map<string, () => void>();
     const requestFn: McpRequestFn = async (request: McpHttpRequest): Promise<McpHttpResponse> => {
         const spec = specs.find((candidate) => request.url === urlOf(candidate.id));
         if (spec === undefined) throw new Error(`mock: 未覆盖的 URL ${request.url}`);
@@ -43,6 +50,12 @@ const makeHarness = (specs: readonly StubSpec[], options: { readonly now?: () =>
         const calls = requests.get(spec.id) ?? [];
         calls.push({ method: message.method, signal: request.signal });
         requests.set(spec.id, calls);
+        if (spec.mode === "gate" && message.method === "initialize" && !gates.has(spec.id)) {
+            return await new Promise<McpHttpResponse>((resolve) => {
+                gates.set(spec.id, () => resolve(jsonReply(message.id, { protocolVersion: "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: spec.id, version: "1" } })));
+                gateArrived.get(spec.id)?.();
+            });
+        }
         if (spec.mode === "http500") return { status: 500, headers: { "content-type": "text/plain" }, bodyText: "boom from stub" };
         if (spec.mode === "hang") {
             return await new Promise<McpHttpResponse>((_resolve, reject) => {
@@ -55,8 +68,8 @@ const makeHarness = (specs: readonly StubSpec[], options: { readonly now?: () =>
         if (message.method === "tools/call") return jsonReply(message.id, { content: [{ type: "text", text: "done" }], isError: false });
         return { status: 500, headers: { "content-type": "text/plain" }, bodyText: `mock: 未覆盖的方法 ${message.method}` };
     };
-    const manager = McpConnectionManagerFactory.create({ listServers: () => specs.map(configFor), requestFn, bearerToken: async () => null, ...(options.now === undefined ? {} : {now: options.now}), ...(options.assemblyBudgetMs === undefined ? {} : {assemblyBudgetMs: options.assemblyBudgetMs}) });
-    return { manager, callsOf: (serverId) => requests.get(serverId) ?? [] };
+    const manager = McpConnectionManagerFactory.create({ listServers: () => specs.map(configFor), requestFn, bearerToken: async () => null, disabledTools: () => [], ...(options.now === undefined ? {} : {now: options.now}), ...(options.assemblyBudgetMs === undefined ? {} : {assemblyBudgetMs: options.assemblyBudgetMs}) });
+    return { manager, requestFn, callsOf: (serverId) => requests.get(serverId) ?? [], release: (serverId) => gates.get(serverId)?.(), gateReady: (serverId) => (gates.has(serverId) ? Promise.resolve() : new Promise<void>((resolve) => gateArrived.set(serverId, resolve))) };
 };
 
 const statusOf = (manager: McpConnectionManager, serverId: string): (ReturnType<McpConnectionManager["serverStatuses"]>[number]) | undefined => manager.serverStatuses().find((status) => status.serverId === serverId);
@@ -77,19 +90,71 @@ describe("McpConnectionManagerFactory.create", () => {
         assert.ok(bad?.failure?.detail.includes("boom from stub"));
     });
 
-        it("一次尝试进行中状态为 connecting；重复触发共享同一次尝试，不重复连接", async () => {
-            const harness = makeHarness([{ id: "srv", mode: "ok" }]);
-            const first = harness.manager.snapshotTools();
-            assert.equal(statusOf(harness.manager, "srv")?.state, "connecting");
-            const second = harness.manager.snapshotTools();
-            await Promise.all([first, second]);
-            assert.equal(statusOf(harness.manager, "srv")?.state, "ready");
-            const requests = harness.callsOf("srv").length;
-            assert.ok(requests > 0);
-            await harness.manager.snapshotTools();
-            assert.equal(statusOf(harness.manager, "srv")?.state, "ready");
-        });
+    it("一次尝试进行中状态为 connecting；重复触发共享同一次尝试，不重复连接", async () => {
+        const harness = makeHarness([{ id: "srv", mode: "ok" }]);
+        const first = harness.manager.snapshotTools();
+        assert.equal(statusOf(harness.manager, "srv")?.state, "connecting");
+        const second = harness.manager.snapshotTools();
+        await Promise.all([first, second]);
+        assert.equal(statusOf(harness.manager, "srv")?.state, "ready");
+        const requests = harness.callsOf("srv").length;
+        assert.ok(requests > 0);
+        await harness.manager.snapshotTools();
+        assert.equal(statusOf(harness.manager, "srv")?.state, "ready");
+    });
     
+    it("invalidate 与在途快照交错：旧配置的结果不写回，下一次重拉走新连接", async () => {
+        const harness = makeHarness([{ id: "srv", mode: "gate" }]);
+        const first = harness.manager.snapshotTools();
+        assert.equal(statusOf(harness.manager, "srv")?.state, "connecting");
+        await harness.gateReady("srv");
+        harness.manager.invalidate("srv");
+        harness.release("srv");
+        assert.deepEqual(await first, []);
+        assert.equal(statusOf(harness.manager, "srv")?.state, "pending");
+        await harness.manager.snapshotTools();
+        assert.equal(statusOf(harness.manager, "srv")?.state, "ready");
+        assert.equal(harness.callsOf("srv").filter((call) => call.method === "initialize").length, 2);
+    });
+
+    it("invalidate 与在途 callTool 交错：该次调用以失败结束，不把旧配置的失败写回状态", async () => {
+        const harness = makeHarness([{ id: "srv", mode: "gate" }]);
+        const call = harness.manager.callTool("srv", "read", {}, new AbortController().signal);
+        await harness.gateReady("srv");
+        harness.manager.invalidate("srv");
+        harness.release("srv");
+        assert.ok(!(await call).ok);
+        assert.equal(statusOf(harness.manager, "srv")?.state, "pending");
+    });
+
+    it("closeAll 与在途连接交错：放行后不写回", async () => {
+        const harness = makeHarness([{ id: "srv", mode: "gate" }]);
+        const pending = harness.manager.snapshotTools();
+        await harness.gateReady("srv");
+        await harness.manager.closeAll();
+        harness.release("srv");
+        assert.deepEqual(await pending, []);
+        assert.equal(statusOf(harness.manager, "srv")?.state, "pending");
+    });
+
+    it("请求函数自身失败（没有响应）归 network / retry，不落 unknown", async () => {
+        const manager = McpConnectionManagerFactory.create({ listServers: () => [configFor({ id: "srv" })], disabledTools: () => [], bearerToken: async () => null, requestFn: async () => { throw new Error("ECONNREFUSED"); } });
+        await manager.snapshotTools();
+        const status = statusOf(manager, "srv");
+        assert.equal(status?.state, "failed");
+        assert.equal(status?.failure?.kind, "network");
+        assert.equal(status?.failure?.action, "retry");
+        assert.ok(status?.failure?.detail.includes("ECONNREFUSED"));
+    });
+
+    it("被关掉的工具不进快照（每工具启停在连接管理器出口过滤）", async () => {
+        const disabled = new Map<string, readonly string[]>([["srv", ["read"]]]);
+        const manager = McpConnectionManagerFactory.create({ listServers: () => [configFor({ id: "srv" }), configFor({ id: "other" })], disabledTools: (serverId) => disabled.get(serverId) ?? [], bearerToken: async () => null, requestFn: makeHarness([{ id: "srv", mode: "ok" }, { id: "other", mode: "ok" }]).requestFn });
+        assert.deepEqual((await manager.snapshotTools()).map((snapshot) => snapshot.serverId), ["other"]);
+        disabled.set("srv", []);
+        assert.deepEqual((await manager.snapshotTools()).map((snapshot) => snapshot.serverId), ["srv", "other"]);
+    });
+
     it("T-M18a: 连不上的 server 在装配预算内被收割为 failed（界面不自动重试），不拖慢其余 server", async () => {
         const budgetMs = 200;
         const harness = makeHarness([{ id: "ok-server", mode: "ok" }, { id: "hung-server", mode: "hang" }], { assemblyBudgetMs: budgetMs });

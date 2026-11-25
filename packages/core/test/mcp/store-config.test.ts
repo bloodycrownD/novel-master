@@ -4,11 +4,13 @@ import { describe, it } from "node:test";
 import { unwrap, unwrapErr } from "../helpers/result-unwrap.js";
 import { McpConfigStoreFactory, type McpConfigStoreDeps } from "../../src/infra/mcp/impl/mcp-config-store.js";
 import type { McpServerConfig } from "../../src/domain/mcp/model/mcp-server-config.js";
+import { McpToolRefs } from "../../src/domain/mcp/logic/rewrite-mcp-tool-references.js";
 import { McpSecretRefs } from "../../src/domain/mcp/ports/mcp-config-store.port.js";
 import { AppError, AppErrorOps } from "../../src/errors/app-error.js";
 import { Result } from "../../src/errors/either.js";
 import type { SecretStore } from "../../src/infra/sksp/ports/secret-store.port.js";
 import type { KkvService } from "../../src/service/kkv/kkv.port.js";
+import { fakeMcpAgentRegistry } from "../helpers/mcp-fake-agent-registry.js";
 
 /** 内存 fake SecretStore：明文落 Map，断言直接读。 */
 function fakeSecretStore(): SecretStore & { readonly map: Map<string, string> } {
@@ -207,5 +209,87 @@ describe("mcp-config-store", () => {
         };
         unwrap(await store.save(httpConfig("zhiyu")));
         assert.deepEqual(unwrap(await store.list()), [httpConfig("zhiyu")]);
+    });
+
+    it("每工具启停：setToolDisabled 增删条目，清空时移除 server 条目；remove 连带清掉该 server 的清单", async () => {
+        const deps = makeDeps();
+        const store = McpConfigStoreFactory.create(deps);
+        unwrap(await store.save(httpConfig("zhiyu")));
+        unwrap(await store.setToolDisabled("zhiyu", "read", true));
+        unwrap(await store.setToolDisabled("zhiyu", "write", true));
+        unwrap(await store.setToolDisabled("zhiyu", "read", true));
+        assert.deepEqual(unwrap(await store.listDisabledTools()), { zhiyu: ["read", "write"] });
+        unwrap(await store.setToolDisabled("zhiyu", "read", false));
+        assert.deepEqual(unwrap(await store.listDisabledTools()), { zhiyu: ["write"] });
+        unwrap(await store.setToolDisabled("zhiyu", "write", false));
+        assert.deepEqual(unwrap(await store.listDisabledTools()), {});
+        unwrap(await store.setToolDisabled("zhiyu", "read", true));
+        unwrap(await store.remove("zhiyu"));
+        assert.deepEqual(unwrap(await store.listDisabledTools()), {});
+    });
+
+    it("listDisabledTools 读路径容错：损坏值回空表，值不是字符串数组的条目跳过", async () => {
+        const deps = makeDeps();
+        const store = McpConfigStoreFactory.create(deps);
+        const key = `${McpConfigStoreFactory.KKV_MODULE}/${McpConfigStoreFactory.KEY_DISABLED_TOOLS}`;
+        deps.kkv.map.set(key, "{oops");
+        assert.deepEqual(unwrap(await store.listDisabledTools()), {});
+        deps.kkv.map.set(key, JSON.stringify({ good: ["read"], bad: "read", mixed: ["read", 1] }));
+        assert.deepEqual(unwrap(await store.listDisabledTools()), { good: ["read"] });
+    });
+
+    it("renameWithRewrite：先改写 agent 引用再改名，afterRename 在改名之后执行", async () => {
+        const deps = makeDeps();
+        const store = McpConfigStoreFactory.create(deps);
+        unwrap(await store.save(httpConfig("old")));
+        const registry = fakeMcpAgentRegistry({ hit: { name: "hit", prompts: { persist: [], dynamic: [] }, tools: { allow: ["mcp__old__read"] } } });
+        const order: string[] = [];
+        const outcome = unwrap(await McpToolRefs.renameWithRewrite({ configStore: store, agentRegistry: registry }, "old", httpConfig("new"), async () => {
+            order.push("afterRename");
+        }));
+        assert.equal(outcome.oauthMigrated, true);
+        assert.deepEqual(unwrap(await store.list()), [httpConfig("new")]);
+        assert.deepEqual(registry.defs.get("hit")?.tools?.allow, ["mcp__new__read"]);
+        assert.deepEqual(order, ["afterRename"]);
+    });
+
+    it("renameWithRewrite：引用改写失败时不动配置；afterRename 失败时引用与配置都回到旧 ID", async () => {
+        const deps = makeDeps();
+        const store = McpConfigStoreFactory.create(deps);
+        unwrap(await store.save(httpConfig("old")));
+        const registry = fakeMcpAgentRegistry({ hit: { name: "hit", prompts: { persist: [], dynamic: [] }, tools: { allow: ["mcp__old__read"] } } });
+        registry.failNext();
+        const rewriteFailed = unwrapErr(await McpToolRefs.renameWithRewrite({ configStore: store, agentRegistry: registry }, "old", httpConfig("new")));
+        assert.ok(AppErrorOps.is(rewriteFailed, "INFRA_UNEXPECTED_ERROR"));
+        assert.deepEqual(unwrap(await store.list()), [httpConfig("old")]);
+        assert.deepEqual(registry.defs.get("hit")?.tools?.allow, ["mcp__old__read"]);
+        const afterFailed = unwrapErr(await McpToolRefs.renameWithRewrite({ configStore: store, agentRegistry: registry }, "old", httpConfig("new"), async () => {
+            throw new Error("bearer write failed");
+        }));
+        assert.ok(afterFailed.message.includes("bearer write failed"));
+        assert.deepEqual(unwrap(await store.list()), [httpConfig("old")]);
+        assert.deepEqual(registry.defs.get("hit")?.tools?.allow, ["mcp__old__read"]);
+    });
+
+    it("renameWithRewrite：新 ID 撞到别的 server 时只改回引用，不覆盖同名的那个", async () => {
+        const deps = makeDeps();
+        const store = McpConfigStoreFactory.create(deps);
+        unwrap(await store.save(httpConfig("old")));
+        unwrap(await store.save(httpConfig("taken")));
+        const registry = fakeMcpAgentRegistry({ hit: { name: "hit", prompts: { persist: [], dynamic: [] }, tools: { allow: ["mcp__old__read"] } } });
+        const clash = unwrapErr(await McpToolRefs.renameWithRewrite({ configStore: store, agentRegistry: registry }, "old", httpConfig("taken")));
+        assert.ok(AppErrorOps.is(clash, "INFRA_VALIDATION_FAILED"));
+        assert.deepEqual(unwrap(await store.list()), [httpConfig("old"), httpConfig("taken")]);
+        assert.deepEqual(registry.defs.get("hit")?.tools?.allow, ["mcp__old__read"]);
+    });
+
+    it("renameWithRewrite：ID 没变时只是普通保存", async () => {
+        const deps = makeDeps();
+        const store = McpConfigStoreFactory.create(deps);
+        unwrap(await store.save(httpConfig("same")));
+        const registry = fakeMcpAgentRegistry({});
+        const outcome = unwrap(await McpToolRefs.renameWithRewrite({ configStore: store, agentRegistry: registry }, "same", httpConfig("same", "https://moved.example.com/mcp")));
+        assert.equal(outcome.oauthMigrated, true);
+        assert.deepEqual(unwrap(await store.list()), [httpConfig("same", "https://moved.example.com/mcp")]);
     });
 });
