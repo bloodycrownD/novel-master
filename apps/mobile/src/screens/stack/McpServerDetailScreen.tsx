@@ -30,7 +30,6 @@ import {FormTextInput} from '@/components/form/FormTextInput';
 import {ScreenFormLayout} from '@/components/form/ScreenFormLayout';
 import {StickyFormFooter} from '@/components/form/StickyFormFooter';
 import {SecondaryButton} from '@/components/ui/Buttons';
-import {ModalShell} from '@/components/ui/ModalShell';
 import {useRuntime} from '@/hooks/useRuntime';
 import {useStackOverrideSetter} from '@/navigation/HeaderContext';
 import type {RootStackParamList} from '@/navigation/types';
@@ -64,7 +63,7 @@ const TRANSPORT_OPTIONS: ReadonlyArray<ChipOption<'http' | 'sse'>> = [
 const EMPTY_DRAFT: McpServerDraft = {name: '', transport: 'http', url: '', timeoutSeconds: '120', authType: 'none'};
 
 /** 在途写操作（互斥：同刻只允许一个；null = 空闲）。 */
-type WriteOp = 'save' | 'clear_key' | 'delete';
+type WriteOp = 'save' | 'clear_key';
 
 export function McpServerDetailScreen() {
     const {tokens} = useTheme();
@@ -97,7 +96,6 @@ export function McpServerDetailScreen() {
     /** 测试连接进行中（互斥连点）。 */
     const [testing, setTesting] = useState(false);
     /** 删除确认弹窗开关。 */
-    const [confirmDelete, setConfirmDelete] = useState(false);
 
     const isCreate = serverId == null;
     const savedConfig = useRef<McpServerConfig | null>(null);
@@ -229,7 +227,7 @@ export function McpServerDetailScreen() {
         }
     };
 
-    // nm-style: keep-local — 短写操作互斥模板：clear_key / delete 两处共用 writeOp 互斥态与失败 toast 映射；内联进各按钮会复制互斥状态机
+    // nm-style: keep-local — 短写操作互斥模板：clear_key 与保存共用 writeOp 互斥态与失败 toast 映射；内联进各按钮会复制互斥状态机
     const runWrite = async (op: WriteOp, go: (id: string) => Promise<void>) => {
         if (serverId == null || writeOp != null) {
             return;
@@ -238,7 +236,7 @@ export function McpServerDetailScreen() {
         try {
             await go(serverId);
         } catch (cause) {
-            const failKeys: Record<WriteOp, SettingsMessageKey> = {save: 'settings.mcp.toast.save_failed.mobile', clear_key: 'settings.mcp.toast.clear_key_failed.mobile', delete: 'settings.mcp.toast.delete_failed.mobile'};
+            const failKeys: Record<WriteOp, SettingsMessageKey> = {save: 'settings.mcp.toast.save_failed.mobile', clear_key: 'settings.mcp.toast.clear_key_failed.mobile'};
             showToast(ToastMessage.toast(settingsTranslator({key: failKeys[op]}), cause));
         } finally {
             setWriteOp(null);
@@ -424,37 +422,6 @@ export function McpServerDetailScreen() {
                     )}
                 </FormSectionCard>
             ) : null}
-            {!isCreate ? (
-                <FormSectionCard tokens={tokens} title={settingsTranslator({key: 'settings.mcp.delete_title'})} hint={settingsTranslator({key: 'settings.mcp.delete_notice', params: {name: title}})}>
-                    <SecondaryButton tokens={tokens} fullWidth label={settingsTranslator({key: 'settings.mcp.list.menu.delete'})} onPress={() => setConfirmDelete(true)} disabled={writeOp != null} />
-                </FormSectionCard>
-            ) : null}
-            {/* 删除确认：配置与 SKSP 密钥一并清除，二次确认后回列表。 */}
-            <ModalShell visible={confirmDelete} onClose={() => setConfirmDelete(false)} variant="center" animationType="fade" panelStyle={styles.confirmPanel}>
-                <Text style={[styles.confirmTitle, {color: tokens.text}]}>{settingsTranslator({key: 'settings.mcp.delete_title'})}</Text>
-                <Text style={[styles.confirmBody, {color: tokens.textSecondary}]}>{settingsTranslator({key: 'settings.mcp.delete_notice', params: {name: title}})}</Text>
-                <View style={styles.confirmActions}>
-                    <View style={styles.confirmAction}>
-                        <SecondaryButton tokens={tokens} fullWidth label={settingsTranslator({key: 'settings.mcp.list.cancel'})} onPress={() => setConfirmDelete(false)} disabled={writeOp != null} />
-                    </View>
-                    <View style={styles.confirmAction}>
-                        <SecondaryButton
-                            tokens={tokens}
-                            fullWidth
-                            label={writeOp === 'delete' ? settingsTranslator({key: 'settings.mcp.list.deleting.mobile'}) : settingsTranslator({key: 'settings.mcp.list.menu.delete'})}
-                            onPress={() => {
-                                void runWrite('delete', async id => {
-                                    await mcp.remove(id);
-                                    showToast(settingsTranslator({key: 'settings.mcp.toast.deleted'}));
-                                    setConfirmDelete(false);
-                                    navigation.goBack();
-                                });
-                            }}
-                            disabled={writeOp != null}
-                        />
-                    </View>
-                </View>
-            </ModalShell>
         </ScreenFormLayout>
     );
 }
@@ -470,13 +437,4 @@ const styles = StyleSheet.create({
         paddingVertical: 3,
         borderRadius: 999,
     },
-    confirmPanel: {
-        borderRadius: 16,
-        width: '100%',
-        padding: 20,
-    },
-    confirmTitle: {fontSize: 17, fontWeight: '600', marginBottom: 10},
-    confirmBody: {fontSize: 14, lineHeight: 21, marginBottom: 14},
-    confirmActions: {flexDirection: 'row', gap: 12},
-    confirmAction: {flex: 1},
 });

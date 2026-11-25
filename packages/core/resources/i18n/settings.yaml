@@ -76,8 +76,6 @@ zh-CN:
   mcp.list.import.desktop: 导入 JSON
   mcp.list.loading.desktop: 加载中…
   mcp.list.menu.delete: 删除
-  mcp.list.menu.move_down: 下移
-  mcp.list.menu.move_up: 上移
   mcp.list.retry.mobile: 重试
   mcp.list.tool_count: "{count} 个工具"
   mcp.toast.clear_key_failed.mobile: 清除密钥失败
@@ -91,7 +89,6 @@ zh-CN:
   mcp.toast.oauth_no_pending.mobile: 没有进行中的授权
   mcp.toast.oauth_start_failed.mobile: 授权发起失败
   mcp.toast.oauth_started: 已打开系统浏览器进行授权
-  mcp.toast.order_failed.mobile: 调整顺序失败
   mcp.toast.save_failed.mobile: 保存失败
   mcp.toast.saved: 已保存
   mcp.toast.server_not_found.mobile: "未找到 MCP 服务器：{name}"
@@ -322,8 +319,6 @@ en-US:
   mcp.list.import.desktop: Import JSON
   mcp.list.loading.desktop: Loading…
   mcp.list.menu.delete: Delete
-  mcp.list.menu.move_down: Move down
-  mcp.list.menu.move_up: Move up
   mcp.list.retry.mobile: Retry
   mcp.list.tool_count: "{count} tools"
   mcp.toast.clear_key_failed.mobile: Failed to clear key
@@ -337,7 +332,6 @@ en-US:
   mcp.toast.oauth_no_pending.mobile: No authorization in progress
   mcp.toast.oauth_start_failed.mobile: Failed to start authorization
   mcp.toast.oauth_started: Opened the system browser for authorization
-  mcp.toast.order_failed.mobile: Failed to reorder
   mcp.toast.save_failed.mobile: Failed to save
   mcp.toast.saved: Saved
   mcp.toast.server_not_found.mobile: "MCP server not found: {name}"

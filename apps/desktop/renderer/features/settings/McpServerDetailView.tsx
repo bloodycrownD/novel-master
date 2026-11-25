@@ -10,9 +10,8 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import type { McpAuthType, McpServerStatus, McpTransportType } from "@shared/ipc-types";
-import { ipcMcpDeleteServer, ipcMcpListServers, ipcMcpOAuthStart, ipcMcpOAuthStatuses, ipcMcpSaveServer, ipcMcpTestConnection } from "@/ipc/client";
+import { ipcMcpListServers, ipcMcpOAuthStart, ipcMcpOAuthStatuses, ipcMcpSaveServer, ipcMcpTestConnection } from "@/ipc/client";
 import { Button } from "@/components/ui/Button";
-import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { toastSettingsSuccess } from "@/utils/settings-feedback";
 import { coreT } from "@shared/logic/core-i18n";
 import { settingsTranslator } from "../../i18n/settings";
@@ -45,7 +44,6 @@ export function McpServerDetailView({ nav }: { nav: SettingsNavHandle }) {
     /** 最近一次测试连接的结果（tag + 原文展示）；null = 本会话未测过。 */
     const [testStatus, setTestStatus] = useState<McpServerStatus | null>(null);
     const [oauthAuthorized, setOauthAuthorized] = useState(false);
-    const [deleteOpen, setDeleteOpen] = useState(false);
 
     const isCreate = serverId === NEW_MCP_SERVER_SENTINEL && savedId == null;
     // 早退守卫保证 serverId 非空；`?? NEW_MCP_SERVER_SENTINEL` 只是类型收窄（闭包里拿不到早退信息）。
@@ -252,39 +250,6 @@ export function McpServerDetailView({ nav }: { nav: SettingsNavHandle }) {
                     {testing ? settingsTranslator({ key: "settings.mcp.detail.testing" }) : settingsTranslator({ key: "settings.mcp.detail.test_connection" })}
                 </Button>
             </SettingsSection>
-            {!isCreate ? (
-                <SettingsSection title={settingsTranslator({ key: "settings.mcp.delete_title" })}>
-                    <Button variant="danger" disabled={busy} onClick={() => setDeleteOpen(true)}>
-                        {settingsTranslator({ key: "settings.mcp.delete_title" })}
-                    </Button>
-                </SettingsSection>
-            ) : null}
-            <ConfirmModal
-                open={deleteOpen}
-                title={settingsTranslator({ key: "settings.mcp.delete_title" })}
-                message={settingsTranslator({ key: "settings.mcp.delete_notice", params: { name: form.name } })}
-                confirmLabel={settingsTranslator({ key: "settings.mcp.list.menu.delete" })}
-                danger
-                busy={busy}
-                onConfirm={() => {
-                    void (async () => {
-                        setSaving(true);
-                        try {
-                            const res = await ipcMcpDeleteServer({ serverId: effectiveId });
-                            setDeleteOpen(false);
-                            if (!res.ok) {
-                                setError(res.error.message);
-                                return;
-                            }
-                            toastSettingsSuccess(settingsTranslator({ key: "settings.mcp.toast.deleted" }));
-                            nav.pop();
-                        } finally {
-                            setSaving(false);
-                        }
-                    })();
-                }}
-                onCancel={() => setDeleteOpen(false)}
-            />
         </SettingsPanel>
     );
 }

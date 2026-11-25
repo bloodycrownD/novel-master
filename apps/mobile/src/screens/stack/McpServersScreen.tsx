@@ -1,6 +1,6 @@
 /**
  * MCP 服务器列表页（spec mcp-support Step 14）：全部已配置服务器按
- * `mcp.servers()` 动态渲染 + 行内启用开关 + 行菜单（上移/下移/删除）+
+ * `mcp.servers()` 动态渲染 + 行内启用开关 + 行菜单（删除）+
  * 底部「新建服务器」入口；点击行进详情页。
  *
  * 状态标签读连接管理器的 `serverStatuses()`（spec §五：server 级状态唯一读取
@@ -50,8 +50,6 @@ export function McpServersScreen() {
     const setStackOverride = useStackOverrideSetter();
     /** 行菜单当前指向的 server（undefined = 收起）。 */
     const [menuServerId, setMenuServerId] = useState<string | undefined>();
-    /** 排序写库进行中（互斥连点）。 */
-    const [moving, setMoving] = useState(false);
     /** 开关写库进行中的 server id（互斥连点；用 ref 避免整表 disabled 态闪烁）。 */
     const togglingRef = useRef<string | undefined>(undefined);
     /** 待确认删除的 server（undefined = 弹窗收起）。 */
@@ -93,24 +91,7 @@ export function McpServersScreen() {
         fallbackValue: EMPTY_ROWS,
     });
 
-    /** 上移（delta=-1）/ 下移（delta=+1）：写库后重读（顺序以库内新值为准）。 */
-    const moveServer = async (serverId: string, delta: -1 | 1) => {
-        if (moving) {
-            return;
-        }
-        setMoving(true);
-        try {
-            await mcp.reorder(serverId, delta);
-            await reload({silent: true});
-        } catch (cause) {
-            showToast(ToastMessage.toast(settingsTranslator({key: 'settings.mcp.toast.order_failed.mobile'}), cause));
-        } finally {
-            setMoving(false);
-        }
-    };
-
     const menuRow = rows.find(row => row.config.id === menuServerId);
-    const menuIndex = menuRow == null ? -1 : rows.indexOf(menuRow);
     const deleteRow = rows.find(row => row.config.id === pendingDelete);
     // 删除确认文案提前拼好：模板串含 CJK 长文案，内联进 JSX 会被 prettier 拆行。
     let deleteNotice = '';
@@ -197,9 +178,7 @@ export function McpServersScreen() {
                 visible={menuServerId != null}
                 title={menuRow?.config.name}
                 items={[
-                    {label: settingsTranslator({key: 'settings.mcp.list.menu.move_up'}), action: 'up', disabled: menuIndex <= 0 || moving},
-                    {label: settingsTranslator({key: 'settings.mcp.list.menu.move_down'}), action: 'down', disabled: menuIndex < 0 || menuIndex >= rows.length - 1 || moving},
-                    {label: settingsTranslator({key: 'settings.mcp.list.menu.delete'}), action: 'delete', danger: true, disabled: moving || deleting},
+                    {label: settingsTranslator({key: 'settings.mcp.list.menu.delete'}), action: 'delete', danger: true, disabled: deleting},
                 ]}
                 onClose={() => setMenuServerId(undefined)}
                 onSelect={action => {
@@ -208,11 +187,7 @@ export function McpServersScreen() {
                     if (serverId == null) {
                         return;
                     }
-                    if (action === 'up') {
-                        moveServer(serverId, -1).catch(() => undefined);
-                    } else if (action === 'down') {
-                        moveServer(serverId, 1).catch(() => undefined);
-                    } else if (action === 'delete') {
+                    if (action === 'delete') {
                         setPendingDelete(serverId);
                     }
                 }}
