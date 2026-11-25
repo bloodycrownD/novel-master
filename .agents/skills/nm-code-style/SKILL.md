@@ -39,6 +39,7 @@ description: novel-master 的代码优化与重构原则。写新代码、重构
 - `new AppError("KEY", {detail})` 也写一行。
 - 导入语句能一行就一行（1–3 个具名 import 不拆行）。
 - 简单表达式不要拆成多行；只有长条件确实需要分段时才换行，且每段要能独立读懂。
+- **不写链式 / 嵌套的三元**：`a ? x : b ? y : z`、`a ? (b ? y : z) : w` 一律改成 if / else；按枚举值分支的（字符串字面量联合、固定数字码）用 switch。单层的二选一（`ok ? a : b`）可以留；条件位置里嵌的、同一语句里彼此独立的两个三元也不在门内。`nm-style check` 的 `chained-ternary` 段会拦（`CHAINED_TERNARY`），确有理由的在现场写 `// nm-style: keep-ternary — 理由`。
 - **链式调用可以折行**（每链一行），不算拆参数——参数列表折叠才违规。
 
 ## 3. 错误进 Either，不抛
@@ -283,6 +284,8 @@ nm-style gate bare                             # bare-exports 基线门禁（新
 | `hygiene` | `DEAD` / `INLINE_CANDIDATE` / `PASS_THROUGH` / `FAKE_PUBLIC` / `TEST_ONLY` / `AMBIGUOUS` / `KEEP_*`（旧 inline+methods+find-fake-exports 三合一） | 见 §4.1 的 verdict 表 |
 | `bare-exports` | `--changed` 拦新增裸顶层 export function；`--all`/指定目录报存量计数（INFO） | 收进主体 namespace（§9.7）或写 `nm-style: keep-bare` |
 | `dup` | 增量判据透传（新增重复组才红），基线在 `scripts/dup-signatures-baseline.json` | 按 §5.1 语义族归类；不阻断（门禁走独立 `gate dup`） |
+| `top-let` | `TOP_LEVEL_LET`（模块顶层 / namespace 体内裸 `let`） | 改成对象槽；确有理由写 `nm-style: keep-top-let` |
+| `chained-ternary` | `CHAINED_TERNARY`（真 / 假分支里再接一个三元，允许外套括号） | 改成 if / else 或 switch（§2）；确有理由写 `nm-style: keep-ternary` |
 | `oop` | `OOP_CANDIDATE`（共享状态 + 多导出）、`MANY_EXPORTS`（导出 ≥6） | INFO 呈现；`--strict` 才阻断；见 §9.3 |
 
 **汇总行记法**：`nm-style: PASS|FINDINGS（signatures=N hygiene=N bare-exports=INFO(N)|N dup=… oop=INFO(N)|N）`。`INFO(N)` 表示该段只计数不阻断——bare-exports 在非增量模式（`--all`/指定目录）恒 `INFO(N)`，`--range`/`--since` 下 bare 段恒 INFO（增量按 hunk 语义不可判）；`|` 右侧是阻断数。hygiene 一个数并入旧 inline/methods/exports 三段的阻断合计。

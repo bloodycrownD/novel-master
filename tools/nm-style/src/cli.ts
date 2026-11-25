@@ -16,6 +16,7 @@ import { renderClusters, viewByFile, viewLongNames, viewModifiers, viewSubjectFa
 import { dupBaselinePayload, dupGateCompare, salvageJudged, scanDupGroups, type DupGroups, type JudgedSections } from "./rules/dup.js";
 import { scanOop } from "./rules/oop.js";
 import { scanTopLevelLet } from "./rules/top-level-let.js";
+import { scanChainedTernary } from "./rules/chained-ternary.js";
 import { hygieneUnits, scanHygiene, type HygieneMode } from "./rules/hygiene.js";
 import { rangeScanInput, scanSignatures, type SignaturesScanContext } from "./rules/signatures.js";
 import { parseThrowBaseline, scanThrowAudit, throwBaselinePayload, throwGateCompare, type ThrowSite } from "./rules/throw-audit.js";
@@ -158,9 +159,10 @@ function runCheck(argv: string[]): number {
 
     // hygiene 复用同一扫描面；引用面恒全仓（packages+apps ∪ 扫描面），行过滤只作用于报出。
     const hygieneFindings = scanHygiene({ entries: context.entries, units: hygieneUnits(context.entries), isAdded: context.isAdded, mode, snapshotDir: path.resolve(process.cwd(), "packages/core/test/package-exports/snapshots") });
-    const findings = [...scanSignatures(context), ...hygieneFindings, ...scanTopLevelLet({ entries: context.entries.filter((entry) => !isTestPath(toPosix(entry.file))) })];
-    // oop 与 check 同扫描面，恒排除测试路径（旧 check-oop includeTests:false 保形）；--strict 才阻断。
-    const oopFindings = scanOop({ entries: context.entries.filter((entry) => !isTestPath(toPosix(entry.file))), strict: flags.strict });
+    // top-level-let / chained-ternary / oop 与 check 同扫描面，恒排除测试路径（旧 check-oop includeTests:false 保形）；oop 仅 --strict 才阻断。
+    const productionEntries = context.entries.filter((entry) => !isTestPath(toPosix(entry.file)));
+    const findings = [...scanSignatures(context), ...hygieneFindings, ...scanTopLevelLet({ entries: productionEntries }), ...scanChainedTernary({ entries: productionEntries })];
+    const oopFindings = scanOop({ entries: productionEntries, strict: flags.strict });
     const kfp = loadKfp();
     const reported: Finding[] = [];
     const downgraded: Array<{ finding: Finding; entry: KfpEntry }> = [];
@@ -204,7 +206,7 @@ function runCheck(argv: string[]): number {
         console.log(toJson([...reported, ...downgraded.map((item) => item.finding), ...bareBlocked]));
         return exitCodeFor(reported) === 1 || bareBlocked.length > 0 ? 1 : 0;
     }
-    console.log(`== nm-style check ==（signatures + hygiene + top-level-let + bare-exports + dup + oop，扫描 ${context.entries.length} 个文件）`);
+    console.log(`== nm-style check ==（signatures + hygiene + top-level-let + chained-ternary + bare-exports + dup + oop，扫描 ${context.entries.length} 个文件）`);
     if (reported.length > 0) console.log(formatFindingsTable(reported));
     for (const { finding, entry } of downgraded) console.log(`INFO  ${locationOf(finding)}  ${finding.symbol}  [${entry.category ?? "known-false-positive"}] ${entry.reason}`);
     if (suppressed > 0) console.log(`↓↓ nm-style：${suppressed} 处命中 suppressPrefixes（${kfp.suppressPrefixes.join(", ")}），已跳过`);
@@ -222,7 +224,7 @@ function runCheck(argv: string[]): number {
     const bareSegment = flags.changed ? String(bareBlocked.length) : `INFO(${bareFindings.length})`;
     const oopSegment = flags.strict ? String(countBlockingOf(reported, "oop")) : `INFO(${oopFindings.length})`;
     const failed = reported.some((finding) => finding.blocking) || bareBlocked.length > 0;
-    console.log(`\nnm-style: ${failed ? "FINDINGS" : "PASS"}（signatures=${countBlockingOf(reported, "signatures")} hygiene=${countBlockingOf(reported, "hygiene")} top-let=${countBlockingOf(reported, "top-level-let")} bare-exports=${bareSegment} dup=${dup.summary} oop=${oopSegment} throw-audit=${throwAudit.summary}）`);
+    console.log(`\nnm-style: ${failed ? "FINDINGS" : "PASS"}（signatures=${countBlockingOf(reported, "signatures")} hygiene=${countBlockingOf(reported, "hygiene")} top-let=${countBlockingOf(reported, "top-level-let")} ternary=${countBlockingOf(reported, "chained-ternary")} bare-exports=${bareSegment} dup=${dup.summary} oop=${oopSegment} throw-audit=${throwAudit.summary}）`);
     return failed ? 1 : 0;
 }
 
