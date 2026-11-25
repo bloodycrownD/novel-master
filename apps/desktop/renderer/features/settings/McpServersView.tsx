@@ -2,14 +2,13 @@
  * 设置 · MCP 服务器列表页（两级结构第一级，照搜索引擎配置页同构）：
  * 配置行来自 `ipcMcpListServers`（core 归一配置），状态标签来自 `ipcMcpServerStatuses`
  * （core 连接管理器同步读；server 带失败时状态位置直显 `failure.detail` 原文，不自写
- * 文案）。每行 = 名称 + 状态 + 启用开关 + ⋮ 菜单（测试连接 / 删除）；点击行进详情页；
- * 页首「新建服务器」进详情页 create 模式（`NEW_MCP_SERVER_SENTINEL` 哨兵，不新增
- * viewId）、「导入 JSON」弹粘贴窗。详细说明收进页首「?」帮助弹窗，页内不铺长文案
- * （双端同构口径）。
+ * 文案）。每行 = ID + 描述副标 + 状态 + 启用开关 + ⋮ 菜单（测试连接 / 删除）；点击行进
+ * 详情页；页首「新建服务器」进详情页 create 模式（`NEW_MCP_SERVER_SENTINEL` 哨兵，不新增
+ * viewId）。详细说明收进页首「?」帮助弹窗，页内不铺长文案（双端同构口径）。
  */
 import { useCallback, useEffect, useState } from "react";
 import type { IpcResult, McpServerConfig, McpServerStatus } from "@shared/ipc-types";
-import { ipcMcpDeleteServer, ipcMcpImportExternal, ipcMcpListServers, ipcMcpSaveServer, ipcMcpServerStatuses, ipcMcpTestConnection } from "@/ipc/client";
+import { ipcMcpDeleteServer, ipcMcpListServers, ipcMcpSaveServer, ipcMcpServerStatuses, ipcMcpTestConnection } from "@/ipc/client";
 import { Button } from "@/components/ui/Button";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { ContextMenu } from "@/components/ui/ContextMenu";
@@ -29,8 +28,6 @@ export function McpServersView({ nav }: { nav: SettingsNavHandle }) {
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | undefined>();
     const [helpOpen, setHelpOpen] = useState(false);
-    const [importOpen, setImportOpen] = useState(false);
-    const [importText, setImportText] = useState("");
     /** 待确认删除的 server（null = 无）。 */
     const [deleteTarget, setDeleteTarget] = useState<McpServerConfig | null>(null);
 
@@ -91,44 +88,10 @@ export function McpServersView({ nav }: { nav: SettingsNavHandle }) {
         }
     };
 
-    // nm-style: keep-local — 导入共享 busy 互斥态、收窗与回读；内联进按钮 onClick 会拆散互斥与错误回显（照 SearchEngineDetailView 的 runWrite 先例）。
-    /** 导入：JSON 形状校验在 renderer 拦（不发 IPC）；core 归一后无可识别条目时按提示回显。 */
-    const runImport = async (): Promise<void> => {
-        if (busy) return;
-        try {
-            JSON.parse(importText);
-        } catch {
-            setError(settingsTranslator({ key: "settings.mcp.import.invalid_json.desktop" }));
-            return;
-        }
-        setBusy(true);
-        setError(undefined);
-        try {
-            const res = await ipcMcpImportExternal({ raw: importText });
-            if (!res.ok) {
-                setError(res.error.message);
-                return;
-            }
-            setImportOpen(false);
-            setImportText("");
-            if (res.data.length === 0) {
-                setError(settingsTranslator({ key: "settings.mcp.import.empty_result.desktop" }));
-                return;
-            }
-            await reload();
-            toastSettingsSuccess(settingsTranslator({ key: "settings.mcp.toast.imported.desktop" }));
-        } catch (e) {
-            setError(e instanceof Error ? e.message : String(e));
-        } finally {
-            setBusy(false);
-        }
-    };
-
     /** 帮助弹窗分段（K-1 事实口径：只说这个选项是什么，不写建议句；传输类型的事实提示由 server 状态位置承担）。 */
     const helpSections: ReadonlyArray<{ title: string; body: string }> = [
         { title: settingsTranslator({ key: "settings.mcp.help.tools.title.desktop" }), body: settingsTranslator({ key: "settings.mcp.help.tools.body.desktop" }) },
         { title: settingsTranslator({ key: "settings.mcp.help.auth.title" }), body: settingsTranslator({ key: "settings.mcp.help.auth.body" }) },
-        { title: settingsTranslator({ key: "settings.mcp.help.import.title.desktop" }), body: settingsTranslator({ key: "settings.mcp.help.import.body.desktop" }) },
     ];
 
     return (
@@ -145,9 +108,6 @@ export function McpServersView({ nav }: { nav: SettingsNavHandle }) {
                             }}
                         >
                             {settingsTranslator({ key: "settings.mcp.list.create" })}
-                        </Button>
-                        <Button variant="secondary" disabled={busy} onClick={() => setImportOpen(true)}>
-                            {settingsTranslator({ key: "settings.mcp.list.import.desktop" })}
                         </Button>
                         <button type="button" className="icon-btn" aria-label={coreT({ key: "ui.nav.mcp_servers" })} onClick={() => setHelpOpen(true)}>
                             ?
@@ -168,7 +128,10 @@ export function McpServersView({ nav }: { nav: SettingsNavHandle }) {
                                     nav.push("mcpServerDetail");
                                 }}
                             >
-                                <span className="settings-list-item__label">{server.name}</span>
+                                <span className="settings-list-item__label">
+                                    {server.id}
+                                    {server.description.trim().length === 0 ? null : <span className="settings-row__desc">{server.description}</span>}
+                                </span>
                                 <span className="settings-list-item__meta">
                                     {status == null
                                         ? null
@@ -186,14 +149,14 @@ export function McpServersView({ nav }: { nav: SettingsNavHandle }) {
                                 <Switch
                                     checked={server.enabled}
                                     disabled={busy}
-                                    onChange={(next) => void runWrite(() => ipcMcpSaveServer({ id: server.id, name: server.name, transportType: server.transport.type, url: server.transport.type === "stdio" ? undefined : server.transport.url, timeoutMs: server.timeoutMs, authType: server.auth.type, enabled: next }))}
-                                    aria-label={server.name}
+                                    onChange={(next) => void runWrite(() => ipcMcpSaveServer({ id: server.id, description: server.description, transportType: server.transport.type, url: server.transport.type === "stdio" ? undefined : server.transport.url, timeoutMs: server.timeoutMs, authType: server.auth.type, enabled: next }))}
+                                    aria-label={server.id}
                                 />
                             </span>
                             <button
                                 type="button"
                                 className="settings-list-item__menu-btn"
-                                aria-label={server.name}
+                                aria-label={server.id}
                                 onClick={(e) => {
                                     if (busy) return;
                                     const rect = e.currentTarget.getBoundingClientRect();
@@ -231,32 +194,13 @@ export function McpServersView({ nav }: { nav: SettingsNavHandle }) {
             <ConfirmModal
                 open={deleteTarget != null}
                 title={settingsTranslator({ key: "settings.mcp.delete_title" })}
-                message={settingsTranslator({ key: "settings.mcp.delete_notice", params: { name: deleteTarget?.name ?? "" } })}
+                message={settingsTranslator({ key: "settings.mcp.delete_notice", params: { id: deleteTarget?.id ?? "" } })}
                 confirmLabel={settingsTranslator({ key: "settings.mcp.list.menu.delete" })}
                 danger
                 busy={busy}
                 onConfirm={() => void removeServer()}
                 onCancel={() => setDeleteTarget(null)}
             />
-            {importOpen ? (
-                <div className="text-prompt-overlay" onClick={() => setImportOpen(false)}>
-                    <div className="text-prompt-modal" role="dialog" aria-modal="true" aria-labelledby="mcp-import-title" onClick={(e) => e.stopPropagation()}>
-                        <h3 id="mcp-import-title" className="text-prompt-modal__title">
-                            {settingsTranslator({ key: "settings.mcp.import.title.desktop" })}
-                        </h3>
-                        <p className="settings-hint">{settingsTranslator({ key: "settings.mcp.import.label.desktop" })}</p>
-                        <textarea rows={8} value={importText} placeholder={settingsTranslator({ key: "settings.mcp.import.placeholder.desktop" })} onChange={(e) => setImportText(e.target.value)} />
-                        <div className="confirm-modal__actions">
-                            <Button variant="secondary" onClick={() => setImportOpen(false)}>
-                                {settingsTranslator({ key: "settings.mcp.list.cancel" })}
-                            </Button>
-                            <Button variant="primary" disabled={busy || importText.trim().length === 0} onClick={() => void runImport()}>
-                                {settingsTranslator({ key: "settings.mcp.list.import.desktop" })}
-                            </Button>
-                        </div>
-                    </div>
-                </div>
-            ) : null}
             {helpOpen ? (
                 <div className="text-prompt-overlay" onClick={() => setHelpOpen(false)}>
                     <div className="text-prompt-modal text-prompt-modal--wide" role="dialog" aria-modal="true" aria-labelledby="mcp-help-title" onClick={(e) => e.stopPropagation()}>

@@ -70,7 +70,7 @@ export function AgentEditorForm(props: Props) {
     // TTL 内命中缓存不发请求），失败静默回落「未配置」占位，不阻断 agent 编辑。
     // nm-style: keep-local — React hook：then/catch 链多行回调，单行化会破坏可读性
     useEffect(() => {
-        runtime.mcp.connectionManager.snapshotTools().then(snapshots => setMcpTools(snapshots.map(entry => ({registeredName: McpToolSlug.toolName(entry.serverId, entry.toolName), serverName: entry.serverName, toolDescription: entry.toolDescription})))).catch(() => undefined);
+        runtime.mcp.connectionManager.snapshotTools().then(snapshots => setMcpTools(snapshots.map(entry => ({registeredName: McpToolSlug.toolName(entry.serverId, entry.toolName), serverId: entry.serverId, toolDescription: entry.toolDescription})))).catch(() => undefined);
     }, []);
 
     const {

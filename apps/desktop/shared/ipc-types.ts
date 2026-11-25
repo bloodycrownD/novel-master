@@ -212,7 +212,6 @@ export const IPC_CHANNELS = {
     MCP_LIST_SERVERS: "nm:mcp/listServers",
     MCP_SAVE_SERVER: "nm:mcp/saveServer",
     MCP_DELETE_SERVER: "nm:mcp/deleteServer",
-    MCP_IMPORT_EXTERNAL: "nm:mcp/importExternal",
     MCP_TEST_CONNECTION: "nm:mcp/testConnection",
     MCP_SERVER_STATUSES: "nm:mcp/serverStatuses",
     MCP_TOOLS_SNAPSHOT: "nm:mcp/toolsSnapshot",
@@ -1845,10 +1844,16 @@ export type SearchResetPresetOverrideRequest = {
 
 // —— MCP 服务器配置（mcp-support Step 13/14；core 类型只做 type 引用，运行期纯 JSON 形状）——
 
-/** MCP 配置保存（新建缺 id 由 main 生成；bearerToken undefined=保留、空串=清除、非空=覆盖，与 search 密钥语义同口径）。 */
+/**
+ * MCP 配置保存。create=true 走新建（id 撞名拒绝）；编辑带 previousId，previousId
+ * 与 id 不同即换 ID（main 侧改写 agent 工具引用 `mcp__<旧ID>__` 并迁 SKSP 密钥到
+ * 新 ref）。bearerToken undefined=保留、空串=清除、非空=覆盖，与 search 密钥语义同口径。
+ */
 export type McpSaveServerRequest = {
-    readonly id?: string;
-    readonly name: string;
+    readonly id: string;
+    readonly create?: boolean;
+    readonly previousId?: string;
+    readonly description: string;
     readonly transportType: McpTransportType;
     readonly url?: string;
     readonly timeoutMs?: number;
@@ -1859,11 +1864,6 @@ export type McpSaveServerRequest = {
 
 export type McpDeleteServerRequest = {
     readonly serverId: string;
-};
-
-/** 外部格式导入（Claude Desktop 的 `{mcpServers:{...}}` / 数组 / 单对象）；main 侧 JSON.parse 后交 core store 归一。 */
-export type McpImportExternalRequest = {
-    readonly raw: string;
 };
 
 export type McpTestConnectionRequest = {

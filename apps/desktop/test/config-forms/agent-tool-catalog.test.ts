@@ -67,8 +67,8 @@ test("AgentToolCatalog.get 空快照回落「未配置 MCP 服务器」单项提
 test("AgentToolCatalog.get 快照条目映射为 mcp__ 复合名条目（名字与描述取快照，不在 app 侧重算）", () => {
     const mcp = AgentToolCatalog.get({
         mcpTools: () => [
-            { registeredName: "mcp__fs__read", serverName: "fs", toolDescription: "Read files" },
-            { registeredName: "mcp__fs__write", serverName: "fs" },
+            { registeredName: "mcp__fs__read", serverId: "fs", toolDescription: "Read files" },
+            { registeredName: "mcp__fs__write", serverId: "fs" },
         ],
     })[1].entries;
     assert.equal(mcp.length, 2);

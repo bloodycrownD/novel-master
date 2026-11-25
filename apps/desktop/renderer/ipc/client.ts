@@ -175,7 +175,6 @@ export const {
     ipcMcpListServers,
     ipcMcpSaveServer,
     ipcMcpDeleteServer,
-    ipcMcpImportExternal,
     ipcMcpTestConnection,
     ipcMcpServerStatuses,
     ipcMcpToolsSnapshot,

@@ -20,8 +20,8 @@ export interface AgentToolCatalogGroup {
 export interface AgentToolCatalogMcpTool {
     /** `McpToolSlug.toolName(serverId, toolName)` 的结果（`mcp__<server>__<tool>`，含截断短哈希）。 */
     readonly registeredName: string;
-    /** 展示名（description 前缀用）。 */
-    readonly serverName: string;
+    /** 所属服务器 ID（description 前缀与分组展示用）。 */
+    readonly serverId: string;
     /** 工具描述；缺省回落 registeredName。 */
     readonly toolDescription?: string;
 }
@@ -83,7 +83,7 @@ export const AgentToolCatalog = {
             : tools.map((tool) => ({
                 name: tool.registeredName,
                 label: tool.registeredName,
-                description: `[MCP:${tool.serverName}] ${tool.toolDescription ?? tool.registeredName}`,
+                description: `[MCP:${tool.serverId}] ${tool.toolDescription ?? tool.registeredName}`,
             }));
         return [
             { id: "builtin", entries: BUILTIN_TOOL_CATALOG },

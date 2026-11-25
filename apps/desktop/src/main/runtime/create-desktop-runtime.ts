@@ -81,13 +81,18 @@ export namespace DesktopRuntimeFactory {
                 if (result.ok) await mcpConfig.list();
                 return result;
             },
-            remove: async (serverId) => {
-                const result = await mcpBaseStore.remove(serverId);
+            create: async (config) => {
+                const result = await mcpBaseStore.create(config);
                 if (result.ok) await mcpConfig.list();
                 return result;
             },
-            importExternal: async (raw) => {
-                const result = await mcpBaseStore.importExternal(raw);
+            rename: async (oldId, config) => {
+                const result = await mcpBaseStore.rename(oldId, config);
+                if (result.ok) await mcpConfig.list();
+                return result;
+            },
+            remove: async (serverId) => {
+                const result = await mcpBaseStore.remove(serverId);
                 if (result.ok) await mcpConfig.list();
                 return result;
             },

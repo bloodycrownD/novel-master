@@ -50,8 +50,8 @@ test("T-P4: mcpTools 快照并入可选计数（MCP 工具 + 内置 11）；缺�
             selected={["mcp__fs__read"]}
             onChange={() => {}}
             mcpTools={[
-                { registeredName: "mcp__fs__read", serverName: "fs", toolDescription: "Read files" },
-                { registeredName: "mcp__fs__write", serverName: "fs" },
+                { registeredName: "mcp__fs__read", serverId: "fs", toolDescription: "Read files" },
+                { registeredName: "mcp__fs__write", serverId: "fs" },
             ]}
         />,
     );

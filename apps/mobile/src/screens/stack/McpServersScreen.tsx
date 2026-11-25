@@ -96,7 +96,7 @@ export function McpServersScreen() {
     // 删除确认文案提前拼好：模板串含 CJK 长文案，内联进 JSX 会被 prettier 拆行。
     let deleteNotice = '';
     if (deleteRow != null) {
-        deleteNotice = settingsTranslator({key: 'settings.mcp.delete_notice', params: {name: deleteRow.config.name}});
+        deleteNotice = settingsTranslator({key: 'settings.mcp.delete_notice', params: {id: deleteRow.config.id}});
     }
 
     return (
@@ -122,17 +122,17 @@ export function McpServersScreen() {
                     refreshControl={<RefreshControl refreshing={loading} onRefresh={reload} />}
                     renderItem={({item}) => {
                         const failure = item.status.failure;
-                        // 开关本身已表达启停态，副标题给地址；有失败时直显 failure.detail 原文（core 事实提示，不自写文案）。
-                        const url = item.config.transport.type === 'stdio' ? null : item.config.transport.url;
+                        // 开关本身已表达启停态，副标题给描述（选填，可为空）；有失败时直显 failure.detail 原文（core 事实提示，不自写文案）。
+                        const description = item.config.description.trim();
                         const failureText = failure?.detail ?? null;
-                        const subtitle = [url, failureText].filter(part => part != null).join(' · ');
+                        const subtitle = [description.length > 0 ? description : null, failureText].filter(part => part != null).join(' · ');
                         return (
                             <ConfigListCard
                                 tokens={tokens}
                                 onPress={() => {
                                     navigation.navigate('McpServerDetail', {serverId: item.config.id});
                                 }}
-                                title={item.config.name}
+                                title={item.config.id}
                                 subtitle={subtitle}
                                 trailingMeta={
                                     <View style={styles.rowMeta}>
@@ -176,7 +176,7 @@ export function McpServersScreen() {
             </View>
             <BottomSheetMenu
                 visible={menuServerId != null}
-                title={menuRow?.config.name}
+                title={menuRow?.config.id}
                 items={[
                     {label: settingsTranslator({key: 'settings.mcp.list.menu.delete'}), action: 'delete', danger: true, disabled: deleting},
                 ]}

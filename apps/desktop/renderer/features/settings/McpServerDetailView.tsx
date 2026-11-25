@@ -1,14 +1,16 @@
 /**
  * 设置 · MCP 服务器详情页（两级结构第二级，照搜索引擎详情页同构）：
  * `navState.editingMcpServerId` 定位单 server，编辑 + create 模式（哨兵复用本 viewId）。
- * 表单：名称 / 传输类型（HTTP / SSE / stdio——后两者只归一不可连，不可用原因由 server
- * 状态位置的 `failure.detail` 事实提示承担）/ 地址 / 超时时间 / 认证三态（无 / Bearer /
- * OAuth）。Bearer 明文只在输入框停留，保存经 IPC 写 SKSP（留空保留、清除按钮传空串）；
- * OAuth 区显示授权状态并在「发起授权」时走 main 侧 loopback 回调（invoke 挂起至浏览器
- * 授权完成）。测试连接先静默保存（main 按已存配置测），结果读 `McpServerStatus`——
- * 失败时 `failure.detail` 原文展示。
+ * 表单：ID（`mcp__<ID>__<tool>` 的服务器段，只允许英文字母、数字和下划线，编辑时可改——
+ * 换 ID 由 main 侧 rename 改写 agent 工具引用并迁移密钥）/ 描述（选填）/ 传输类型（HTTP /
+ * SSE / stdio——后两者只归一不可连，不可用原因由 server 状态位置的 `failure.detail` 事实
+ * 提示承担）/ 地址 / 超时时间 / 认证三态（无 / Bearer / OAuth）。Bearer 明文只在输入框
+ * 停留，保存经 IPC 写 SKSP（留空保留、清除按钮传空串）；OAuth 区显示授权状态并在「发起
+ * 授权」时走 main 侧 loopback 回调（invoke 挂起至浏览器授权完成）。测试连接先静默保存
+ * （main 按已存配置测），结果读 `McpServerStatus`——失败时 `failure.detail` 原文展示。
  */
 import { useCallback, useEffect, useState } from "react";
+import { McpId } from "@shared/logic/mcp-id";
 import type { McpAuthType, McpServerStatus, McpTransportType } from "@shared/ipc-types";
 import { ipcMcpListServers, ipcMcpOAuthStart, ipcMcpOAuthStatuses, ipcMcpSaveServer, ipcMcpTestConnection } from "@/ipc/client";
 import { Button } from "@/components/ui/Button";
@@ -21,14 +23,15 @@ import { SettingsField, SettingsFormSection, SettingsPanel, SettingsSection, Set
 
 /** 表单草稿（timeout 以文本承载，提交时才数值化；空串 = 用默认）。 */
 type McpServerFormState = {
-    name: string;
+    id: string;
+    description: string;
     transportType: McpTransportType;
     url: string;
     timeoutText: string;
     authType: McpAuthType;
 };
 
-const EMPTY_FORM: McpServerFormState = { name: "", transportType: "http", url: "", timeoutText: "", authType: "none" };
+const EMPTY_FORM: McpServerFormState = { id: "", description: "", transportType: "http", url: "", timeoutText: "", authType: "none" };
 
 export function McpServerDetailView({ nav }: { nav: SettingsNavHandle }) {
     const serverId = nav.navState.editingMcpServerId;
@@ -64,7 +67,7 @@ export function McpServerDetailView({ nav }: { nav: SettingsNavHandle }) {
         }
         const entry = res.data.find((server) => server.id === serverId);
         if (entry != null) {
-            setForm({ name: entry.name, transportType: entry.transport.type, url: entry.transport.type === "stdio" ? "" : entry.transport.url, timeoutText: String(entry.timeoutMs), authType: entry.auth.type });
+            setForm({ id: entry.id, description: entry.description, transportType: entry.transport.type, url: entry.transport.type === "stdio" ? "" : entry.transport.url, timeoutText: String(entry.timeoutMs), authType: entry.auth.type });
             if (entry.auth.type === "oauth") void reloadOAuth(entry.id);
         }
         setLoaded(true);
@@ -105,17 +108,30 @@ export function McpServerDetailView({ nav }: { nav: SettingsNavHandle }) {
 
     /**
      * 保存草稿（测试连接 / 发起授权前也走这里，main 按已存配置操作）。
-     * 返回成功时的 serverId（新建后即得真 id）；失败置页内错误返回 null。
-     * bearerToken：输入框非空 → 覆盖；clearToken=true → 传空串清除；否则不传（保留）。
+     * 返回成功时的 serverId（新建 / 换 ID 后即得真 id）；失败置页内错误返回 null。
+     * ID 空与非法在 renderer 拦（i18n 文案），撞已有 ID 预查列表后同样拦；main 的
+     * create / rename 是权威兜底。bearerToken：输入框非空 → 覆盖；clearToken=true →
+     * 传空串清除；否则不传（换 ID 时保留随迁的旧值）。
      */
     const save = async (clearToken = false): Promise<string | null> => {
         setSaving(true);
         setError(undefined);
         try {
             const timeoutValue = Number(form.timeoutText.trim());
+            const nextId = form.id.trim();
+            if (!McpId.isValid(nextId)) {
+                setError(settingsTranslator({ key: nextId === "" ? "settings.mcp.validation.id_required" : "settings.mcp.validation.id_invalid" }));
+                return null;
+            }
+            const listed = await ipcMcpListServers();
+            if (listed.ok && listed.data.some((server) => server.id === nextId && server.id !== effectiveId)) {
+                setError(settingsTranslator({ key: "settings.mcp.validation.id_exists" }));
+                return null;
+            }
             const res = await ipcMcpSaveServer({
-                ...(isCreate ? {} : { id: effectiveId }),
-                name: form.name.trim(),
+                id: nextId,
+                ...(isCreate ? { create: true } : { previousId: effectiveId }),
+                description: form.description.trim(),
                 transportType: form.transportType,
                 url: form.transportType === "stdio" ? undefined : form.url.trim(),
                 timeoutMs: form.timeoutText.trim() !== "" && Number.isFinite(timeoutValue) && timeoutValue > 0 ? timeoutValue : undefined,
@@ -127,6 +143,8 @@ export function McpServerDetailView({ nav }: { nav: SettingsNavHandle }) {
                 return null;
             }
             setSavedId(res.data.serverId);
+            // 换 ID 后把导航指针拨到新 id：reload 与后续保存都按新 id 找配置。
+            nav.navState.editingMcpServerId = res.data.serverId;
             setToken(""); // 密码框回落空白（不留明文残影）
             await reload();
             if (form.authType === "oauth") void reloadOAuth(res.data.serverId);
@@ -142,15 +160,18 @@ export function McpServerDetailView({ nav }: { nav: SettingsNavHandle }) {
     return (
         <SettingsPanel>
             <SettingsFormSection
-                title={isCreate ? settingsTranslator({ key: "settings.mcp.detail.create_action" }) : form.name}
+                title={isCreate ? settingsTranslator({ key: "settings.mcp.detail.create_action" }) : form.id}
                 footer={
                     <Button variant="primary" disabled={busy} onClick={() => void save().then((id) => id != null && toastSettingsSuccess(settingsTranslator({ key: "settings.mcp.toast.saved" })))}>
                         {saving ? settingsTranslator({ key: "settings.mcp.detail.saving.desktop" }) : isCreate ? settingsTranslator({ key: "settings.mcp.detail.create.desktop" }) : settingsTranslator({ key: "settings.mcp.detail.save_action" })}
                     </Button>
                 }
             >
-                <SettingsField label={settingsTranslator({ key: "settings.mcp.detail.name_label" })}>
-                    <input type="text" value={form.name} placeholder={settingsTranslator({ key: "settings.mcp.detail.name_placeholder" })} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                <SettingsField label={settingsTranslator({ key: "settings.mcp.detail.id_label" })}>
+                    <input type="text" value={form.id} placeholder={settingsTranslator({ key: "settings.mcp.detail.id_placeholder" })} onChange={(e) => setForm({ ...form, id: e.target.value })} />
+                </SettingsField>
+                <SettingsField label={settingsTranslator({ key: "settings.mcp.detail.description_label" })}>
+                    <input type="text" value={form.description} placeholder={settingsTranslator({ key: "settings.mcp.detail.description_placeholder" })} onChange={(e) => setForm({ ...form, description: e.target.value })} />
                 </SettingsField>
                 <SettingsField label={settingsTranslator({ key: "settings.mcp.detail.transport_label" })}>
                     <select value={form.transportType} onChange={(e) => setForm({ ...form, transportType: e.target.value as McpTransportType })}>

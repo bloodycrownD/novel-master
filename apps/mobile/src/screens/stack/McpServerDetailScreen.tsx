@@ -2,8 +2,10 @@
  * MCP 服务器详情页（spec mcp-support Step 14）：分组卡片「连接 / 认证 / 工具」+
  * create 模式（无 route 参数）。
  *
- * - 连接：名称 / 传输类型（HTTP | SSE，SSE 归一保留但连接管理器报
- *   unsupported）/ 地址 / 超时时间（秒；保存时 ×1000 归一，下限 1000ms）；
+ * - 连接：ID（`mcp__<ID>__<tool>` 的服务器段，只允许英文字母、数字和下划线，
+ *   编辑时可改——换 ID 由镜像层 rename 改写 agent 工具引用并迁移密钥）/ 描述
+ *   （选填）/ 传输类型（HTTP | SSE，SSE 归一保留但连接管理器报 unsupported）/
+ *   地址 / 超时时间（秒；保存时 ×1000 归一，下限 1000ms）；
  * - 认证：方式 FormSelectField（无 / API Key / OAuth）。bearer 的密钥只经 SKSP
  *   写入（ref `mcp/{id}/bearer`），不回显明文；OAuth 显示授权状态与「重新授权」
  *   （McpOauthService.start → 系统浏览器，回调由 deep link service 接住）；
@@ -19,7 +21,7 @@ import {useCallback, useEffect, useRef, useState} from 'react';
 import {ActivityIndicator, Pressable, StyleSheet, Text, View} from 'react-native';
 import {useFocusEffect, useNavigation, useRoute, type RouteProp} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import {MCP_DEFAULT_TIMEOUT_MS, MCP_MIN_TIMEOUT_MS, McpSecretRefs, type McpServerConfig, type McpServerStatus, type McpToolSnapshot} from '@novel-master/core/mcp';
+import {MCP_DEFAULT_TIMEOUT_MS, MCP_MIN_TIMEOUT_MS, McpSecretRefs, McpServerConfigOps, type McpServerConfig, type McpServerStatus, type McpToolSnapshot} from '@novel-master/core/mcp';
 import type {SettingsMessageKey} from '@novel-master/core/settings';
 import {FormChipGroup, type ChipOption} from '@/components/form/FormChipGroup';
 import {FormField} from '@/components/form/FormField';
@@ -44,7 +46,9 @@ type DetailRoute = RouteProp<RootStackParamList, 'McpServerDetail'>;
 
 /** 表单草稿：提交前解析/归一（超时秒 → 毫秒，传输类型 → transport 联合）。 */
 interface McpServerDraft {
-    name: string;
+    /** 用户填的服务器 ID（`mcp__<ID>__<tool>` 的服务器段）；编辑时可改（换 ID 走 rename）。 */
+    id: string;
+    description: string;
     transport: 'http' | 'sse';
     url: string;
     /** 输入框原始文本（秒）；保存时解析，非法 / 缺失回缺省预算。 */
@@ -60,7 +64,7 @@ const TRANSPORT_OPTIONS: ReadonlyArray<ChipOption<'http' | 'sse'>> = [
     {value: 'sse', label: 'SSE'},
 ];
 
-const EMPTY_DRAFT: McpServerDraft = {name: '', transport: 'http', url: '', timeoutSeconds: '120', authType: 'none'};
+const EMPTY_DRAFT: McpServerDraft = {id: '', description: '', transport: 'http', url: '', timeoutSeconds: '120', authType: 'none'};
 
 /** 在途写操作（互斥：同刻只允许一个；null = 空闲）。 */
 type WriteOp = 'save' | 'clear_key';
@@ -101,10 +105,10 @@ export function McpServerDetailScreen() {
     const savedConfig = useRef<McpServerConfig | null>(null);
     let title = settingsTranslator({key: 'settings.mcp.detail.create_action'});
     if (savedConfig.current != null) {
-        title = savedConfig.current.name;
+        title = savedConfig.current.id;
     }
 
-    // 详情页标题用服务器名（create 模式回「新建服务器」）。
+    // 详情页标题用服务器 ID（create 模式回「新建服务器」）。
     const syncHeader = useCallback(() => {
         setStackOverride({title});
         return () => setStackOverride(undefined);
@@ -132,7 +136,8 @@ export function McpServerDetailScreen() {
                     setDraft(EMPTY_DRAFT);
                 } else {
                     setDraft({
-                        name: servers.name,
+                        id: servers.id,
+                        description: servers.description,
                         transport: servers.transport.type === 'sse' ? 'sse' : 'http',
                         url: servers.transport.type === 'stdio' ? '' : servers.transport.url,
                         timeoutSeconds: String(Math.round(servers.timeoutMs / 1000)),
@@ -173,20 +178,30 @@ export function McpServerDetailScreen() {
     // route 参数防御：配置清单里没有该 id（深链 / 已删除）→ 提示后退回列表。
     useEffect(() => {
         if (serverId != null && !loading && savedConfig.current == null) {
-            showToast(settingsTranslator({key: 'settings.mcp.toast.server_not_found.mobile', params: {name: serverId}}));
+            showToast(settingsTranslator({key: 'settings.mcp.toast.server_not_found.mobile', params: {id: serverId}}));
             navigation.goBack();
         }
     }, [loading, navigation, serverId, showToast]);
 
-    // nm-style: keep-local — 保存分流 create/edit 两分支，共享 writeOp 互斥态、密钥写入与失败回读；内联进 footer 按钮会拆散互斥与回读状态机
+    // nm-style: keep-local — 保存分流 create / save / rename 三分支，共享 writeOp 互斥态、密钥写入与失败回读；内联进 footer 按钮会拆散互斥与回读状态机
     const handleSave = async () => {
         if (writeOp != null) {
             return;
         }
-        const name = draft.name.trim();
+        const id = draft.id.trim();
+        const description = draft.description.trim();
         const url = draft.url.trim();
-        if (name === '') {
-            showToast(settingsTranslator({key: 'settings.mcp.validation.name_required'}));
+        if (id === '') {
+            showToast(settingsTranslator({key: 'settings.mcp.validation.id_required'}));
+            return;
+        }
+        if (!McpServerConfigOps.isValidId(id)) {
+            showToast(settingsTranslator({key: 'settings.mcp.validation.id_invalid'}));
+            return;
+        }
+        // 换 ID / 新建撞已有 ID 拦在 UI（镜像同步读）；镜像层的 create / rename 再兜底
+        if (id !== serverId && mcp.servers().some(candidate => candidate.id === id)) {
+            showToast(settingsTranslator({key: 'settings.mcp.validation.id_exists'}));
             return;
         }
         if (url === '') {
@@ -195,26 +210,36 @@ export function McpServerDetailScreen() {
         }
         const timeoutSeconds = Number.parseInt(draft.timeoutSeconds.trim(), 10);
         const timeoutMs = Number.isFinite(timeoutSeconds) && timeoutSeconds > 0 ? Math.max(MCP_MIN_TIMEOUT_MS, timeoutSeconds * 1000) : MCP_DEFAULT_TIMEOUT_MS;
-        const configId = serverId ?? `mcp:${Math.random().toString(36).slice(2, 10).padEnd(8, '0')}`;
-        // bearer 密钥先写 SKSP 再落配置（与 core importExternal 的先 SKSP 后 KKV 同序）：
-        // SKSP 失败时中止保存，不留下无密钥的 bearer 配置。
-        const keyDraft = apiKeyDraft.trim();
-        if (draft.authType === 'bearer' && keyDraft.length > 0) {
-            await runtime.secretStore.set(McpSecretRefs.bearer(configId), keyDraft);
-        }
         const config: McpServerConfig = {
-            id: configId,
-            name,
+            id,
+            description,
             enabled: savedConfig.current?.enabled ?? true,
             transport: draft.transport === 'sse' ? {type: 'sse', url} : {type: 'http', url},
             timeoutMs,
-            auth: draft.authType === 'oauth' ? {type: 'oauth'} : draft.authType === 'bearer' ? {type: 'bearer', secretRef: McpSecretRefs.bearer(configId)} : {type: 'none'},
+            auth: draft.authType === 'oauth' ? {type: 'oauth'} : draft.authType === 'bearer' ? {type: 'bearer', secretRef: McpSecretRefs.bearer(id)} : {type: 'none'},
         };
         setWriteOp('save');
         try {
-            await mcp.save(config);
-            showToast(settingsTranslator({key: 'settings.mcp.toast.saved'}));
+            const renamed = serverId != null && serverId !== id;
+            const keyDraft = apiKeyDraft.trim();
+            // bearer 密钥写 SKSP：原 id 保存 / 新建先写密钥再落配置（SKSP 失败时中止保存，不留无密钥的 bearer 配置）；
+            // 换 ID 先 rename（旧 ref 密钥随迁），再覆盖新输入——搬家旧值不能盖掉用户刚填的密钥。
+            if (draft.authType === 'bearer' && keyDraft.length > 0 && !renamed) {
+                await runtime.secretStore.set(McpSecretRefs.bearer(id), keyDraft);
+            }
             if (isCreate) {
+                await mcp.create(config);
+            } else if (renamed) {
+                await mcp.rename(serverId, config);
+            } else {
+                await mcp.save(config);
+            }
+            if (renamed && draft.authType === 'bearer' && keyDraft.length > 0) {
+                await runtime.secretStore.set(McpSecretRefs.bearer(id), keyDraft);
+            }
+            showToast(settingsTranslator({key: 'settings.mcp.toast.saved'}));
+            if (isCreate || renamed) {
+                // 新建 / 换 ID 后 route 参数已失效（新 id 不在 route 上），回列表看新条目
                 navigation.goBack();
                 return;
             }
@@ -293,8 +318,11 @@ export function McpServerDetailScreen() {
             }
         >
             <FormSectionCard title={settingsTranslator({key: 'settings.mcp.detail.connection_section'})} tokens={tokens}>
-                <FormField label={settingsTranslator({key: 'settings.mcp.detail.name_label'})} tokens={tokens}>
-                    <FormTextInput tokens={tokens} value={draft.name} onChangeText={text => patchDraft({name: text})} placeholder={settingsTranslator({key: 'settings.mcp.detail.name_placeholder'})} autoCapitalize="none" autoCorrect={false} />
+                <FormField label={settingsTranslator({key: 'settings.mcp.detail.id_label'})} tokens={tokens}>
+                    <FormTextInput tokens={tokens} value={draft.id} onChangeText={text => patchDraft({id: text})} placeholder={settingsTranslator({key: 'settings.mcp.detail.id_placeholder'})} autoCapitalize="none" autoCorrect={false} />
+                </FormField>
+                <FormField label={settingsTranslator({key: 'settings.mcp.detail.description_label'})} tokens={tokens}>
+                    <FormTextInput tokens={tokens} value={draft.description} onChangeText={text => patchDraft({description: text})} placeholder={settingsTranslator({key: 'settings.mcp.detail.description_placeholder'})} autoCapitalize="none" autoCorrect={false} />
                 </FormField>
                 <FormField label={settingsTranslator({key: 'settings.mcp.detail.transport_label'})} tokens={tokens}>
                     <FormChipGroup tokens={tokens} options={TRANSPORT_OPTIONS} value={draft.transport} onChange={transport => patchDraft({transport})} />

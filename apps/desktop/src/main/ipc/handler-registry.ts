@@ -264,7 +264,6 @@ export const HandlerRegistry = {
         HandlerRegistry.bindNoArg(IPC_CHANNELS.MCP_LIST_SERVERS, Mcp.listServers);
         HandlerRegistry.bindReq(IPC_CHANNELS.MCP_SAVE_SERVER, Mcp.saveServer);
         HandlerRegistry.bindReq(IPC_CHANNELS.MCP_DELETE_SERVER, Mcp.deleteServer);
-        HandlerRegistry.bindReq(IPC_CHANNELS.MCP_IMPORT_EXTERNAL, Mcp.importExternal);
         HandlerRegistry.bindReq(IPC_CHANNELS.MCP_TEST_CONNECTION, Mcp.testConnection);
         HandlerRegistry.bindNoArg(IPC_CHANNELS.MCP_SERVER_STATUSES, Mcp.serverStatuses);
         HandlerRegistry.bindNoArg(IPC_CHANNELS.MCP_TOOLS_SNAPSHOT, Mcp.toolsSnapshot);

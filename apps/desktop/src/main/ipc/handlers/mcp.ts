@@ -3,6 +3,8 @@
  *
  * 口径（mcp-support Step 13/14）：配置 CRUD 是 core `McpConfigStore` 的薄转发（归一、
  * SKSP 密钥拆分、容错迁移全在 store），写成功后失效对应 server 的连接与快照缓存；
+ * create 是新建专用（ID 撞名拒绝），换 ID（previousId ≠ id）先改写 agent 工具引用
+ * `mcp__<旧ID>__` 再 rename（SKSP 密钥迁新 ref，失败回滚）；
  * 「测试连接」= invalidate + snapshotTools 重拉后读 serverStatuses（状态与错误原文
  * 的唯一读取面，detail 原文透出）；OAuth 桌面侧只经 `McpOAuth.start` / `handleCallback`
  * 两个入口——本文件负责 loopback 回调 server（127.0.0.1 随机端口，先起 server 拿到
@@ -18,14 +20,13 @@ import { shell } from "electron";
 import type {
     IpcResult,
     McpDeleteServerRequest,
-    McpImportExternalRequest,
     McpOAuthStartRequest,
     McpOAuthStatusesDto,
     McpSaveServerRequest,
     McpTestConnectionRequest,
     McpToolSnapshotDto,
 } from "../../../../shared/ipc-types.js";
-import { MCP_DEFAULT_TIMEOUT_MS, MCP_MIN_TIMEOUT_MS, McpSecretRefs, McpToolSlug, type McpServerConfig, type McpServerStatus } from "@novel-master/core/mcp";
+import { MCP_DEFAULT_TIMEOUT_MS, MCP_MIN_TIMEOUT_MS, McpSecretRefs, McpToolRefs, McpToolSlug, McpServerConfigOps, type McpServerConfig, type McpServerStatus } from "@novel-master/core/mcp";
 import { AppError } from "@novel-master/core/errors";
 import { DesktopRuntimeSingleton } from "../../runtime/desktop-runtime-singleton.js";
 import { FormatIpcError } from "../ipc-error.js";
@@ -94,30 +95,63 @@ export namespace Mcp {
         }
     }
 
-    export async function saveServer(req: McpSaveServerRequest): Promise<IpcResult<{ readonly serverId: string }>> {
+    export async function saveServer(req: McpSaveServerRequest): Promise<IpcResult<{ readonly serverId: string; readonly oauthMigrated?: boolean }>> {
         try {
             const built = await DesktopRuntimeSingleton.get();
             if (!built.ok) return { ok: false, error: FormatIpcError.format(built.error) };
             const rt = built.value;
-            const id = req.id?.trim() || crypto.randomUUID();
+            const id = req.id.trim();
+            if (!McpServerConfigOps.isValidId(id)) return { ok: false, error: FormatIpcError.format(new AppError("INFRA_VALIDATION_FAILED", { detail: "ID 只能使用英文字母、数字和下划线" })) };
             const url = req.url?.trim() ?? "";
             if (req.transportType !== "stdio" && !/^https?:\/\//i.test(url)) return { ok: false, error: FormatIpcError.format(new AppError("INFRA_VALIDATION_FAILED", { detail: "URL 必须以 http:// 或 https:// 开头" })) };
             const config: McpServerConfig = {
                 id,
-                name: req.name.trim() || id,
+                description: req.description.trim(),
                 enabled: req.enabled !== false,
                 transport: req.transportType === "stdio" ? { type: "stdio" } : req.transportType === "sse" ? { type: "sse", url } : { type: "http", url },
                 timeoutMs: req.timeoutMs != null && Number.isFinite(req.timeoutMs) && req.timeoutMs > 0 ? Math.max(MCP_MIN_TIMEOUT_MS, Math.trunc(req.timeoutMs)) : MCP_DEFAULT_TIMEOUT_MS,
                 auth: req.authType === "oauth" ? { type: "oauth" } : req.authType === "bearer" ? { type: "bearer", secretRef: McpSecretRefs.bearer(id) } : { type: "none" },
             };
-            // bearer 明文：undefined=保留、空串=清除、非空=覆盖（SKSP 直写，SecretStore 无 Result 通道、失败以 throw 收进 catch）
-            if (req.authType === "bearer" && req.bearerToken != null) {
+            const previousId = req.previousId?.trim();
+            const renaming = req.create !== true && previousId != null && previousId !== "" && previousId !== id;
+            // bearer 明文：undefined=保留、空串=清除、非空=覆盖（SKSP 直写，SecretStore 无 Result 通道、失败以 throw 收进 catch）。
+            // 换 ID 顺序相反：先 rename（旧 ref 密钥随迁），再对新 ref 执行同一语义——搬家旧值不能盖掉用户刚填的密钥。
+            if (req.authType === "bearer" && req.bearerToken != null && !renaming) {
                 if (req.bearerToken === "") await rt.secretStore.delete(McpSecretRefs.bearer(id));
                 else await rt.secretStore.set(McpSecretRefs.bearer(id), req.bearerToken);
             }
-            const saved = await rt.mcpConfig.save(config);
-            if (saved.ok) rt.mcp.connectionManager.invalidate(id);
-            return saved.ok ? IpcResults.ok({ serverId: id }) : { ok: false, error: FormatIpcError.format(saved.error) };
+            let oauthMigrated: boolean | undefined;
+            if (req.create === true) {
+                const created = await rt.mcpConfig.create(config);
+                if (!created.ok) return { ok: false, error: FormatIpcError.format(created.error) };
+            } else if (previousId != null && previousId !== "" && previousId !== id) {
+                // 换 ID：先改写 agent 工具引用（mcp__<旧ID>__ → mcp__<新ID>__），再 rename（SKSP 密钥迁新 ref、配置原位替换、清旧 ref）；
+                // 任一失败回滚（反向改写与迁回均幂等），不留配置已换、引用改一半的状态。
+                const listed = await rt.mcpConfig.list();
+                if (!listed.ok) return { ok: false, error: FormatIpcError.format(listed.error) };
+                const previousConfig = listed.value.find((candidate) => candidate.id === previousId);
+                try {
+                    await McpToolRefs.rewriteAgentTools(rt.agentRegistry, previousId, id);
+                    const renamed = await rt.mcpConfig.rename(previousId, config);
+                    // nm-throw: keep — 转码边界：rename 的 Result.err 抛进本函数 catch，经 FormatIpcError 收进 IpcResult（回滚已在 catch 内先行）
+                    if (!renamed.ok) throw renamed.error;
+                    oauthMigrated = renamed.value.oauthMigrated;
+                    rt.mcp.connectionManager.invalidate(previousId);
+                } catch (cause) {
+                    await McpToolRefs.rewriteAgentTools(rt.agentRegistry, id, previousId).catch(() => undefined);
+                    if (previousConfig != null) await rt.mcpConfig.rename(id, previousConfig).catch(() => undefined);
+                    return { ok: false, error: FormatIpcError.format(cause) };
+                }
+            } else {
+                const saved = await rt.mcpConfig.save(config);
+                if (!saved.ok) return { ok: false, error: FormatIpcError.format(saved.error) };
+            }
+            if (req.authType === "bearer" && req.bearerToken != null && renaming) {
+                if (req.bearerToken === "") await rt.secretStore.delete(McpSecretRefs.bearer(id));
+                else await rt.secretStore.set(McpSecretRefs.bearer(id), req.bearerToken);
+            }
+            rt.mcp.connectionManager.invalidate(id);
+            return IpcResults.ok({ serverId: id, ...(oauthMigrated === undefined ? {} : { oauthMigrated }) });
         } catch (err) {
             return { ok: false, error: FormatIpcError.format(err) };
         }
@@ -131,25 +165,6 @@ export namespace Mcp {
             const removed = await rt.mcpConfig.remove(req.serverId);
             if (removed.ok) rt.mcp.connectionManager.invalidate(req.serverId);
             return IpcResults.from(removed);
-        } catch (err) {
-            return { ok: false, error: FormatIpcError.format(err) };
-        }
-    }
-
-    export async function importExternal(req: McpImportExternalRequest): Promise<IpcResult<readonly McpServerConfig[]>> {
-        try {
-            const built = await DesktopRuntimeSingleton.get();
-            if (!built.ok) return { ok: false, error: FormatIpcError.format(built.error) };
-            const rt = built.value;
-            let parsed: unknown;
-            try {
-                parsed = JSON.parse(req.raw);
-            } catch {
-                return { ok: false, error: FormatIpcError.format(new AppError("INFRA_VALIDATION_FAILED", { detail: "粘贴内容不是合法 JSON" })) };
-            }
-            const imported = await rt.mcpConfig.importExternal(parsed);
-            if (imported.ok) for (const config of imported.value) rt.mcp.connectionManager.invalidate(config.id);
-            return IpcResults.from(imported);
         } catch (err) {
             return { ok: false, error: FormatIpcError.format(err) };
         }
