@@ -210,7 +210,6 @@ const SETTINGS_MESSAGE_KEYS = [
     "settings.mcp.detail.transport_http",
     "settings.mcp.detail.transport_label",
     "settings.mcp.detail.transport_sse",
-    "settings.mcp.detail.transport_stdio.desktop",
     "settings.mcp.detail.url_label",
     "settings.mcp.detail.url_placeholder",
     "settings.mcp.delete_notice",

@@ -24,7 +24,7 @@ export function McpServersView({ nav }: { nav: SettingsNavHandle }) {
     const [servers, setServers] = useState<readonly McpServerConfig[] | null>(null);
     const [statuses, setStatuses] = useState<readonly McpServerStatus[]>([]);
     const [menu, setMenu] = useState<{ serverId: string; x: number; y: number } | null>(null);
-    /** 开关 / 测试 / 删除 / 导入在途（行控件整体禁点，避免交错提交）。 */
+    /** 开关 / 测试 / 删除在途（行控件整体禁点，避免交错提交）。 */
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | undefined>();
     const [helpOpen, setHelpOpen] = useState(false);
@@ -36,16 +36,19 @@ export function McpServersView({ nav }: { nav: SettingsNavHandle }) {
         if (serversRes.ok) setServers(serversRes.data);
         else setError(serversRes.error.message);
         if (statusesRes.ok) setStatuses(statusesRes.data);
-                // 启用但从未尝试连接的服务器，进列表时自动试一次；失败不自动重试（重试入口是「测试连接」）。
-                if (serversRes.ok && statusesRes.ok) {
-                    const idle = serversRes.data.filter((server) => server.enabled && (statusesRes.data.find((status) => status.serverId === server.id)?.state ?? "pending") === "pending");
-                    if (idle.length > 0) {
-                        void Promise.all(idle.map((server) => ipcMcpTestConnection({ serverId: server.id }))).then(async () => {
-                            const refreshed = await ipcMcpServerStatuses();
-                            if (refreshed.ok) setStatuses(refreshed.data);
-                        });
-                    }
-                }
+        // 启用但从未尝试连接的服务器，进列表时自动试一次；失败不自动重试（重试入口是「测试连接」）。
+        if (serversRes.ok && statusesRes.ok) {
+            const idle = serversRes.data.filter((server) => server.enabled && (statusesRes.data.find((status) => status.serverId === server.id)?.state ?? "pending") === "pending");
+            if (idle.length > 0) {
+                void Promise.all(idle.map((server) => ipcMcpTestConnection({ serverId: server.id }))).then(async () => {
+                    const refreshed = await ipcMcpServerStatuses();
+                    if (refreshed.ok) setStatuses(refreshed.data);
+                });
+                // 发起后立即重读一次：让「连接中」先上屏（全部完成后的重读在上面 then 里）。
+                const kicking = await ipcMcpServerStatuses();
+                if (kicking.ok) setStatuses(kicking.data);
+            }
+        }
     }, []);
 
     useEffect(() => {
@@ -104,6 +107,9 @@ export function McpServersView({ nav }: { nav: SettingsNavHandle }) {
         { title: settingsTranslator({ key: "settings.mcp.help.auth.title" }), body: settingsTranslator({ key: "settings.mcp.help.auth.body" }) },
     ];
 
+    /** 行菜单目标 server 的连接中态（菜单项随之禁点）。 */
+    const menuConnecting = menu != null && statuses.find((entry) => entry.serverId === menu.serverId)?.state === "connecting";
+
     return (
         <SettingsPanel>
             <SettingsListSection
@@ -128,6 +134,8 @@ export function McpServersView({ nav }: { nav: SettingsNavHandle }) {
                 {servers == null && error == null ? <p className="settings-hint">{settingsTranslator({ key: "settings.mcp.list.loading.desktop" })}</p> : null}
                 {(servers ?? []).map((server) => {
                     const status = statuses.find((entry) => entry.serverId === server.id);
+                    // 连接进行中该行只读（移动端同口径）：开关与行菜单都禁点，避免交错发起连接。
+                    const connecting = status?.state === "connecting";
                     return (
                         <div key={server.id} className="settings-list-item-row">
                             <button
@@ -158,7 +166,7 @@ export function McpServersView({ nav }: { nav: SettingsNavHandle }) {
                                 {/* 开关提交完整草稿（bearerToken 不传 = 保留已存值）；构造内联自 meta 的单点 helper */}
                                 <Switch
                                     checked={server.enabled}
-                                    disabled={busy}
+                                    disabled={busy || connecting}
                                     onChange={(next) => void runWrite(() => ipcMcpSaveServer({ id: server.id, description: server.description, transportType: server.transport.type, url: server.transport.type === "stdio" ? undefined : server.transport.url, timeoutMs: server.timeoutMs, authType: server.auth.type, enabled: next }))}
                                     aria-label={server.id}
                                 />
@@ -167,8 +175,9 @@ export function McpServersView({ nav }: { nav: SettingsNavHandle }) {
                                 type="button"
                                 className="settings-list-item__menu-btn"
                                 aria-label={server.id}
+                                disabled={busy || connecting}
                                 onClick={(e) => {
-                                    if (busy) return;
+                                    if (busy || connecting) return;
                                     const rect = e.currentTarget.getBoundingClientRect();
                                     setMenu({ serverId: server.id, x: Math.max(8, rect.left), y: Math.max(8, rect.bottom + 4) });
                                 }}
@@ -189,8 +198,8 @@ export function McpServersView({ nav }: { nav: SettingsNavHandle }) {
                     menu == null
                         ? []
                         : [
-                                { label: settingsTranslator({ key: "settings.mcp.detail.test_connection" }), action: "test", disabled: busy },
-                                { label: settingsTranslator({ key: "settings.mcp.list.menu.delete" }), action: "delete", danger: true, disabled: busy },
+                                { label: settingsTranslator({ key: "settings.mcp.detail.test_connection" }), action: "test", disabled: busy || menuConnecting },
+                                { label: settingsTranslator({ key: "settings.mcp.list.menu.delete" }), action: "delete", danger: true, disabled: busy || menuConnecting },
                             ]
                 }
                 onSelect={(action) => {

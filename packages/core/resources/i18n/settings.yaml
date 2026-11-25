@@ -51,7 +51,6 @@ zh-CN:
   mcp.detail.transport_http: HTTP
   mcp.detail.transport_label: 传输类型
   mcp.detail.transport_sse: SSE
-  mcp.detail.transport_stdio.desktop: stdio
   mcp.detail.url_label: 地址
   mcp.detail.url_placeholder: https://example.com/mcp
   mcp.delete_notice: "「{id}」的配置与密钥会一并清除，不可恢复。"
@@ -291,7 +290,6 @@ en-US:
   mcp.detail.transport_http: HTTP
   mcp.detail.transport_label: Transport
   mcp.detail.transport_sse: SSE
-  mcp.detail.transport_stdio.desktop: stdio
   mcp.detail.url_label: URL
   mcp.detail.url_placeholder: https://example.com/mcp
   mcp.delete_notice: "The configuration and keys of \"{id}\" will be removed. This cannot be undone."

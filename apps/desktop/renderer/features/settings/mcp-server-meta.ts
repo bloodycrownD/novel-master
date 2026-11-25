@@ -15,7 +15,7 @@ export const NEW_MCP_SERVER_SENTINEL = "__new-mcp__";
 export function mcpStatusLabel(status: McpServerStatus): string {
     if (status.failure != null) return status.failure.detail;
     if (status.state === "ready") return `${settingsTranslator({ key: "settings.mcp.list.connected" })} · ${settingsTranslator({ key: "settings.mcp.list.tool_count", params: { count: status.toolCount ?? 0 } })}`;
-        if (status.state === "connecting") return settingsTranslator({ key: "settings.mcp.list.connecting" });
+    if (status.state === "connecting") return settingsTranslator({ key: "settings.mcp.list.connecting" });
     if (status.state === "disabled") return settingsTranslator({ key: "settings.mcp.detail.status_disabled" });
     return settingsTranslator({ key: "settings.mcp.detail.status_pending" });
 }
