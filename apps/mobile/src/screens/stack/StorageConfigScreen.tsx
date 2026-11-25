@@ -94,6 +94,16 @@ export function StorageConfigScreen() {
 
     useFocusEffect(refreshStorageOnFocus);
 
+    // 清理入口文案：清理进行中最优先，其次智能体运行占用，否则可清理
+    let cleanupValue: string;
+    if (dbBusy) {
+        cleanupValue = coreT({key: "ui.common.processing"});
+    } else if (agentActive) {
+        cleanupValue = coreT({key: "ui.cloud_sync.agent_busy_value"});
+    } else {
+        cleanupValue = coreT({key: "ui.storage.cleanup_action"});
+    }
+
     return (
         <ScrollView style={[styles.scroll, {backgroundColor: tokens.background}]} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
             <ProfileStatusCard
@@ -109,7 +119,7 @@ export function StorageConfigScreen() {
             <ProfileMenuItem
                 icon="🧹"
                 label={coreT({key: "ui.storage.cleanup_section"})}
-                value={dbBusy ? coreT({key: "ui.common.processing"}) : agentActive ? coreT({key: "ui.cloud_sync.agent_busy_value"}) : coreT({key: "ui.storage.cleanup_action"})}
+                value={cleanupValue}
                 tokens={tokens}
                 onPress={() => {
                     if (dbBusy) {

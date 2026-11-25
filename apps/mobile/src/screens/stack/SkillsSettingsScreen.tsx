@@ -164,7 +164,15 @@ export function SkillsSettingsScreen() {
         title: coreT({key: "ui.skills.delete_title"}),
         message: targets => {
             const anyGlobal = targets.some(t => t.domain === 'global');
-            const scopeHint = anyGlobal ? coreT({key: "ui.skills.scope_hint_global"}) : targets.length === 1 && targets[0]!.projectName ? coreT({key: "ui.skills.scope_hint_project_single", params: {project: targets[0]!.projectName}}) : coreT({key: "ui.skills.scope_hint_project"});
+            // 范围提示：含全局技能 / 单个具名项目技能 / 其余按泛化措辞
+            let scopeHint: string;
+            if (anyGlobal) {
+                scopeHint = coreT({key: "ui.skills.scope_hint_global"});
+            } else if (targets.length === 1 && targets[0]!.projectName) {
+                scopeHint = coreT({key: "ui.skills.scope_hint_project_single", params: {project: targets[0]!.projectName}});
+            } else {
+                scopeHint = coreT({key: "ui.skills.scope_hint_project"});
+            }
             const names = targets.map(t => t.name).join('、');
             return `${scopeHint}${coreT({key: "ui.skills.delete_confirm_frame", params: {names: targets.length > 1 ? coreT({key: "ui.skills.selected_skills_label", params: {count: targets.length}}) : `「${names}」`}})}`;
         },

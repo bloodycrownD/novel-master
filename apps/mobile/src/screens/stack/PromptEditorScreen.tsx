@@ -256,6 +256,17 @@ export function PromptEditorScreen() {
 showToast(coreT({key: "ui.common.saved"}));
     }, [previewMode, isDirty, draft, showToast]);
 
+    // composer 变体不传 title：页内 toolbar 整行不渲染——导航栏已经有「编辑消息」
+    // （route.params.title → stackOverride），页内再居中写一个就是两个标题叠着。
+    let shellTitle: string | undefined;
+    if (isComposer) {
+        shellTitle = undefined;
+    } else if (isDirty) {
+        shellTitle = coreT({key: "ui.common.unsaved_title"});
+    } else {
+        shellTitle = title ?? coreT({key: "ui.chat.tab_prompt"});
+    }
+
     // 预览态无软键盘，直接铺开；编辑态键盘抬升/裁切分支由 EditorScreenShell 统一处理。
     return (
         <>
@@ -275,7 +286,7 @@ showToast(coreT({key: "ui.common.saved"}));
                 }
                 /* composer 变体不传 title：页内 toolbar 整行不渲染——导航栏已经有「编辑消息」
            （route.params.title → stackOverride），页内再居中写一个就是两个标题叠着。 */
-                title={isComposer ? undefined : isDirty ? coreT({key: "ui.common.unsaved_title"}) : title ?? coreT({key: "ui.chat.tab_prompt"})}
+                title={shellTitle}
                 titleDanger={!isComposer && isDirty}
                 /* composer 变体是**纯编辑态**（用户定案：输入框全屏只要编辑，不要预览）：
            不传 toggle / segmented / preview，shell 只渲染编辑器。 */

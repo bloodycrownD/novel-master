@@ -123,9 +123,18 @@ export namespace ManualCompactionService {
             return work;
         }
         const ok = work?.kind === 'completed' ? work.value : false;
+        // 失败原因优先取本地 catch 的异常；否则取压缩本体报的 failed error
+        let outcomeError: unknown;
+        if (failure != null) {
+            outcomeError = failure.error;
+        } else if (work?.kind === 'failed') {
+            outcomeError = work.error;
+        } else {
+            outcomeError = undefined;
+        }
         const outcome: ManualCompactionOutcome = {
             ok,
-            error: failure != null ? failure.error : work?.kind === 'failed' ? work.error : undefined,
+            error: outcomeError,
         };
         try {
             if (ok) {

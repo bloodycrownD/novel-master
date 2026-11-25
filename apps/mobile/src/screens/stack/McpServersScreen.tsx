@@ -129,23 +129,28 @@ export function McpServersScreen() {
         deleteNotice = settingsTranslator({key: 'settings.mcp.delete_notice', params: {id: deleteRow.config.id}});
     }
 
-    return (
-        <View style={[listScreenStyles.root, {backgroundColor: tokens.background}]}>
-            {loading && rows.length === 0 ? (
-                <ActivityIndicator style={listScreenStyles.loader} />
-            ) : error ? (
-                <View style={styles.center}>
-                    <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text>
-                    <Pressable onPress={() => void reload()}>
-                        <Text style={{color: tokens.primary, fontWeight: '600'}}>{settingsTranslator({key: 'settings.mcp.list.retry.mobile'})}</Text>
-                    </Pressable>
-                </View>
-            ) : rows.length === 0 ? (
-                <View style={styles.center}>
-                    <Text style={[styles.empty, {color: tokens.textSecondary}]}>{settingsTranslator({key: 'settings.mcp.list.empty'})}</Text>
-                </View>
-            ) : (
-                <FlatList
+    // 首载转圈 / 失败给重试 / 空态文案 / 就绪渲染列表
+    let bodyNode: React.ReactNode;
+    if (loading && rows.length === 0) {
+        bodyNode = <ActivityIndicator style={listScreenStyles.loader} />;
+    } else if (error) {
+        bodyNode = (
+            <View style={styles.center}>
+                <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text>
+                <Pressable onPress={() => void reload()}>
+                    <Text style={{color: tokens.primary, fontWeight: '600'}}>{settingsTranslator({key: 'settings.mcp.list.retry.mobile'})}</Text>
+                </Pressable>
+            </View>
+        );
+    } else if (rows.length === 0) {
+        bodyNode = (
+            <View style={styles.center}>
+                <Text style={[styles.empty, {color: tokens.textSecondary}]}>{settingsTranslator({key: 'settings.mcp.list.empty'})}</Text>
+            </View>
+        );
+    } else {
+        bodyNode = (
+            <FlatList
                     data={rows}
                     keyExtractor={item => item.config.id}
                     contentContainerStyle={listScreenStyles.listContent}
@@ -201,7 +206,12 @@ export function McpServersScreen() {
                         );
                     }}
                 />
-            )}
+        );
+    }
+
+    return (
+        <View style={[listScreenStyles.root, {backgroundColor: tokens.background}]}>
+            {bodyNode}
             <View style={[styles.createBar, {borderTopColor: tokens.borderLight}]}>
                 <SecondaryButton tokens={tokens} fullWidth label={settingsTranslator({key: 'settings.mcp.list.create'})} onPress={() => navigation.navigate('McpServerDetail', undefined)} disabled={deleting} />
             </View>

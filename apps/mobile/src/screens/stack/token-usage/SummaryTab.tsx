@@ -60,21 +60,26 @@ export function SummaryTab({
         () =>
             [...modelRows]
                 .sort((a, b) => b.totalTokens - a.totalTokens)
-                .map(row => ({
-                    key: `${row.providerId ?? '__np__'}::${row.modelName ?? '__unlogged__'}`,
+                .map(row => {
                     // label 三态：未记录服务商兜 provider_id IS NULL 的合并行（core
                     // 已归并为单行，不拼模型后缀）；名称解析不到兑底「未知服务
                     // 商」；modelName 为 null 归「{服务商}/其他模型」（斜杠格式与
                     // 聊天侧模型选择下拉一致，2026-09-28 统一）。
-                    label:
-                        row.providerId == null
-                            ? coreT({key: "ui.stats.provider_unlogged"})
-                            : row.modelName == null
-                            ? coreT({key: "ui.stats.provider_other_label", params: {provider: providerLabels[row.providerId] ?? coreT({key: "ui.provider.unknown_provider"})}})
-                            : `${providerLabels[row.providerId] ?? coreT({key: "ui.provider.unknown_provider"})}/${row.modelName}`,
-                    totalTokens: row.totalTokens,
-                    calls: row.calls,
-                })),
+                    let label: string;
+                    if (row.providerId == null) {
+                        label = coreT({key: "ui.stats.provider_unlogged"});
+                    } else if (row.modelName == null) {
+                        label = coreT({key: "ui.stats.provider_other_label", params: {provider: providerLabels[row.providerId] ?? coreT({key: "ui.provider.unknown_provider"})}});
+                    } else {
+                        label = `${providerLabels[row.providerId] ?? coreT({key: "ui.provider.unknown_provider"})}/${row.modelName}`;
+                    }
+                    return {
+                        key: `${row.providerId ?? '__np__'}::${row.modelName ?? '__unlogged__'}`,
+                        label,
+                        totalTokens: row.totalTokens,
+                        calls: row.calls,
+                    };
+                }),
         [modelRows, providerLabels],
     );
 

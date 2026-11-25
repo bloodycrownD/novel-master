@@ -354,6 +354,44 @@ export function TokenUsageStatsScreen() {
     const libraryEmpty = combos.length === 0 && summary != null;
     const rangeEmpty = summary != null && summary.calls === 0 && summary.totalTokens === 0;
 
+    // 内容区：首查失败无旧数据让位；库空 / 区间空各自空态；其余按页签渲染
+    let contentNode: React.ReactNode = null;
+    if (loadError != null && summary == null) {
+        contentNode = null;
+    } else if (libraryEmpty) {
+        contentNode = (
+            <View style={styles.empty} testID="empty-cold-start">
+                <Text style={[styles.emptyText, {color: tokens.textSecondary}]}>{coreT({key: "ui.stats.empty_db"})}</Text>
+            </View>
+        );
+    } else if (rangeEmpty) {
+        // 范围空态覆盖全部页签（需求①勘误后）：流水同样随时间窗口，
+        // 窗口空（库非空）时与其他页签统一显示区间空态。
+        contentNode = (
+            <View style={styles.empty} testID="empty-range">
+                <Text style={[styles.emptyText, {color: tokens.textSecondary}]}>{coreT({key: "ui.stats.empty_range"})}</Text>
+            </View>
+        );
+    } else if (pageTab === 'summary') {
+        contentNode = <SummaryTab summary={summary} modelRows={modelRows} providerLabels={providerLabels} rangeLabel={rangeLabel} tokens={tokens} />;
+    } else if (pageTab === 'requests') {
+        contentNode = <RequestsTab reqRows={reqRows} reqTotal={reqTotal} reqPage={reqPage} reqLoading={reqLoading} reqDirty={reqDirtyRef.current} onLoadRequests={loadRequests} tokens={tokens} />;
+    } else {
+        contentNode = (
+            <DetailTab
+                dailyBuckets={dailyBuckets}
+                hourlyBuckets={hourlyBuckets}
+                selectedDay={selectedDay}
+                inspectedKey={inspectedKey}
+                // 重复点选同一天 toggle 取消选中（与桌面端一致，mobile/C-orch-1）。
+                onSelectDay={key => setSelectedDay(prev => (prev === key ? null : key))}
+                onSetInspectedKey={setInspectedKey}
+                tokens={tokens}
+                todayMode={rangeKind === 'today'}
+            />
+        );
+    }
+
     return (
         <ScrollView style={[styles.scroll, {backgroundColor: tokens.background}]} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
             {/* 筛选栏置顶：时间范围 + 模型筛选，页签共享（状态由本层持有）。 */}
@@ -403,33 +441,7 @@ export function TokenUsageStatsScreen() {
                     <Text style={{color: tokens.danger}}>{loadError}</Text>
                 </View>
             ) : null}
-            {loadError != null && summary == null ? null : libraryEmpty ? (
-                <View style={styles.empty} testID="empty-cold-start">
-                    <Text style={[styles.emptyText, {color: tokens.textSecondary}]}>{coreT({key: "ui.stats.empty_db"})}</Text>
-                </View>
-            ) : rangeEmpty ? (
-                // 范围空态覆盖全部页签（需求①勘误后）：流水同样随时间窗口，
-                // 窗口空（库非空）时与其他页签统一显示区间空态。
-                <View style={styles.empty} testID="empty-range">
-                    <Text style={[styles.emptyText, {color: tokens.textSecondary}]}>{coreT({key: "ui.stats.empty_range"})}</Text>
-                </View>
-            ) : pageTab === 'summary' ? (
-                <SummaryTab summary={summary} modelRows={modelRows} providerLabels={providerLabels} rangeLabel={rangeLabel} tokens={tokens} />
-            ) : pageTab === 'requests' ? (
-                <RequestsTab reqRows={reqRows} reqTotal={reqTotal} reqPage={reqPage} reqLoading={reqLoading} reqDirty={reqDirtyRef.current} onLoadRequests={loadRequests} tokens={tokens} />
-            ) : (
-                <DetailTab
-                    dailyBuckets={dailyBuckets}
-                    hourlyBuckets={hourlyBuckets}
-                    selectedDay={selectedDay}
-                    inspectedKey={inspectedKey}
-                    // 重复点选同一天 toggle 取消选中（与桌面端一致，mobile/C-orch-1）。
-                    onSelectDay={key => setSelectedDay(prev => (prev === key ? null : key))}
-                    onSetInspectedKey={setInspectedKey}
-                    tokens={tokens}
-                    todayMode={rangeKind === 'today'}
-                />
-            )}
+            {contentNode}
         </ScrollView>
     );
 }

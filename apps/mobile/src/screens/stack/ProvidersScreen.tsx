@@ -138,30 +138,23 @@ export function ProvidersScreen() {
         ]);
     };
 
-    return (
-        <View style={[listScreenStyles.root, {backgroundColor: tokens.background}]}>
-            <ManageHeader
-                title={coreT({key: "ui.provider.title"})}
-                batchMode={batch.active}
-                selectedCount={batch.selectedCount}
-                onEnterBatch={batch.enter}
-                onCancelBatch={batch.exit}
-                onDelete={() => confirmBatchDelete(Array.from(batch.selectedIds))}
-                hint={coreT({key: "ui.provider.delete_select_hint_mobile"})}
-                normalActions={<PrimaryButton label={coreT({key: "ui.common.add"})} tokens={tokens} onPress={() => navigation.navigate('ProviderCreate')} />}
-            />
-            {loading && rows.length === 0 ? (
-                <ActivityIndicator style={listScreenStyles.loader} />
-            ) : error ? (
-                <View style={styles.center}>
-                    <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text>
-                    <Pressable onPress={() => void reload()}>
-                        <Text style={{color: tokens.primary, fontWeight: '600'}}>{coreT({key: "ui.common.retry"})}</Text>
-                    </Pressable>
-                </View>
-            ) : (
-                <FlatList
-                    data={rows}
+    // 首载转圈 / 失败给重试 / 就绪渲染列表
+    let bodyNode: React.ReactNode;
+    if (loading && rows.length === 0) {
+        bodyNode = <ActivityIndicator style={listScreenStyles.loader} />;
+    } else if (error) {
+        bodyNode = (
+            <View style={styles.center}>
+                <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text>
+                <Pressable onPress={() => void reload()}>
+                    <Text style={{color: tokens.primary, fontWeight: '600'}}>{coreT({key: "ui.common.retry"})}</Text>
+                </Pressable>
+            </View>
+        );
+    } else {
+        bodyNode = (
+            <FlatList
+                data={rows}
                     keyExtractor={item => item.id}
                     contentContainerStyle={listScreenStyles.listContent}
                     refreshControl={<RefreshControl refreshing={loading} onRefresh={reload} />}
@@ -185,7 +178,22 @@ export function ProvidersScreen() {
                         />
                     )}
                 />
-            )}
+        );
+    }
+
+    return (
+        <View style={[listScreenStyles.root, {backgroundColor: tokens.background}]}>
+            <ManageHeader
+                title={coreT({key: "ui.provider.title"})}
+                batchMode={batch.active}
+                selectedCount={batch.selectedCount}
+                onEnterBatch={batch.enter}
+                onCancelBatch={batch.exit}
+                onDelete={() => confirmBatchDelete(Array.from(batch.selectedIds))}
+                hint={coreT({key: "ui.provider.delete_select_hint_mobile"})}
+                normalActions={<PrimaryButton label={coreT({key: "ui.common.add"})} tokens={tokens} onPress={() => navigation.navigate('ProviderCreate')} />}
+            />
+            {bodyNode}
             <BottomSheetMenu
                 visible={menuProviderId != null}
                 items={[{label: coreT({key: "ui.common.delete"}), action: 'delete', danger: true}]}

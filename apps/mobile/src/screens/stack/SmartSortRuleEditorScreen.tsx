@@ -18,7 +18,7 @@
  * 值行模式（照 DirectoryRuleSheet）；固定档命中即哨兵元组、忽略捕获组。
  */
 import {Result, AppError} from '@novel-master/core/errors';
-import {useCallback, useEffect, useMemo, useState} from 'react';
+import {useCallback, useEffect, useMemo, useState, type ReactNode} from 'react';
 import {useFocusEffect} from '@react-navigation/native';
 import {ActivityIndicator, Pressable, StyleSheet, Text, View, type NativeSyntheticEvent, type TextInputContentSizeChangeEventData, type TextInputProps} from 'react-native';
 import {useNavigation, useRoute} from '@react-navigation/native';
@@ -336,6 +336,64 @@ export function SmartSortRuleEditorScreen() {
         return <ActivityIndicator style={styles.loader} />;
     }
 
+    // 捕获档提示文案：smart / fixed_min（前 N 字）/ 其余（后 N 字）
+    let captureHint: string;
+    switch (draft.captureKind) {
+        case 'smart': {
+            captureHint = coreT({key: "ui.smart_sort.capture_smart_hint"});
+            break;
+        }
+        case 'fixed_min': {
+            captureHint = coreT({key: "ui.smart_sort.capture_hint_before"});
+            break;
+        }
+        default: {
+            captureHint = coreT({key: "ui.smart_sort.capture_hint_after"});
+        }
+    }
+
+    // 匹配结果区：待测提示 / 报错红字 / 命中（高亮 + 元组小字 + 计数）/ 正则非法
+    let resultNode: ReactNode;
+    if (testOutcome.kind === 'idle') {
+        resultNode = <Text style={[styles.resultText, {color: tokens.textSecondary}]}>{coreT({key: "ui.smart_sort.result_pending"})}</Text>;
+    } else if (testOutcome.kind === 'error') {
+        resultNode = <Text style={[styles.resultText, {color: tokens.danger}]}>{testOutcome.message}</Text>;
+    } else if (testOutcome.result.ok) {
+        resultNode = (
+            <>
+                                {/* 高亮渲染（fix-desc-and-highlight）：core 单源切分
+                    （SmartSortHighlight.splitSegments）按匹配偏移把原文切
+                    成普通段/匹配段，嵌套 Text 继承 monospace 样式；多行
+                    文本在 Text 内自然换行。 */}
+                                <Text style={[styles.resultText, {color: tokens.text}]}>
+                                    {SmartSortHighlight.splitSegments(testText, testOutcome.result.matches).map((seg, i) =>
+                                        seg.matched ? (
+                                            <Text key={i} style={{color: tokens.primary}}>
+                                                {seg.text}
+                                            </Text>
+                                        ) : (
+                                            <Text key={i}>{seg.text}</Text>
+                                        ),
+                                    )}
+                                </Text>
+                                {/* 每处匹配的提取元组小字（D13）：匹配文本 → tuple 展示，
+                    null 显「无序号」；固定档恒显哨兵文案。 */}
+                                {testOutcome.result.matches.length > 0 ? (
+                                    <View style={styles.tupleList}>
+                                        {testOutcome.result.matches.map((m, i) => (
+                                            <Text key={`${m.index}-${i}`} style={[styles.tupleRow, {color: tokens.textSecondary}]}>
+                                                {`${m.text || coreT({key: "ui.smart_sort.no_match_text"})} → ${m.tuple ?? coreT({key: "ui.smart_sort.no_tuple"})}`}
+                                            </Text>
+                                        ))}
+                                    </View>
+                                ) : null}
+                                <Text style={[styles.resultCount, {color: tokens.textSecondary}]}>{testOutcome.result.matches.length > 0 ? coreT({key: "ui.smart_sort.match_count", params: {count: testOutcome.result.matches.length}}) : coreT({key: "ui.smart_sort.no_matches"})}</Text>
+                            </>
+        );
+    } else {
+        resultNode = <Text style={[styles.resultText, {color: tokens.danger}]}>{coreT({key: "ui.smart_sort.regex_invalid", params: {detail: testOutcome.result.error}})}</Text>;
+    }
+
     return (
         <ScreenFormLayout
             tokens={tokens}
@@ -364,13 +422,7 @@ export function SmartSortRuleEditorScreen() {
                 <FormField
                     label={coreT({key: "ui.smart_sort.capture_label"})}
                     tokens={tokens}
-                    hint={
-                        draft.captureKind === 'smart'
-                            ? coreT({key: "ui.smart_sort.capture_smart_hint"})
-                            : draft.captureKind === 'fixed_min'
-                            ? coreT({key: "ui.smart_sort.capture_hint_before"})
-                            : coreT({key: "ui.smart_sort.capture_hint_after"})
-                    }
+                    hint={captureHint}
                 >
                     <Pressable
                         testID="capture-kind-value-row"
@@ -411,43 +463,7 @@ export function SmartSortRuleEditorScreen() {
                             },
                         ]}
                     >
-                        {testOutcome.kind === 'idle' ? (
-                            <Text style={[styles.resultText, {color: tokens.textSecondary}]}>{coreT({key: "ui.smart_sort.result_pending"})}</Text>
-                        ) : testOutcome.kind === 'error' ? (
-                            <Text style={[styles.resultText, {color: tokens.danger}]}>{testOutcome.message}</Text>
-                        ) : testOutcome.result.ok ? (
-                            <>
-                                {/* 高亮渲染（fix-desc-and-highlight）：core 单源切分
-                    （SmartSortHighlight.splitSegments）按匹配偏移把原文切
-                    成普通段/匹配段，嵌套 Text 继承 monospace 样式；多行
-                    文本在 Text 内自然换行。 */}
-                                <Text style={[styles.resultText, {color: tokens.text}]}>
-                                    {SmartSortHighlight.splitSegments(testText, testOutcome.result.matches).map((seg, i) =>
-                                        seg.matched ? (
-                                            <Text key={i} style={{color: tokens.primary}}>
-                                                {seg.text}
-                                            </Text>
-                                        ) : (
-                                            <Text key={i}>{seg.text}</Text>
-                                        ),
-                                    )}
-                                </Text>
-                                {/* 每处匹配的提取元组小字（D13）：匹配文本 → tuple 展示，
-                    null 显「无序号」；固定档恒显哨兵文案。 */}
-                                {testOutcome.result.matches.length > 0 ? (
-                                    <View style={styles.tupleList}>
-                                        {testOutcome.result.matches.map((m, i) => (
-                                            <Text key={`${m.index}-${i}`} style={[styles.tupleRow, {color: tokens.textSecondary}]}>
-                                                {`${m.text || coreT({key: "ui.smart_sort.no_match_text"})} → ${m.tuple ?? coreT({key: "ui.smart_sort.no_tuple"})}`}
-                                            </Text>
-                                        ))}
-                                    </View>
-                                ) : null}
-                                <Text style={[styles.resultCount, {color: tokens.textSecondary}]}>{testOutcome.result.matches.length > 0 ? coreT({key: "ui.smart_sort.match_count", params: {count: testOutcome.result.matches.length}}) : coreT({key: "ui.smart_sort.no_matches"})}</Text>
-                            </>
-                        ) : (
-                            <Text style={[styles.resultText, {color: tokens.danger}]}>{coreT({key: "ui.smart_sort.regex_invalid", params: {detail: testOutcome.result.error}})}</Text>
-                        )}
+                        {resultNode}
                     </View>
                 </FormField>
             </FormSectionCard>

@@ -212,7 +212,14 @@ export namespace LlmNativeFetchShim {
             throw new NativeSseAbortError(requestId);
         }
         // 提取 fetch 首参的 URL 字符串（string | URL | Request 形态）。
-        const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+        let url: string;
+        if (typeof input === 'string') {
+            url = input;
+        } else if (input instanceof URL) {
+            url = input.toString();
+        } else {
+            url = input.url;
+        }
         const method = (init?.method ?? 'GET').toUpperCase();
         if (method !== 'GET' && method !== 'POST') {
             // nm-throw: keep — native bridge fetch 适配层：fetch 形状契约以 reject 报错（测试钉 'GET/POST' 拒绝）

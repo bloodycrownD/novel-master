@@ -187,6 +187,22 @@ export function ChatConfigScreen() {
         [compactionEnabled, compactionTokenRatio, compactionHideStartDepth, runtime, showToast],
     );
 
+    // 通知权限三态文案（authorized / denied / 其余 pending）
+    let permissionLabel: string;
+    switch (notificationPermission) {
+        case 'authorized': {
+            permissionLabel = coreT({key: "ui.chat_config.perm_granted"});
+            break;
+        }
+        case 'denied': {
+            permissionLabel = coreT({key: "ui.chat_config.perm_denied"});
+            break;
+        }
+        default: {
+            permissionLabel = coreT({key: "ui.chat_config.perm_pending"});
+        }
+    }
+
     return (
         <ScreenFormLayout tokens={tokens}>
             <ProfileSwitchItem
@@ -282,7 +298,7 @@ export function ChatConfigScreen() {
                 <ProfileMenuItem
                     icon="🔔"
                     label={coreT({key: "ui.chat_config.notification_permission"})}
-                    value={notificationPermission === 'authorized' ? coreT({key: "ui.chat_config.perm_granted"}) : notificationPermission === 'denied' ? coreT({key: "ui.chat_config.perm_denied"}) : coreT({key: "ui.chat_config.perm_pending"})}
+                    value={permissionLabel}
                     onPress={handleNotificationPermissionPress}
                     tokens={tokens}
                 />

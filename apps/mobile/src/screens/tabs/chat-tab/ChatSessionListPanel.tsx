@@ -167,6 +167,31 @@ function ChatSessionListPanelInner({
         emitWorkspaceBackState();
     }, [emitWorkspaceBackState, vfsRefreshKey]);
 
+    // projects 工作区：有项目上下文出 VFS 管理器，否则占位提示
+    let projectsNode: React.ReactNode;
+    if (projectVfs && projectWorktree && projectId != null) {
+        projectsNode = (
+            <View style={styles.flexFill}>
+                <VfsFileManager
+                    key={`project-template-${vfsRefreshKey}`}
+                    ref={projectVfsRef}
+                    scope={projectVfsScope!}
+                    vfs={projectVfs}
+                    workplace={projectWorktree}
+                    rootPath="/"
+                    onOpenFile={path => onOpenFileEditor(path, 'project')}
+                    onDirectoryChange={emitWorkspaceBackState}
+                />
+            </View>
+        );
+    } else {
+        projectsNode = (
+            <View style={styles.placeholder}>
+                <Text style={{color: tokens.textSecondary}}>{coreT({key: "ui.chat.select_project_first"})}</Text>
+            </View>
+        );
+    }
+
     return (
         <View
             style={[styles.subviewFill, !visible && styles.panelHidden]}
@@ -182,24 +207,7 @@ function ChatSessionListPanelInner({
                 ]}
             />
             {sessionListPanel === 'projects' ? (
-                projectVfs && projectWorktree && projectId != null ? (
-                    <View style={styles.flexFill}>
-                        <VfsFileManager
-                            key={`project-template-${vfsRefreshKey}`}
-                            ref={projectVfsRef}
-                            scope={projectVfsScope!}
-                            vfs={projectVfs}
-                            workplace={projectWorktree}
-                            rootPath="/"
-                            onOpenFile={path => onOpenFileEditor(path, 'project')}
-                            onDirectoryChange={emitWorkspaceBackState}
-                        />
-                    </View>
-                ) : (
-                    <View style={styles.placeholder}>
-                        <Text style={{color: tokens.textSecondary}}>{coreT({key: "ui.chat.select_project_first"})}</Text>
-                    </View>
-                )
+                projectsNode
             ) : (
                 <>
                     <ManageHeader

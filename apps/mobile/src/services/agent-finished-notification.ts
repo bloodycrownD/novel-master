@@ -321,15 +321,19 @@ export namespace AgentFinishedNotification {
             lastFailedNotifyAt.set(input.sessionId, now);
         }
         await ensureChannels();
+        // 有会话名用带会话名的正文；无名按完成 / 中断给短正文
+        let body: string;
+        if (input.sessionTitle != null && input.sessionTitle !== '') {
+            body = coreT({key: input.status === 'finished' ? "ui.notification.body_finished" : "ui.notification.body_interrupted", params: {session: input.sessionTitle}});
+        } else if (input.status === 'finished') {
+            body = coreT({key: "ui.notification.body_finished_short"});
+        } else {
+            body = coreT({key: "ui.notification.body_interrupted_short"});
+        }
         await notifee.displayNotification({
             id: `nm-agent-finished-${input.sessionId}`,
             title: input.status === 'finished' ? coreT({key: "ui.notification.finished_title"}) : coreT({key: "ui.notification.failed_title"}),
-            body:
-                input.sessionTitle != null && input.sessionTitle !== ''
-                    ? coreT({key: input.status === 'finished' ? "ui.notification.body_finished" : "ui.notification.body_interrupted", params: {session: input.sessionTitle}})
-                    : input.status === 'finished'
-                    ? coreT({key: "ui.notification.body_finished_short"})
-                    : coreT({key: "ui.notification.body_interrupted_short"}),
+            body,
             data: {sessionId: input.sessionId},
             android: {
                 channelId: CHANNEL_AGENT_FINISHED,

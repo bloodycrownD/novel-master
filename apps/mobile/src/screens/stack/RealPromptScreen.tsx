@@ -147,14 +147,15 @@ export function RealPromptScreen() {
     }, [load]);
     useFocusEffect(onScreenFocus);
 
-    return (
-        <View style={[styles.root, {backgroundColor: tokens.background}]}>
-            {loading ? (
-                <ActivityIndicator style={styles.loader} />
-            ) : error ? (
-                <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text>
-            ) : (
-                <FlatList
+    // 加载转圈 / 失败给错误文本 / 就绪渲染轮次列表
+    let bodyNode: React.ReactNode;
+    if (loading) {
+        bodyNode = <ActivityIndicator style={styles.loader} />;
+    } else if (error) {
+        bodyNode = <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text>;
+    } else {
+        bodyNode = (
+            <FlatList
                     data={turns}
                     keyExtractor={item => item.id}
                     style={styles.list}
@@ -167,7 +168,12 @@ export function RealPromptScreen() {
                     ListFooterComponent={<Text style={[styles.hint, {color: tokens.textSecondary}]}>{coreT({key: "ui.prompt.viewer_hint_mobile"})}</Text>}
                     renderItem={({item}) => <PromptTurnRow turn={item} openTurnIds={openTurnIds} openGroupIds={openGroupIds} onToggleTurn={toggleTurn} onToggleGroup={toggleGroup} />}
                 />
-            )}
+        );
+    }
+
+    return (
+        <View style={[styles.root, {backgroundColor: tokens.background}]}>
+            {bodyNode}
         </View>
     );
 }

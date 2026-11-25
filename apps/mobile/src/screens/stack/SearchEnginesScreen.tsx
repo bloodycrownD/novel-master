@@ -128,19 +128,22 @@ export function SearchEnginesScreen() {
         deleteNotice = settingsTranslator({key: 'settings.search.detail.delete_notice.mobile', params: {name: label}});
     }
 
-    return (
-        <View style={[listScreenStyles.root, {backgroundColor: tokens.background}]}>
-            {loading && rows.length === 0 ? (
-                <ActivityIndicator style={listScreenStyles.loader} />
-            ) : error ? (
-                <View style={styles.center}>
-                    <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text>
-                    <Pressable onPress={() => void reload()}>
-                        <Text style={{color: tokens.primary, fontWeight: '600'}}>{settingsTranslator({key: 'settings.search.list.retry.mobile'})}</Text>
-                    </Pressable>
-                </View>
-            ) : (
-                <FlatList
+    // 首载转圈 / 失败给重试 / 就绪渲染列表
+    let bodyNode: React.ReactNode;
+    if (loading && rows.length === 0) {
+        bodyNode = <ActivityIndicator style={listScreenStyles.loader} />;
+    } else if (error) {
+        bodyNode = (
+            <View style={styles.center}>
+                <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text>
+                <Pressable onPress={() => void reload()}>
+                    <Text style={{color: tokens.primary, fontWeight: '600'}}>{settingsTranslator({key: 'settings.search.list.retry.mobile'})}</Text>
+                </Pressable>
+            </View>
+        );
+    } else {
+        bodyNode = (
+            <FlatList
                     data={rows}
                     keyExtractor={item => item.id}
                     contentContainerStyle={listScreenStyles.listContent}
@@ -152,6 +155,15 @@ export function SearchEnginesScreen() {
                             ...(item.needsKey && !item.hasKey ? [settingsTranslator({key: 'settings.search.list.issue.key_missing.mobile'})] : []),
                             ...(item.needsBaseUrl ? [settingsTranslator({key: 'settings.search.list.issue.base_url_missing.mobile'})] : []),
                         ];
+                        // DDG 内置兜底出专属徽标；其余按缺什么凭据给状态标
+                        let trailingTag: React.ReactNode = null;
+                        if (item.id === 'duckduckgo') {
+                            trailingTag = <BuiltinTag tokens={tokens} />;
+                        } else if (item.needsKey) {
+                            trailingTag = <ApiKeyStatusTag status={item.hasKey ? 'set' : 'not set'} tokens={tokens} />;
+                        } else if (item.needsBaseUrl) {
+                            trailingTag = <ApiKeyStatusTag status={item.baseUrl == null ? 'not set' : 'set'} tokens={tokens} />;
+                        }
                         return (
                             <ConfigListCard
                                 tokens={tokens}
@@ -168,13 +180,7 @@ export function SearchEnginesScreen() {
                                 subtitle={issues.length === 0 ? hint : `${hint} · ${issues.join(' · ')}`}
                                 trailingMeta={
                                     <View style={styles.rowMeta}>
-                                        {item.id === 'duckduckgo' ? (
-                                            <BuiltinTag tokens={tokens} />
-                                        ) : item.needsKey ? (
-                                            <ApiKeyStatusTag status={item.hasKey ? 'set' : 'not set'} tokens={tokens} />
-                                        ) : item.needsBaseUrl ? (
-                                            <ApiKeyStatusTag status={item.baseUrl == null ? 'not set' : 'set'} tokens={tokens} />
-                                        ) : null}
+                                        {trailingTag}
                                         <Switch
                                             value={item.enabled}
                                             onValueChange={async next => {
@@ -204,7 +210,12 @@ export function SearchEnginesScreen() {
                         );
                     }}
                 />
-            )}
+        );
+    }
+
+    return (
+        <View style={[listScreenStyles.root, {backgroundColor: tokens.background}]}>
+            {bodyNode}
             <View style={[styles.createBar, {borderTopColor: tokens.borderLight}]}>
                 <SecondaryButton
                     tokens={tokens}

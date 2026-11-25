@@ -413,6 +413,52 @@ export function ChatConversationPanel({
     );
     const chatBody = surfaceReady ? chatSurface : null;
 
+    // 工作区只在「确有选中会话」时存在（`surfaceReady` 已保证两者皆非空，
+    // 这里显式带上 `sessionId != null` 一并收窄类型）；无会话但工作区开着给占位提示。
+    let workspaceNode: React.ReactNode = null;
+    if (sessionVfs && sessionWorktree && sessionId != null) {
+        workspaceNode = (
+            <View
+                style={[
+                    styles.flexFill,
+                    !workspaceActive && styles.panelHidden,
+                ]}
+                pointerEvents={workspaceActive ? 'auto' : 'none'}
+            >
+                <VfsFileManager
+                    ref={workspaceVfsRef}
+                    // key 必须含 sessionId：SPA 化后外层不再随会话重挂，而浏览位置等
+                    // 面板状态属会话——key 丢掉 sessionId 会跨会话残留 currentPath，
+                    // 切会话以新 VFS list 旧目录 → 误弹「文件不存在或已被删除」
+                    // （10-02 修复曾因未合入 main 丢失，v1.5.30~33 连续带病，勿再冲掉）。
+                    key={`session-vfs-${sessionId}-${vfsRefreshKey}`}
+                    scope={sessionVfsScope!}
+                    vfs={sessionVfs}
+                    workplace={sessionWorktree}
+                    rootPath="/"
+                    pullFromParent={{
+                        scope: {kind: 'session', sessionId},
+                        onPulled: bumpWorktreeUiToken,
+                    }}
+                    pushToParent={{
+                        scope: {kind: 'session', sessionId},
+                        onPushed: bumpWorktreeUiToken,
+                    }}
+                    onOpenFile={path => onOpenFileEditor(path, 'session')}
+                    onDirectoryChange={emitWorkspaceBackState}
+                />
+            </View>
+        );
+    } else if (workspaceActive) {
+        workspaceNode = (
+            <View style={styles.placeholder}>
+                <Text style={{color: tokens.textSecondary}}>
+                    {coreT({key: "ui.chat.workspace_unavailable"})}
+                </Text>
+            </View>
+        );
+    }
+
     return (
         <View
             style={[styles.subviewFill, !visible && styles.panelHidden]}
@@ -442,46 +488,7 @@ export function ChatConversationPanel({
                             <View style={styles.transcriptHost}>{chatBody}</View>
                         </View>
                     )}
-                    {/* 工作区只在「确有选中会话」时存在（`surfaceReady` 已保证两者皆非空，
-              这里显式带上 `sessionId != null` 一并收窄类型）。 */}
-                    {sessionVfs && sessionWorktree && sessionId != null ? (
-                        <View
-                            style={[
-                                styles.flexFill,
-                                !workspaceActive && styles.panelHidden,
-                            ]}
-                            pointerEvents={workspaceActive ? 'auto' : 'none'}
-                        >
-                            <VfsFileManager
-                                ref={workspaceVfsRef}
-                                // key 必须含 sessionId：SPA 化后外层不再随会话重挂，而浏览位置等
-                                // 面板状态属会话——key 丢掉 sessionId 会跨会话残留 currentPath，
-                                // 切会话以新 VFS list 旧目录 → 误弹「文件不存在或已被删除」
-                                // （10-02 修复曾因未合入 main 丢失，v1.5.30~33 连续带病，勿再冲掉）。
-                                key={`session-vfs-${sessionId}-${vfsRefreshKey}`}
-                                scope={sessionVfsScope!}
-                                vfs={sessionVfs}
-                                workplace={sessionWorktree}
-                                rootPath="/"
-                                pullFromParent={{
-                                    scope: {kind: 'session', sessionId},
-                                    onPulled: bumpWorktreeUiToken,
-                                }}
-                                pushToParent={{
-                                    scope: {kind: 'session', sessionId},
-                                    onPushed: bumpWorktreeUiToken,
-                                }}
-                                onOpenFile={path => onOpenFileEditor(path, 'session')}
-                                onDirectoryChange={emitWorkspaceBackState}
-                            />
-                        </View>
-                    ) : workspaceActive ? (
-                        <View style={styles.placeholder}>
-                            <Text style={{color: tokens.textSecondary}}>
-                                {coreT({key: "ui.chat.workspace_unavailable"})}
-                            </Text>
-                        </View>
-                    ) : null}
+                    {workspaceNode}
                 </>
             ) : (
                 <View style={styles.placeholder}>

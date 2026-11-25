@@ -192,6 +192,141 @@ export function ProviderDetailScreen() {
 
     const menuRow = rows.find(r => r.savedModelId === menuSavedModelId);
 
+    // 模型列表区：首载转圈 / 失败给重试 / 就绪渲染已存模型列表
+    let modelsBody: React.ReactNode;
+    if (loading && rows.length === 0) {
+        modelsBody = <ActivityIndicator style={listScreenStyles.loader} />;
+    } else if (error) {
+        modelsBody = (
+            <View style={styles.errorWrap}>
+                <Text style={[styles.errorText, {color: tokens.danger}]}>{error}</Text>
+                <Pressable onPress={() => void reload()}>
+                    <Text style={{color: tokens.primary, fontWeight: '600'}}>{coreT({key: "ui.common.retry"})}</Text>
+                </Pressable>
+            </View>
+        );
+    } else {
+        modelsBody = (
+            <FlatList
+                data={rows}
+                keyExtractor={item => item.savedModelId}
+                contentContainerStyle={listScreenStyles.listContent}
+                refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void reload()} />}
+                ListEmptyComponent={
+                    <View style={styles.emptyWrap}>
+                        <Text style={[styles.empty, {color: tokens.textSecondary}]}>{coreT({key: "ui.provider.empty_saved_models"})}</Text>
+                    </View>
+                }
+                renderItem={({item}) => (
+                    <ConfigListCard
+                        tokens={tokens}
+                        selected={batch.isSelected(item.savedModelId)}
+                        onPress={() => {
+                            if (batch.active) {
+                                batch.toggle(item.savedModelId);
+                            } else {
+                                navigation.navigate('ModelSampling', {
+                                    savedModelId: item.savedModelId,
+                                });
+                            }
+                        }}
+                        leading={batch.active ? <BatchCheckbox checked={batch.isSelected(item.savedModelId)} onToggle={() => batch.toggle(item.savedModelId)} /> : <Text style={styles.modelIcon}>🧠</Text>}
+                        title={item.label}
+                        subtitle={item.subtitle || undefined}
+                        onMenuPress={batch.active ? undefined : () => setMenuSavedModelId(item.savedModelId)}
+                    />
+                )}
+            />
+        );
+    }
+
+    // config tab 缺 providerId 提示缺失；models tab 渲染管理区（列表 + 弹窗组）
+    let tabNode: React.ReactNode;
+    if (activeTab === 'config') {
+        if (providerId) {
+            tabNode = <ProviderConfigTab providerId={providerId} />;
+        } else {
+            tabNode = <Text style={[styles.empty, {color: tokens.textSecondary}]}>{coreT({key: "ui.provider.provider_id_missing"})}</Text>;
+        }
+    } else {
+        tabNode = (
+            <>
+                <ManageHeader
+                    title={coreT({key: "ui.provider.models_saved_done"})}
+                    batchMode={batch.active}
+                    selectedCount={batch.selectedCount}
+                    allSelected={rows.length > 0 && batch.selectedCount === rows.length}
+                    onSelectAll={() => batch.selectRange(batch.selectedCount === rows.length ? [] : rows.map(row => row.savedModelId))}
+                    onEnterBatch={batch.enter}
+                    onCancelBatch={batch.exit}
+                    onDelete={() => confirmBatchDelete(Array.from(batch.selectedIds))}
+                    hint={coreT({key: "ui.provider.delete_select_hint"})}
+                    normalActions={
+                        <>
+                            <SecondaryButton label={coreT({key: "ui.provider.remote_tag"})} tokens={tokens} onPress={() => setFetchVisible(true)} />
+                            <PrimaryButton label={coreT({key: "ui.common.add"})} tokens={tokens} onPress={() => setAddVisible(true)} />
+                        </>
+                    }
+                />
+                {modelsBody}
+                <TextPromptModal
+                    visible={addVisible}
+                    variant="bottom"
+                    title={coreT({key: "ui.provider.add_model_title"})}
+                    confirmLabel={coreT({key: "ui.common.add"})}
+                    fields={[
+                        {
+                            label: coreT({key: "ui.provider.vendor_model_id_label"}),
+                            placeholder: coreT({key: "ui.provider.vendor_model_id_placeholder"}),
+                            autoCapitalize: 'none',
+                        },
+                        {
+                            label: coreT({key: "ui.provider.model_name_optional_label"}),
+                            placeholder: coreT({key: "ui.common.model_name"}),
+                            optional: true,
+                        },
+                    ]}
+                    onClose={() => setAddVisible(false)}
+                    onConfirm={values => handleAdd(values[0], values[1] || undefined)}
+                />
+                <TextPromptModal
+                    visible={renameVisible}
+                    variant="bottom"
+                    title={coreT({key: "ui.provider.rename_model_title"})}
+                    label={coreT({key: "ui.common.model_name"})}
+                    placeholder={coreT({key: "ui.common.model_name"})}
+                    initialValue={renameModelName}
+                    autoCapitalize="none"
+                    confirmLabel={coreT({key: "ui.common.save"})}
+                    onClose={() => {
+                        setRenameVisible(false);
+                        setMenuSavedModelId(undefined);
+                    }}
+                    onConfirm={values => handleRename(values[0])}
+                />
+                {providerId ? <FetchModelsSheet visible={fetchVisible} providerId={providerId} onClose={() => setFetchVisible(false)} onSaved={() => void reload()} /> : null}
+                <BottomSheetMenu
+                    visible={menuSavedModelId != null}
+                    items={[
+                        {label: coreT({key: "ui.common.rename"}), action: 'rename'},
+                        {label: coreT({key: "ui.common.delete"}), action: 'delete', danger: true},
+                    ]}
+                    onClose={() => setMenuSavedModelId(undefined)}
+                    onSelect={action => {
+                        const row = menuRow;
+                        if (action === 'rename' && row) {
+                            setRenameModelName(row.modelName);
+                            setRenameVisible(true);
+                        } else if (action === 'delete' && row) {
+                            setMenuSavedModelId(undefined);
+                            handleDelete(row).catch(() => undefined);
+                        }
+                    }}
+                />
+            </>
+        );
+    }
+
     return (
         <View style={[listScreenStyles.root, {backgroundColor: tokens.background}]}>
             <SegmentedControl
@@ -203,128 +338,7 @@ export function ProviderDetailScreen() {
                     {value: 'models', label: coreT({key: "ui.nav.model_management"})},
                 ]}
             />
-            {activeTab === 'config' ? (
-                providerId ? (
-                    <ProviderConfigTab providerId={providerId} />
-                ) : (
-                    <Text style={[styles.empty, {color: tokens.textSecondary}]}>{coreT({key: "ui.provider.provider_id_missing"})}</Text>
-                )
-            ) : (
-                <>
-                    <ManageHeader
-                        title={coreT({key: "ui.provider.models_saved_done"})}
-                        batchMode={batch.active}
-                        selectedCount={batch.selectedCount}
-                        allSelected={rows.length > 0 && batch.selectedCount === rows.length}
-                        onSelectAll={() => batch.selectRange(batch.selectedCount === rows.length ? [] : rows.map(row => row.savedModelId))}
-                        onEnterBatch={batch.enter}
-                        onCancelBatch={batch.exit}
-                        onDelete={() => confirmBatchDelete(Array.from(batch.selectedIds))}
-                        hint={coreT({key: "ui.provider.delete_select_hint"})}
-                        normalActions={
-                            <>
-                                <SecondaryButton label={coreT({key: "ui.provider.remote_tag"})} tokens={tokens} onPress={() => setFetchVisible(true)} />
-                                <PrimaryButton label={coreT({key: "ui.common.add"})} tokens={tokens} onPress={() => setAddVisible(true)} />
-                            </>
-                        }
-                    />
-                    {loading && rows.length === 0 ? (
-                        <ActivityIndicator style={listScreenStyles.loader} />
-                    ) : error ? (
-                        <View style={styles.errorWrap}>
-                            <Text style={[styles.errorText, {color: tokens.danger}]}>{error}</Text>
-                            <Pressable onPress={() => void reload()}>
-                                <Text style={{color: tokens.primary, fontWeight: '600'}}>{coreT({key: "ui.common.retry"})}</Text>
-                            </Pressable>
-                        </View>
-                    ) : (
-                        <FlatList
-                            data={rows}
-                            keyExtractor={item => item.savedModelId}
-                            contentContainerStyle={listScreenStyles.listContent}
-                            refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void reload()} />}
-                            ListEmptyComponent={
-                                <View style={styles.emptyWrap}>
-                                    <Text style={[styles.empty, {color: tokens.textSecondary}]}>{coreT({key: "ui.provider.empty_saved_models"})}</Text>
-                                </View>
-                            }
-                            renderItem={({item}) => (
-                                <ConfigListCard
-                                    tokens={tokens}
-                                    selected={batch.isSelected(item.savedModelId)}
-                                    onPress={() => {
-                                        if (batch.active) {
-                                            batch.toggle(item.savedModelId);
-                                        } else {
-                                            navigation.navigate('ModelSampling', {
-                                                savedModelId: item.savedModelId,
-                                            });
-                                        }
-                                    }}
-                                    leading={batch.active ? <BatchCheckbox checked={batch.isSelected(item.savedModelId)} onToggle={() => batch.toggle(item.savedModelId)} /> : <Text style={styles.modelIcon}>🧠</Text>}
-                                    title={item.label}
-                                    subtitle={item.subtitle || undefined}
-                                    onMenuPress={batch.active ? undefined : () => setMenuSavedModelId(item.savedModelId)}
-                                />
-                            )}
-                        />
-                    )}
-                    <TextPromptModal
-                        visible={addVisible}
-                        variant="bottom"
-                        title={coreT({key: "ui.provider.add_model_title"})}
-                        confirmLabel={coreT({key: "ui.common.add"})}
-                        fields={[
-                            {
-                                label: coreT({key: "ui.provider.vendor_model_id_label"}),
-                                placeholder: coreT({key: "ui.provider.vendor_model_id_placeholder"}),
-                                autoCapitalize: 'none',
-                            },
-                            {
-                                label: coreT({key: "ui.provider.model_name_optional_label"}),
-                                placeholder: coreT({key: "ui.common.model_name"}),
-                                optional: true,
-                            },
-                        ]}
-                        onClose={() => setAddVisible(false)}
-                        onConfirm={values => handleAdd(values[0], values[1] || undefined)}
-                    />
-                    <TextPromptModal
-                        visible={renameVisible}
-                        variant="bottom"
-                        title={coreT({key: "ui.provider.rename_model_title"})}
-                        label={coreT({key: "ui.common.model_name"})}
-                        placeholder={coreT({key: "ui.common.model_name"})}
-                        initialValue={renameModelName}
-                        autoCapitalize="none"
-                        confirmLabel={coreT({key: "ui.common.save"})}
-                        onClose={() => {
-                            setRenameVisible(false);
-                            setMenuSavedModelId(undefined);
-                        }}
-                        onConfirm={values => handleRename(values[0])}
-                    />
-                    {providerId ? <FetchModelsSheet visible={fetchVisible} providerId={providerId} onClose={() => setFetchVisible(false)} onSaved={() => void reload()} /> : null}
-                    <BottomSheetMenu
-                        visible={menuSavedModelId != null}
-                        items={[
-                            {label: coreT({key: "ui.common.rename"}), action: 'rename'},
-                            {label: coreT({key: "ui.common.delete"}), action: 'delete', danger: true},
-                        ]}
-                        onClose={() => setMenuSavedModelId(undefined)}
-                        onSelect={action => {
-                            const row = menuRow;
-                            if (action === 'rename' && row) {
-                                setRenameModelName(row.modelName);
-                                setRenameVisible(true);
-                            } else if (action === 'delete' && row) {
-                                setMenuSavedModelId(undefined);
-                                handleDelete(row).catch(() => undefined);
-                            }
-                        }}
-                    />
-                </>
-            )}
+            {tabNode}
         </View>
     );
 }
