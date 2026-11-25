@@ -4,7 +4,7 @@ import { AgentPromptLayout, AgentPromptLayoutValidate, DEFAULT_SKILLS_INDEX_PREF
 import { ErrorMessage } from "@novel-master/core/i18n";
 import { SavedModelUuid } from "@novel-master/core/provider";
 import { coreT } from "../logic/core-i18n.js";
-import { buildToolsPolicyFromSelection } from "./agent-tool-catalog.js";
+import { AgentToolCatalog } from "./agent-tool-catalog.js";
 
 export type ToolsMode = "default" | "allow" | "deny";
 
@@ -351,7 +351,7 @@ export function buildAgentDefinitionFromForm(input: AgentEditorFormInput): { ok:
     }
     const validatedLayout = validated.value;
     const steps = Number(input.maxSteps);
-    const tools = buildToolsPolicyFromSelection(input.toolsMode, input.toolsSelected);
+    const tools = AgentToolCatalog.buildToolsPolicyFromSelection(input.toolsMode, input.toolsSelected);
     let modelPin: string | undefined;
     if (input.modelEnabled && input.savedModelId.trim()) {
         const trimmed = input.savedModelId.trim();

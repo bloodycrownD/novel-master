@@ -90,28 +90,28 @@ export const AgentToolCatalog = {
             { id: "mcp", entries: mcpEntries },
         ];
     },
+
+    buildToolsPolicyFromSelection: (mode: ToolsMode, selected: readonly string[]): AgentToolPolicy | undefined => {
+        if (mode === "default") {
+            return undefined;
+        }
+        const names = [...selected];
+        if (mode === "allow") {
+            return { allow: names };
+        }
+        return { deny: names };
+    },
+
+    toolsSelectionFromDefinition: (def: AgentDefinition): {
+        mode: ToolsMode;
+        selected: readonly string[];
+    } => {
+        if (def.tools?.allow != null) {
+            return { mode: "allow", selected: [...def.tools.allow] };
+        }
+        if (def.tools?.deny != null) {
+            return { mode: "deny", selected: [...def.tools.deny] };
+        }
+        return { mode: "default", selected: [] };
+    },
 } as const;
-
-export function buildToolsPolicyFromSelection(mode: ToolsMode, selected: readonly string[]): AgentToolPolicy | undefined {
-    if (mode === "default") {
-        return undefined;
-    }
-    const names = [...selected];
-    if (mode === "allow") {
-        return { allow: names };
-    }
-    return { deny: names };
-}
-
-export function toolsSelectionFromDefinition(def: AgentDefinition): {
-    mode: ToolsMode;
-    selected: readonly string[];
-} {
-    if (def.tools?.allow != null) {
-        return { mode: "allow", selected: [...def.tools.allow] };
-    }
-    if (def.tools?.deny != null) {
-        return { mode: "deny", selected: [...def.tools.deny] };
-    }
-    return { mode: "default", selected: [] };
-}

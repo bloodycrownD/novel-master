@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildAgentDefinitionFromForm, countEffectiveFormPromptSources, countFormPromptSources, createDefaultAgentEditorPrompts, definitionToForm, formSnapshotJson, layoutFromFormInput, movePersistTextBlock, PROMPT_REGION_LABELS, splitPersistBlocksForEditor, hasAnyPromptRegionEnabled, WORKPLACE_BLOCK_HINT, WORKPLACE_DISABLED_HINT, withWorkplaceToggle } from "../../shared/config-forms/agent-editor-state.js";
-import { buildToolsPolicyFromSelection, toolsSelectionFromDefinition } from "../../shared/config-forms/agent-tool-catalog.js";
+import { AgentToolCatalog } from "../../shared/config-forms/agent-tool-catalog.js";
 import { AgentPromptLayoutValidate, DEFAULT_WORKPLACE_ASSISTANT_TEXT } from "@novel-master/core/prompt";
 
 test("PROMPT_REGION_LABELS 三区主文案为中文且无 wire 英文主标签", () => {
@@ -47,21 +47,21 @@ test("WORKPLACE_BLOCK_HINT 新文案", () => {
 });
 
 test("buildToolsPolicyFromSelection returns undefined for default mode", () => {
-    assert.equal(buildToolsPolicyFromSelection("default", ["read"]), undefined);
+    assert.equal(AgentToolCatalog.buildToolsPolicyFromSelection("default", ["read"]), undefined);
 });
 
 test("T8: buildToolsPolicyFromSelection builds allow/deny lists", () => {
-    assert.deepEqual(buildToolsPolicyFromSelection("allow", ["read", "grep"]), {
+    assert.deepEqual(AgentToolCatalog.buildToolsPolicyFromSelection("allow", ["read", "grep"]), {
         allow: ["read", "grep"],
     });
-    assert.deepEqual(buildToolsPolicyFromSelection("deny", ["write"]), {
+    assert.deepEqual(AgentToolCatalog.buildToolsPolicyFromSelection("deny", ["write"]), {
         deny: ["write"],
     });
 });
 
 test("T8: toolsSelectionFromDefinition round-trips policy modes", () => {
     assert.deepEqual(
-        toolsSelectionFromDefinition({
+        AgentToolCatalog.toolsSelectionFromDefinition({
             name: "a",
             prompts: { persist: [], dynamic: [] },
             tools: { allow: ["read"] },
@@ -69,7 +69,7 @@ test("T8: toolsSelectionFromDefinition round-trips policy modes", () => {
         { mode: "allow", selected: ["read"] }
     );
     assert.deepEqual(
-        toolsSelectionFromDefinition({
+        AgentToolCatalog.toolsSelectionFromDefinition({
             name: "a",
             prompts: { persist: [], dynamic: [] },
         }),

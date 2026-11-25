@@ -7,8 +7,8 @@
  * @module logic/mcp-id
  */
 
-/** ID 规则正则：英文字母、数字和下划线（`mcp__<ID>__<tool>` 的服务器段）。 */
-export const MCP_ID_PATTERN = /^[A-Za-z0-9_]+$/;
+/** ID 规则正则：英文字母、数字、单个下划线分隔（不含连续或首尾下划线——`__` 是 `mcp__<ID>__<tool>` 的分隔符，ID 里出现会让换 ID 的引用改写误伤别的 server）。 */
+export const MCP_ID_PATTERN = /^[A-Za-z0-9]+(_[A-Za-z0-9]+)*$/;
 
 /** ID 判定（先剥边缘空白）；非法时 UI 用 settings.mcp.validation.id_invalid 文案。 */
 export const McpId = {

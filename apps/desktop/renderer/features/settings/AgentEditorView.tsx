@@ -34,7 +34,7 @@ import {
     hasAnyPromptRegionEnabled,
     mapPersistTextBlocks,
     movePersistTextBlock,
-    toolsSelectionFromDefinition,
+    AgentToolCatalog,
     withWorkplaceToggle,
     type AgentMode,
     type ToolsMode,
@@ -291,7 +291,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
         setPersist([...promptForm.persist]);
         setDynamic([...promptForm.dynamic]);
 
-        const toolsWire = toolsSelectionFromDefinition(def);
+        const toolsWire = AgentToolCatalog.toolsSelectionFromDefinition(def);
         setToolsMode(toolsWire.mode);
         setToolsSelected([...toolsWire.selected]);
 
