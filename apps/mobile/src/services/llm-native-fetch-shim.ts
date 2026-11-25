@@ -50,7 +50,7 @@ export type LlmNativeRequestFn = LlmSseNativeModule['request'];
 type LlmNativeRequestAbortFn = LlmSseNativeModule['requestAbort'];
 
 /** shim 的 native 依赖（双注入：不直连 NativeModules，保持纯适配器设计）。 */
-interface LlmNativeRequestDeps {
+export interface LlmNativeRequestDeps {
     readonly request: LlmNativeRequestFn;
     /** 旧 native 构建缺该方法时退化为「仅本地取消」的假取消。 */
     readonly requestAbort?: LlmNativeRequestAbortFn;
@@ -190,94 +190,90 @@ export namespace LlmNativeFetchShim {
     }
 
     /**
-   * 以注入的 native `request` / `requestAbort` 为底座构建 fetch 形状函数（纯适配器，不读全局）。
-   *
-   * method 分发：按 `init.method` 分发到 native `request(requestId, method, ...)`——
-   * GET 不传 body（listModels 三家均为 GET）；POST 携带 JSON string body
-   * （chatNonStream 走 fetchJson 的请求-响应形态）。native `request` 只收
-   * GET/POST（Kotlin 侧按 GET/其余 二分），其余 method 属误用，直接抛错。
-   *
-   * 取消：`init.signal` 已 aborted 时直接拒绝（native 请求不发出）；请求途中
-   * abort 先调 `requestAbort(requestId)` 真断连，再立刻以 AbortError 拒绝。
-   */
-    export function create(deps: LlmNativeRequestDeps): FetchLike {
+     * 以 native `request` / `requestAbort` 为底座发一次请求（纯适配器，不读全局）。依赖直接作参数，
+     * 本函数是具名的普通函数；要交给按 fetch 签名调用的消费方时，由装配点包一行（见 setup-llm-fetch.ts）。
+     *
+     * method 分发：按 `init.method` 分发到 native `request(requestId, method, ...)`——
+     * GET 不传 body（listModels 三家均为 GET）；POST 携带 JSON string body
+     * （chatNonStream 走 fetchJson 的请求-响应形态）。native `request` 只收
+     * GET/POST（Kotlin 侧按 GET/其余 二分），其余 method 属误用，直接抛错。
+     *
+     * 取消：`init.signal` 已 aborted 时直接拒绝（native 请求不发出）；请求途中
+     * abort 先调 `requestAbort(requestId)` 真断连，再立刻以 AbortError 拒绝。
+     */
+    export async function performRequest(deps: LlmNativeRequestDeps, input: Parameters<FetchLike>[0], init?: Parameters<FetchLike>[1]): Promise<ShimResponse> {
         const {request, requestAbort} = deps;
-        // nm-style: keep-closure — fetch 形状 API 契约要求返回闭包：工厂产物本体，捕获注入依赖 request/requestAbort（注入式工厂既定形态）
-        const fetchLike = async (input: Parameters<FetchLike>[0], init?: Parameters<FetchLike>[1]): Promise<ShimResponse> => {
-            const signal = init?.signal ?? undefined;
-            // 本次请求的取消路由键（实例前缀 + 独立计数器）：abort 时用它调 requestAbort。
-            const requestId = `llm-native-fetch-${NATIVE_FETCH_REQUEST_ID_PREFIX}-${nativeFetchRequestIdCounter.next++}`;
-            if (signal?.aborted === true) {
-                // fetch 语义：aborted signal 立即以 AbortError 拒绝；native 请求不发出。
-                // nm-throw: keep — 平台强制（fetch AbortError）：fetch 契约以 reject 报错
+        const signal = init?.signal ?? undefined;
+        // 本次请求的取消路由键（实例前缀 + 独立计数器）：abort 时用它调 requestAbort。
+        const requestId = `llm-native-fetch-${NATIVE_FETCH_REQUEST_ID_PREFIX}-${nativeFetchRequestIdCounter.next++}`;
+        if (signal?.aborted === true) {
+            // fetch 语义：aborted signal 立即以 AbortError 拒绝；native 请求不发出。
+            // nm-throw: keep — 平台强制（fetch AbortError）：fetch 契约以 reject 报错
+            throw new NativeSseAbortError(requestId);
+        }
+        // 提取 fetch 首参的 URL 字符串（string | URL | Request 形态）。
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+        const method = (init?.method ?? 'GET').toUpperCase();
+        if (method !== 'GET' && method !== 'POST') {
+            // nm-throw: keep — native bridge fetch 适配层：fetch 形状契约以 reject 报错（测试钉 'GET/POST' 拒绝）
+            throw new Error(`llm-native-fetch 仅支持 GET/POST 非流式请求（收到 ${method}）`);
+        }
+        const rawBody = init?.body;
+        let body: string | null = null;
+        if (method === 'POST') {
+            if (rawBody != null && typeof rawBody !== 'string') {
+                // 消费面（fetchJson）只发 JSON string；其它 body 形态属误用，明确报错
+                // 而不是静默丢弃或序列化出意外载荷。
+                // nm-throw: keep — native bridge fetch 适配层：fetch 形状契约以 reject 报错
+                throw new Error(`llm-native-fetch 仅支持 string body（收到 ${typeof rawBody}）`);
+            }
+            body = rawBody ?? null;
+        }
+        // GET 分支忽略 init.body（与 native/Kotlin GET 语义一致：不携带请求体）。
+
+        // 本地取消标记：race 的 abort 分支置位；native 的 "abort" reject 据此与本端
+        // 主动取消同归 AbortError（而非网络失败）。只服务本次调用，finally 清理。
+        const cancelState = {userAborted: false};
+        let result: NativeRequestResult;
+        try {
+            const headers = NativeSseTransport.flattenRequestHeaders(init?.headers as Parameters<typeof NativeSseTransport.flattenRequestHeaders>[0]);
+            const nativeCall = request(requestId, method, url, headers, body, LLM_NATIVE_FETCH_CALL_TIMEOUT_MS) as Promise<NativeRequestResult>;
+            result = signal == null ? await nativeCall : await raceWithAbort({call: nativeCall, signal, requestId, requestAbort, cancelState});
+        } catch (err) {
+            if (err instanceof NativeSseAbortError) {
+                // 用户取消是终态：AbortError 形态原样上抛，不套传输错误映射——core 的
+                // isAbortLikeError / isRequestAborted 按 name 识别。
+                // nm-throw: keep — 平台强制（fetch AbortError）：AbortError 原样 reject 交 core 识别
+                throw err;
+            }
+            // 网络失败 / callTimeout 到点：reject（与 fetch 的网络错误语义一致）；
+            // 非 2xx 不在这里出现——native request 对非 2xx 不 reject，
+            // status 与 body 原样带回，由 Response.ok 语义交给消费面 assertOk。
+            // bridge reject（Kotlin `promise.reject(kind, message)` → JS Error，`code`
+            // 携带错误分类 "network" | "timeout" | "abort"）映射为 transport 契约错误形态；
+            // 其它错误原样上抛。
+            if (err instanceof NativeSseTransportError) {
+                // nm-throw: keep — 平台强制（fetch AbortError 同族）：transport 错误原样 reject
+                throw err;
+            }
+            const code = (err as {code?: unknown} | null)?.code;
+            if (code === 'abort' || cancelState.userAborted) {
+                // native 侧取消回传（requestAbort 后的 reject("abort")）：统一成
+                // AbortError，不当网络错误弹给用户。
+                // nm-throw: keep — 平台强制（fetch AbortError）：native abort 回传统一成 AbortError reject
                 throw new NativeSseAbortError(requestId);
             }
-            // 提取 fetch 首参的 URL 字符串（string | URL | Request 形态）。
-            const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
-            const method = (init?.method ?? 'GET').toUpperCase();
-            if (method !== 'GET' && method !== 'POST') {
-                // nm-throw: keep — native bridge fetch 适配层：fetch 形状契约以 reject 报错（测试钉 'GET/POST' 拒绝）
-                throw new Error(`llm-native-fetch 仅支持 GET/POST 非流式请求（收到 ${method}）`);
+            if (code === 'network' || code === 'timeout') {
+                // nm-throw: keep — 平台强制（fetch AbortError 同族）：network/timeout 映射 transport 错误 reject
+                throw new NativeSseTransportError(code, err instanceof Error ? err.message : String(err), requestId);
             }
-            const rawBody = init?.body;
-            let body: string | null = null;
-            if (method === 'POST') {
-                if (rawBody != null && typeof rawBody !== 'string') {
-                    // 消费面（fetchJson）只发 JSON string；其它 body 形态属误用，明确报错
-                    // 而不是静默丢弃或序列化出意外载荷。
-                    // nm-throw: keep — native bridge fetch 适配层：fetch 形状契约以 reject 报错
-                    throw new Error(`llm-native-fetch 仅支持 string body（收到 ${typeof rawBody}）`);
-                }
-                body = rawBody ?? null;
-            }
-            // GET 分支忽略 init.body（与 native/Kotlin GET 语义一致：不携带请求体）。
-
-            // 本地取消标记：race 的 abort 分支置位；native 的 "abort" reject 据此与本端
-            // 主动取消同归 AbortError（而非网络失败）。只服务本次调用，finally 清理。
-            const cancelState = {userAborted: false};
-            let result: NativeRequestResult;
-            try {
-                const headers = NativeSseTransport.flattenRequestHeaders(init?.headers as Parameters<typeof NativeSseTransport.flattenRequestHeaders>[0]);
-                const nativeCall = request(requestId, method, url, headers, body, LLM_NATIVE_FETCH_CALL_TIMEOUT_MS) as Promise<NativeRequestResult>;
-                result = signal == null ? await nativeCall : await raceWithAbort({call: nativeCall, signal, requestId, requestAbort, cancelState});
-            } catch (err) {
-                if (err instanceof NativeSseAbortError) {
-                    // 用户取消是终态：AbortError 形态原样上抛，不套传输错误映射——core 的
-                    // isAbortLikeError / isRequestAborted 按 name 识别。
-                    // nm-throw: keep — 平台强制（fetch AbortError）：AbortError 原样 reject 交 core 识别
-                    throw err;
-                }
-                // 网络失败 / callTimeout 到点：reject（与 fetch 的网络错误语义一致）；
-                // 非 2xx 不在这里出现——native request 对非 2xx 不 reject，
-                // status 与 body 原样带回，由 Response.ok 语义交给消费面 assertOk。
-                // bridge reject（Kotlin `promise.reject(kind, message)` → JS Error，`code`
-                // 携带错误分类 "network" | "timeout" | "abort"）映射为 transport 契约错误形态；
-                // 其它错误原样上抛。
-                if (err instanceof NativeSseTransportError) {
-                    // nm-throw: keep — 平台强制（fetch AbortError 同族）：transport 错误原样 reject
-                    throw err;
-                }
-                const code = (err as {code?: unknown} | null)?.code;
-                if (code === 'abort' || cancelState.userAborted) {
-                    // native 侧取消回传（requestAbort 后的 reject("abort")）：统一成
-                    // AbortError，不当网络错误弹给用户。
-                    // nm-throw: keep — 平台强制（fetch AbortError）：native abort 回传统一成 AbortError reject
-                    throw new NativeSseAbortError(requestId);
-                }
-                if (code === 'network' || code === 'timeout') {
-                    // nm-throw: keep — 平台强制（fetch AbortError 同族）：network/timeout 映射 transport 错误 reject
-                    throw new NativeSseTransportError(code, err instanceof Error ? err.message : String(err), requestId);
-                }
-                // nm-throw: keep — 平台强制（fetch AbortError 同族）：未知 bridge 错误原样 reject（fetch 契约）
-                throw err;
-            } finally {
-                // 迟到 settle 已在 race 内吞掉；本端标记不跨请求泄漏。
-                cancelState.userAborted = false;
-            }
-            // 旧 APK 构建缺 headers 字段：按空对象处理，make 内由 contentType 兜底 content-type。
-            return make(result.status, result.contentType, result.body, result.headers ?? {});
-        };
-        // 结构形状已对齐 Response 消费面；ShimResponse → fetch Response 的收口转换。
-        return fetchLike as unknown as FetchLike;
+            // nm-throw: keep — 平台强制（fetch AbortError 同族）：未知 bridge 错误原样 reject（fetch 契约）
+            throw err;
+        } finally {
+            // 迟到 settle 已在 race 内吞掉；本端标记不跨请求泄漏。
+            cancelState.userAborted = false;
+        }
+        // 旧 APK 构建缺 headers 字段：按空对象处理，make 内由 contentType 兜底 content-type。
+        return make(result.status, result.contentType, result.body, result.headers ?? {});
     }
 }

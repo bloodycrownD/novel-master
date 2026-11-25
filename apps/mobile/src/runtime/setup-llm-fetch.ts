@@ -21,7 +21,7 @@ import {NativeModules} from 'react-native';
 import {DebugFetch, LlmSseTransport, Registry} from '@novel-master/core/llm-protocol';
 import {LogFactory} from '@novel-master/core/log';
 import {NativeSse, type LlmSseNativeModule} from '@novel-master/llm-sse-native/native';
-import {LlmNativeFetchShim} from '../services/llm-native-fetch-shim';
+import {LlmNativeFetchShim, type LlmNativeRequestDeps} from '../services/llm-native-fetch-shim';
 
 const log = LogFactory.create('llm.sse-native');
 
@@ -56,9 +56,11 @@ export const LlmFetchSetup = {
         // requestAbort 缺失（旧 native 构建）不阻塞装配：退化为仅本地取消，仍保留
         // native 连接池与整调用 callTimeout，比回落 globalThis.fetch 更接近生产行为。
         const requestAbort = nativeModule == null || typeof nativeModule.requestAbort !== 'function' ? null : nativeModule.requestAbort.bind(nativeModule);
-        let shim: ReturnType<typeof LlmNativeFetchShim.create> | typeof globalThis.fetch;
+        let shim: typeof globalThis.fetch;
         if (request != null) {
-            shim = LlmNativeFetchShim.create(requestAbort == null ? {request} : {request, requestAbort});
+            // fetch 签名的消费方不传依赖：在这里把 native 依赖绑进去（唯一的一处包装）。
+            const nativeDeps: LlmNativeRequestDeps = requestAbort == null ? {request} : {request, requestAbort};
+            shim = ((input: Parameters<typeof globalThis.fetch>[0], init?: Parameters<typeof globalThis.fetch>[1]) => LlmNativeFetchShim.performRequest(nativeDeps, input, init)) as unknown as typeof globalThis.fetch;
         } else {
             if (!setupState.fallbackWarned) {
                 setupState.fallbackWarned = true;
