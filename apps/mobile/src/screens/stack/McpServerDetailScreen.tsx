@@ -161,7 +161,14 @@ export function McpServerDetailScreen() {
                 setOauthAuthorized(false);
             }
             try {
-                await refreshTools();
+                const current = mcp.connectionManager.serverStatuses().find(candidate => candidate.serverId === serverId) ?? null;
+                // 已失败的不在进页时重试（重试入口是「测试连接」）；未连接的试一次，已连接的读缓存快照。
+                if (current?.state === 'failed') {
+                    setTools([]);
+                    setStatus(current);
+                } else {
+                    await refreshTools();
+                }
             } catch {
                 // 工具拉取失败不阻断表单（连接失败在状态区可见；快照保持空列表）
                 setTools([]);
@@ -294,6 +301,9 @@ export function McpServerDetailScreen() {
         if (status.state === 'ready') {
             return {text: `${settingsTranslator({key: 'settings.mcp.detail.status_ready'})} · ${settingsTranslator({key: 'settings.mcp.list.tool_count', params: {count: status.toolCount ?? tools.length}})}`, color: tokens.success};
         }
+                if (status.state === 'connecting') {
+                    return {text: settingsTranslator({key: 'settings.mcp.detail.status_connecting'}), color: tokens.textSecondary};
+                }
         if (status.state === 'pending') {
             return {text: settingsTranslator({key: 'settings.mcp.detail.status_pending'}), color: tokens.textSecondary};
         }

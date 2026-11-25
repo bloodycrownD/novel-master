@@ -36,6 +36,16 @@ export function McpServersView({ nav }: { nav: SettingsNavHandle }) {
         if (serversRes.ok) setServers(serversRes.data);
         else setError(serversRes.error.message);
         if (statusesRes.ok) setStatuses(statusesRes.data);
+                // 启用但从未尝试连接的服务器，进列表时自动试一次；失败不自动重试（重试入口是「测试连接」）。
+                if (serversRes.ok && statusesRes.ok) {
+                    const idle = serversRes.data.filter((server) => server.enabled && (statusesRes.data.find((status) => status.serverId === server.id)?.state ?? "pending") === "pending");
+                    if (idle.length > 0) {
+                        void Promise.all(idle.map((server) => ipcMcpTestConnection({ serverId: server.id }))).then(async () => {
+                            const refreshed = await ipcMcpServerStatuses();
+                            if (refreshed.ok) setStatuses(refreshed.data);
+                        });
+                    }
+                }
     }, []);
 
     useEffect(() => {

@@ -116,7 +116,10 @@ export const McpConnectionManagerFactory = {
             try {
                 const client = await pending;
                 connecting.delete(config.id);
-                if (connections.get(config.id)?.client == null) connections.set(config.id, { client, snapshots: [], snapshotAt: 0, status: { serverId: config.id, state: "ready", lastConnectedAt: now() }, inflight: null });
+                const settled = connections.get(config.id);
+                // 快照拉取已先行登记「连接中」条目时只补 client，不覆盖其状态。
+                if (settled == null) connections.set(config.id, { client, snapshots: [], snapshotAt: 0, status: { serverId: config.id, state: "ready", lastConnectedAt: now() }, inflight: null });
+                else if (settled.client == null) connections.set(config.id, { ...settled, client });
                 return client;
             } catch (error: unknown) {
                 connecting.delete(config.id);
@@ -125,7 +128,7 @@ export const McpConnectionManagerFactory = {
         };
 
         /** nm-style: keep-local — 直接读写 connections 闭包状态（快照条目），是连接状态机的组成部分。单 server 快照拉取：全程受装配预算约束（connect + listTools），失败记状态并返回空，不拖累其他 server。 */
-        const fetchSnapshot = async (config: McpServerConfig): Promise<readonly McpToolSnapshot[]> => {
+        const fetchSnapshot = async (config: McpServerConfig, holder: { inflight: Promise<readonly McpToolSnapshot[]> | null }): Promise<readonly McpToolSnapshot[]> => {
             const budgetMs = Math.min(config.timeoutMs, budgetCeiling);
             const controller = new AbortController();
             const timer = setTimeout(() => controller.abort(), budgetMs);
@@ -135,15 +138,15 @@ export const McpConnectionManagerFactory = {
                 const tools = await client.listTools(controller.signal);
                 const snapshots = tools.map((tool) => ({ serverId: config.id, toolName: tool.name, ...(tool.description === undefined ? {} : {toolDescription: tool.description}) }));
                 const snapshotAt = now();
-                connections.set(config.id, { client, snapshots, snapshotAt, status: { serverId: config.id, state: "ready", toolCount: snapshots.length, lastConnectedAt: snapshotAt }, inflight: null });
+                connections.set(config.id, { client, snapshots, snapshotAt, status: { serverId: config.id, state: "ready", toolCount: snapshots.length, lastConnectedAt: snapshotAt }, inflight: holder.inflight });
                 return snapshots;
             } catch (error: unknown) {
                 const timedOut = controller.signal.aborted || RequestAbort.isAbortLikeError(error);
-                // 预算内未完成 → pending（保留在途连接，下次复用），其余 → failed（丢连接下次重连）。
+                // 一次尝试到此即 failed（预算内未完成，或握手 / tools/list 出错）：界面不自动重试，重试入口是「测试连接」与装配期。
                 const status: McpServerStatus = timedOut
-                    ? { serverId: config.id, state: "pending", failure: { kind: "network", action: "retry", detail: `装配期 ${budgetMs}ms 预算内未完成连接与 tools/list，已中止在途请求` } }
+                    ? { serverId: config.id, state: "failed", failure: { kind: "network", action: "retry", detail: `装配期 ${budgetMs}ms 预算内未完成连接与 tools/list，已中止在途请求` } }
                     : { serverId: config.id, state: "failed", failure: failureOf(config, error) };
-                connections.set(config.id, { client: timedOut ? client : null, snapshots: [], snapshotAt: 0, status, inflight: null });
+                connections.set(config.id, { client: timedOut ? client : null, snapshots: [], snapshotAt: 0, status, inflight: holder.inflight });
                 return [];
             } finally {
                 clearTimeout(timer);
@@ -156,10 +159,15 @@ export const McpConnectionManagerFactory = {
             const entry = connections.get(config.id);
             if (entry !== undefined && entry.snapshotAt > 0 && now() - entry.snapshotAt < MCP_SNAPSHOT_TTL_MS) return Promise.resolve(entry.snapshots);
             if (entry?.inflight != null) return entry.inflight;
-            const inflight = fetchSnapshot(config).finally(() => {
+            const holder = { inflight: null as Promise<readonly McpToolSnapshot[]> | null };
+            const inflight = fetchSnapshot(config, holder).finally(() => {
                 const current = connections.get(config.id);
                 if (current?.inflight === inflight) current.inflight = null;
             });
+            holder.inflight = inflight;
+            // 连接中状态与在途 promise 同步落表：连点开关、反复进列表都共享同一次尝试。
+            const previous = entry ?? { client: null, snapshots: [] as readonly McpToolSnapshot[], snapshotAt: 0 };
+            connections.set(config.id, { client: previous.client, snapshots: previous.snapshots, snapshotAt: previous.snapshotAt, status: { serverId: config.id, state: "connecting" }, inflight });
             return inflight;
         };
 

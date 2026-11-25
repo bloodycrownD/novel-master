@@ -77,7 +77,20 @@ describe("McpConnectionManagerFactory.create", () => {
         assert.ok(bad?.failure?.detail.includes("boom from stub"));
     });
 
-    it("T-M18a: 连不上的 server 在装配预算内被收割为 pending，不拖慢其余 server", async () => {
+        it("一次尝试进行中状态为 connecting；重复触发共享同一次尝试，不重复连接", async () => {
+            const harness = makeHarness([{ id: "srv", mode: "ok" }]);
+            const first = harness.manager.snapshotTools();
+            assert.equal(statusOf(harness.manager, "srv")?.state, "connecting");
+            const second = harness.manager.snapshotTools();
+            await Promise.all([first, second]);
+            assert.equal(statusOf(harness.manager, "srv")?.state, "ready");
+            const requests = harness.callsOf("srv").length;
+            assert.ok(requests > 0);
+            await harness.manager.snapshotTools();
+            assert.equal(statusOf(harness.manager, "srv")?.state, "ready");
+        });
+    
+    it("T-M18a: 连不上的 server 在装配预算内被收割为 failed（界面不自动重试），不拖慢其余 server", async () => {
         const budgetMs = 200;
         const harness = makeHarness([{ id: "ok-server", mode: "ok" }, { id: "hung-server", mode: "hang" }], { assemblyBudgetMs: budgetMs });
         const startedAt = Date.now();
@@ -86,7 +99,7 @@ describe("McpConnectionManagerFactory.create", () => {
         assert.ok(elapsed < budgetMs + 2_000, `snapshotTools 应在预算附近返回，实测 ${elapsed}ms`);
         assert.deepEqual(snapshots.map((snapshot) => snapshot.serverId), ["ok-server"]);
         const hung = statusOf(harness.manager, "hung-server");
-        assert.equal(hung?.state, "pending");
+        assert.equal(hung?.state, "failed");
         assert.equal(hung?.failure?.kind, "network");
         assert.equal(hung?.failure?.action, "retry");
         assert.ok(hung?.failure?.detail.includes("已中止在途请求"));

@@ -21,7 +21,8 @@ export interface McpToolSnapshot {
 }
 
 /** server 状态（UI 状态标签与「测试连接」口径）。 */
-export type McpServerState = "ready" | "failed" | "unsupported" | "disabled" | "pending";
+/** pending = 启用但从未尝试连接；connecting = 一次尝试进行中；failed 之后界面不自动重试。 */
+export type McpServerState = "ready" | "failed" | "unsupported" | "disabled" | "pending" | "connecting";
 
 /** server 级状态：连接管理器同步读；双端的状态标签与错误原文展示都消费它。 */
 export interface McpServerStatus {

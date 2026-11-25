@@ -39,6 +39,7 @@ zh-CN:
   mcp.detail.saving.desktop: 保存中…
   mcp.detail.status_disabled: 已停用
   mcp.detail.status_pending: 未连接
+  mcp.detail.status_connecting: 连接中
   mcp.detail.status_ready: 连接正常
   mcp.detail.test_connection: 测试连接
   mcp.detail.testing: 测试中…
@@ -67,6 +68,7 @@ zh-CN:
   mcp.list.create: 新建服务器
   mcp.list.deleting.mobile: 删除中…
   mcp.list.disconnected: 未连接
+  mcp.list.connecting: 连接中
   mcp.list.empty: 还没有服务器；点「新建服务器」添加一个
   mcp.list.loading.desktop: 加载中…
   mcp.list.menu.delete: 删除
@@ -277,6 +279,7 @@ en-US:
   mcp.detail.saving.desktop: Saving…
   mcp.detail.status_disabled: Disabled
   mcp.detail.status_pending: Not connected
+  mcp.detail.status_connecting: Connecting
   mcp.detail.status_ready: Connected
   mcp.detail.test_connection: Test connection
   mcp.detail.testing: Testing…
@@ -305,6 +308,7 @@ en-US:
   mcp.list.create: New server
   mcp.list.deleting.mobile: Deleting…
   mcp.list.disconnected: Not connected
+  mcp.list.connecting: Connecting
   mcp.list.empty: No servers yet; tap "New server" to add one
   mcp.list.loading.desktop: Loading…
   mcp.list.menu.delete: Delete
