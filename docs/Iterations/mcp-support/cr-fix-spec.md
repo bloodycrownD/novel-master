@@ -4,8 +4,8 @@
 - repo：D:/worktree/mcp-support（worktree，分支 feat/mcp-support）
 - base_sha：7f3950754（main） / head_sha：c997c98cb
 - prd_path：未提供 / spec_path：docs/Iterations/mcp-support/spec.md（「开发期变更（2026-11-25）」一节优先于其后各章）
-- review_round：2 / dag_version：3
-- 状态：fix-spec-ready（末次 spec-fix 之后的 review-final 认证通过；代码尚未修复，是否开工待用户确认）
+- review_round：3 / dag_version：4
+- 状态：fix-spec-ready（第三轮 review-final 在末次 spec-fix 之后做 read-after-write 认证并通过；代码尚未修复，是否开工待用户确认）
 
 评审方式：code-review-loop · scope 模式，第 1 轮同 wave 四个只读审查者（review-scope-core / review-scope-mobile / review-scope-desktop / review-global，互盲）。合并口径：发现取并集、同问题去重、同文件同维度保留最高严重度。下表「来源」保留原始节点 id 以便回溯。
 
@@ -20,6 +20,10 @@
   2. `connectOnce` 在入口处、第一个 `await` 之前自行捕获 `generation = generations.get(config.id) ?? 0`，这样 `snapshotFor`（经 `fetchSnapshot`）与 `callTool` 两个调用点走的是同一套校验；`fetchSnapshot` 同样在入口捕获。
   3. `fetchSnapshot` 与 `connectOnce` 在每次 `await` 之后、写回 `connections` 之前校验代际：不一致则丢弃结果并 `return []`（fetchSnapshot）或抛 `McpTransportError("连接已被更新的配置取代")`（connectOnce）；若 client 是本次新建且表里没有别的条目持有它，`await client.close()` 后再返回。
   4. `.finally` 里清理 `inflight` 的身份判断保持不变。
+  5. 执行注意（第三轮认证补充，非阻塞，但请照做）：
+     - `fetchSnapshot` 有两个写回点（成功路径与 catch 里的失败路径），两处都要加代际校验；不要只守成功路径，让旧配置的失败结果也写回去。
+     - `callTool` 的 catch 里也有一处 `connections.set`（写 `client: null` 的 failed 条目），顺手加同款守卫。
+     - `connectOnce` 的 `connecting.delete(config.id)` 没有身份判断，极端交错下会误删新一代的 single-flight 登记导致重复建连；改为仅当 `connecting.get(config.id) === pending` 时才删。
 - 验收/测试：
   - 新增用例「invalidate 与在途快照交错」：用可挂起的请求让 `snapshotTools()` 停在 initialize；`invalidate("srv")`；放行后断言该 server 状态不是 `ready`（`pending` 或 `failed`），表里没有旧 client；再次 `snapshotTools()` 走新配置（请求 URL / 调用次数可观测）。
   - 新增用例「invalidate 与在途 callTool 交错」：`callTool` 停在握手时 `invalidate`，放行后该次调用以错误结束，表里没有旧 client。
@@ -169,9 +173,9 @@
 | --- | --- |
 | fix-spec-ready | yes |
 | fix_spec_path | docs/Iterations/mcp-support/cr-fix-spec.md |
-| dag_version / review_round | 3 / 2 |
+| dag_version / review_round | 4 / 3 |
 | review-global 每轮参与 | yes（第 1 轮与三个 scope 同 wave、互盲） |
-| 末轮 review-final | 通过（发生在末次 spec-fix 之后的 read-after-write 认证；认证提出两处补充——CR-01 的 `callTool` 路径覆盖、CR-14 的注释——已并入本文件） |
+| 末轮 review-final | 通过（第三轮，发生在末次 spec-fix 之后的 read-after-write 认证；它对 CR-01 另给出三条非阻塞的执行注意，已作为 CR-01 改法第 5 步原样并入） |
 | P0 / P1 / P2（已写入 fix-spec） | 1 / 9 / 7 |
 | 未写入的开放 must-fix | 0 |
 | spec_deviations | none |
