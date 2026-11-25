@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { coreT } from '@shared/logic/core-i18n';
 import { MermaidMarkdown } from '../../components/MermaidMarkdown';
 import type { ChatMessageDto } from '@shared/ipc-types';
@@ -143,6 +143,31 @@ export function MessageList({
                 const msg = item.message;
                 const text = item.textParts.join('\n');
 
+                let messageBody: ReactNode;
+                if (text) {
+                    if (collapsibleMessageBody) {
+                        messageBody = (
+                            <CollapsibleMessageBody
+                                text={text}
+                                richText={chatRichText}
+                                alwaysRichText={msg.role === 'assistant'}
+                                onLinkClick={onLinkClick}
+                            />
+                        );
+                    } else {
+                        messageBody = (
+                            <MessageBody
+                                text={text}
+                                richText={chatRichText}
+                                alwaysRichText={msg.role === 'assistant'}
+                                onLinkClick={onLinkClick}
+                            />
+                        );
+                    }
+                } else {
+                    messageBody = null;
+                }
+
                 return (
                     <div
                         key={msg.id}
@@ -181,23 +206,7 @@ export function MessageList({
                                     <p>{item.thinkingParts.join('\n')}</p>
                                 </details>
                             ) : null}
-                            {text ? (
-                                collapsibleMessageBody ? (
-                                    <CollapsibleMessageBody
-                                        text={text}
-                                        richText={chatRichText}
-                                        alwaysRichText={msg.role === 'assistant'}
-                                        onLinkClick={onLinkClick}
-                                    />
-                                ) : (
-                                    <MessageBody
-                                        text={text}
-                                        richText={chatRichText}
-                                        alwaysRichText={msg.role === 'assistant'}
-                                        onLinkClick={onLinkClick}
-                                    />
-                                )
-                            ) : null}
+                            {messageBody}
                             {msg.role === "user" &&
                             (msg.attachments?.length ?? 0) > 0 ? (
                                 <MessageAttachmentGroupCard

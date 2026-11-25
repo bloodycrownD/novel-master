@@ -76,7 +76,16 @@ export function ToolCallCard({
     })();
     const detail = showFullParams ? JSON.stringify(tool.input, null, 2) : summary;
 
-    const openHint = canOpenSubagent ? coreT({key: "ui.transcript.open_hint", params: {kind: coreT({key: "ui.transcript.open_kind.subagent"})}}) : canOpenSkill ? coreT({key: "ui.transcript.open_hint", params: {kind: coreT({key: "ui.transcript.open_kind.skill"})}}) : resultView != null ? coreT({key: "ui.transcript.open_hint", params: {kind: coreT({key: "ui.transcript.open_kind.result"})}}) : coreT({key: "ui.transcript.open_hint", params: {kind: coreT({key: "ui.transcript.open_kind.workspace"})}});
+    let openHint: string;
+    if (canOpenSubagent) {
+        openHint = coreT({key: "ui.transcript.open_hint", params: {kind: coreT({key: "ui.transcript.open_kind.subagent"})}});
+    } else if (canOpenSkill) {
+        openHint = coreT({key: "ui.transcript.open_hint", params: {kind: coreT({key: "ui.transcript.open_kind.skill"})}});
+    } else if (resultView != null) {
+        openHint = coreT({key: "ui.transcript.open_hint", params: {kind: coreT({key: "ui.transcript.open_kind.result"})}});
+    } else {
+        openHint = coreT({key: "ui.transcript.open_hint", params: {kind: coreT({key: "ui.transcript.open_kind.workspace"})}});
+    }
 
     const handleClick = () => {
         // 文件路径优先（同一张卡理论上不会同时具备多种入口，仍以文件优先兜底）
@@ -98,7 +107,18 @@ export function ToolCallCard({
         }
     };
 
-    const ariaLabel = canOpenFile ? coreT({key: "ui.chat.open_file_aria", params: {path: filePath}}) : canOpenSubagent ? coreT({key: "ui.chat.view_subagent_aria", params: {id: subagentSessionId}}) : canOpenSkill ? coreT({key: "ui.chat.view_skill_aria", params: {name: skillRef?.name}}) : resultView != null ? coreT({key: "ui.chat.view_result_aria", params: {name: tool.name}}) : "";
+    let ariaLabel: string;
+    if (canOpenFile) {
+        ariaLabel = coreT({key: "ui.chat.open_file_aria", params: {path: filePath}});
+    } else if (canOpenSubagent) {
+        ariaLabel = coreT({key: "ui.chat.view_subagent_aria", params: {id: subagentSessionId}});
+    } else if (canOpenSkill) {
+        ariaLabel = coreT({key: "ui.chat.view_skill_aria", params: {name: skillRef?.name}});
+    } else if (resultView != null) {
+        ariaLabel = coreT({key: "ui.chat.view_result_aria", params: {name: tool.name}});
+    } else {
+        ariaLabel = "";
+    }
 
     const content = (
         <>

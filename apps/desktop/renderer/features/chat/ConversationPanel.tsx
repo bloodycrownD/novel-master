@@ -892,9 +892,37 @@ export function ConversationPanel({
         return '';
     })();
 
-    const confirmTitle = confirmState?.kind === 'set-floor' ? coreT({key: "ui.chat.set_floor_confirm_title"}) : confirmState?.kind === 'rollback-degraded' ? coreT({key: "ui.chat.workspace_restore_fail_title"}) : confirmState?.kind === 'rollback-backfill' ? coreT({key: "ui.chat.snapshot_missing"}) : coreT({key: "ui.common.confirm_op"});
+    let confirmTitle: string;
+    switch (confirmState?.kind) {
+        case 'set-floor':
+            confirmTitle = coreT({key: "ui.chat.set_floor_confirm_title"});
+            break;
+        case 'rollback-degraded':
+            confirmTitle = coreT({key: "ui.chat.workspace_restore_fail_title"});
+            break;
+        case 'rollback-backfill':
+            confirmTitle = coreT({key: "ui.chat.snapshot_missing"});
+            break;
+        default:
+            confirmTitle = coreT({key: "ui.common.confirm_op"});
+            break;
+    }
 
-    const confirmLabel = confirmState?.kind === 'set-floor' ? coreT({key: "ui.transcript.menu.set_floor"}) : confirmState?.kind === 'rollback-degraded' ? coreT({key: "ui.chat.rollback_degraded_title"}) : confirmState?.kind === 'rollback-backfill' ? coreT({key: "ui.chat.rollback_continue"}) : coreT({key: "ui.common.confirm"});
+    let confirmLabel: string;
+    switch (confirmState?.kind) {
+        case 'set-floor':
+            confirmLabel = coreT({key: "ui.transcript.menu.set_floor"});
+            break;
+        case 'rollback-degraded':
+            confirmLabel = coreT({key: "ui.chat.rollback_degraded_title"});
+            break;
+        case 'rollback-backfill':
+            confirmLabel = coreT({key: "ui.chat.rollback_continue"});
+            break;
+        default:
+            confirmLabel = coreT({key: "ui.common.confirm"});
+            break;
+    }
 
     return (
         <>

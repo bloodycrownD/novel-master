@@ -165,7 +165,14 @@ export function buildChatListItems(messages: readonly ChatMessageDto[], options:
 
         const hasToolUse = toolUses.length > 0;
         // Composer 已停时未配对卡直接 error；否则只有最后一个待结果的 assistant 保持 pending
-        const unpairedStatus: ToolCallStatus = runUiStopped ? "error" : isTurnToolExecutingWith(message, context, agentRunning) ? "pending" : "error";
+        let unpairedStatus: ToolCallStatus;
+        if (runUiStopped) {
+            unpairedStatus = "error";
+        } else if (isTurnToolExecutingWith(message, context, agentRunning)) {
+            unpairedStatus = "pending";
+        } else {
+            unpairedStatus = "error";
+        }
         const tools = toolUses.map((use): ToolCallView => {
             const result = results.get(use.id);
             if (result == null) {

@@ -32,6 +32,7 @@ import {
     useEffect,
     useRef,
     useState,
+    type ReactNode,
 } from "react";
 import type {
     PromptAgentMetaResponse,
@@ -322,7 +323,54 @@ export function SessionDetailDrawer({
         setDraftName(sessionName);
     };
 
-    const barPct = tokenStats?.pct != null ? Math.min(100, Math.max(0, tokenStats.pct)) : tokenStats != null ? Math.min(100, Math.max(2, tokenStats.tokenCount > 0 ? 8 : 0)) : 0;
+    let barPct: number;
+    if (tokenStats?.pct != null) {
+        barPct = Math.min(100, Math.max(0, tokenStats.pct));
+    } else if (tokenStats != null) {
+        barPct = Math.min(100, Math.max(2, tokenStats.tokenCount > 0 ? 8 : 0));
+    } else {
+        barPct = 0;
+    }
+
+    let switchAgentAria: string;
+    if (agentLocked) {
+        switchAgentAria = metaLoadFailed ? coreT({key: "ui.session.switch_agent_error"}) : coreT({key: "ui.session.switch_agent_loading"});
+    } else if (agentDeleted) {
+        switchAgentAria = coreT({key: "ui.session.switch_agent_pending"});
+    } else {
+        switchAgentAria = coreT({key: "ui.session.switch_agent"});
+    }
+
+    let agentLockBadge: ReactNode;
+    if (agentDeleted) {
+        agentLockBadge = (
+            <span className="session-detail-pick__lock session-detail-pick__lock--reselect">
+                <span
+                    className="session-detail-pick__lock-icon"
+                    aria-hidden="true"
+                >
+                    ↻
+                </span>
+                {coreT({key: "ui.session.agent_deleted_hint"})}
+            </span>
+        );
+    } else if (agentLocked) {
+        // meta==null 的两态分流（au/B-3 三态可辨）：未落定 = 加载中，
+        // ok:false 已落定 = 加载失败；两者都不是「已删待重选」。
+        agentLockBadge = (
+            <span className="session-detail-pick__lock">
+                <span
+                    className="session-detail-pick__lock-icon"
+                    aria-hidden="true"
+                >
+                    {metaLoadFailed ? "⚠" : "…"}
+                </span>
+                {metaLoadFailed ? coreT({key: "ui.session.agent_info_load_failed"}) : coreT({key: "ui.common.loading"})}
+            </span>
+        );
+    } else {
+        agentLockBadge = null;
+    }
 
     return (
         <div className="session-detail-drawer" id="session-detail-drawer">
@@ -431,15 +479,7 @@ export function SessionDetailDrawer({
                 agentLocked ? " session-detail-pick--locked" : ""
               }`}
                             data-session-detail-action="switch-agent"
-                            aria-label={
-                                agentLocked
-                                    ? metaLoadFailed
-                                        ? coreT({key: "ui.session.switch_agent_error"})
-                                        : coreT({key: "ui.session.switch_agent_loading"})
-                                    : agentDeleted
-                                        ? coreT({key: "ui.session.switch_agent_pending"})
-                                        : coreT({key: "ui.session.switch_agent"})
-                            }
+                            aria-label={switchAgentAria}
                             aria-disabled={agentLocked}
                             onClick={() => void openAgentPicker()}
                         >
@@ -454,29 +494,7 @@ export function SessionDetailDrawer({
                                 <span className="session-detail-pick__value">
                                     {meta?.agentName ?? "—"}
                                 </span>
-                                {agentDeleted ? (
-                                    <span className="session-detail-pick__lock session-detail-pick__lock--reselect">
-                                        <span
-                                            className="session-detail-pick__lock-icon"
-                                            aria-hidden="true"
-                                        >
-                                            ↻
-                                        </span>
-                                        {coreT({key: "ui.session.agent_deleted_hint"})}
-                                    </span>
-                                ) : agentLocked ? (
-                                    // meta==null 的两态分流（au/B-3 三态可辨）：未落定 = 加载中，
-                                    // ok:false 已落定 = 加载失败；两者都不是「已删待重选」。
-                                    <span className="session-detail-pick__lock">
-                                        <span
-                                            className="session-detail-pick__lock-icon"
-                                            aria-hidden="true"
-                                        >
-                                            {metaLoadFailed ? "⚠" : "…"}
-                                        </span>
-                                        {metaLoadFailed ? coreT({key: "ui.session.agent_info_load_failed"}) : coreT({key: "ui.common.loading"})}
-                                    </span>
-                                ) : null}
+                                {agentLockBadge}
                             </span>
                             <span
                                 className="session-detail-pick__chevron"
