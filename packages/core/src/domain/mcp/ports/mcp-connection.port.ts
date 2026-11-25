@@ -14,7 +14,7 @@ import type { McpServerStatus, McpToolSnapshot } from "../model/mcp-tool-snapsho
 
 /** MCP 连接管理器：懒连接 + 快照缓存（TTL 60s / invalidate 失效）+ 失败隔离。 */
 export interface McpConnectionManager {
-    /** 装配期调用（runAgentTurn 在 BuiltinTools.register 之后 await 一次）；带缓存，失败的 server 跳过。 */
+    /** 装配期调用（runAgentTurn 在 BuiltinTools.register 之后 await 一次）；带缓存，失败的 server 跳过；出口已按 deps.disabledTools 过滤被关掉的工具。 */
     snapshotTools(): Promise<readonly McpToolSnapshot[]>;
     /** 同步读的 server 状态（UI 状态标签与「测试连接」唯一读取面）。 */
     serverStatuses(): readonly McpServerStatus[];
@@ -23,9 +23,9 @@ export interface McpConnectionManager {
      * 透传（工具 run 负责转 TOOL_CANCELLED），已知失败沿 `Result.err` 带原文。
      */
     callTool(serverId: string, toolName: string, args: unknown, signal: AbortSignal): Promise<Result<unknown, McpFailure>>;
-    /** 失效某 server 的工具快照（配置保存或手动刷新时调；下次 snapshotTools 重拉）。 */
+    /** 失效某 server 的工具快照与在途连接（配置保存、手动刷新、换 ID 时调）：之后再回来的在途结果会被丢弃，下次 snapshotTools 重拉。 */
     invalidate(serverId: string): void;
-    /** 关闭全部常驻连接（回合结束时调）。 */
+    /** 关闭全部常驻连接并作废在途结果。回合之间连接常驻复用，不在这里关；两端 runtime 目前都没有在应用退出时调它（连接随进程结束）。 */
     closeAll(): Promise<void>;
 }
 
