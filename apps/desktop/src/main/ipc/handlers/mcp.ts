@@ -3,8 +3,10 @@
  *
  * 口径（mcp-support Step 13/14）：配置 CRUD 是 core `McpConfigStore` 的薄转发（归一、
  * SKSP 密钥拆分、容错迁移全在 store），写成功后失效对应 server 的连接与快照缓存；
- * create 是新建专用（ID 撞名拒绝），换 ID（previousId ≠ id）先改写 agent 工具引用
- * `mcp__<旧ID>__` 再 rename（SKSP 密钥迁新 ref，失败回滚）；
+ * create 是新建专用（ID 撞名拒绝），bearer 明文在 create 成功后才写（撞名不碰已有
+ * server 的密钥）；换 ID（previousId ≠ id）走 core 的 `McpToolRefs.renameWithRewrite`
+ * 统一编排（改写 agent 工具引用 `mcp__<旧ID>__` → rename → 写用户新填 bearer，
+ * 任一步失败反向回滚）；
  * 「测试连接」= invalidate + snapshotTools 重拉后读 serverStatuses（状态与错误原文
  * 的唯一读取面，detail 原文透出）；OAuth 桌面侧只经 `McpOAuth.start` / `handleCallback`
  * 两个入口——本文件负责 loopback 回调 server（127.0.0.1 随机端口，先起 server 拿到
@@ -23,7 +25,10 @@ import type {
     McpOAuthStartRequest,
     McpOAuthStatusesDto,
     McpSaveServerRequest,
+    McpSetToolDisabledRequest,
     McpTestConnectionRequest,
+    McpToolListRequest,
+    McpToolRowDto,
     McpToolSnapshotDto,
 } from "../../../../shared/ipc-types.js";
 import { MCP_DEFAULT_TIMEOUT_MS, MCP_MIN_TIMEOUT_MS, McpSecretRefs, McpToolRefs, McpToolSlug, McpServerConfigOps, type McpServerConfig, type McpServerStatus } from "@novel-master/core/mcp";
@@ -113,42 +118,32 @@ export namespace Mcp {
                 auth: req.authType === "oauth" ? { type: "oauth" } : req.authType === "bearer" ? { type: "bearer", secretRef: McpSecretRefs.bearer(id) } : { type: "none" },
             };
             const previousId = req.previousId?.trim();
-            const renaming = req.create !== true && previousId != null && previousId !== "" && previousId !== id;
             // bearer 明文：undefined=保留、空串=清除、非空=覆盖（SKSP 直写，SecretStore 无 Result 通道、失败以 throw 收进 catch）。
-            // 换 ID 顺序相反：先 rename（旧 ref 密钥随迁），再对新 ref 执行同一语义——搬家旧值不能盖掉用户刚填的密钥。
-            if (req.authType === "bearer" && req.bearerToken != null && !renaming) {
+            // 写入时机：新建在 create 成功之后（撞名被拒时不覆盖已有同名 server 的密钥）；
+            // 换 ID 在 renameWithRewrite 的 afterRename 里（落在回滚链内，密钥写入失败整体回滚）；
+            // 原地编辑保持先写后 save。
+            const writeBearer = async (): Promise<void> => {
+                if (req.authType !== "bearer" || req.bearerToken == null) return;
                 if (req.bearerToken === "") await rt.secretStore.delete(McpSecretRefs.bearer(id));
                 else await rt.secretStore.set(McpSecretRefs.bearer(id), req.bearerToken);
-            }
+            };
             let oauthMigrated: boolean | undefined;
             if (req.create === true) {
                 const created = await rt.mcpConfig.create(config);
                 if (!created.ok) return { ok: false, error: FormatIpcError.format(created.error) };
+                await writeBearer();
             } else if (previousId != null && previousId !== "" && previousId !== id) {
-                // 换 ID：先改写 agent 工具引用（mcp__<旧ID>__ → mcp__<新ID>__），再 rename（SKSP 密钥迁新 ref、配置原位替换、清旧 ref）；
-                // 任一失败回滚（反向改写与迁回均幂等），不留配置已换、引用改一半的状态。
-                const listed = await rt.mcpConfig.list();
-                if (!listed.ok) return { ok: false, error: FormatIpcError.format(listed.error) };
-                const previousConfig = listed.value.find((candidate) => candidate.id === previousId);
-                try {
-                    await McpToolRefs.rewriteAgentTools(rt.agentRegistry, previousId, id);
-                    const renamed = await rt.mcpConfig.rename(previousId, config);
-                    // nm-throw: keep — 转码边界：rename 的 Result.err 抛进本函数 catch，经 FormatIpcError 收进 IpcResult（回滚已在 catch 内先行）
-                    if (!renamed.ok) throw renamed.error;
-                    oauthMigrated = renamed.value.oauthMigrated;
-                    rt.mcp.connectionManager.invalidate(previousId);
-                } catch (cause) {
-                    await McpToolRefs.rewriteAgentTools(rt.agentRegistry, id, previousId).catch(() => undefined);
-                    if (previousConfig != null) await rt.mcpConfig.rename(id, previousConfig).catch(() => undefined);
-                    return { ok: false, error: FormatIpcError.format(cause) };
-                }
+                // 换 ID：core 统一编排（改写 agent 工具引用 mcp__<旧ID>__ → mcp__<新ID>__ → rename
+                // （SKSP 密钥迁新 ref、配置原位替换、清旧 ref）→ afterRename 写用户新填的 bearer），
+                // 任一步失败反向改写 + 已改名的按旧配置迁回，不留「引用已改、配置或密钥改了一半」的状态。
+                const renamed = await McpToolRefs.renameWithRewrite({ configStore: rt.mcpConfig, agentRegistry: rt.agentRegistry }, previousId, config, writeBearer);
+                if (!renamed.ok) return { ok: false, error: FormatIpcError.format(renamed.error) };
+                oauthMigrated = renamed.value.oauthMigrated;
+                rt.mcp.connectionManager.invalidate(previousId);
             } else {
+                await writeBearer();
                 const saved = await rt.mcpConfig.save(config);
                 if (!saved.ok) return { ok: false, error: FormatIpcError.format(saved.error) };
-            }
-            if (req.authType === "bearer" && req.bearerToken != null && renaming) {
-                if (req.bearerToken === "") await rt.secretStore.delete(McpSecretRefs.bearer(id));
-                else await rt.secretStore.set(McpSecretRefs.bearer(id), req.bearerToken);
             }
             rt.mcp.connectionManager.invalidate(id);
             // 保存后自动连接（列表开关与详情保存同一条路）：失败原因经 serverStatuses 的 failure.detail 带出，不影响保存结果。
@@ -203,6 +198,37 @@ export namespace Mcp {
             if (!built.ok) return { ok: false, error: FormatIpcError.format(built.error) };
             const snapshots = await built.value.mcp.connectionManager.snapshotTools();
             return IpcResults.ok(snapshots.map((entry) => ({ ...entry, registeredName: McpToolSlug.toolName(entry.serverId, entry.toolName) })));
+        } catch (err) {
+            return { ok: false, error: FormatIpcError.format(err) };
+        }
+    }
+
+    /**
+     * 详情页「工具」卡的行清单：快照按 server 过滤 + 禁用位。禁用位只读
+     * `mcpConfig.listDisabledTools()`——snapshotTools 的出口已滤掉被关的工具，
+     * 拿它判断 disabled 会漏。快照读取会顺带把 pending 的 server 连上（同移动端进页行为）。
+     */
+    export async function toolList(req: McpToolListRequest): Promise<IpcResult<readonly McpToolRowDto[]>> {
+        try {
+            const built = await DesktopRuntimeSingleton.get();
+            if (!built.ok) return { ok: false, error: FormatIpcError.format(built.error) };
+            const rt = built.value;
+            const snapshots = await rt.mcp.connectionManager.snapshotTools();
+            const disabled = await rt.mcpConfig.listDisabledTools();
+            if (!disabled.ok) return { ok: false, error: FormatIpcError.format(disabled.error) };
+            const disabledNames = disabled.value[req.serverId] ?? [];
+            return IpcResults.ok(snapshots.filter((entry) => entry.serverId === req.serverId).map((entry) => ({ toolName: entry.toolName, toolDescription: entry.toolDescription, disabled: disabledNames.includes(entry.toolName) })));
+        } catch (err) {
+            return { ok: false, error: FormatIpcError.format(err) };
+        }
+    }
+
+    /** 每工具启停：KKV 直写；过滤发生在 snapshotTools 出口，被关的工具下一次装配自然不注册进 agent，无需重连。 */
+    export async function setToolDisabled(req: McpSetToolDisabledRequest): Promise<IpcResult<void>> {
+        try {
+            const built = await DesktopRuntimeSingleton.get();
+            if (!built.ok) return { ok: false, error: FormatIpcError.format(built.error) };
+            return IpcResults.from(await built.value.mcpConfig.setToolDisabled(req.serverId, req.toolName, req.disabled));
         } catch (err) {
             return { ok: false, error: FormatIpcError.format(err) };
         }

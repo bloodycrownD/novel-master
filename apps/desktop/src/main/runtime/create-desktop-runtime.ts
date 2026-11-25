@@ -12,7 +12,7 @@ import { DefaultTokenCounterRegistry } from "@novel-master/core/tokenizer";
 import { SimpleEventBus } from "@novel-master/core/events";
 import { ChatServiceFactory } from "@novel-master/core/chat";
 import { PersistentStateFactory, SearchConfig, createPersistentPreferences } from "@novel-master/core";
-import { McpConfigStoreFactory, McpConnectionManagerFactory, McpOAuthFactory, type McpConfigStore, type McpRequestFn, type McpServerConfig } from "@novel-master/core/mcp";
+import { McpConfigStoreFactory, McpConnectionManagerFactory, McpOAuthFactory, type McpConfigStore, type McpDisabledTools, type McpRequestFn, type McpServerConfig } from "@novel-master/core/mcp";
 import { userVfsUnifiedToolTurnFlag } from "@novel-master/core/feature-flags";
 import { SmartSortRuleServiceFactory } from "@novel-master/core/smart-sort-rule";
 import { MessageCheckpointFactory } from "@novel-master/core/message-checkpoint";
@@ -66,10 +66,12 @@ export namespace DesktopRuntimeFactory {
 
         // MCP 域装配（mcp-support Step 13/14）：配置 store 包一层读缓存——connection
         // manager 的 listServers 是同步签名、KKV 读是异步，经缓存桥接；写方法成功后
-        // 重读刷新。配置 CRUD 全部经本实例（唯一写入口），缓存永不落后；装配期首读
-        // 失败不阻断启动（缓存空列表 = 本进程无 MCP 工具，配置页读时再刷新）。
+        // 重读刷新（servers 与禁用工具表各自刷新各自的）。配置 CRUD 全部经本实例
+        // （唯一写入口），缓存永不落后；装配期首读失败不阻断启动（缓存空列表 =
+        // 本进程无 MCP 工具，配置页读时再刷新）。
         const mcpBaseStore = McpConfigStoreFactory.create({ kkv, secretStore });
         const mcpServersCache: { current: readonly McpServerConfig[] } = { current: [] };
+        const mcpDisabledCache: { current: McpDisabledTools } = { current: {} };
         const mcpConfig: McpConfigStore = {
             list: async () => {
                 const result = await mcpBaseStore.list();
@@ -93,11 +95,25 @@ export namespace DesktopRuntimeFactory {
             },
             remove: async (serverId) => {
                 const result = await mcpBaseStore.remove(serverId);
-                if (result.ok) await mcpConfig.list();
+                if (result.ok) {
+                    await mcpConfig.list();
+                    await mcpConfig.listDisabledTools();
+                }
+                return result;
+            },
+            listDisabledTools: async () => {
+                const result = await mcpBaseStore.listDisabledTools();
+                if (result.ok) mcpDisabledCache.current = result.value;
+                return result;
+            },
+            setToolDisabled: async (serverId, toolName, disabled) => {
+                const result = await mcpBaseStore.setToolDisabled(serverId, toolName, disabled);
+                if (result.ok) await mcpConfig.listDisabledTools();
                 return result;
             },
         };
         await mcpConfig.list();
+        await mcpConfig.listDisabledTools();
         // 桌面请求函数：Node 22 全局 fetch → McpRequestFn（响应头收全头小写表、
         // bodyText 完整读回——「原文透出」只在 transport 能看到 raw body 时成立）。
         const mcpRequestFn: McpRequestFn = async (request) => {
@@ -108,7 +124,9 @@ export namespace DesktopRuntimeFactory {
             });
             return { status: response.status, headers, bodyText: await response.text() };
         };
-        const mcpConnections = McpConnectionManagerFactory.create({ listServers: () => mcpServersCache.current, requestFn: mcpRequestFn, bearerToken: secretStore.get.bind(secretStore) });
+        // disabledTools 读禁用表缓存：每工具开关写在配置页，过滤发生在 snapshotTools 出口，
+        // 下一次装配自然生效（装配与 run 共享本闭包读同一份缓存）。
+        const mcpConnections = McpConnectionManagerFactory.create({ listServers: () => mcpServersCache.current, requestFn: mcpRequestFn, bearerToken: secretStore.get.bind(secretStore), disabledTools: (serverId) => mcpDisabledCache.current[serverId] ?? [] });
         const mcpOAuth = McpOAuthFactory.create({ listServers: () => mcpServersCache.current, secretStore });
 
         const providerBundle = ProviderServiceFactory.create(conn, secretStore);
