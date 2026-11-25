@@ -51,7 +51,16 @@ export const Text = {
         for (const char of text) {
             // 单码点 UTF-8 字节数（与 Encoding.utf8ByteLength 的回落口径一致）
             const code = char.codePointAt(0)!;
-            const size = code < 0x80 ? 1 : code < 0x800 ? 2 : code < 0x10000 ? 3 : 4;
+            let size: number;
+            if (code < 0x80) {
+                size = 1;
+            } else if (code < 0x800) {
+                size = 2;
+            } else if (code < 0x10000) {
+                size = 3;
+            } else {
+                size = 4;
+            }
             if (used + size > maxBytes) {
                 break;
             }

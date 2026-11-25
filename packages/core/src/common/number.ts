@@ -122,7 +122,14 @@ export const Number = {
             }
         }
         const scaled = bytes / unit.scale;
-        const fixed = unit.digits == null ? String(scaled) : unit.digits === 0 ? String(Math.round(scaled)) : scaled.toFixed(unit.digits);
+        let fixed: string;
+        if (unit.digits == null) {
+            fixed = String(scaled);
+        } else if (unit.digits === 0) {
+            fixed = String(Math.round(scaled));
+        } else {
+            fixed = scaled.toFixed(unit.digits);
+        }
         const value = unit.trim === true ? fixed.replace(/\.0+$/, "") : fixed;
         return `${value}${format.separator ?? ""}${unit.suffix}`;
     },
