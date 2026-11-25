@@ -189,7 +189,21 @@ app.on("window-all-closed", () => {
     }
 });
 
-app.on("before-quit", () => {
+/** 退出收尾状态（对象管理）：MCP 常驻连接是否已随本次退出关闭——第一次 before-quit 拦下退出等连接关完，关完后再 quit 时放行。 */
+const mcpQuitState = { connectionsClosed: false };
+/** 退出时等 MCP 连接关闭的上限：超过就不再等，直接退出，不让应用退不出去。 */
+const MCP_QUIT_CLOSE_TIMEOUT_MS = 1_500;
+
+app.on("before-quit", (event) => {
     detachMainEventBusListeners();
     void DesktopDb.close();
+    // MCP 连接跨回合常驻，退出时显式关（向服务器发会话结束请求）；运行时尚未装配或已关过就直接放行。
+    const runtime = DesktopRuntimeSingleton.peek();
+    if (runtime === undefined || mcpQuitState.connectionsClosed) {
+        return;
+    }
+    event.preventDefault();
+    mcpQuitState.connectionsClosed = true;
+    const closeTimeout = new Promise<undefined>((resolve) => setTimeout(resolve, MCP_QUIT_CLOSE_TIMEOUT_MS));
+    void Promise.race([runtime.mcp.connectionManager.closeAll(), closeTimeout]).finally(() => app.quit());
 });

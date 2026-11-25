@@ -725,24 +725,6 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
         </div>
     );
 
-    // nm-style: keep-local — 宏插入含光标快照与 rAF 回填，内联进芯片 JSX 会拆散焦点状态
-    const insertMacro = (index: number, content: string, token: string) => {
-        setInsertIndex(index);
-        const ta = insertIndex === index ? dynamicTextareaRef.current : null;
-        const start = ta?.selectionStart ?? content.length;
-        const end = ta?.selectionEnd ?? content.length;
-        const selection = { start, end };
-        const result = insertTextAtSelection(content, selection, token);
-        const { next, selection: nextSel } = result;
-        setDynamic((prev) =>
-            prev.map((b, i) => (i === index ? { ...b, content: next } : b))
-        );
-        requestAnimationFrame(() => {
-            const el = dynamicTextareaRef.current;
-            el?.focus();
-            el?.setSelectionRange(nextSel.start, nextSel.end);
-        });
-    };
 
     return (
         <SettingsPanel>
@@ -1377,9 +1359,24 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                                                                 type="button"
                                                                 className="config-dep-chip"
                                                                 disabled={isBuiltin}
-                                                                onClick={() =>
-                                                                    insertMacro(index, block.content, macro.token)
-                                                                }
+                                                                onClick={() => {
+                                                                    // 宏插入：记下插入位置，按当前光标选区插入 token，下一帧把焦点与选区回填到插入点之后。
+                                                                    setInsertIndex(index);
+                                                                    const textarea = insertIndex === index ? dynamicTextareaRef.current : null;
+                                                                    const {next, selection: nextSelection} = insertTextAtSelection(
+                                                                        block.content,
+                                                                        {start: textarea?.selectionStart ?? block.content.length, end: textarea?.selectionEnd ?? block.content.length},
+                                                                        macro.token
+                                                                    );
+                                                                    setDynamic((prev) =>
+                                                                        prev.map((b, i) => (i === index ? {...b, content: next} : b))
+                                                                    );
+                                                                    requestAnimationFrame(() => {
+                                                                        const el = dynamicTextareaRef.current;
+                                                                        el?.focus();
+                                                                        el?.setSelectionRange(nextSelection.start, nextSelection.end);
+                                                                    });
+                                                                }}
                                                             >
                                                                 {macro.label}
                                                             </button>

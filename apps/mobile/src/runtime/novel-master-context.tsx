@@ -237,6 +237,9 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
                 // 写通尽力落盘），再销毁旧连接。模块级 agent-activity 不随 runtime
                 // 重建归零，必须 dispose 显式清零。
                 runtimeRef.current?.sessionStreamUnitManager.dispose();
+                // MCP 常驻连接随旧 runtime 一起收：显式关闭并向服务器发会话结束请求。
+                // 移动端没有「应用退出」钩子，进程被系统回收时连接随进程结束。
+                await runtimeRef.current?.mcp.connectionManager.closeAll();
                 await MobileDb.closeMobileConnection();
             }
             const rtResult = await MobileRuntimeFactory.create();

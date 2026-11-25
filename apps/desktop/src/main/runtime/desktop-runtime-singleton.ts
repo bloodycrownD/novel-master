@@ -47,6 +47,11 @@ export namespace DesktopRuntimeSingleton {
         return runtimeSlot.current;
     }
 
+    /** 只读当前句柄，不触发装配：退出收尾这类「有就处理、没有就跳过」的调用点用。 */
+    export function peek(): DesktopNovelMasterRuntime | undefined {
+        return runtimeSlot.current;
+    }
+
     /** Closes DB and rebuilds the full service graph (backup import, etc.). */
     export async function rebootstrap(): Promise<Result<DesktopNovelMasterRuntime, AppError>> {
         await resetForTest();
