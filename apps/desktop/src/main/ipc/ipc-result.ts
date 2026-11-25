@@ -32,14 +32,16 @@ type ResultValueOf<R> = R extends PromiseLike<infer P>
 function from<R extends Result<unknown, AppError>>(r: R): IpcResult<ResultValueOf<R>>;
 function from<R extends PromiseLike<Result<unknown, AppError>>>(work: () => R): Promise<IpcResult<ResultValueOf<R>>>;
 function from(r: unknown): unknown {
-    return typeof r === "function"
-        ? (r as () => PromiseLike<Result<unknown, AppError>>)().then(
-                (x) => (x.ok ? IpcResults.ok(x.value) : IpcResults.err(FormatIpcError.format(x.error))),
-                (err) => IpcResults.err(FormatIpcError.format(err)),
-            )
-        : (r as Result<unknown, AppError>).ok
-            ? IpcResults.ok((r as Result<unknown, AppError> & { ok: true }).value)
-            : IpcResults.err(FormatIpcError.format((r as Result<never, AppError> & { ok: false }).error));
+    if (typeof r === "function") {
+        return (r as () => PromiseLike<Result<unknown, AppError>>)().then(
+            (x) => (x.ok ? IpcResults.ok(x.value) : IpcResults.err(FormatIpcError.format(x.error))),
+            (err) => IpcResults.err(FormatIpcError.format(err)),
+        );
+    }
+    if ((r as Result<unknown, AppError>).ok) {
+        return IpcResults.ok((r as Result<unknown, AppError> & { ok: true }).value);
+    }
+    return IpcResults.err(FormatIpcError.format((r as Result<never, AppError> & { ok: false }).error));
 }
 
 export const IpcResults = {

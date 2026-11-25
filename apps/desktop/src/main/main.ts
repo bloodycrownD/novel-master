@@ -43,23 +43,25 @@ function resolvePushWebContents(window: BrowserWindow): WebContents {
 
 function createMainWindow(): BrowserWindow {
     const iconPath = AppIcon.resolvePath();
+    let titleBarOptions: Electron.BrowserWindowConstructorOptions = {};
+    if (process.platform === "darwin") {
+        titleBarOptions = {
+            titleBarStyle: "hiddenInset" as const,
+            trafficLightPosition: { x: 12, y: 12 },
+        };
+    } else if (process.platform === "win32") {
+        titleBarOptions = {
+            titleBarStyle: "hidden" as const,
+            titleBarOverlay: ShellMenu.titleBarOverlayOptions("light"),
+        };
+    }
     const window = new BrowserWindow({
         title: "",
         width: 1280,
         height: 800,
         show: false,
         autoHideMenuBar: true,
-        ...(process.platform === "darwin"
-            ? {
-                    titleBarStyle: "hiddenInset" as const,
-                    trafficLightPosition: { x: 12, y: 12 },
-                }
-            : process.platform === "win32"
-                ? {
-                        titleBarStyle: "hidden" as const,
-                        titleBarOverlay: ShellMenu.titleBarOverlayOptions("light"),
-                    }
-                : {}),
+        ...titleBarOptions,
         ...(iconPath ? { icon: nativeImage.createFromPath(iconPath) } : {}),
         webPreferences: {
             // Sandboxed preload must be CommonJS; ESM preload.js fails to execute in Electron.

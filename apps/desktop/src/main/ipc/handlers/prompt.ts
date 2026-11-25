@@ -39,33 +39,35 @@ export const Prompt = {
                 // cards 是唯一正文载体：三类轮统一下发，body / items 已从 DTO 退役
                 // （它们是同一份正文的两种粒度，各下发一次才需要按 kind 分叉压体积；
                 // 详见 shared/ipc-types.ts 的体积策略注释）。
-                cards: turn.cards.map((card) =>
-                    card.type === "toolGroup"
-                        ? ({
-                                type: card.type,
-                                id: card.id,
-                                toolName: card.toolName,
-                                inputJson: card.inputJson,
-                                // 保结构截大 key 的预览在 main 侧算好下发（renderer 不引
-                                // core 运行时——这条 import 会把 zod 等整图拖进沙箱 bundle）。
-                                inputPreview: PromptPreviewTurns.formatToolUsePreviewJson(card.inputJson),
-                                result: card.result,
-                                status: card.status,
-                                parallel: card.parallel,
-                            } satisfies PromptTurnCardDto)
-                        : card.type === "workplace"
-                            ? ({
-                                    type: card.type,
-                                    id: card.id,
-                                    files: card.files,
-                                } satisfies PromptTurnCardDto)
-                            : ({
-                                    type: card.type,
-                                    id: card.id,
-                                    role: card.role,
-                                    body: card.body,
-                                } satisfies PromptTurnCardDto),
-                ),
+                cards: turn.cards.map((card) => {
+                    if (card.type === "toolGroup") {
+                        return ({
+                            type: card.type,
+                            id: card.id,
+                            toolName: card.toolName,
+                            inputJson: card.inputJson,
+                            // 保结构截大 key 的预览在 main 侧算好下发（renderer 不引
+                            // core 运行时——这条 import 会把 zod 等整图拖进沙箱 bundle）。
+                            inputPreview: PromptPreviewTurns.formatToolUsePreviewJson(card.inputJson),
+                            result: card.result,
+                            status: card.status,
+                            parallel: card.parallel,
+                        } satisfies PromptTurnCardDto);
+                    }
+                    if (card.type === "workplace") {
+                        return ({
+                            type: card.type,
+                            id: card.id,
+                            files: card.files,
+                        } satisfies PromptTurnCardDto);
+                    }
+                    return ({
+                        type: card.type,
+                        id: card.id,
+                        role: card.role,
+                        body: card.body,
+                    } satisfies PromptTurnCardDto);
+                }),
             })));
         });
     },
