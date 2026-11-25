@@ -42,6 +42,9 @@ const detailFrom = (text: string): string => Text.sliceUtf8Bytes(text, DETAIL_MA
 const buildFailure = (kind: McpFailureKind, detail: string, status: number | undefined): McpFailure =>
     ({kind, action: McpFailureClassifier.actionForKind(kind), detail, ...(status === undefined ? {} : {status})});
 
+/** isError 文本的鉴权失败措辞（spec §四第 4 层，T-M9 锁定口径）。 */
+const AUTH_TEXT_PATTERN = /401|unauthorized|invalid.?token|expired|credential|api.?key|forbidden/i;
+
 export const McpFailureClassifier = {
     /**
      * 四层判定入口（params 对象入参）：401/403/429/5xx 按状态直判；2xx 非
@@ -76,7 +79,7 @@ export const McpFailureClassifier = {
             }
         }
         // 第 4 层：isError 文本嗅探升级（forbidden 措辞归 permission，其余 auth）。
-        if (McpFailureClassifier.looksLikeAuthFailure(p.body)) return buildFailure(/forbidden/i.test(p.body) ? "permission" : "auth", detailFrom(p.body), p.status);
+        if (AUTH_TEXT_PATTERN.test(p.body)) return buildFailure(/forbidden/i.test(p.body) ? "permission" : "auth", detailFrom(p.body), p.status);
         return buildFailure("unknown", detailFrom(p.body), p.status);
     },
 
@@ -89,7 +92,4 @@ export const McpFailureClassifier = {
             : kind === "permission" ? "fix-config"
                 : kind === "rate-limit" || kind === "server" || kind === "network" ? "retry"
                     : "report",
-
-    /** isError 文本嗅探谓词（spec §四层 4，T-M9 锁定正则口径）。 */
-    looksLikeAuthFailure: (text: string): boolean => /401|unauthorized|invalid.?token|expired|credential|api.?key|forbidden/i.test(text),
 } as const;

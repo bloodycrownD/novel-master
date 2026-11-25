@@ -60,9 +60,11 @@ describe("classify-mcp-failure", () => {
         assert.equal(business.kind, "server");
     });
 
-    it("T-M9: looksLikeAuthFailure 的正/反例", () => {
-        assert.equal(McpFailureClassifier.looksLikeAuthFailure("401 Bad credentials"), true);
-        assert.equal(McpFailureClassifier.looksLikeAuthFailure("file not found"), false);
+    it("T-M9: isError 文本的鉴权失败措辞嗅探（第 4 层）正/反例", () => {
+        const sniffed = (body: string) => McpFailureClassifier.classify({ status: undefined, contentType: null, body, wwwAuthenticate: null });
+        assert.equal(sniffed("401 Bad credentials").kind, "auth");
+        assert.equal(sniffed("forbidden: api key required").kind, "permission");
+        assert.equal(sniffed("file not found").kind, "unknown");
     });
 
     it("kind → action 固定映射（auth 配 bearer 时细化 fix-config）", () => {

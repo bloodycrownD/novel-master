@@ -120,9 +120,11 @@ export const McpConfigStoreFactory = {
                 }
                 return Result.ok(undefined);
             },
+            // nm-style: keep-public — McpConfigStore port 契约方法（双端读禁用表的唯一入口），接口消费不是内联候选
             async listDisabledTools(): Promise<Result<McpDisabledTools, AppError>> {
                 return readDisabledTools(kkv);
             },
+            // nm-style: keep-public — McpConfigStore port 契约方法（双端每工具开关的唯一写通道），单调用点是接口消费不是内联候选
             async setToolDisabled(serverId, toolName, disabled) {
                 const current = await readDisabledTools(kkv);
                 if (!current.ok) return Result.err(current.error);

@@ -49,6 +49,7 @@ const detailPrefix = (serverId: string): string => `[MCP:${serverId}]`;
 
 export const McpToolAdapter = {
     /** 快照条目 → nm 工具（name / description / inputSchema 同步可得；run 委托 call）。 */
+    // nm-style: keep-public — spec §六的工具适配契约：装配期注册与 7 处用例都按名字调用，适配体是完整的闭包工厂不是转手
     toNmTool: (snapshot: McpToolSnapshot, deps: McpToolCallDeps): Tool<unknown, string, BuiltinToolContext> => {
         const name = McpToolSlug.toolName(snapshot.serverId, snapshot.toolName);
         const description = `${detailPrefix(snapshot.serverId)} ${snapshot.toolDescription ?? snapshot.toolName}`;

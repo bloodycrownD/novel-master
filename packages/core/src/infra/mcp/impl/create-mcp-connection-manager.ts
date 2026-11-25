@@ -94,8 +94,11 @@ export const McpConnectionManagerFactory = {
         const connecting = new Map<string, Promise<OfficialMcpClient>>();
         /** 按 server 的代际：invalidate / closeAll 递增，在途结果写回前校验——代际已变即属于旧配置，丢弃。 */
         const generations = new Map<string, number>();
+        // nm-style: keep-local — 闭包内被 connectOnce / fetchSnapshot / callTool / invalidate / closeAll 共用（闭包内引用按名计数看不到）
         const generationOf = (serverId: string): number => generations.get(serverId) ?? 0;
+        // nm-style: keep-local — 闭包内三处在途路径共用的代际校验（闭包内引用按名计数看不到）
         const isStale = (serverId: string, generation: number): boolean => generationOf(serverId) !== generation;
+        // nm-style: keep-local — 闭包内 connectOnce / fetchSnapshot 两处丢弃路径共用（闭包内引用按名计数看不到）
         const closeClient = async (client: OfficialMcpClient | null): Promise<void> => {
             if (client !== null) await client.close().catch(() => undefined);
         };

@@ -36,6 +36,7 @@ export const McpConfigParser = {
      * 解析 KKV 存储值（`servers` 键的 JSON 字符串 / 已解析的配置数组）。容错归一，
      * 永不 throw：损坏 JSON 回缺省（空列表），非法条目跳过，缺 enabled 视为启用。
      */
+    // nm-style: keep-public — KKV 存储值的归一规则属领域纯函数，与 infra 的 IO 读通道分离；归一规则有独立的用例矩阵
     parse: (raw: unknown): readonly McpServerConfig[] => {
         if (typeof raw === "string") {
             const parsed = Json.parseText(raw);
@@ -78,6 +79,7 @@ export const McpConfigParser = {
      * 解析 KKV 存储值（`disabledTools` 键的 JSON 字符串 / 已解析的对象）。容错归一，永不 throw：
      * 值不是字符串数组的条目跳过，整体损坏回空表（等价于全部工具启用）。
      */
+    // nm-style: keep-public — 同 parse：存储值的归一规则属领域纯函数，与 infra 的 IO 读通道分离
     parseDisabledTools: (raw: unknown): Record<string, string[]> => {
         const text = typeof raw === "string" ? Json.parseText(raw) : null;
         const value: unknown = text == null ? raw : text.ok ? text.value : null;

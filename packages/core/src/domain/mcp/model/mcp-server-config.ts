@@ -51,6 +51,10 @@ const MCP_ID_PATTERN = /^[A-Za-z0-9]+(_[A-Za-z0-9]+)*$/;
 /** 传输可用性判定（spec Step 11）：首版只有 http 可连；stdio / sse 由连接管理器报 `unsupported`。 */
 export const McpServerConfigOps = {
     isTransportSupported: (config: McpServerConfig): boolean => config.transport.type === "http",
-    // ID 表单判定：先剥边缘空白再判（表单输入容忍首尾空格），限英文字母 / 数字 / 下划线；强制校验在 app 表单层，KKV 读路径宽容不在此拦。
-    isValidId: (id: string): boolean => MCP_ID_PATTERN.test(id.trim()),
+    // nm-style: keep-public — 双端表单共用的 ID 规则契约（桌面另有跨 bundle 同值副本）。表单判定先剥边缘空白（容忍首尾空格）；
+    // 强制校验在 app 表单层，KKV 读路径宽容不在此拦。
+    isValidId: (id: string): boolean => {
+        const trimmed = id.trim();
+        return trimmed !== "" && MCP_ID_PATTERN.test(trimmed);
+    },
 } as const;
