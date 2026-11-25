@@ -29,6 +29,6 @@ export const McpFailureOps = {
     unsupportedTransport: (type: McpTransportType): McpFailure => ({
         kind: "server",
         action: "fix-config",
-        detail: `暂不支持 ${type === "sse" ? "SSE" : "stdio"} 传输，请改用 Streamable HTTP`,
+        detail: `暂不支持 ${type === "sse" ? "SSE" : "stdio"} 传输，请改用 HTTP 传输`,
     }),
 } as const;

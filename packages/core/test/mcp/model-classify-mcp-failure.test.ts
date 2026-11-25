@@ -98,7 +98,7 @@ describe("classify-mcp-failure", () => {
             assert.equal(failure.kind, "server");
             assert.equal(failure.action, "fix-config");
             assert.ok(failure.detail.includes(fragment));
-            assert.ok(failure.detail.includes("Streamable HTTP"));
+            assert.ok(failure.detail.includes("请改用 HTTP 传输"));
         }
     });
 });

@@ -45,7 +45,7 @@ zh-CN:
   mcp.detail.timeout_label: 超时时间
   mcp.detail.tools_hint: 关闭的工具不会出现在 AI 的工具列表里
   mcp.detail.tools_section: 工具
-  mcp.detail.transport_http: Streamable HTTP
+  mcp.detail.transport_http: HTTP
   mcp.detail.transport_label: 传输类型
   mcp.detail.transport_sse: SSE
   mcp.detail.transport_stdio.desktop: stdio
@@ -291,7 +291,7 @@ en-US:
   mcp.detail.timeout_label: Timeout
   mcp.detail.tools_hint: Tools turned off are not shown in the AI's tool list
   mcp.detail.tools_section: Tools
-  mcp.detail.transport_http: Streamable HTTP
+  mcp.detail.transport_http: HTTP
   mcp.detail.transport_label: Transport
   mcp.detail.transport_sse: SSE
   mcp.detail.transport_stdio.desktop: stdio

@@ -226,7 +226,7 @@ export const McpOAuthFactory = {
         const httpServer = async (serverId: string): Promise<Result<{ readonly url: string; readonly name: string; readonly authType: McpAuthType }, AppError>> => {
             const config = deps.listServers().find((candidate) => candidate.id === serverId);
             if (config == null) return Result.err(new AppError("INFRA_VALIDATION_FAILED", { detail: `MCP 服务器未配置: ${serverId}` }));
-            if (config.transport.type !== "http") return Result.err(new AppError("INFRA_VALIDATION_FAILED", { detail: `MCP 服务器 ${config.name} 不是 Streamable HTTP 传输，无法走 OAuth 授权` }));
+            if (config.transport.type !== "http") return Result.err(new AppError("INFRA_VALIDATION_FAILED", { detail: `MCP 服务器 ${config.name} 不是 HTTP 传输，无法走 OAuth 授权` }));
             return Result.ok({ url: config.transport.url, name: config.name, authType: config.auth.type });
         };
         return {

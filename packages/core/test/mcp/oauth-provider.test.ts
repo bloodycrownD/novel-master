@@ -151,7 +151,7 @@ describe("mcp-oauth-provider", () => {
         const missing = unwrapErr(await factory.start("nope", "https://127.0.0.1:1/cb"));
         assert.match(missing.message, /未配置/);
         const notHttp = unwrapErr(await factory.start("legacy", "https://127.0.0.1:1/cb"));
-        assert.match(notHttp.message, /Streamable HTTP/);
+        assert.match(notHttp.message, /HTTP 传输/);
         const notOAuth = unwrapErr(await factory.start("plain", "https://127.0.0.1:1/cb"));
         assert.match(notOAuth.message, /OAuth 鉴权/);
         assert.equal(store.map.has(McpSecretRefs.oauth("nope")), false);

@@ -2,7 +2,7 @@
  * MCP 服务器详情页（spec mcp-support Step 14）：分组卡片「连接 / 认证 / 工具」+
  * create 模式（无 route 参数）。
  *
- * - 连接：名称 / 传输类型（Streamable HTTP | SSE，SSE 归一保留但连接管理器报
+ * - 连接：名称 / 传输类型（HTTP | SSE，SSE 归一保留但连接管理器报
  *   unsupported）/ 地址 / 超时时间（秒；保存时 ×1000 归一，下限 1000ms）；
  * - 认证：方式 FormSelectField（无 / API Key / OAuth）。bearer 的密钥只经 SKSP
  *   写入（ref `mcp/{id}/bearer`），不回显明文；OAuth 显示授权状态与「重新授权」
@@ -57,7 +57,7 @@ interface McpServerDraft {
 type AuthTypeOption = 'none' | 'bearer' | 'oauth';
 
 const TRANSPORT_OPTIONS: ReadonlyArray<ChipOption<'http' | 'sse'>> = [
-    {value: 'http', label: 'Streamable HTTP'},
+    {value: 'http', label: settingsTranslator({key: 'settings.mcp.detail.transport_http'})},
     {value: 'sse', label: 'SSE'},
 ];
 
