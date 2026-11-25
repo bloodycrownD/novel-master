@@ -416,6 +416,7 @@ export function McpServerDetailScreen() {
                                         });
                                     }}
                                     description={tool.toolDescription}
+                                    descriptionLines={2}
                                 />
                             ))}
                         </View>
