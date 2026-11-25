@@ -28,14 +28,21 @@ date: 2026-11-13
 
 以下条目已实现并提交在 `feat/mcp-support`，下文各章里与之矛盾的旧表述尚未逐句回改。
 
-1. **服务器模型**：`McpServerConfig` 去掉 `name`，改为 `description`（选填、可空）；`id` 由用户填写，规则 `^[A-Za-z0-9_]+$`（`McpServerConfigOps.isValidId`，经 `public/mcp.ts` 导出；桌面 renderer 有一份同值的跨 bundle 副本 `shared/logic/mcp-id.ts`，改正则要两处同步）。新建时必填且不可与已有 ID 重复；两端不再生成随机 id。
-2. **换 ID**：编辑时可以改 ID，存储层走 `rename`（SKSP 的 bearer / headers / oauth 先写新 ref、KKV 原位替换、最后清旧 ref；oauth 搬迁失败回到未授权）。换 ID 时同步改写所有智能体工具允许 / 禁止名单里的 `mcp__<旧ID>__<工具>` 为新前缀（`McpToolRefs.rewriteAgentTools`），改写失败回滚。
-3. **导入 JSON 整个移除**（两端都不要）：界面入口、IPC 通道、core 的 `importExternal` 与外部 JSON 归一解析（`McpConfigParser.parse`）及对应测试、文案一并删除。§七里「配置导入 / 外部 JSON 归一 / importExternal」相关内容作废；T-M1~T-M4 中针对外部 JSON 解析的用例作废。
+1. **服务器模型**：`McpServerConfig` 去掉 `name`，改为 `description`（选填、可空）；`id` 由用户填写，规则 `^[A-Za-z0-9]+(_[A-Za-z0-9]+)*$`——英文字母、数字、单个下划线分隔，不允许连续或首尾下划线（`__` 是工具名里 ID 与工具名的分隔符，ID 里出现会让换 ID 的引用改写误伤别的 server）。判定是 `McpServerConfigOps.isValidId`，经 `public/mcp.ts` 导出；桌面 renderer 有一份同值的跨 bundle 副本 `shared/logic/mcp-id.ts`，改正则要两处同步。新建时必填且不可与已有 ID 重复；两端不再生成随机 id。
+2. **换 ID**：编辑时可以改 ID。整条编排只有 core 一处：`McpToolRefs.renameWithRewrite({ configStore, agentRegistry }, oldId, config, afterRename?)`——先改写所有智能体工具允许 / 禁止名单里的 `mcp__<旧ID>__<工具>` 为新前缀，再 `store.rename`（SKSP 的 bearer / headers / oauth 先写新 ref、KKV 原位替换、最后清旧 ref；oauth 搬迁失败回到未授权），最后跑调用方传入的 `afterRename`（两端在这里写用户新填的 bearer）。任一步失败反向改写；配置已经改名过的按旧配置迁回；新 ID 撞到别的 server 时只改回引用，不覆盖同名的那个。两端不再各写一份编排。
+3. **导入 JSON 整个移除**（两端都不要）：界面入口、IPC 通道、core 的 `importExternal`、外部 JSON / Claude Desktop 格式的归一解析及对应测试、文案一并删除。`McpConfigParser.parse` 保留，但收窄为 KKV 存储值的归一器（§七的读路径容错仍需要它）。§七里「配置导入 / 外部 JSON 归一 / importExternal」相关内容作废；T-M1~T-M4 中针对外部 JSON 解析的用例作废。
 4. **界面文案与布局**：传输类型选项标签为 `HTTP` / `SSE`（不再写 Streamable HTTP），提示语同步为「请改用 HTTP 传输」；设置入口与页头标题为「MCP 配置」；详情页不再有「删除服务器」，删除只在列表行菜单；列表行菜单没有上移 / 下移；列表标题为 ID、副标题为描述（不显示 URL；不可用时仍直显 `failure.detail`）；工具描述限两行、点描述文字展开 / 收起（`FormSwitchRow.descriptionLines`）；工具数量显示在连接状态行。
 5. **工具结果**：渲染出的文本是 JSON 时先经 `Json.prettyJson(text, 300)` 整理成多行再交给模型，非 JSON 原样；超 50KB 落盘口径不变。`structuredContent` 仍不读取（用户确认暂不做）。
-6. **桌面端详情页没有工具列表**，每工具启停目前只在移动端有——双端是否对齐待定。
+6. **每工具启停双端对齐（2026-11-26）**：桌面端详情页补了「工具」卡与每工具开关，与移动端一致。存储与过滤都在 core：`McpConfigStore.listDisabledTools / setToolDisabled`（KKV `nm-mcp/disabledTools`，`remove` 连带清掉该 server 的清单），连接管理器 deps 必填 `disabledTools`，`snapshotTools()` 出口过滤（先过滤再查撞名）。移动端配置 store 改成 core 的薄镜像（只留同步读镜像，写路径全部委托 core）。
 7. **移动端传输**：走原生非流式 `request`（补回传全部响应头），不是 RN `fetch`；详见「三、HTTP transport」与 Step 6。
 8. **自动连接与状态**：`McpServerState` 增加 `connecting`；`pending` 只表示「启用但从未尝试连接」。启用且处于 `pending` 的服务器在「开关打开」「进入列表」「保存」时自动尝试一次；一次尝试结束即为 `ready` 或 `failed`，**界面不自动重试**，重试入口是详情页「测试连接」（装配期每次 run 仍会自行重拉快照）。在途尝试在连接管理器里同步登记，连点开关、反复进列表共享同一次连接；连接进行中列表行开关禁用并显示「连接中」。装配预算内未完成由原来的 `pending` 改记 `failed`（T-M18a 断言随之调整）。进入详情页不再对已失败的服务器自动重试。
+9. **连接失效与在途结果（2026-11-26）**：连接管理器按 server 记代际，`invalidate` / `closeAll` 递增；在途的建连、`tools/list`、`tools/call` 回来后先核对代际，代际已变即丢弃并关闭本次新建的连接——旧配置的连接与快照不会被写回。`invalidate` 的语义相应变为「失效快照并作废在途结果」。
+10. **错误归一补充（2026-11-26）**：`McpTransportError` 且没有响应（请求函数自身失败，如网络断开）直接归 `kind:"network"`、`action:"retry"`，不再走文本嗅探。§四的判定顺序不变，这一条排在最前。
+
+## 代码评审（2026-11-25 ~ 26）
+
+评审与修复的完整记录见同目录 `cr-fix-spec.md`：首轮四路评审合并出 17 条（P0 1 / P1 9 / P2 7），三轮终态认证通过后全部修复落地，另按用户要求补了第 6 条的双端对齐并把第 2 条、第 6 条的公共逻辑收进 core。
+
 ## 现状约束（探索结论）
 
 **工具系统**：

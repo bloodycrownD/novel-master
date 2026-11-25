@@ -5,7 +5,38 @@
 - base_sha：7f3950754（main） / head_sha：c997c98cb
 - prd_path：未提供 / spec_path：docs/Iterations/mcp-support/spec.md（「开发期变更（2026-11-25）」一节优先于其后各章）
 - review_round：3 / dag_version：4
-- 状态：fix-spec-ready（第三轮 review-final 在末次 spec-fix 之后做 read-after-write 认证并通过；代码尚未修复，是否开工待用户确认）
+- 状态：已执行（2026-11-26；CR-01~CR-17 全部落地，另按用户要求补了桌面端每工具启停并把换 ID 编排、每工具启停收进 core）。合并前的人工 QA 见「合并后 QA（manual_user）」。
+
+## 执行记录（2026-11-26）
+
+分支 `feat/mcp-support`，提交区间 `d8896d8ed..ddae3c955`。
+
+| 条目 | 落点 | 提交 |
+| --- | --- | --- |
+| CR-01（P0） | core：按 server 的代际表；`connectOnce` / `fetchSnapshot` 入口自捕获，成功与失败两个写回点都校验；`callTool` 的失败写回加守卫；`connecting.delete` 带身份判断。三条交错用例 | d8896d8ed |
+| CR-02 / CR-03 / CR-04 | 两端新建改为 create 成功后写 bearer；换 ID 的 bearer 写入放进 core 编排的 `afterRename`（在回滚链内）；oauth 搬迁失败由 core 降级为未授权，移动端不再整体回滚 | d8896d8ed（core）、b7aaec11f（mobile）、4532a39a1（desktop） |
+| CR-05 | 桌面传输下拉去掉 stdio 与对应 key | 0a210c080 |
+| CR-06 | 移动端请求适配层缺 `headers` 时用 `contentType` 回填 | b7aaec11f |
+| CR-07 | 桌面列表 connecting 时禁用行开关与行菜单，后台连接前后各重读一次状态 | 0a210c080 |
+| CR-08 / CR-09 / CR-10 | 新增 `apps/desktop/test/mcp-handlers.test.ts`（6 条）、`apps/mobile/__tests__/mcp-config-store.test.ts`、`apps/mobile/__tests__/mcp-oauth-service.test.ts` | 5753f61a6、92da895d1 |
+| CR-11 / CR-12 / CR-13 | 列表开关互斥改 state；`@babel/plugin-transform-class-static-block` 进 devDependencies；死注释与缩进 | 12dfcfb3c、0a210c080 |
+| CR-14 | 移动端 `reorder` 及其注释删除 | b60c54f10 |
+| CR-15 | 桌面 catalog 两个辅助函数收进 `AgentToolCatalog` namespace | 8b7efebe7 |
+| CR-16 | ID 规则拒绝连续 / 首尾下划线，core 与桌面副本同步 | d8896d8ed、8b7efebe7 |
+| CR-17 | 没有响应的传输错误归 network / retry | d8896d8ed |
+| K 节 | port 注释与实际行为对齐；`closeAll` 两端仍未在应用退出时调用（注释已如实写明） | 168eb78fb |
+
+超出 fix-spec 的收敛（用户要求「做干净」）：
+- 换 ID 编排收进 core `McpToolRefs.renameWithRewrite`，两端不再各写一份；`rewriteAgentTools` 改返回 `Result`。
+- 每工具启停上收 core：`McpConfigStore.listDisabledTools / setToolDisabled`、`remove` 连带清清单、连接管理器 deps 必填 `disabledTools` 并在 `snapshotTools` 出口过滤。移动端配置 store 改成 core 的薄镜像（写路径全部委托 core）；桌面端补了详情页「工具」卡与每工具开关（`nm:mcp/toolList`、`nm:mcp/setToolDisabled` 两条通道）。
+
+执行后的验证（全部由主代理亲手跑）：
+- core：tsc 0；`test/mcp` 126、`test/tool` 392、`test/i18n` 21、`test/common` 96 全过。
+- desktop：typecheck 0；`mcp-handlers` / `agent-tool-catalog` / `agent-editor-state` / `tool-policy-picker` / `runtime` / `ipc-handlers` 六个文件 71 条全过（未跑 packaging，原因见 CR-08）。
+- mobile：tsc 0；jest 273 套 2430 条全过。
+- mobile bundle（android、`--dev false`）：11.56MB，`cross-spawn` / `child_process` / `eventsource` 零命中。
+- nm-style：对分支改动的 40 个 MCP 相关文件跑 `check`，本次迭代引入的 hygiene 发现已清零；剩余 8 条是 main 上就存在的存量（`AgentEditorView.tsx` 7 条、`llm-native-fetch-shim.ts` 的 `fetchLike` 1 条，已在主仓同文件上复现确认）；dup gate 剩 3 组，均为保留理由明确的契约同名（两个页面的 UI 回调 `runWrite`、SDK 的 `send(message, options?)`、`listTools(signal)` 与 abort scope 的 `(signal)`）。
+- 真机已 RELOAD 到最新代码，logcat 无启动期异常。
 
 评审方式：code-review-loop · scope 模式，第 1 轮同 wave 四个只读审查者（review-scope-core / review-scope-mobile / review-scope-desktop / review-global，互盲）。合并口径：发现取并集、同问题去重、同文件同维度保留最高严重度。下表「来源」保留原始节点 id 以便回溯。
 
