@@ -8,7 +8,7 @@
  * 原文（不自写文案）。本页不主动发起连接（首次进入状态多为未连接，由详情页的
  * 连接/测试点亮）。长说明收进标题栏「?」帮助弹窗（照 SearchEnginesScreen 先例）。
  */
-import React, {useCallback, useEffect, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useState} from 'react';
 import {ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Switch, Text, View} from 'react-native';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
@@ -50,8 +50,8 @@ export function McpServersScreen() {
     const setStackOverride = useStackOverrideSetter();
     /** 行菜单当前指向的 server（undefined = 收起）。 */
     const [menuServerId, setMenuServerId] = useState<string | undefined>();
-    /** 开关写库进行中的 server id（互斥连点；用 ref 避免整表 disabled 态闪烁）。 */
-    const togglingRef = useRef<string | undefined>(undefined);
+    /** 行开关写库进行中的 server id（互斥连点；在途时禁用全部行开关，与 deleting 同口径）。 */
+    const [toggling, setToggling] = useState<string | undefined>();
     /** 待确认删除的 server（undefined = 弹窗收起）。 */
     const [pendingDelete, setPendingDelete] = useState<string | undefined>();
     /** 删除写库进行中。 */
@@ -91,24 +91,24 @@ export function McpServersScreen() {
         fallbackValue: EMPTY_ROWS,
     });
 
-        /** 连接某一行并在结束后回读状态，不阻塞界面；连接中 / 已连接的由连接管理器去重，失败不自动重试。 */
-        const connectRow = (serverId: string) => {
-            const syncRow = () => {
-                const status = mcp.connectionManager.serverStatuses().find(candidate => candidate.serverId === serverId);
-                if (status != null) setRows(current => current.map(row => (row.config.id === serverId ? {config: row.config, status} : row)));
-            };
-            const done = mcp.connect(serverId).catch(() => undefined);
-            syncRow();
-            void done.finally(syncRow);
+    /** 连接某一行并在结束后回读状态，不阻塞界面；连接中 / 已连接的由连接管理器去重，失败不自动重试。 */
+    const connectRow = (serverId: string) => {
+        const syncRow = () => {
+            const status = mcp.connectionManager.serverStatuses().find(candidate => candidate.serverId === serverId);
+            if (status != null) setRows(current => current.map(row => (row.config.id === serverId ? {config: row.config, status} : row)));
         };
-    
-        // 启用但从未尝试连接的服务器，进列表时自动试一次；已失败的只在详情页「测试连接」时重试。
-        useEffect(() => {
-            rows.forEach(row => {
-                if (row.config.enabled && row.status.state === 'pending') connectRow(row.config.id);
-            });
-        }, [rows]);
-    
+        const done = mcp.connect(serverId).catch(() => undefined);
+        syncRow();
+        void done.finally(syncRow);
+    };
+
+    // 启用但从未尝试连接的服务器，进列表时自动试一次；已失败的只在详情页「测试连接」时重试。
+    useEffect(() => {
+        rows.forEach(row => {
+            if (row.config.enabled && row.status.state === 'pending') connectRow(row.config.id);
+        });
+    }, [rows]);
+
     const menuRow = rows.find(row => row.config.id === menuServerId);
     const deleteRow = rows.find(row => row.config.id === pendingDelete);
     // 删除确认文案提前拼好：模板串含 CJK 长文案，内联进 JSX 会被 prettier 拆行。
@@ -163,11 +163,11 @@ export function McpServersScreen() {
                                         <Switch
                                             value={item.config.enabled}
                                             onValueChange={async next => {
-                                                // 行开关：乐观翻转 + 失败回滚同一行；togglingRef 互斥保证同刻只有一行写库在途。
-                                                if (togglingRef.current != null) {
+                                                // 行开关：乐观翻转 + 失败回滚同一行；toggling 互斥保证同刻只有一行写库在途，在途时全部行开关禁用（呈 disabled 而非静默吞点击）。
+                                                if (toggling != null) {
                                                     return;
                                                 }
-                                                togglingRef.current = item.config.id;
+                                                setToggling(item.config.id);
                                                 setRows(current => current.map(row => (row.config.id === item.config.id ? {config: {...row.config, enabled: next}, status: row.status} : row)));
                                                 try {
                                                     await mcp.setEnabled(item.config.id, next);
@@ -176,10 +176,10 @@ export function McpServersScreen() {
                                                     setRows(current => current.map(row => (row.config.id === item.config.id ? {config: {...row.config, enabled: !next}, status: row.status} : row)));
                                                     showToast(ToastMessage.toast(settingsTranslator({key: 'settings.mcp.toast.toggle_failed.mobile'}), cause));
                                                 } finally {
-                                                    togglingRef.current = undefined;
+                                                    setToggling(undefined);
                                                 }
                                             }}
-                                            disabled={deleting || item.status.state === 'connecting'}
+                                            disabled={deleting || toggling != null || item.status.state === 'connecting'}
                                             trackColor={{false: tokens.border, true: tokens.primary}}
                                         />
                                     </View>
