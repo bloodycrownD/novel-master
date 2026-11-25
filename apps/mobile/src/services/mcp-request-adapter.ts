@@ -167,9 +167,11 @@ export const McpRequestAdapter = {
                 const headersKv = NativeSseTransport.flattenRequestHeaders(req.headers);
                 const nativeCall = request(requestId, req.method, req.url, headersKv, req.body, deps.timeoutMs) as Promise<NativeRequestResult>;
                 const result = req.signal == null ? await nativeCall : await LlmNativeFetchShim.raceWithAbort({call: nativeCall, signal: req.signal, requestId, requestAbort, cancelState});
-                // 旧 APK 构建缺 headers 字段：按空对象处理（T-M16b），content-type
-                // 由 transport 按 contentType 契约另行解析——原生表是键名小写全头。
-                return {status: result.status, headers: result.headers ?? {}, bodyText: result.body};
+                // 旧 APK 构建缺 headers 字段（T-M16b）：用返回值自带的 contentType 回填
+                // content-type 键（非空才填），transport 的 content-type 分支不再整体失效；
+                // 新 APK 的 headers 是键名小写全头表，原样透传。
+                const headers = result.headers ?? (result.contentType == null ? {} : {'content-type': result.contentType});
+                return {status: result.status, headers, bodyText: result.body};
             } catch (err) {
                 if (err instanceof NativeSseAbortError) {
                     // 用户取消是终态：AbortError 形态原样上抛，core 的 isAbortLikeError 按 name 识别。

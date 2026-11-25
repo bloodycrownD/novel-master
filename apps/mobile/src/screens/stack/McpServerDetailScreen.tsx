@@ -99,7 +99,6 @@ export function McpServerDetailScreen() {
     const [status, setStatus] = useState<McpServerStatus | null>(null);
     /** 测试连接进行中（互斥连点）。 */
     const [testing, setTesting] = useState(false);
-    /** 删除确认弹窗开关。 */
 
     const isCreate = serverId == null;
     const savedConfig = useRef<McpServerConfig | null>(null);
@@ -229,20 +228,24 @@ export function McpServerDetailScreen() {
         try {
             const renamed = serverId != null && serverId !== id;
             const keyDraft = apiKeyDraft.trim();
-            // bearer 密钥写 SKSP：原 id 保存 / 新建先写密钥再落配置（SKSP 失败时中止保存，不留无密钥的 bearer 配置）；
-            // 换 ID 先 rename（旧 ref 密钥随迁），再覆盖新输入——搬家旧值不能盖掉用户刚填的密钥。
-            if (draft.authType === 'bearer' && keyDraft.length > 0 && !renamed) {
-                await runtime.secretStore.set(McpSecretRefs.bearer(id), keyDraft);
-            }
+            // bearer 明文写 SKSP（ref 按目标 id）：三支路各自择时，见各分支注释。
+            const writeBearerKey = async (): Promise<void> => {
+                if (draft.authType === 'bearer' && keyDraft.length > 0) {
+                    await runtime.secretStore.set(McpSecretRefs.bearer(id), keyDraft);
+                }
+            };
             if (isCreate) {
+                // 新建先 create 后写密钥：撞名被拒时不留孤儿密钥、不覆盖已有同名服务器的密钥。
                 await mcp.create(config);
+                await writeBearerKey();
             } else if (renamed) {
-                await mcp.rename(serverId, config);
+                // 换 ID 经 afterRename 写新密钥：落在 core renameWithRewrite 的回滚链之内（写入失败整体回滚）；
+                // core 对 oauth 搬迁失败已降级为未授权，不中断换 ID。
+                await mcp.rename(serverId, config, writeBearerKey);
             } else {
+                // 原 id 保存保持先密钥后配置：SKSP 失败时中止保存，不留无密钥的 bearer 配置。
+                await writeBearerKey();
                 await mcp.save(config);
-            }
-            if (renamed && draft.authType === 'bearer' && keyDraft.length > 0) {
-                await runtime.secretStore.set(McpSecretRefs.bearer(id), keyDraft);
             }
             // 保存后自动连接：启用中的服务器不必再点「测试连接」。
             if (config.enabled) await mcp.connect(config.id).catch(() => undefined);

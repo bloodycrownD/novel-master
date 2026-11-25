@@ -85,8 +85,8 @@ describe('mcp-request-adapter (T-M16b)', () => {
             });
         });
 
-        it('旧 APK 缺 headers 字段：按空对象处理，status 与 body 原文照常返回', async () => {
-            const request = createMockRequest({status: 404, contentType: 'text/html', body: '<html>404</html>'});
+        it('旧 APK 缺 headers 字段且 contentType 为 null：headers 按空对象处理，status 与 body 原文照常返回', async () => {
+            const request = createMockRequest({status: 404, contentType: null, body: '<html>404</html>'});
             const adapter = McpRequestAdapter.create({request, timeoutMs: 120000});
 
             const out = await adapter(mcpRequest());
@@ -94,6 +94,17 @@ describe('mcp-request-adapter (T-M16b)', () => {
             expect(out.status).toBe(404);
             expect(out.headers).toEqual({});
             expect(out.bodyText).toBe('<html>404</html>');
+        });
+
+        it('旧 APK 缺 headers 字段但有 contentType：用 contentType 回填 content-type 键', async () => {
+            const request = createMockRequest({status: 200, contentType: 'application/json', body: '{"jsonrpc":"2.0","id":1,"result":{}}'});
+            const adapter = McpRequestAdapter.create({request, timeoutMs: 120000});
+
+            const out = await adapter(mcpRequest());
+
+            expect(out.status).toBe(200);
+            expect(out.headers).toEqual({'content-type': 'application/json'});
+            expect(out.bodyText).toBe('{"jsonrpc":"2.0","id":1,"result":{}}');
         });
 
         it('每请求生成独立 requestId（mcp-request 命名空间，不与 fetch shim / 流式 transport 撞 id）', async () => {
