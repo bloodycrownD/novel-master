@@ -88,7 +88,14 @@ export const UserVfsTurns = {
                 continue;
             }
             const [renameFrom = "", renameTo = ""] = action.path.split("→");
-            const params = Object.keys(action.params).length > 0 ? action.params : action.name === "rename" || action.name === "move" ? {from: renameFrom, to: renameTo} : {path: action.path};
+            let params: Record<string, unknown> = action.params;
+            if (Object.keys(action.params).length === 0) {
+                if (action.name === "rename" || action.name === "move") {
+                    params = {from: renameFrom, to: renameTo};
+                } else {
+                    params = {path: action.path};
+                }
+            }
             xmlParts.push(UserVfsActionXml.build(action.name || action.kind, params));
         }
         return ActionXmlToolUses.toToolUses(xmlParts.join("\n"));

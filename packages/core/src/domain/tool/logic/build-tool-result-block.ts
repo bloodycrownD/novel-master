@@ -232,21 +232,18 @@ export const ToolResultBlock = {
             if (Guards.isRecord(subagentOutput) && subagentOutput.stopped === true) {
                 const rawReason = (outcome.output as { failureReason?: unknown }).failureReason;
                 const failureReason = typeof rawReason === "string" ? rawReason : undefined;
+                let stoppedMeta: { subagentSessionId?: string; failureReason?: string } | undefined;
+                if (subagentSessionId != null) {
+                    stoppedMeta = failureReason != null ? { subagentSessionId, failureReason } : { subagentSessionId };
+                } else if (failureReason != null) {
+                    stoppedMeta = { failureReason };
+                }
                 return {
                     type: "tool_result",
                     toolUseId,
                     ok: false,
                     content,
-                    ...(subagentSessionId != null
-                        ? {
-                                meta: {
-                                    ...(failureReason != null ? { failureReason } : {}),
-                                    subagentSessionId,
-                                },
-                            }
-                        : failureReason != null
-                        ? { meta: { failureReason } }
-                        : {}),
+                    ...(stoppedMeta != null ? { meta: stoppedMeta } : {}),
                 };
             }
 

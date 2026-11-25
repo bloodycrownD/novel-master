@@ -54,9 +54,19 @@ export const CharacterCardToMdTree = {
     }
 
     const descriptionRaw = data?.["description"];
-    const description = typeof descriptionRaw === "string" ? descriptionRaw : typeof card["description"] === "string" ? card["description"] : "";
+    let description = "";
+    if (typeof descriptionRaw === "string") {
+      description = descriptionRaw;
+    } else if (typeof card["description"] === "string") {
+      description = card["description"];
+    }
     const firstMesRaw = data?.["first_mes"];
-    const firstMes = typeof firstMesRaw === "string" ? firstMesRaw : typeof card["first_mes"] === "string" ? card["first_mes"] : "";
+    let firstMes = "";
+    if (typeof firstMesRaw === "string") {
+      firstMes = firstMesRaw;
+    } else if (typeof card["first_mes"] === "string") {
+      firstMes = card["first_mes"];
+    }
     const greetingsRaw = data?.["alternate_greetings"] ?? card["alternate_greetings"];
     const alternateGreetings = Array.isArray(greetingsRaw) ? greetingsRaw.filter((item): item is string => typeof item === "string") : [];
     const bookRaw = data?.["character_book"] ?? card["character_book"];

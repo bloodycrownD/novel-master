@@ -178,10 +178,26 @@ export const AttachmentChip = {
         }
         const parsed = raw as { userAnnotation?: unknown; originalText?: unknown; from?: unknown; to?: unknown; oldPath?: unknown; newPath?: unknown };
         const userAnnotation = typeof parsed.userAnnotation === "string" ? parsed.userAnnotation.trim() : "";
-        const from = typeof parsed.from === "string" ? parsed.from : typeof parsed.oldPath === "string" ? parsed.oldPath : "";
-        const to = typeof parsed.to === "string" ? parsed.to : typeof parsed.newPath === "string" ? parsed.newPath : "";
+        let from = "";
+        if (typeof parsed.from === "string") {
+            from = parsed.from;
+        } else if (typeof parsed.oldPath === "string") {
+            from = parsed.oldPath;
+        }
+        let to = "";
+        if (typeof parsed.to === "string") {
+            to = parsed.to;
+        } else if (typeof parsed.newPath === "string") {
+            to = parsed.newPath;
+        }
+        let annotateText: string | null = null;
+        if (userAnnotation !== "") {
+            annotateText = userAnnotation;
+        } else if (typeof parsed.originalText === "string") {
+            annotateText = parsed.originalText;
+        }
         return {
-            annotateText: userAnnotation !== "" ? userAnnotation : typeof parsed.originalText === "string" ? parsed.originalText : null,
+            annotateText,
             renameTo: from !== "" && to !== "" ? to : null,
         };
     },

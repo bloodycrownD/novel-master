@@ -14,6 +14,7 @@
 import { VfsErrorForLlm } from "@/domain/vfs/logic/format-vfs-error-for-llm.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { AppErrorOps } from "@/errors/app-error.js";
+import type { AppError } from "@/errors/app-error.js";
 import { ErrorGuards, isVfsError } from "@/errors/guards.js";
 import { TdbcError } from "@/infra/tdbc/index.js";
 import type { ZodIssue } from "zod";
@@ -173,7 +174,12 @@ export const ToolOutput = {
                 });
                 let out = lines.join("\n");
                 if (rec.truncated === true) {
-                    const omitted = typeof rec.omitted === "number" ? rec.omitted : typeof rec.total === "number" ? rec.total - entries.length : 0;
+                    let omitted = 0;
+                    if (typeof rec.omitted === "number") {
+                        omitted = rec.omitted;
+                    } else if (typeof rec.total === "number") {
+                        omitted = rec.total - entries.length;
+                    }
                     out += `\n\nOutput truncated (${omitted} entries omitted; total ${rec.total}).`;
                 }
                 return out;
@@ -316,7 +322,12 @@ export const ToolOutput = {
                     while (unwrapped instanceof TdbcError && unwrapped.cause != null) {
                         unwrapped = unwrapped.cause;
                     }
-                    const vfsError = isVfsError(unwrapped) ? unwrapped : isVfsError(cause) ? cause : undefined;
+                    let vfsError: AppError | undefined;
+                    if (isVfsError(unwrapped)) {
+                        vfsError = unwrapped;
+                    } else if (isVfsError(cause)) {
+                        vfsError = cause;
+                    }
                     if (vfsError != null) {
                         message = VfsErrorForLlm.format(vfsError, options?.vfsScope);
                     } else if (AppErrorOps.is(cause)) {

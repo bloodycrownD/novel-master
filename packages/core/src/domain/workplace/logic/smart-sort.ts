@@ -165,6 +165,9 @@ export const SmartSort = {
         } else {
             cmp = Text.compareNatural(a, b);
         }
-        return order === "desc" ? (cmp === 0 ? 0 : -cmp) : cmp;
+        if (order === "desc") {
+            return cmp === 0 ? 0 : -cmp;
+        }
+        return cmp;
     },
 } as const;

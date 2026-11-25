@@ -571,7 +571,14 @@ export const SearchConfig = {
                 const validated = input.template == null ? Result.ok(existing.template) : SearchConfig.validateTemplateForSave(input.template);
                 if (!validated.ok) return Result.err(validated.error);
                 const template = validated.value;
-                const name = input.name == null ? (input.template == null ? existing.name : template.name) : input.name.trim();
+                let name: string;
+                if (input.name != null) {
+                    name = input.name.trim();
+                } else if (input.template == null) {
+                    name = existing.name;
+                } else {
+                    name = template.name;
+                }
                 if (name.length === 0)
                     return Result.err(new AppError("TOOL_SEARCH_TEMPLATE_INVALID", { descriptor: {key: "error.tool.search_template_invalid", params: {reason: "custom engine name is required"}} }));
                 // 地址校验必须在任何写入之前（保存路径失败不产生半写状态）。
