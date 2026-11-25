@@ -71,14 +71,22 @@ export const McpFailureClassifier = {
         if (parsed.ok && Guards.isRecord(parsed.value)) {
             const body = parsed.value;
             if ("jsonrpc" in body) {
-                return buildFailure(Coerce.strictNumber(Guards.isRecord(body.error) ? body.error.code : undefined) === -32603 ? "server" : "protocol", detailFrom(p.body), p.status);
+                // 标准 JSON-RPC 的 -32603 是服务端内部错误（可重试），其余错误码是协议层面的错误。
+                const errorCode = Coerce.strictNumber(Guards.isRecord(body.error) ? body.error.code : undefined);
+                return buildFailure(errorCode === -32603 ? "server" : "protocol", detailFrom(p.body), p.status);
             }
             const businessCode = Coerce.strictNumber(body.code) ?? Coerce.strictNumber(Guards.isRecord(body.error) ? body.error.code : undefined) ?? Coerce.strictNumber(body.error_code);
             if (businessCode != null) {
-                if (businessCode === 401) return buildFailure("auth", detailFrom(p.body), p.status);
-                if (businessCode === 403) return buildFailure("permission", detailFrom(p.body), p.status);
-                if (businessCode === 429) return buildFailure("rate-limit", detailFrom(p.body), p.status);
-                return buildFailure("server", detailFrom(p.body), p.status);
+                switch (businessCode) {
+                    case 401:
+                        return buildFailure("auth", detailFrom(p.body), p.status);
+                    case 403:
+                        return buildFailure("permission", detailFrom(p.body), p.status);
+                    case 429:
+                        return buildFailure("rate-limit", detailFrom(p.body), p.status);
+                    default:
+                        return buildFailure("server", detailFrom(p.body), p.status);
+                }
             }
         }
         // 第 4 层：isError 文本嗅探升级（forbidden 措辞归 permission，其余 auth）。
@@ -91,15 +99,17 @@ export const McpFailureClassifier = {
      * `authType` 细化 auth 的去向（bearer → fix-config，其余 → reauthorize）。
      */
     actionForKind: (kind: McpFailureKind, authType?: McpAuthType): McpFailureAction => {
-        if (kind === "auth") {
-            return authType === "bearer" ? "fix-config" : "reauthorize";
+        switch (kind) {
+            case "auth":
+                return authType === "bearer" ? "fix-config" : "reauthorize";
+            case "permission":
+                return "fix-config";
+            case "rate-limit":
+            case "server":
+            case "network":
+                return "retry";
+            default:
+                return "report";
         }
-        if (kind === "permission") {
-            return "fix-config";
-        }
-        if (kind === "rate-limit" || kind === "server" || kind === "network") {
-            return "retry";
-        }
-        return "report";
     },
 } as const;
