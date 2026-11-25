@@ -51,30 +51,29 @@ export function BottomSheetMenu({
                     {title}
                 </Text>
             ) : null}
-            {items.map(item => (
-                <Pressable
-                    key={item.action}
-                    style={[styles.item, {borderTopColor: tokens.border}]}
-                    disabled={item.disabled}
-                    onPress={() => {
-                        onClose();
-                        onSelect(item.action);
-                    }}
-                >
-                    <Text
-                        style={{
-                            color: item.disabled
-                                ? tokens.textTertiary
-                                : item.danger
-                                ? tokens.danger
-                                : tokens.text,
-                            fontSize: 16,
+            {items.map(item => {
+                let labelColor: string;
+                if (item.disabled) {
+                    labelColor = tokens.textTertiary;
+                } else if (item.danger) {
+                    labelColor = tokens.danger;
+                } else {
+                    labelColor = tokens.text;
+                }
+                return (
+                    <Pressable
+                        key={item.action}
+                        style={[styles.item, {borderTopColor: tokens.border}]}
+                        disabled={item.disabled}
+                        onPress={() => {
+                            onClose();
+                            onSelect(item.action);
                         }}
                     >
-                        {item.label}
-                    </Text>
-                </Pressable>
-            ))}
+                        <Text style={{color: labelColor, fontSize: 16}}>{item.label}</Text>
+                    </Pressable>
+                );
+            })}
             <Pressable
                 style={[styles.item, {borderTopColor: tokens.border}]}
                 onPress={onClose}

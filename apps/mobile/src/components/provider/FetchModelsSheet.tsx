@@ -136,21 +136,22 @@ export function FetchModelsSheet({visible, providerId, onClose, onSaved}: Props)
 
     const confirmLabel = batch.selectedCount > 0 ? coreT({key: "ui.provider.add_count_confirm", params: {count: batch.selectedCount}}) : coreT({key: "ui.common.add"});
 
-    const body = (
-        <>
-            <Text style={[styles.title, {color: tokens.text}]}>{coreT({key: "ui.provider.fetch_models_title"})}</Text>
-            <Text style={[styles.subtitle, {color: tokens.textSecondary}]}>{coreT({key: "ui.provider.fetch_models_hint"})}</Text>
-            {loading ? (
-                <ActivityIndicator style={styles.loader} />
-            ) : error ? (
-                <View style={styles.center}>
-                    <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text>
-                    <Pressable onPress={() => load().catch(() => undefined)}>
-                        <Text style={{color: tokens.primary, fontWeight: '600'}}>{coreT({key: "ui.common.retry"})}</Text>
-                    </Pressable>
-                </View>
-            ) : (
-                <>
+    // 加载中转圈；失败态给出错误与重试入口；否则渲染过滤列表主体
+    let stateNode: React.ReactNode;
+    if (loading) {
+        stateNode = <ActivityIndicator style={styles.loader} />;
+    } else if (error) {
+        stateNode = (
+            <View style={styles.center}>
+                <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text>
+                <Pressable onPress={() => load().catch(() => undefined)}>
+                    <Text style={{color: tokens.primary, fontWeight: '600'}}>{coreT({key: "ui.common.retry"})}</Text>
+                </Pressable>
+            </View>
+        );
+    } else {
+        stateNode = (
+            <>
                     <View style={styles.searchWrap}>
                         <FormTextInput tokens={tokens} value={query} onChangeText={setQuery} placeholder={coreT({key: "ui.provider.filter_models_placeholder"})} />
                     </View>
@@ -181,6 +182,13 @@ export function FetchModelsSheet({visible, providerId, onClose, onSaved}: Props)
                             const saved = addedSet.has(item.vendorModelId);
                             const selected = batch.isSelected(item.vendorModelId);
                             const label = item.displayName?.trim() || item.vendorModelId;
+                            // 保存进行中的行转圈；已保存行显示「已添加」；其余不渲染
+                            let rowStatusNode: React.ReactNode = null;
+                            if (saving && selected && !saved) {
+                                rowStatusNode = <ActivityIndicator size="small" />;
+                            } else if (saved) {
+                                rowStatusNode = <Text style={{color: tokens.textSecondary}}>{coreT({key: "ui.common.added"})}</Text>;
+                            }
                             return (
                                 <Pressable
                                     style={[styles.row, {borderBottomColor: tokens.border}, selected && {backgroundColor: tokens.bgSecondary}, saved && {opacity: 0.55}]}
@@ -197,13 +205,20 @@ export function FetchModelsSheet({visible, providerId, onClose, onSaved}: Props)
                                         <Text style={{color: tokens.text, fontWeight: '500'}}>{label}</Text>
                                         {item.displayName?.trim() && item.displayName.trim() !== item.vendorModelId ? <Text style={{color: tokens.textSecondary, fontSize: 13}}>{item.vendorModelId}</Text> : null}
                                     </View>
-                                    {saving && selected && !saved ? <ActivityIndicator size="small" /> : saved ? <Text style={{color: tokens.textSecondary}}>{coreT({key: "ui.common.added"})}</Text> : null}
+                                    {rowStatusNode}
                                 </Pressable>
                             );
                         }}
                     />
                 </>
-            )}
+        );
+    }
+
+    const body = (
+        <>
+            <Text style={[styles.title, {color: tokens.text}]}>{coreT({key: "ui.provider.fetch_models_title"})}</Text>
+            <Text style={[styles.subtitle, {color: tokens.textSecondary}]}>{coreT({key: "ui.provider.fetch_models_hint"})}</Text>
+            {stateNode}
             {saveError ? <Text style={[styles.saveError, {color: tokens.danger}]}>{saveError}</Text> : null}
             <View style={styles.actionRow}>
                 <Pressable onPress={onClose} disabled={saving} style={styles.doneBtn}>

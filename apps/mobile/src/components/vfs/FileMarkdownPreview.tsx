@@ -390,31 +390,41 @@ export function FileMarkdownPreview({path, content, tokens, previewFill = false,
         return <PreviewScrollWrap previewFill={previewFill}>{plain}</PreviewScrollWrap>;
     }
 
+    // WebView（批注/富预览）优先；有正文平铺渲染正文；无正文但前元数据存在则只出前元卡片加空正文提示
+    let mdNode: React.ReactNode = null;
+    if (mdUseWebViewPreview || mdAnnotateActive) {
+        mdNode = (
+            <RichDocumentWebView
+                key={path}
+                html={mdBodyHtml}
+                plain={mdBody}
+                overLimit={mdOverLimit}
+                frontMatterHtml={frontMatterHtml}
+                style={previewFill ? styles.webBody : undefined}
+                {...annotateWebProps}
+            />
+        );
+    } else if (mdBody) {
+        mdNode = (
+            <>
+                {showFrontMatter ? <FrontMatterCard tokens={tokens} fields={fmFields} empty={fmLines.length === 0} /> : null}
+                <PreviewScrollWrap previewFill={previewFill}>
+                    <RichContentBody content={mdBody} tokens={tokens} />
+                </PreviewScrollWrap>
+            </>
+        );
+    } else if (showFrontMatter) {
+        mdNode = (
+            <>
+                <FrontMatterCard tokens={tokens} fields={fmFields} empty={fmLines.length === 0} />
+                <Text style={{color: tokens.textSecondary, fontSize: 14}}>{coreT({key: "ui.vfs.markdown_empty_body"})}</Text>
+            </>
+        );
+    }
+
     return (
         <View style={[styles.root, previewFill && mdUseWebViewPreview && styles.fillRoot, previewFill && mdAnnotateActive && styles.fillRoot]}>
-            {mdUseWebViewPreview || mdAnnotateActive ? (
-                <RichDocumentWebView
-                    key={path}
-                    html={mdBodyHtml}
-                    plain={mdBody}
-                    overLimit={mdOverLimit}
-                    frontMatterHtml={frontMatterHtml}
-                    style={previewFill ? styles.webBody : undefined}
-                    {...annotateWebProps}
-                />
-            ) : mdBody ? (
-                <>
-                    {showFrontMatter ? <FrontMatterCard tokens={tokens} fields={fmFields} empty={fmLines.length === 0} /> : null}
-                    <PreviewScrollWrap previewFill={previewFill}>
-                        <RichContentBody content={mdBody} tokens={tokens} />
-                    </PreviewScrollWrap>
-                </>
-            ) : showFrontMatter ? (
-                <>
-                    <FrontMatterCard tokens={tokens} fields={fmFields} empty={fmLines.length === 0} />
-                    <Text style={{color: tokens.textSecondary, fontSize: 14}}>{coreT({key: "ui.vfs.markdown_empty_body"})}</Text>
-                </>
-            ) : null}
+            {mdNode}
             {mdAnnotateActive ? annotateModals : null}
         </View>
     );

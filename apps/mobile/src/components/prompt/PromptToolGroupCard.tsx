@@ -74,6 +74,22 @@ export function PromptToolGroupCard({card, turnId, expanded, onToggle}: Props) {
         });
     }, [openDetail, card.id, card.toolName, card.result, turnId]);
 
+    /** 状态点三色：ok 绿 / error 红 / 其余（lost 等）中性。 */
+    let dotColor: string;
+    switch (card.status) {
+        case 'ok': {
+            dotColor = tokens.success;
+            break;
+        }
+        case 'error': {
+            dotColor = tokens.danger;
+            break;
+        }
+        default: {
+            dotColor = tokens.textTertiary;
+        }
+    }
+
     return (
         <View
             testID="prompt-tool-group-card"
@@ -97,7 +113,7 @@ export function PromptToolGroupCard({card, turnId, expanded, onToggle}: Props) {
                 <View testID="prompt-tool-group-status" style={styles.headLeft}>
                     <View
                         testID={`prompt-tool-group-dot-${card.status}`}
-                        style={[styles.dot, {backgroundColor: card.status === 'ok' ? tokens.success : card.status === 'error' ? tokens.danger : tokens.textTertiary}]}
+                        style={[styles.dot, {backgroundColor: dotColor}]}
                     />
                     <Text testID="prompt-tool-group-name" style={[styles.name, {color: tokens.text}]} numberOfLines={1}>
                         {card.toolName}

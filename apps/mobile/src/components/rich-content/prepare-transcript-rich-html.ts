@@ -79,7 +79,14 @@ markdown.renderer.rules.fence = (tokens, idx) => {
     const langClass = markdown.utils.escapeHtml(rawLang);
     if (highlighted) {
         // 三态：mermaid 裸 pre（图表链路豁免语言标）/ 命中归一化表带真语言标 / 表外语言统一 plain 标
-        const label = isMermaid ? '' : normalized ? ` data-lang="${normalized}"` : ' data-lang="plain"';
+        let label: string;
+        if (isMermaid) {
+            label = '';
+        } else if (normalized) {
+            label = ` data-lang="${normalized}"`;
+        } else {
+            label = ' data-lang="plain"';
+        }
         return `<pre${label}>${copyBtn}<code class="language-${langClass} hljs">${highlighted}</code></pre>\n`;
     }
     // 等价 markdown-it 默认 fence 输出（escapeHtml 同源）+ 复制按钮

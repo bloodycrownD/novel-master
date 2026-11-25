@@ -613,7 +613,11 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
             return;
         }
         const meta = worktreeRows.find(r => r.path === menuPath);
-        const protectReason = action === 'rename' || action === 'delete' ? (isProtectedPath ? isProtectedPath(menuPath) : null) : null;
+        // 重命名/删除受保护路径拦截；其余动作不设防
+        let protectReason: string | null = null;
+        if (action === 'rename' || action === 'delete') {
+            protectReason = isProtectedPath ? isProtectedPath(menuPath) : null;
+        }
         if (protectReason != null) {
             showToast(protectReason);
             return;

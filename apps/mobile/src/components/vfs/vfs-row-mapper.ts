@@ -98,7 +98,20 @@ export namespace VfsRowMapper {
         const displayText = coreT(WorkplaceLabels.displayStateLabel(row.displayState));
         const subtitle = `${inclusionText}·${displayText}`;
         const mode = row.inclusionMode;
-        const badge: VfsRowBadge = mode === 'hide' ? {label: coreT({key: "ui.vfs.row_badge_hidden"}), tone: 'muted'} : mode === 'show' ? {label: coreT({key: "label.workplace.inclusion.show"}), tone: 'in'} : {label: coreT({key: "ui.vfs.row_badge_follow"}), tone: 'follow'};
+        let badge: VfsRowBadge;
+        switch (mode) {
+            case 'hide': {
+                badge = {label: coreT({key: "ui.vfs.row_badge_hidden"}), tone: 'muted'};
+                break;
+            }
+            case 'show': {
+                badge = {label: coreT({key: "label.workplace.inclusion.show"}), tone: 'in'};
+                break;
+            }
+            default: {
+                badge = {label: coreT({key: "ui.vfs.row_badge_follow"}), tone: 'follow'};
+            }
+        }
 
         return {
             path: row.path,

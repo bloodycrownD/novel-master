@@ -160,6 +160,16 @@ export function FileReferencePicker(props: FileReferencePickerProps) {
         onClose();
     };
 
+    // 目录选择模式固定显示「选择当前文件夹」，文件引用模式按当前目录是否已选切换文案
+    let selectDirLabel: string;
+    if (isPickDirectory) {
+        selectDirLabel = coreT({key: "ui.chat.select_current_folder"});
+    } else if (currentDirSelected) {
+        selectDirLabel = coreT({key: "ui.chat.deselect_current_folder"});
+    } else {
+        selectDirLabel = coreT({key: "ui.chat.select_current_folder"});
+    }
+
     return (
         <AppModal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
             <View style={styles.overlay}>
@@ -195,7 +205,7 @@ export function FileReferencePicker(props: FileReferencePickerProps) {
                                     color: isPickDirectory && cwdBlocked ? tokens.textSecondary : tokens.primary,
                                 }}
                             >
-                                {isPickDirectory ? coreT({key: "ui.chat.select_current_folder"}) : currentDirSelected ? coreT({key: "ui.chat.deselect_current_folder"}) : coreT({key: "ui.chat.select_current_folder"})}
+                                {selectDirLabel}
                             </Text>
                         </Pressable>
                     </View>

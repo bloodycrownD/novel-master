@@ -14,7 +14,7 @@ import {AgentModeTab, type AgentSettingsTab} from '@/config-forms/agent';
 import * as storedConfig from '@novel-master/core/stored-config-validity';
 import {BatchCheckbox} from '../batch/BatchCheckbox';
 import {ManageHeader} from '../batch/ManageHeader';
-import {BottomSheetMenu} from '../sheet/BottomSheetMenu';
+import {BottomSheetMenu, type SheetMenuItem} from '../sheet/BottomSheetMenu';
 import {SegmentedControl} from '../ui/SegmentedControl';
 import {ElevatedCard} from '../ui/ElevatedCard';
 import {PrimaryButton} from '../ui/Buttons';
@@ -215,6 +215,20 @@ export function AgentList({onCreate}: Props) {
         ]);
     };
 
+    // 失效配置行仅允许删除，避免 strict get() 在重命名/复制时失败
+    let menuItems: SheetMenuItem[];
+    if (!menuAgentId) {
+        menuItems = [];
+    } else if (rows.find(r => r.id === menuAgentId)?.configInvalid) {
+        menuItems = [{label: coreT({key: "ui.common.delete"}), action: 'delete', danger: true}];
+    } else {
+        menuItems = [
+            {label: coreT({key: "ui.common.rename"}), action: 'rename'},
+            {label: coreT({key: "ui.transcript.menu.copy"}), action: 'duplicate'},
+            {label: coreT({key: "ui.common.delete"}), action: 'delete', danger: true},
+        ];
+    }
+
     return (
         <View style={styles.root}>
             <ManageHeader
@@ -258,7 +272,25 @@ export function AgentList({onCreate}: Props) {
                     contentContainerStyle={styles.listContent}
                     refreshControl={<RefreshControl refreshing={loading} onRefresh={reload} />}
                     ListEmptyComponent={<Text style={[styles.empty, {color: tokens.textSecondary}]}>{EMPTY_TEXTS[tab]}</Text>}
-                    renderItem={({item, index}) => (
+                    renderItem={({item, index}) => {
+                        // mode 归一后为 all（显式/缺省）挂「全部」徽标；invalid 行读不到 def 也按 all
+                        let modeBadge: React.ReactNode;
+                        if (item.builtin) {
+                            modeBadge = (
+                                <View style={[styles.tagBadge, {backgroundColor: `${tokens.primary}1A`}]}>
+                                    <Text style={[styles.tagBadgeText, {color: tokens.primary}]}>{coreT({key: "ui.common.builtin"})}</Text>
+                                </View>
+                            );
+                        } else if ((item.def?.mode ?? 'all') === 'all') {
+                            modeBadge = (
+                                <View style={[styles.tagBadge, {backgroundColor: `${tokens.textTertiary}1A`}]}>
+                                    <Text style={[styles.tagBadgeText, {color: tokens.textTertiary}]}>{coreT({key: "ui.common.all"})}</Text>
+                                </View>
+                            );
+                        } else {
+                            modeBadge = null;
+                        }
+                        return (
                         <ElevatedCard
                             tokens={tokens}
                             selected={!item.builtin && batch.isSelected(item.id)}
@@ -289,16 +321,7 @@ export function AgentList({onCreate}: Props) {
                                     <Text style={[styles.name, {color: tokens.text}]} numberOfLines={1}>
                                         {item.name}
                                     </Text>
-                                    {/* mode 归一后为 all（显式/缺省）挂「全部」徽标；invalid 行读不到 def 也按 all */}
-                                    {item.builtin ? (
-                                        <View style={[styles.tagBadge, {backgroundColor: `${tokens.primary}1A`}]}>
-                                            <Text style={[styles.tagBadgeText, {color: tokens.primary}]}>{coreT({key: "ui.common.builtin"})}</Text>
-                                        </View>
-                                    ) : (item.def?.mode ?? 'all') === 'all' ? (
-                                        <View style={[styles.tagBadge, {backgroundColor: `${tokens.textTertiary}1A`}]}>
-                                            <Text style={[styles.tagBadgeText, {color: tokens.textTertiary}]}>{coreT({key: "ui.common.all"})}</Text>
-                                        </View>
-                                    ) : null}
+                                    {modeBadge}
                                 </View>
                                 {item.configInvalid ? (
                                     <View style={styles.metaRow}>
@@ -330,23 +353,13 @@ export function AgentList({onCreate}: Props) {
                                 </>
                             ) : null}
                         </ElevatedCard>
-                    )}
+                        );
+                    }}
                 />
             )}
-            {/* 失效配置行仅允许删除，避免 strict get() 在重命名/复制时失败 */}
             <BottomSheetMenu
                 visible={menuAgentId != null}
-                items={
-                    !menuAgentId
-                        ? []
-                        : rows.find(r => r.id === menuAgentId)?.configInvalid
-                        ? [{label: coreT({key: "ui.common.delete"}), action: 'delete', danger: true}]
-                        : [
-                                {label: coreT({key: "ui.common.rename"}), action: 'rename'},
-                                {label: coreT({key: "ui.transcript.menu.copy"}), action: 'duplicate'},
-                                {label: coreT({key: "ui.common.delete"}), action: 'delete', danger: true},
-                            ]
-                }
+                items={menuItems}
                 onClose={() => setMenuAgentId(undefined)}
                 onSelect={action => {
                     const id = menuAgentId;

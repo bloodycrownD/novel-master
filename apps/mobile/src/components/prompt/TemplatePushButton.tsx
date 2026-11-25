@@ -10,6 +10,7 @@ import {
     StyleSheet,
     Text,
 } from 'react-native';
+import type {StyleProp, ViewStyle} from 'react-native';
 import {SyncPushIcon} from '@/components/icons/TabIcons';
 import {useRuntime} from '@/hooks/useRuntime';
 import {useTheme} from '@/theme/ThemeProvider';
@@ -67,34 +68,44 @@ export function TemplatePushButton({
         ]);
     };
 
+    // 图标态走方形图标钮，紧凑态小钮，普通态带边框标准钮
+    let triggerStyle: StyleProp<ViewStyle>;
+    if (iconOnly) {
+        triggerStyle = styles.iconBtn;
+    } else if (compact) {
+        triggerStyle = styles.btnCompact;
+    } else {
+        triggerStyle = [styles.btn, {borderColor: tokens.border}];
+    }
+
+    // 推送中转圈；图标态只出图标；文本态按 compact 切字号
+    let bodyNode: React.ReactNode;
+    if (pushing) {
+        bodyNode = <ActivityIndicator size="small" color={tokens.primary} />;
+    } else if (iconOnly) {
+        bodyNode = <SyncPushIcon color={tokens.primary} />;
+    } else {
+        bodyNode = (
+            <Text
+                style={
+                    compact
+                        ? {color: tokens.primary, fontSize: 13, fontWeight: '600'}
+                        : {color: tokens.primary, fontWeight: '600'}
+                }
+            >
+                {coreT({key: "ui.vfs.push_project_title"})}
+            </Text>
+        );
+    }
+
     return (
         <Pressable
             accessibilityLabel={coreT({key: "ui.vfs.push_project_title"})}
-            style={
-                iconOnly
-                    ? styles.iconBtn
-                    : compact
-                    ? styles.btnCompact
-                    : [styles.btn, {borderColor: tokens.border}]
-            }
+            style={triggerStyle}
             disabled={pushing}
             onPress={confirmPush}
         >
-            {pushing ? (
-                <ActivityIndicator size="small" color={tokens.primary} />
-            ) : iconOnly ? (
-                <SyncPushIcon color={tokens.primary} />
-            ) : (
-                <Text
-                    style={
-                        compact
-                            ? {color: tokens.primary, fontSize: 13, fontWeight: '600'}
-                            : {color: tokens.primary, fontWeight: '600'}
-                    }
-                >
-                    {coreT({key: "ui.vfs.push_project_title"})}
-                </Text>
-            )}
+            {bodyNode}
         </Pressable>
     );
 }

@@ -89,6 +89,26 @@ export function EditorScreenShell<T extends string>({
     /** 无标题、无动作位 → 整行不渲染：导航栏已有标题时别在页内再叠一个重复标题。 */
     const hasToolbar = save != null || title != null || titlePress != null || toggle != null;
 
+    /** 无标题不渲染标题位；有按压回调走按钮形态，否则纯文本标题。 */
+    let titleNode: React.ReactNode = null;
+    if (title != null) {
+        if (titlePress) {
+            titleNode = (
+                <Pressable testID={titlePress.testID} style={styles.toolbarTitle} onPress={titlePress.onPress} accessibilityRole="button" accessibilityLabel={coreT({key: "ui.common.dismiss_keyboard"})}>
+                    <Text style={[styles.toolbarTitleText, {color: titleColor, fontSize: titleFontSize}]} numberOfLines={1} ellipsizeMode="tail">
+                        {title}
+                    </Text>
+                </Pressable>
+            );
+        } else {
+            titleNode = (
+                <Text style={[styles.toolbarTitle, styles.toolbarTitleText, {color: titleColor, fontSize: titleFontSize}]} numberOfLines={1} ellipsizeMode="tail">
+                    {title}
+                </Text>
+            );
+        }
+    }
+
     const body = (
         <>
             {hasToolbar ? (
@@ -107,17 +127,7 @@ export function EditorScreenShell<T extends string>({
                             </Text>
                         </Pressable>
                     ) : null}
-                    {title == null ? null : titlePress ? (
-                        <Pressable testID={titlePress.testID} style={styles.toolbarTitle} onPress={titlePress.onPress} accessibilityRole="button" accessibilityLabel={coreT({key: "ui.common.dismiss_keyboard"})}>
-                            <Text style={[styles.toolbarTitleText, {color: titleColor, fontSize: titleFontSize}]} numberOfLines={1} ellipsizeMode="tail">
-                                {title}
-                            </Text>
-                        </Pressable>
-                    ) : (
-                        <Text style={[styles.toolbarTitle, styles.toolbarTitleText, {color: titleColor, fontSize: titleFontSize}]} numberOfLines={1} ellipsizeMode="tail">
-                            {title}
-                        </Text>
-                    )}
+                    {titleNode}
                     {toggle ? (
                         <Pressable testID={toggle.testID} accessibilityLabel={toggle.accessibilityLabel} style={styles.toolbarBtn} onPress={toggle.onPress}>
                             <Text

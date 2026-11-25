@@ -99,7 +99,14 @@ export function ChatStreamMetricsBarLive({agentRunning, sessionId, contextTokenL
             // 受理即置起点后，starting 阶段被杀的水合单元带短历时（字数为零）
             // ——「已中断 · 数百 ms」比静默消失更可感知，属预期口径。
             interrupted = view.status === 'interrupted';
-            const elapsedMs = view.elapsedMs != null ? view.elapsedMs : view.startedAtMs > 0 ? Math.max(0, (view.settledAtMs ?? Date.now()) - view.startedAtMs) : 0;
+            let elapsedMs: number;
+            if (view.elapsedMs != null) {
+                elapsedMs = view.elapsedMs;
+            } else if (view.startedAtMs > 0) {
+                elapsedMs = Math.max(0, (view.settledAtMs ?? Date.now()) - view.startedAtMs);
+            } else {
+                elapsedMs = 0;
+            }
             // 冻结态：token 计数照显 + 收尾冻结的末值速率（无样本则省略速率段）。
             const frozenSample = {elapsedMs, completionTokens: view.metrics.completionTokens, tokenSource: view.metrics.tokenSource};
             metrics = AgentStreamMetrics.toView(false, frozenSample, manager.rateTokensPerSecond(sessionId, Date.now()));

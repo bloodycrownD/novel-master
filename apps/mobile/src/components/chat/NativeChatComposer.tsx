@@ -522,7 +522,20 @@ export const NativeChatComposer = forwardRef<NativeChatComposerInstance, NativeC
     );
 
     /** 发送钮底色（J 组三分支的主题映射；disabled 走 --border 即 borderLight）。 */
-    const sendButtonBackground = sendState.variant === 'disabled' ? theme.borderLight : sendState.variant === 'danger' ? theme.danger : theme.primary;
+    let sendButtonBackground: string;
+    switch (sendState.variant) {
+        case 'disabled': {
+            sendButtonBackground = theme.borderLight;
+            break;
+        }
+        case 'danger': {
+            sendButtonBackground = theme.danger;
+            break;
+        }
+        default: {
+            sendButtonBackground = theme.primary;
+        }
+    }
 
     return (
         <View

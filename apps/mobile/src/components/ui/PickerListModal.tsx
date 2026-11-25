@@ -117,6 +117,53 @@ export function PickerListModal<T>({
         [isSelected, keyExtractor, selectedId],
     );
 
+    // 加载中转圈；失败态给出错误与重试；就绪渲染列表
+    let bodyNode: React.ReactNode;
+    if (loading) {
+        bodyNode = <ActivityIndicator style={styles.loader} />;
+    } else if (error) {
+        bodyNode = (
+            <View style={styles.center}>
+                <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text>
+                <Pressable onPress={() => reload().catch(() => undefined)}>
+                    <Text style={{color: tokens.primary, fontWeight: '600'}}>{coreT({key: "ui.common.retry"})}</Text>
+                </Pressable>
+            </View>
+        );
+    } else {
+        bodyNode = (
+            <FlatList
+                data={rows}
+                keyExtractor={keyExtractor}
+                style={styles.list}
+                ListEmptyComponent={
+                    <Text style={[styles.empty, {color: tokens.textSecondary}]}>
+                        {emptyText}
+                    </Text>
+                }
+                renderItem={({item, index}) => {
+                    const selected = isRowSelected(item, index);
+                    const rowProps = getRowProps?.(item);
+                    return (
+                        <Pressable
+                            style={({pressed}) => [
+                                styles.row,
+                                {borderBottomColor: tokens.border},
+                                selected && {backgroundColor: tokens.background},
+                                {opacity: pressed ? 0.85 : rowProps?.opacity ?? 1},
+                            ]}
+                            onPress={() => onPick(item)}
+                            testID={rowProps?.testID}
+                            accessibilityLabel={rowProps?.accessibilityLabel}
+                        >
+                            {renderRow(item, selected)}
+                        </Pressable>
+                    );
+                }}
+            />
+        );
+    }
+
     return (
         <ModalShell
             visible={visible}
@@ -131,46 +178,7 @@ export function PickerListModal<T>({
                     {subtitle}
                 </Text>
             ) : null}
-            {loading ? (
-                <ActivityIndicator style={styles.loader} />
-            ) : error ? (
-                <View style={styles.center}>
-                    <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text>
-                    <Pressable onPress={() => reload().catch(() => undefined)}>
-                        <Text style={{color: tokens.primary, fontWeight: '600'}}>{coreT({key: "ui.common.retry"})}</Text>
-                    </Pressable>
-                </View>
-            ) : (
-                <FlatList
-                    data={rows}
-                    keyExtractor={keyExtractor}
-                    style={styles.list}
-                    ListEmptyComponent={
-                        <Text style={[styles.empty, {color: tokens.textSecondary}]}>
-                            {emptyText}
-                        </Text>
-                    }
-                    renderItem={({item, index}) => {
-                        const selected = isRowSelected(item, index);
-                        const rowProps = getRowProps?.(item);
-                        return (
-                            <Pressable
-                                style={({pressed}) => [
-                                    styles.row,
-                                    {borderBottomColor: tokens.border},
-                                    selected && {backgroundColor: tokens.background},
-                                    {opacity: pressed ? 0.85 : rowProps?.opacity ?? 1},
-                                ]}
-                                onPress={() => onPick(item)}
-                                testID={rowProps?.testID}
-                                accessibilityLabel={rowProps?.accessibilityLabel}
-                            >
-                                {renderRow(item, selected)}
-                            </Pressable>
-                        );
-                    }}
-                />
-            )}
+            {bodyNode}
             <Pressable onPress={onClose} style={styles.cancelBtn}>
                 <Text style={{color: cancelColor ?? tokens.textSecondary}}>{coreT({key: "ui.common.cancel"})}</Text>
             </Pressable>

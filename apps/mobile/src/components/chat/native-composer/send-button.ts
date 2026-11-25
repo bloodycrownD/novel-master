@@ -28,10 +28,19 @@ export namespace SendButton {
         readonly canSend: boolean;
         readonly running: boolean;
     }): SendButtonState {
+        // 分支优先级 disabled → danger → primary（与 web 版 resolveSendButtonState 逐字对齐）
+        let variant: SendButtonState['variant'];
+        if (!input.canSend) {
+            variant = 'disabled';
+        } else if (input.running) {
+            variant = 'danger';
+        } else {
+            variant = 'primary';
+        }
         return {
             disabled: !input.canSend,
             running: input.running,
-            variant: !input.canSend ? 'disabled' : input.running ? 'danger' : 'primary',
+            variant,
             action: input.running ? 'terminate' : 'send',
         };
     }

@@ -54,7 +54,14 @@ export namespace FormatError {
         // 6. TdbcError：message + cause。
         if (error instanceof TdbcError) {
             const causeValue = read(error);
-            const inner = causeValue instanceof Error && causeValue.message ? causeValue.message : causeValue != null ? String(causeValue) : undefined;
+            let inner: string | undefined;
+            if (causeValue instanceof Error && causeValue.message) {
+                inner = causeValue.message;
+            } else if (causeValue != null) {
+                inner = String(causeValue);
+            } else {
+                inner = undefined;
+            }
             return inner ? `${error.message}\n${inner}` : error.message;
         }
         // 7. 未知 Error。

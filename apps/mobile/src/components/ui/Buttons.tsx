@@ -25,14 +25,25 @@ export function PrimaryButton({
             accessibilityRole="button"
             onPress={onPress}
             disabled={disabled}
-            style={({pressed}) => [
-                styles.primary,
-                fullWidth ? styles.fullWidth : null,
-                {
-                    backgroundColor: tokens.primary,
-                    opacity: disabled ? 0.45 : pressed ? 0.85 : 1,
-                },
-            ]}
+            style={({pressed}) => {
+                // 禁用置灰最优先，其次按压反馈
+                let opacity: number;
+                if (disabled) {
+                    opacity = 0.45;
+                } else if (pressed) {
+                    opacity = 0.85;
+                } else {
+                    opacity = 1;
+                }
+                return [
+                    styles.primary,
+                    fullWidth ? styles.fullWidth : null,
+                    {
+                        backgroundColor: tokens.primary,
+                        opacity,
+                    },
+                ];
+            }}
         >
             <Text
                 pointerEvents="none"
@@ -56,14 +67,25 @@ export function SecondaryButton({
             accessibilityRole="button"
             onPress={onPress}
             disabled={disabled}
-            style={({pressed}) => [
-                styles.secondary,
-                fullWidth ? styles.fullWidth : null,
-                {
-                    backgroundColor: tokens.bgSecondary,
-                    opacity: disabled ? 0.45 : pressed ? 0.85 : 1,
-                },
-            ]}
+            style={({pressed}) => {
+                // 禁用置灰最优先，其次按压反馈
+                let opacity: number;
+                if (disabled) {
+                    opacity = 0.45;
+                } else if (pressed) {
+                    opacity = 0.85;
+                } else {
+                    opacity = 1;
+                }
+                return [
+                    styles.secondary,
+                    fullWidth ? styles.fullWidth : null,
+                    {
+                        backgroundColor: tokens.bgSecondary,
+                        opacity,
+                    },
+                ];
+            }}
         >
             <Text
                 pointerEvents="none"

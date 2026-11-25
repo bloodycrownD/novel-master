@@ -46,7 +46,24 @@ export function ToolCallCard({tool, showFullParams, groupItem = false, onOpenFil
     const detail = showFullParams ? JSON.stringify(tool.input, null, 2) : ToolSummary.callSummary(tool);
     const statusMeta = STATUS_META[tool.status];
     // prettier-ignore
-    const openHint = canOpenSubagent ? coreT({key: "ui.transcript.open_hint", params: {kind: coreT({key: "ui.transcript.open_kind.subagent"})}}) : canOpenSkill ? coreT({key: "ui.transcript.open_hint", params: {kind: coreT({key: "ui.transcript.open_kind.skill"})}}) : coreT({key: "ui.transcript.open_hint", params: {kind: coreT({key: "ui.transcript.open_kind.workspace"})}});
+    let openHint: string;
+    if (canOpenSubagent) {
+        openHint = coreT({key: "ui.transcript.open_hint", params: {kind: coreT({key: "ui.transcript.open_kind.subagent"})}});
+    } else if (canOpenSkill) {
+        openHint = coreT({key: "ui.transcript.open_hint", params: {kind: coreT({key: "ui.transcript.open_kind.skill"})}});
+    } else {
+        openHint = coreT({key: "ui.transcript.open_hint", params: {kind: coreT({key: "ui.transcript.open_kind.workspace"})}});
+    }
+
+    // aria 标签按优先级说清打开目标：子会话 > 技能 > 文件
+    let openAriaLabel: string;
+    if (canOpenSubagent) {
+        openAriaLabel = coreT({key: "ui.chat.open_subagent_aria", params: {id: subagentSessionId}});
+    } else if (canOpenSkill) {
+        openAriaLabel = coreT({key: "ui.chat.open_skill_aria", params: {name: skillRef.name}});
+    } else {
+        openAriaLabel = coreT({key: "ui.chat.open_file_aria", params: {path: filePath}});
+    }
 
     const card = (
         <>
@@ -70,7 +87,7 @@ export function ToolCallCard({tool, showFullParams, groupItem = false, onOpenFil
             <Pressable
                 accessibilityRole="button"
                 // prettier-ignore
-                accessibilityLabel={canOpenSubagent ? coreT({key: "ui.chat.open_subagent_aria", params: {id: subagentSessionId}}) : canOpenSkill ? coreT({key: "ui.chat.open_skill_aria", params: {name: skillRef.name}}) : coreT({key: "ui.chat.open_file_aria", params: {path: filePath}})}
+                accessibilityLabel={openAriaLabel}
                 onPress={() => {
                     if (canOpenSubagent) {
                         onOpenSubagentSession(subagentSessionId);

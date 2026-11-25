@@ -50,7 +50,13 @@ export function MetricDetailSheet({visible, sessionId, contextTokenLabel, onClos
             .then(result => {
                 if (!cancelled) {
                     // 已知失败走 Result 收口（错误通道迁移四期）；未知异常仍走异常通道。
-                    setError(result.ok ? null : result.error instanceof Error ? result.error.message : String(result.error));
+                    if (result.ok) {
+                        setError(null);
+                    } else if (result.error instanceof Error) {
+                        setError(result.error.message);
+                    } else {
+                        setError(String(result.error));
+                    }
                     setDetail(result.ok ? result.value : null);
                     setLoading(false);
                 }
@@ -76,19 +82,23 @@ export function MetricDetailSheet({visible, sessionId, contextTokenLabel, onClos
         lastBilledInput = hasCacheColumns && last.provider === 'anthropic' ? last.promptTokens + (last.cacheReadTokens ?? 0) + (last.cacheCreationTokens ?? 0) : last.promptTokens;
     }
 
-    return (
-        <ModalShell visible={visible} onClose={onClose} variant="bottom" backdropOpacity={0.55} keyboardAvoid={{kind: 'none'}} panelStyle={styles.sheet}>
-            <Text style={[styles.heading, {color: tokens.text}]}>{coreT({key: "ui.stats.detail_title"})}</Text>
-            {loading ? (
-                <Text testID="metric-detail-sheet-loading" style={[styles.hint, {color: tokens.textSecondary}]}>
-                    {coreT({key: "ui.common.loading"})}
-                </Text>
-            ) : error != null ? (
-                <Text testID="metric-detail-sheet-error" style={[styles.hint, {color: tokens.danger}]}>
-                    {error}
-                </Text>
-            ) : (
-                <ScrollView testID="metric-detail-sheet-content" style={styles.body} showsVerticalScrollIndicator={false}>
+    // 加载中提示；失败态红字错误；就绪后渲染明细
+    let bodyNode: React.ReactNode;
+    if (loading) {
+        bodyNode = (
+            <Text testID="metric-detail-sheet-loading" style={[styles.hint, {color: tokens.textSecondary}]}>
+                {coreT({key: "ui.common.loading"})}
+            </Text>
+        );
+    } else if (error != null) {
+        bodyNode = (
+            <Text testID="metric-detail-sheet-error" style={[styles.hint, {color: tokens.danger}]}>
+                {error}
+            </Text>
+        );
+    } else {
+        bodyNode = (
+            <ScrollView testID="metric-detail-sheet-content" style={styles.body} showsVerticalScrollIndicator={false}>
                     <SectionLabel text={coreT({key: "ui.stats.recent_requests"})} tokens={tokens} />
                     {last == null ? (
                         <EmptyRow text={coreT({key: "ui.stats.recent_empty"})} tokens={tokens} />
@@ -113,7 +123,13 @@ export function MetricDetailSheet({visible, sessionId, contextTokenLabel, onClos
                     </Text>
                     <Text style={[styles.footnoteLine2, {color: tokens.textTertiary}]}>{coreT({key: "ui.stats.footnote_recent"})}</Text>
                 </ScrollView>
-            )}
+        );
+    }
+
+    return (
+        <ModalShell visible={visible} onClose={onClose} variant="bottom" backdropOpacity={0.55} keyboardAvoid={{kind: 'none'}} panelStyle={styles.sheet}>
+            <Text style={[styles.heading, {color: tokens.text}]}>{coreT({key: "ui.stats.detail_title"})}</Text>
+            {bodyNode}
         </ModalShell>
     );
 }

@@ -163,6 +163,15 @@ export function ToolPolicyPicker({tokens, selected, onChange, mcpTools, disabled
     const sheetDeps = [open, overlay, overlayKey, filtered, draft, draftSet, query, tokens, insets.bottom, close, confirm, toggle];
     useEffect(showSheet, sheetDeps);
 
+    let triggerLabel: string;
+    if (selected.length === 0) {
+        triggerLabel = coreT({key: "ui.agent.no_tools_selected", params: {total: String(total)}});
+    } else if (selected.length >= total) {
+        triggerLabel = coreT({key: "ui.agent.all_tools_selected", params: {total: String(total)}});
+    } else {
+        triggerLabel = coreT({key: "ui.agent.selected_tools_aria", params: {selected: String(selected.length), total: String(total)}});
+    }
+
     return (
         <Pressable
             disabled={disabled}
@@ -183,7 +192,7 @@ export function ToolPolicyPicker({tokens, selected, onChange, mcpTools, disabled
                 }}
                 numberOfLines={1}
             >
-                {selected.length === 0 ? coreT({key: "ui.agent.no_tools_selected", params: {total: String(total)}}) : selected.length >= total ? coreT({key: "ui.agent.all_tools_selected", params: {total: String(total)}}) : coreT({key: "ui.agent.selected_tools_aria", params: {selected: String(selected.length), total: String(total)}})}
+                {triggerLabel}
             </Text>
             <Text style={{color: tokens.textSecondary, fontSize: 12}}>▼</Text>
         </Pressable>

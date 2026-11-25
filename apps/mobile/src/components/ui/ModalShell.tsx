@@ -80,7 +80,20 @@ export function ModalShell({
     const adaptiveAvoid = useAdaptiveKeyboardSheetStyle(keyboardAvoid.kind === 'adaptive' ? keyboardAvoid.maxHeightRatio : 0.75, {
         iosTranslateY: keyboardAvoid.kind === 'adaptive' ? keyboardAvoid.iosTranslateY ?? false : false,
     });
-    const avoidStyle = keyboardAvoid.kind === 'translate' ? translateAvoid : keyboardAvoid.kind === 'adaptive' ? adaptiveAvoid : undefined;
+    let avoidStyle: typeof translateAvoid | typeof adaptiveAvoid | undefined;
+    switch (keyboardAvoid.kind) {
+        case 'translate': {
+            avoidStyle = translateAvoid;
+            break;
+        }
+        case 'adaptive': {
+            avoidStyle = adaptiveAvoid;
+            break;
+        }
+        default: {
+            avoidStyle = undefined;
+        }
+    }
 
     // panel 挂 responder 吞掉落在面板空白处的触摸，避免穿透到遮罩误关闭。
     const panel = (
@@ -89,7 +102,21 @@ export function ModalShell({
         </Animated.View>
     );
 
-    const containerStyleList = [variant === 'center' ? styles.center : variant === 'left' ? styles.left : styles.bottom, containerStyle];
+    let variantStyle: ViewStyle;
+    switch (variant) {
+        case 'center': {
+            variantStyle = styles.center;
+            break;
+        }
+        case 'left': {
+            variantStyle = styles.left;
+            break;
+        }
+        default: {
+            variantStyle = styles.bottom;
+        }
+    }
+    const containerStyleList = [variantStyle, containerStyle];
 
     // left 抽屉：遮罩是 drawer 右侧的正常流 Pressable（不能用 absoluteFill，
     // 否则会垫在 drawer 下面、点 drawer 空白处穿透关闭）。

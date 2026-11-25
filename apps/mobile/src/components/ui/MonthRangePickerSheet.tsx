@@ -134,6 +134,16 @@ export function MonthRangePickerSheet({
         ...Array.from({length: daysInMonth}, (_, i) => i + 1),
     ];
 
+    // 未选起点提示选起点；选了起点未选终点提示选终点；齐了显示区间
+    let hintText: string;
+    if (start == null) {
+        hintText = coreT({key: "ui.stats.range_pick_start"});
+    } else if (end == null) {
+        hintText = coreT({key: "ui.stats.range_pick_end"});
+    } else {
+        hintText = `${coreT({key: "ui.stats.date_md", params: {month: String(start.getMonth() + 1), day: String(start.getDate())}})} — ${coreT({key: "ui.stats.date_md", params: {month: String(end.getMonth() + 1), day: String(end.getDate())}})}`;
+    }
+
     return (
         <ModalShell
             visible={visible}
@@ -208,13 +218,7 @@ export function MonthRangePickerSheet({
                     );
                 })}
             </View>
-            <Text style={[styles.hint, {color: tokens.textSecondary}]}>
-                {start == null
-                    ? coreT({key: "ui.stats.range_pick_start"})
-                    : end == null
-                    ? coreT({key: "ui.stats.range_pick_end"})
-                    : `${coreT({key: "ui.stats.date_md", params: {month: String(start.getMonth() + 1), day: String(start.getDate())}})} — ${coreT({key: "ui.stats.date_md", params: {month: String(end.getMonth() + 1), day: String(end.getDate())}})}`}
-            </Text>
+            <Text style={[styles.hint, {color: tokens.textSecondary}]}>{hintText}</Text>
             <View style={styles.actionRow}>
                 <Pressable
                     testID="month-range-clear"

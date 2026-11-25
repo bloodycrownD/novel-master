@@ -22,10 +22,10 @@ describe('ModalShell variant 布局（regression: 项目抽屉不可见）', () 
     });
 
     it('containerStyleList 按 center/left/bottom 三分派，left 不再落入 bottom 分支', () => {
-        // 三元链：center → left → bottom（left 必须独立分支，不能与 bottom 共享）
-        expect(src).toMatch(
-            /variant === 'center'\s*\?\s*styles\.center\s*:\s*variant === 'left'\s*\?\s*styles\.left\s*:\s*styles\.bottom/,
-        );
+        // switch 分派：center / left / bottom 各自独立分支（left 必须独立，不能与 bottom 共享）
+        expect(src).toMatch(/case 'center':\s*\{\s*variantStyle = styles\.center;\s*break;/);
+        expect(src).toMatch(/case 'left':\s*\{\s*variantStyle = styles\.left;\s*break;/);
+        expect(src).toMatch(/default:\s*\{\s*variantStyle = styles\.bottom;/);
     });
 
     it('leftBackdrop 为遮罩（flex:1，与 drawer 同层横向排布）', () => {

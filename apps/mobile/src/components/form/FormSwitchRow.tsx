@@ -38,24 +38,29 @@ export function FormSwitchRow({
             {description}
         </Text>
     );
+    /** 可折叠时描述包进按压展开的 Pressable；不可折叠但有描述则平铺；否则不渲染。 */
+    let descriptionNode: React.ReactNode = null;
+    if (collapsible) {
+        descriptionNode = (
+            <Pressable
+                accessibilityRole="button"
+                accessibilityState={{expanded}}
+                hitSlop={{top: 4, bottom: 4, left: 0, right: 0}}
+                onPress={() => {
+                    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                    setExpanded(current => !current);
+                }}>
+                {descriptionText}
+            </Pressable>
+        );
+    } else if (hasDescription) {
+        descriptionNode = descriptionText;
+    }
     return (
         <View style={[styles.row, hasDescription && styles.rowWithDescription]}>
             <View style={styles.textCol}>
                 <Text style={[styles.label, {color: tokens.text}]}>{label}</Text>
-                {collapsible ? (
-                    <Pressable
-                        accessibilityRole="button"
-                        accessibilityState={{expanded}}
-                        hitSlop={{top: 4, bottom: 4, left: 0, right: 0}}
-                        onPress={() => {
-                            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                            setExpanded(current => !current);
-                        }}>
-                        {descriptionText}
-                    </Pressable>
-                ) : hasDescription ? (
-                    descriptionText
-                ) : null}
+                {descriptionNode}
             </View>
             <View style={styles.switchWrap}>
                 <Switch

@@ -23,22 +23,44 @@ type Props = {
 };
 
 export function ProfileStatusCard({title, hint, message, metrics, notice, noticeTone = 'muted', tokens}: Props) {
-    return (
-        <FormSectionCard title={title} hint={hint} tokens={tokens}>
-            {metrics != null && metrics.length > 0 ? (
-                <View style={styles.metricRow}>
-                    {metrics.map(metric => (
+    // 指标行优先；无指标但给了 message 出提示行；两者皆无不渲染
+    let statusNode: React.ReactNode = null;
+    if (metrics != null && metrics.length > 0) {
+        statusNode = (
+            <View style={styles.metricRow}>
+                {metrics.map(metric => {
+                    let valueColor: string;
+                    switch (metric.tone) {
+                        case 'warning': {
+                            valueColor = tokens.warning;
+                            break;
+                        }
+                        case 'success': {
+                            valueColor = tokens.success;
+                            break;
+                        }
+                        default: {
+                            valueColor = tokens.text;
+                        }
+                    }
+                    return (
                         <View key={metric.label} style={[styles.metric, {backgroundColor: tokens.bgSecondary}]}>
                             <Text style={[styles.metricLabel, {color: tokens.textSecondary}]}>{metric.label}</Text>
-                            <Text style={[styles.metricValue, {color: metric.tone === 'warning' ? tokens.warning : metric.tone === 'success' ? tokens.success : tokens.text}]} numberOfLines={1}>
+                            <Text style={[styles.metricValue, {color: valueColor}]} numberOfLines={1}>
                                 {metric.value}
                             </Text>
                         </View>
-                    ))}
-                </View>
-            ) : message ? (
-                <Text style={[styles.message, {color: tokens.textSecondary}]}>{message}</Text>
-            ) : null}
+                    );
+                })}
+            </View>
+        );
+    } else if (message) {
+        statusNode = <Text style={[styles.message, {color: tokens.textSecondary}]}>{message}</Text>;
+    }
+
+    return (
+        <FormSectionCard title={title} hint={hint} tokens={tokens}>
+            {statusNode}
             {notice ? (
                 <Text
                     style={[

@@ -9,6 +9,7 @@ import {
     StyleSheet,
     Text,
 } from 'react-native';
+import type {StyleProp, ViewStyle} from 'react-native';
 import {SyncPullIcon} from '@/components/icons/TabIcons';
 import {useRuntime} from '@/hooks/useRuntime';
 import {useTheme} from '@/theme/ThemeProvider';
@@ -64,34 +65,44 @@ export function TemplatePullButton({
         ]);
     };
 
+    // 图标态走方形图标钮，紧凑态小钮，普通态带边框标准钮
+    let triggerStyle: StyleProp<ViewStyle>;
+    if (iconOnly) {
+        triggerStyle = styles.iconBtn;
+    } else if (compact) {
+        triggerStyle = styles.btnCompact;
+    } else {
+        triggerStyle = [styles.btn, {borderColor: tokens.border}];
+    }
+
+    // 拉取中转圈；图标态只出图标；文本态按 compact 切字号
+    let bodyNode: React.ReactNode;
+    if (pulling) {
+        bodyNode = <ActivityIndicator size="small" color={tokens.primary} />;
+    } else if (iconOnly) {
+        bodyNode = <SyncPullIcon color={tokens.primary} />;
+    } else {
+        bodyNode = (
+            <Text
+                style={
+                    compact
+                        ? {color: tokens.primary, fontSize: 13, fontWeight: '600'}
+                        : {color: tokens.primary, fontWeight: '600'}
+                }
+            >
+                {coreT({key: "ui.vfs.sync_menu_title"})}
+            </Text>
+        );
+    }
+
     return (
         <Pressable
             accessibilityLabel={coreT({key: "ui.vfs.sync_menu_title"})}
-            style={
-                iconOnly
-                    ? styles.iconBtn
-                    : compact
-                    ? styles.btnCompact
-                    : [styles.btn, {borderColor: tokens.border}]
-            }
+            style={triggerStyle}
             disabled={pulling}
             onPress={confirmPull}
         >
-            {pulling ? (
-                <ActivityIndicator size="small" color={tokens.primary} />
-            ) : iconOnly ? (
-                <SyncPullIcon color={tokens.primary} />
-            ) : (
-                <Text
-                    style={
-                        compact
-                            ? {color: tokens.primary, fontSize: 13, fontWeight: '600'}
-                            : {color: tokens.primary, fontWeight: '600'}
-                    }
-                >
-                    {coreT({key: "ui.vfs.sync_menu_title"})}
-                </Text>
-            )}
+            {bodyNode}
         </Pressable>
     );
 }
