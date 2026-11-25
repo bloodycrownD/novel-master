@@ -11,7 +11,7 @@ import type { McpFailure } from "../../src/domain/mcp/model/mcp-failure.js";
 import type { McpToolSnapshot } from "../../src/domain/mcp/model/mcp-tool-snapshot.js";
 import { unwrap, unwrapErr } from "../helpers/result-unwrap.js";
 
-const SNAPSHOT: McpToolSnapshot = {serverId: "db", serverName: "数据库", toolName: "query", toolDescription: "执行 SQL 查询"};
+const SNAPSHOT: McpToolSnapshot = {serverId: "db", toolName: "query", toolDescription: "执行 SQL 查询"};
 
 /** 内存 mock ctx：记录 vfs write（overflow-sink 落盘用例），可注入写失败。 */
 function makeRecordingCtx(): { readonly ctx: BuiltinToolContext; readonly files: Map<string, string>; readonly setFail: (on: boolean) => void } {
@@ -59,7 +59,7 @@ describe("to-nm-tool", () => {
         const tool = McpToolAdapter.toNmTool(SNAPSHOT, {call: async () => Result.ok({})});
         assert.equal(tool.name, "mcp__db__query");
         const ctx = makeRecordingCtx().ctx;
-        assert.equal(tool.description(ctx), "[MCP:数据库] 执行 SQL 查询");
+        assert.equal(tool.description(ctx), "[MCP:db] 执行 SQL 查询");
         assert.ok(tool.inputSchema.safeParse({sql: "SELECT 1", weird: [1, {x: null}]}).success);
         assert.ok(tool.inputSchema.safeParse("裸字符串也放行").success);
     });
@@ -80,7 +80,7 @@ describe("to-nm-tool", () => {
         const tool = McpToolAdapter.toNmTool(SNAPSHOT, {call: async () => Result.ok({isError: true, content: [{type: "text", text: "boom 原文"}]})});
         const error = unwrapErr(await tool.run({}, makeRecordingCtx().ctx));
         assert.equal(error.key, "TOOL_FAILED");
-        assert.ok(error.message.startsWith("[MCP:数据库]"));
+        assert.ok(error.message.startsWith("[MCP:db]"));
         assert.ok(error.message.includes("boom 原文"));
     });
 
@@ -89,7 +89,7 @@ describe("to-nm-tool", () => {
         const tool = McpToolAdapter.toNmTool(SNAPSHOT, {call: async () => Result.err(failure)});
         const error = unwrapErr(await tool.run({}, makeRecordingCtx().ctx));
         assert.equal(error.key, "TOOL_FAILED");
-        assert.ok(error.message.startsWith("[MCP:数据库]"));
+        assert.ok(error.message.startsWith("[MCP:db]"));
         assert.ok(error.message.includes("gateway down"));
         assert.equal(error.details?.cause, failure);
     });

@@ -26,8 +26,10 @@ zh-CN:
   mcp.detail.connection_section: 连接
   mcp.detail.create.desktop: 创建
   mcp.detail.create_action: 新建服务器
-  mcp.detail.name_label: 名称
-  mcp.detail.name_placeholder: 如 Acme 知识库
+  mcp.detail.description_label: 描述
+  mcp.detail.description_placeholder: 选填
+  mcp.detail.id_label: ID
+  mcp.detail.id_placeholder: 如 notes_db
   mcp.detail.not_authorized: 未授权
   mcp.detail.oauth_section.desktop: OAuth
   mcp.detail.oauth_status_label: 授权状态
@@ -51,29 +53,21 @@ zh-CN:
   mcp.detail.transport_stdio.desktop: stdio
   mcp.detail.url_label: 地址
   mcp.detail.url_placeholder: https://example.com/mcp
-  mcp.delete_notice: "「{name}」的配置与密钥会一并清除，不可恢复。"
+  mcp.delete_notice: "「{id}」的配置与密钥会一并清除，不可恢复。"
   mcp.delete_title: 删除服务器
   mcp.help.auth.body: API Key 加密保存，保存后不再显示明文；OAuth 授权在系统浏览器里完成，结束后自动回到应用。
   mcp.help.auth.title: 认证
   mcp.help.dismiss: 关闭
-  mcp.help.import.body.desktop: "支持粘贴 Claude Desktop 格式的 {\"mcpServers\":{…}}；其中的 Authorization 头识别为 Bearer 密钥。"
-  mcp.help.import.title.desktop: 导入
   mcp.help.toggle.body: 关闭的服务器不参与连接，它的工具也不会出现在 AI 的工具列表里。
   mcp.help.toggle.title: 开关
   mcp.help.tools.body.desktop: 服务器提供的工具以 mcp__服务器__工具 的命名出现在 agent 工具列表，受 agent 的工具白名单/黑名单约束。
   mcp.help.tools.title.desktop: 工具接入
-  mcp.import.empty_result.desktop: 导入内容里没有可识别的 MCP 服务器
-  mcp.import.invalid_json.desktop: 粘贴内容不是合法 JSON
-  mcp.import.label.desktop: 粘贴外部配置 JSON
-  mcp.import.placeholder.desktop: '{"mcpServers": {"my-server": {"url": "https://…"}}}'
-  mcp.import.title.desktop: 从 JSON 导入
   mcp.list.cancel: 取消
   mcp.list.connected: 已连接
   mcp.list.create: 新建服务器
   mcp.list.deleting.mobile: 删除中…
   mcp.list.disconnected: 未连接
   mcp.list.empty: 还没有服务器；点「新建服务器」添加一个
-  mcp.list.import.desktop: 导入 JSON
   mcp.list.loading.desktop: 加载中…
   mcp.list.menu.delete: 删除
   mcp.list.retry.mobile: 重试
@@ -81,7 +75,6 @@ zh-CN:
   mcp.toast.clear_key_failed.mobile: 清除密钥失败
   mcp.toast.deleted: 已删除
   mcp.toast.delete_failed.mobile: 删除失败
-  mcp.toast.imported.desktop: 已导入
   mcp.toast.key_cleared: 密钥已清除
   mcp.toast.load_failed.mobile: 加载失败
   mcp.toast.oauth_callback_failed.mobile: "授权失败：{reason}"
@@ -91,9 +84,11 @@ zh-CN:
   mcp.toast.oauth_started: 已打开系统浏览器进行授权
   mcp.toast.save_failed.mobile: 保存失败
   mcp.toast.saved: 已保存
-  mcp.toast.server_not_found.mobile: "未找到 MCP 服务器：{name}"
+  mcp.toast.server_not_found.mobile: "未找到 MCP 服务器：{id}"
   mcp.toast.toggle_failed.mobile: 切换启用状态失败
-  mcp.validation.name_required: 请输入名称
+  mcp.validation.id_exists: ID 已存在
+  mcp.validation.id_invalid: ID 只能使用英文字母、数字和下划线
+  mcp.validation.id_required: 请输入 ID
   mcp.validation.url_required: 请输入地址
   search.auth.api_key_label: API Key
   search.auth.base_url_hint.mobile: "含 http(s)://；留空保存即清除"
@@ -269,8 +264,10 @@ en-US:
   mcp.detail.connection_section: Connection
   mcp.detail.create.desktop: Create
   mcp.detail.create_action: New server
-  mcp.detail.name_label: Name
-  mcp.detail.name_placeholder: e.g. Acme Knowledge Base
+  mcp.detail.description_label: Description
+  mcp.detail.description_placeholder: Optional
+  mcp.detail.id_label: ID
+  mcp.detail.id_placeholder: e.g. notes_db
   mcp.detail.not_authorized: Not authorized
   mcp.detail.oauth_section.desktop: OAuth
   mcp.detail.oauth_status_label: Authorization
@@ -294,29 +291,21 @@ en-US:
   mcp.detail.transport_stdio.desktop: stdio
   mcp.detail.url_label: URL
   mcp.detail.url_placeholder: https://example.com/mcp
-  mcp.delete_notice: "The configuration and keys of \"{name}\" will be removed. This cannot be undone."
+  mcp.delete_notice: "The configuration and keys of \"{id}\" will be removed. This cannot be undone."
   mcp.delete_title: Delete server
   mcp.help.auth.body: API keys are stored encrypted and never shown again after saving; OAuth authorization happens in the system browser and returns to the app when done.
   mcp.help.auth.title: Authentication
   mcp.help.dismiss: Close
-  mcp.help.import.body.desktop: 'Paste a Claude Desktop style {"mcpServers":{…}} config; Authorization headers in it are recognized as Bearer tokens.'
-  mcp.help.import.title.desktop: Import
   mcp.help.toggle.body: A server that is off does not connect, and its tools do not appear in the AI's tool list.
   mcp.help.toggle.title: Switches
   mcp.help.tools.body.desktop: Tools provided by servers appear in the agent tool list as mcp__server__tool, subject to each agent's tool allow/deny list.
   mcp.help.tools.title.desktop: Tool access
-  mcp.import.empty_result.desktop: No recognizable MCP servers in the pasted content
-  mcp.import.invalid_json.desktop: The pasted content is not valid JSON
-  mcp.import.label.desktop: Paste external config JSON
-  mcp.import.placeholder.desktop: '{"mcpServers": {"my-server": {"url": "https://…"}}}'
-  mcp.import.title.desktop: Import from JSON
   mcp.list.cancel: Cancel
   mcp.list.connected: Connected
   mcp.list.create: New server
   mcp.list.deleting.mobile: Deleting…
   mcp.list.disconnected: Not connected
   mcp.list.empty: No servers yet; tap "New server" to add one
-  mcp.list.import.desktop: Import JSON
   mcp.list.loading.desktop: Loading…
   mcp.list.menu.delete: Delete
   mcp.list.retry.mobile: Retry
@@ -324,7 +313,6 @@ en-US:
   mcp.toast.clear_key_failed.mobile: Failed to clear key
   mcp.toast.deleted: Deleted
   mcp.toast.delete_failed.mobile: Failed to delete
-  mcp.toast.imported.desktop: Imported
   mcp.toast.key_cleared: Key cleared
   mcp.toast.load_failed.mobile: Failed to load
   mcp.toast.oauth_callback_failed.mobile: "Authorization failed: {reason}"
@@ -334,9 +322,11 @@ en-US:
   mcp.toast.oauth_started: Opened the system browser for authorization
   mcp.toast.save_failed.mobile: Failed to save
   mcp.toast.saved: Saved
-  mcp.toast.server_not_found.mobile: "MCP server not found: {name}"
+  mcp.toast.server_not_found.mobile: "MCP server not found: {id}"
   mcp.toast.toggle_failed.mobile: Failed to toggle
-  mcp.validation.name_required: Name is required
+  mcp.validation.id_exists: ID already exists
+  mcp.validation.id_invalid: ID can only contain letters, digits, and underscores
+  mcp.validation.id_required: ID is required
   mcp.validation.url_required: URL is required
   search.auth.api_key_label: API Key
   search.auth.base_url_hint.mobile: "Include http(s)://; leaving it empty on save clears it"

@@ -3,10 +3,11 @@ export type {McpToolSnapshot, McpServerStatus, McpServerState} from "../domain/m
 export type {McpFailure, McpFailureKind, McpFailureAction} from "../domain/mcp/model/mcp-failure.js";
 export type {McpServerConfig, McpTransportType, McpAuthType, McpAuthConfig, McpTransportConfig} from "../domain/mcp/model/mcp-server-config.js";
 export {McpServerConfigOps, MCP_DEFAULT_TIMEOUT_MS, MCP_MIN_TIMEOUT_MS} from "../domain/mcp/model/mcp-server-config.js";
-export {McpConfigParser, type McpServerParseOutcome} from "../domain/mcp/logic/parse-mcp-server-config.js";
+export {McpConfigParser} from "../domain/mcp/logic/parse-mcp-server-config.js";
+export {McpToolRefs} from "../domain/mcp/logic/rewrite-mcp-tool-references.js";
 export {McpConnectionManagerFactory, type McpConnectionManagerDeps} from "../infra/mcp/impl/create-mcp-connection-manager.js";
 export type {McpHttpRequest, McpHttpResponse, McpRequestFn} from "../infra/mcp/ports/mcp-transport.port.js";
 export {McpConfigStoreFactory} from "../infra/mcp/impl/mcp-config-store.js";
-export {McpSecretRefs, type McpConfigStore} from "../domain/mcp/ports/mcp-config-store.port.js";
+export {McpSecretRefs, type McpConfigStore, type McpRenameOutcome} from "../domain/mcp/ports/mcp-config-store.port.js";
 export {McpOAuthFactory} from "../infra/mcp/impl/mcp-oauth-provider.js";
 export {McpToolSlug} from "../domain/mcp/logic/slugify-mcp-tool-name.js";

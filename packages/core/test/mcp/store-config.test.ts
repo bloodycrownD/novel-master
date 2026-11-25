@@ -66,12 +66,12 @@ function makeDeps(): McpConfigStoreDeps & {
 
 /** http 形态 fixture（各用例在此基础上做单点变体）。 */
 function httpConfig(id: string, url = `https://${id}.example.com/mcp`): McpServerConfig {
-    return { id, name: id, enabled: true, transport: { type: "http", url }, timeoutMs: 120000, auth: { type: "none" } };
+    return { id, description: "", enabled: true, transport: { type: "http", url }, timeoutMs: 120000, auth: { type: "none" } };
 }
 
 /** stdio 形态 fixture（归一保留、首版不可用）。 */
 function stdioConfig(id: string): McpServerConfig {
-    return { id, name: id, enabled: false, transport: { type: "stdio" }, timeoutMs: 1000, auth: { type: "none" } };
+    return { id, description: "", enabled: false, transport: { type: "stdio" }, timeoutMs: 1000, auth: { type: "none" } };
 }
 
 describe("mcp-config-store", () => {
@@ -88,16 +88,56 @@ describe("mcp-config-store", () => {
         assert.deepEqual(unwrap(await store.list()), [updated, stdio]);
     });
 
-    it("T-M12: importExternal 的 bearer 明文只进 SKSP，KKV 值里不出现明文、只存 ref", async () => {
+    it("create：新 id 追加；id 已存在拒绝（Result.err），不覆盖既有配置", async () => {
         const deps = makeDeps();
         const store = McpConfigStoreFactory.create(deps);
-        unwrap(await store.importExternal({ mcpServers: { zhiyu: { url: "https://mcp.zhiyu.example/mcp", headers: { Authorization: "Bearer sk-secret-123" } } } }));
-        const raw = deps.kkv.map.get(`${McpConfigStoreFactory.KKV_MODULE}/${McpConfigStoreFactory.KEY_SERVERS}`);
-        assert.ok(typeof raw === "string");
-        assert.ok(!raw.includes("sk-secret-123"), `KKV 值里出现明文：${raw}`);
-        assert.equal(deps.secretStore.map.get(McpSecretRefs.bearer("zhiyu")), "sk-secret-123");
-        const listed = unwrap(await store.list());
-        assert.deepEqual(listed[0]?.auth, { type: "bearer", secretRef: McpSecretRefs.bearer("zhiyu") });
+        unwrap(await store.save(httpConfig("zhiyu")));
+        const duplicated = unwrapErr(await store.create({ ...httpConfig("zhiyu"), transport: { type: "http", url: "https://evil.example.com/mcp" } }));
+        assert.ok(AppErrorOps.is(duplicated, "INFRA_VALIDATION_FAILED"));
+        // 被拒的保存不落库：原配置原样保留
+        assert.deepEqual(unwrap(await store.list()), [httpConfig("zhiyu")]);
+        unwrap(await store.create(httpConfig("fresh")));
+        assert.deepEqual(unwrap(await store.list()), [httpConfig("zhiyu"), httpConfig("fresh")]);
+    });
+
+    it("rename：换 id 原位替换配置，SKSP 密钥迁到新 ref、旧 ref 清掉，返回 oauthMigrated", async () => {
+        const deps = makeDeps();
+        const store = McpConfigStoreFactory.create(deps);
+        unwrap(await store.save({ ...httpConfig("old"), auth: { type: "bearer", secretRef: McpSecretRefs.bearer("old") } }));
+        unwrap(await store.save(httpConfig("other")));
+        deps.secretStore.map.set(McpSecretRefs.bearer("old"), "plain-bearer");
+        deps.secretStore.map.set(McpSecretRefs.headers("old"), "{}");
+        deps.secretStore.map.set(McpSecretRefs.oauth("old"), '{"tokens":{}}');
+        const renamed: McpServerConfig = { ...httpConfig("new"), auth: { type: "bearer", secretRef: McpSecretRefs.bearer("new") } };
+        const outcome = unwrap(await store.rename("old", renamed));
+        assert.equal(outcome.oauthMigrated, true);
+        // 配置原位替换（保序），SKSP 密钥跟着新 id 走、旧 ref 清干净
+        assert.deepEqual(unwrap(await store.list()), [renamed, httpConfig("other")]);
+        assert.equal(deps.secretStore.map.get(McpSecretRefs.bearer("new")), "plain-bearer");
+        assert.equal(deps.secretStore.map.get(McpSecretRefs.headers("new")), "{}");
+        assert.equal(deps.secretStore.map.get(McpSecretRefs.oauth("new")), '{"tokens":{}}');
+        assert.equal(deps.secretStore.map.has(McpSecretRefs.bearer("old")), false);
+        assert.equal(deps.secretStore.map.has(McpSecretRefs.headers("old")), false);
+        assert.equal(deps.secretStore.map.has(McpSecretRefs.oauth("old")), false);
+    });
+
+    it("rename：新 id 撞其它 server 拒绝（不覆盖）；oauth 键搬迁失败回 oauthMigrated=false，换 ID 照常完成", async () => {
+        const deps = makeDeps();
+        const store = McpConfigStoreFactory.create(deps);
+        unwrap(await store.save(httpConfig("a")));
+        unwrap(await store.save(httpConfig("b")));
+        const clash = unwrapErr(await store.rename("a", httpConfig("b")));
+        assert.ok(AppErrorOps.is(clash, "INFRA_VALIDATION_FAILED"));
+        assert.deepEqual(unwrap(await store.list()), [httpConfig("a"), httpConfig("b")]);
+        // oauth 键存在且搬迁被 SKSP 拒（set throw）→ 授权态回落未授权，换 ID 本身成功
+        deps.secretStore.map.set(McpSecretRefs.oauth("a"), '{"tokens":{}}');
+        deps.secretStore.set = async (ref, plain) => {
+            if (ref === McpSecretRefs.oauth("a2")) throw new AppError("SKSP_WRITE_FAILED", { detail: "injected" });
+            deps.secretStore.map.set(ref, plain);
+        };
+        const moved = unwrap(await store.rename("a", httpConfig("a2")));
+        assert.equal(moved.oauthMigrated, false);
+        assert.deepEqual(unwrap(await store.list()).map((config) => config.id), ["a2", "b"]);
     });
 
     it("T-M13: remove 移除配置并连带清掉 bearer / headers / oauth 三个 SKSP ref，重复 remove 幂等", async () => {
@@ -127,7 +167,7 @@ describe("mcp-config-store", () => {
         assert.deepEqual(unwrap(await store.list()), [httpConfig("zhiyu")]);
     });
 
-    it("KKV infra 失败沿 Result.err 接力（list / save / remove / importExternal 四入口同口径）", async () => {
+    it("KKV infra 失败沿 Result.err 接力（list / save / create / rename / remove 五入口同口径）", async () => {
         const deps = makeDeps();
         const store = McpConfigStoreFactory.create(deps);
         const injected = new AppError("KKV_CONFLICT", { detail: "injected infra failure" });
@@ -136,13 +176,15 @@ describe("mcp-config-store", () => {
         assert.ok(AppErrorOps.is(unwrapErr(list), "KKV_CONFLICT"));
         const save = await store.save(httpConfig("zhiyu"));
         assert.ok(AppErrorOps.is(unwrapErr(save), "KKV_CONFLICT"));
+        const created = await store.create(httpConfig("zhiyu"));
+        assert.ok(AppErrorOps.is(unwrapErr(created), "KKV_CONFLICT"));
+        const renamed = await store.rename("zhiyu", httpConfig("zhiyu2"));
+        assert.ok(AppErrorOps.is(unwrapErr(renamed), "KKV_CONFLICT"));
         const remove = await store.remove("zhiyu");
         assert.ok(AppErrorOps.is(unwrapErr(remove), "KKV_CONFLICT"));
-        const imported = await store.importExternal({ mcpServers: { zhiyu: { url: "https://mcp.zhiyu.example/mcp" } } });
-        assert.ok(AppErrorOps.is(unwrapErr(imported), "KKV_CONFLICT"));
     });
 
-    it("KKV set 失败不被吞：save / remove / importExternal 的写失败以 reject 冒出，不静默返回 ok", async () => {
+    it("KKV set 失败不被吞：save / rename / remove 的写失败以 reject 冒出，不静默返回 ok", async () => {
         const deps = makeDeps();
         const store = McpConfigStoreFactory.create(deps);
         unwrap(await store.save(httpConfig("seed")));
@@ -151,8 +193,8 @@ describe("mcp-config-store", () => {
         };
         const isInjected = (error: unknown): boolean => AppErrorOps.is(error, "KKV_CONFLICT");
         await assert.rejects(store.save(httpConfig("zhiyu")), isInjected);
+        await assert.rejects(store.rename("seed", httpConfig("seed2")), isInjected);
         await assert.rejects(store.remove("seed"), isInjected);
-        await assert.rejects(store.importExternal({ mcpServers: { zhiyu: { url: "https://mcp.zhiyu.example/mcp" } } }), isInjected);
     });
 
     it("save 在 KKV 落盘完成后才返回：写后紧跟 list 读到新值（真异步 set 抓未 await）", async () => {
@@ -165,16 +207,5 @@ describe("mcp-config-store", () => {
         };
         unwrap(await store.save(httpConfig("zhiyu")));
         assert.deepEqual(unwrap(await store.list()), [httpConfig("zhiyu")]);
-    });
-
-    it("importExternal 按 id upsert 合并：现有列表保序、同 id 覆盖、新 id 追加队尾", async () => {
-        const deps = makeDeps();
-        const store = McpConfigStoreFactory.create(deps);
-        unwrap(await store.save(httpConfig("existing")));
-        const merged = unwrap(await store.importExternal({ mcpServers: { existing: { url: "https://changed.example.com/mcp" }, fresh: { type: "streamableHttp", url: "https://fresh.example.com/mcp" } } }));
-        assert.deepEqual(merged.map((config) => config.id), ["existing", "fresh"]);
-        assert.deepEqual(unwrap(await store.list()), merged);
-        assert.deepEqual(merged[0]?.transport, { type: "http", url: "https://changed.example.com/mcp" });
-        assert.deepEqual(merged[1]?.transport, { type: "http", url: "https://fresh.example.com/mcp" });
     });
 });

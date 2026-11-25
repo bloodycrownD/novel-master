@@ -222,12 +222,12 @@ export interface McpOAuthDeps {
 export const McpOAuthFactory = {
     /** 构造 {@link McpOAuth} 双端回调接缝：start 发起授权腿、handleCallback 接住回调完成交换。 */
     create(deps: McpOAuthDeps): McpOAuth {
-        // 联合收窄不穿 Result：守卫在闭包内判完，返回窄投影（url / name / authType）。
-        const httpServer = async (serverId: string): Promise<Result<{ readonly url: string; readonly name: string; readonly authType: McpAuthType }, AppError>> => {
+        // 联合收窄不穿 Result：守卫在闭包内判完，返回窄投影（url / authType）。
+        const httpServer = async (serverId: string): Promise<Result<{ readonly url: string; readonly authType: McpAuthType }, AppError>> => {
             const config = deps.listServers().find((candidate) => candidate.id === serverId);
             if (config == null) return Result.err(new AppError("INFRA_VALIDATION_FAILED", { detail: `MCP 服务器未配置: ${serverId}` }));
-            if (config.transport.type !== "http") return Result.err(new AppError("INFRA_VALIDATION_FAILED", { detail: `MCP 服务器 ${config.name} 不是 HTTP 传输，无法走 OAuth 授权` }));
-            return Result.ok({ url: config.transport.url, name: config.name, authType: config.auth.type });
+            if (config.transport.type !== "http") return Result.err(new AppError("INFRA_VALIDATION_FAILED", { detail: `MCP 服务器 ${config.id} 不是 HTTP 传输，无法走 OAuth 授权` }));
+            return Result.ok({ url: config.transport.url, authType: config.auth.type });
         };
         return {
             /**
@@ -239,7 +239,7 @@ export const McpOAuthFactory = {
             async start(serverId: string, redirectUrl: string): Promise<Result<{ readonly authorizeUrl: string }, AppError>> {
                 const server = await httpServer(serverId);
                 if (!server.ok) return Result.err(server.error);
-                if (server.value.authType !== "oauth") return Result.err(new AppError("INFRA_VALIDATION_FAILED", { detail: `MCP 服务器 ${server.value.name} 未配置 OAuth 鉴权` }));
+                if (server.value.authType !== "oauth") return Result.err(new AppError("INFRA_VALIDATION_FAILED", { detail: `MCP 服务器 ${serverId} 未配置 OAuth 鉴权` }));
                 const provider = await McpOAuthProvider.restore(serverId, deps.secretStore, redirectUrl);
                 try {
                     const outcome = await auth(provider, { serverUrl: server.value.url, forceReauthorization: true, ...(deps.fetchFn == null ? {} : { fetchFn: deps.fetchFn }) });

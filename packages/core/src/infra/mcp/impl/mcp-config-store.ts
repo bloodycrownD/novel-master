@@ -8,6 +8,8 @@
  * 条目跳过、缺 enabled 视为启用）；写路径的可预期失败沿 `Result.err` 返回
  * （照 SearchConfig.createStore 先例，KKV infra 失败原样接力）；`KkvService.set`
  * 与 SecretStore 没有 Result 通道，其失败以 throw 冒出、由调用边界收口。
+ * `create` 是新建专用（id 撞名拒绝），`rename` 是换 ID 专用（SKSP 密钥迁新 ref、
+ * 先写新后清旧），编辑 upsert 仍走 `save`。
  *
  * namespace 名没按文件名取 `McpConfigStore`（与 port 的接口撞名），按内容主体
  * 取 `McpConfigStoreFactory`，与 spec Step 8 的 `McpConnectionManagerFactory` 对齐。
@@ -18,8 +20,8 @@
 import { Kkv } from "@/common/kkv.js";
 import { McpConfigParser } from "@/domain/mcp/logic/parse-mcp-server-config.js";
 import type { McpServerConfig } from "@/domain/mcp/model/mcp-server-config.js";
-import { McpSecretRefs, type McpConfigStore } from "@/domain/mcp/ports/mcp-config-store.port.js";
-import type { AppError } from "@/errors/app-error.js";
+import { McpSecretRefs, type McpConfigStore, type McpRenameOutcome } from "@/domain/mcp/ports/mcp-config-store.port.js";
+import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
 import type { KkvService } from "@/service/kkv/kkv.port.js";
@@ -34,7 +36,7 @@ export interface McpConfigStoreDeps {
 const readConfigs = async (kkv: KkvService): Promise<Result<McpServerConfig[], AppError>> => {
     const raw = await Kkv.getOptional(kkv, McpConfigStoreFactory.KKV_MODULE, McpConfigStoreFactory.KEY_SERVERS);
     if (!raw.ok) return Result.err(raw.error);
-    return Result.ok(McpConfigParser.parse(raw.value).map((outcome) => outcome.config));
+    return Result.ok([...McpConfigParser.parse(raw.value)]);
 };
 
 export const McpConfigStoreFactory = {
@@ -58,6 +60,41 @@ export const McpConfigStoreFactory = {
                 await Kkv.setJson(kkv, KKV_MODULE, KEY_SERVERS, next);
                 return Result.ok(undefined);
             },
+            async create(config) {
+                const current = await readConfigs(kkv);
+                if (!current.ok) return Result.err(current.error);
+                if (current.value.some((existing) => existing.id === config.id)) return Result.err(new AppError("INFRA_VALIDATION_FAILED", { detail: `MCP ID 已存在: ${config.id}` }));
+                await Kkv.setJson(kkv, KKV_MODULE, KEY_SERVERS, [...current.value, config]);
+                return Result.ok(undefined);
+            },
+            async rename(oldId, config): Promise<Result<McpRenameOutcome, AppError>> {
+                const current = await readConfigs(kkv);
+                if (!current.ok) return Result.err(current.error);
+                if (current.value.some((existing) => existing.id === config.id && existing.id !== oldId)) return Result.err(new AppError("INFRA_VALIDATION_FAILED", { detail: `MCP ID 已存在: ${config.id}` }));
+                // 换 id 时先把 SKSP 密钥写到新 ref（旧 ref 暂留：KKV 写失败时旧配置照常工作，新 ref 只是无害副本），
+                // 再原位落库新配置（oldId 条目替换；缺失时按追加防御），最后清旧 ref——不留旧删新未写的中间态。
+                let oauthMigrated = true;
+                if (oldId !== config.id) {
+                    const bearerPlain = await secretStore.get(McpSecretRefs.bearer(oldId));
+                    if (bearerPlain != null) await secretStore.set(McpSecretRefs.bearer(config.id), bearerPlain);
+                    const headersPlain = await secretStore.get(McpSecretRefs.headers(oldId));
+                    if (headersPlain != null) await secretStore.set(McpSecretRefs.headers(config.id), headersPlain);
+                    const oauthPlain = await secretStore.get(McpSecretRefs.oauth(oldId));
+                    if (oauthPlain != null) {
+                        try {
+                            await secretStore.set(McpSecretRefs.oauth(config.id), oauthPlain);
+                        } catch {
+                            // oauth 键搬失败不阻断换 ID：授权态回落未授权，经 oauthMigrated=false 说明。
+                            oauthMigrated = false;
+                        }
+                    }
+                }
+                const exists = current.value.some((existing) => existing.id === oldId);
+                const next = exists ? current.value.map((existing) => (existing.id === oldId ? config : existing)) : [...current.value, config];
+                await Kkv.setJson(kkv, KKV_MODULE, KEY_SERVERS, next);
+                if (oldId !== config.id) await Promise.all([secretStore.delete(McpSecretRefs.bearer(oldId)), secretStore.delete(McpSecretRefs.headers(oldId)), secretStore.delete(McpSecretRefs.oauth(oldId))]);
+                return Result.ok({ oauthMigrated });
+            },
             async remove(serverId) {
                 const current = await readConfigs(kkv);
                 if (!current.ok) return Result.err(current.error);
@@ -66,23 +103,6 @@ export const McpConfigStoreFactory = {
                 // SKSP refs 无条件清（幂等）：KKV 损坏回空列表后残留的 ref 也顺手收走。
                 await Promise.all([secretStore.delete(McpSecretRefs.bearer(serverId)), secretStore.delete(McpSecretRefs.headers(serverId)), secretStore.delete(McpSecretRefs.oauth(serverId))]);
                 return Result.ok(undefined);
-            },
-            // nm-style: keep-public — McpConfigStore port 契约方法（port:29）；生产消费方是本迭代
-            // 后续 Step 的双端 IPC / 配置页接线，T-M2 的 SKSP 落库半边也收在这里。
-            async importExternal(raw) {
-                const outcomes = McpConfigParser.parse(raw);
-                // 识别出的 bearer 明文只进 SKSP；KKV 里是带 ref 的归一配置（T-M2 的落库半边）。
-                for (const outcome of outcomes) {
-                    if (outcome.bearerPlain != null) await secretStore.set(McpSecretRefs.bearer(outcome.config.id), outcome.bearerPlain);
-                }
-                const current = await readConfigs(kkv);
-                if (!current.ok) return Result.err(current.error);
-                // 按 id upsert 合并：现有列表保序，同 id 覆盖原位置，新 id 追加队尾。
-                const byId = new Map(current.value.map((config) => [config.id, config]));
-                for (const outcome of outcomes) byId.set(outcome.config.id, outcome.config);
-                const merged = [...byId.values()];
-                await Kkv.setJson(kkv, KKV_MODULE, KEY_SERVERS, merged);
-                return Result.ok(merged);
             },
         };
     },

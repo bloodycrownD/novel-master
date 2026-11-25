@@ -14,8 +14,6 @@ import type { McpFailure } from "./mcp-failure.js";
 /** 单个 MCP 工具的快照条目（`McpToolAdapter.toNmTool` 的装配期输入）。 */
 export interface McpToolSnapshot {
     readonly serverId: string;
-    /** 展示名（description 前缀用）；slug 的源是 serverId，不是它。 */
-    readonly serverName: string;
     /** MCP 侧原始工具名（未 slug；callTool 用它）。 */
     readonly toolName: string;
     /** MCP 工具描述；缺省时 toNmTool 回落 toolName。 */

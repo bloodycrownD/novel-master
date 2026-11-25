@@ -30,7 +30,7 @@ function fakeSecretStore(): SecretStore & { readonly map: Map<string, string> } 
 
 /** http + oauth 形态 fixture（各用例在此基础上做单点变体）。 */
 function oauthConfig(id = "svc", url = SERVER_URL): McpServerConfig {
-    return { id, name: id, enabled: true, transport: { type: "http", url }, timeoutMs: 120000, auth: { type: "oauth" } };
+    return { id, description: "", enabled: true, transport: { type: "http", url }, timeoutMs: 120000, auth: { type: "oauth" } };
 }
 
 /** 预置 `mcp/{serverId}/oauth` 单键的持久化字段（JSON 写进 fake SKSP）。 */
@@ -145,7 +145,7 @@ describe("mcp-oauth-provider", () => {
 
     it("T-M22: start 的配置守卫——server 不存在 / 非 http 传输 / 非 oauth 鉴权都拒", async () => {
         const store = fakeSecretStore();
-        const stdio: McpServerConfig = { id: "legacy", name: "legacy", enabled: true, transport: { type: "stdio" }, timeoutMs: 1000, auth: { type: "oauth" } };
+        const stdio: McpServerConfig = { id: "legacy", description: "", enabled: true, transport: { type: "stdio" }, timeoutMs: 1000, auth: { type: "oauth" } };
         const noneAuth: McpServerConfig = { ...oauthConfig("plain"), auth: { type: "none" } };
         const factory = McpOAuthFactory.create({ listServers: () => [oauthConfig(), stdio, noneAuth], secretStore: store });
         const missing = unwrapErr(await factory.start("nope", "https://127.0.0.1:1/cb"));

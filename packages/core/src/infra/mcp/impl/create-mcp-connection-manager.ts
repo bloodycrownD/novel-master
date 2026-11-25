@@ -133,7 +133,7 @@ export const McpConnectionManagerFactory = {
             try {
                 if (client === null) client = await connectOnce(config, controller.signal);
                 const tools = await client.listTools(controller.signal);
-                const snapshots = tools.map((tool) => ({ serverId: config.id, serverName: config.name, toolName: tool.name, ...(tool.description === undefined ? {} : {toolDescription: tool.description}) }));
+                const snapshots = tools.map((tool) => ({ serverId: config.id, toolName: tool.name, ...(tool.description === undefined ? {} : {toolDescription: tool.description}) }));
                 const snapshotAt = now();
                 connections.set(config.id, { client, snapshots, snapshotAt, status: { serverId: config.id, state: "ready", toolCount: snapshots.length, lastConnectedAt: snapshotAt }, inflight: null });
                 return snapshots;
@@ -206,7 +206,7 @@ export const McpConnectionManagerFactory = {
         const callTool = async (serverId: string, toolName: string, args: unknown, signal: AbortSignal): Promise<Result<unknown, McpFailure>> => {
             const config = deps.listServers().find((server) => server.id === serverId);
             if (config === undefined) return Result.err({ kind: "protocol", action: "report", detail: `MCP 服务器 ${serverId} 不在当前配置中` });
-            if (!config.enabled) return Result.err({ kind: "server", action: "fix-config", detail: `MCP 服务器 ${config.name} 已停用` });
+            if (!config.enabled) return Result.err({ kind: "server", action: "fix-config", detail: `MCP 服务器 ${config.id} 已停用` });
             if (!McpServerConfigOps.isTransportSupported(config)) return Result.err(McpFailureOps.unsupportedTransport(config.transport.type));
             try {
                 const client = await connectOnce(config, signal);

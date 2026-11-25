@@ -17,14 +17,21 @@ export const McpSecretRefs = {
     oauth: (serverId: string): string => `mcp/${serverId}/oauth`,
 } as const;
 
+/** {@link McpConfigStore.rename} 的结果：oauthMigrated=false 表示旧 OAuth 会话键搬迁失败（授权态回落未授权，需重新授权）。 */
+export interface McpRenameOutcome {
+    readonly oauthMigrated: boolean;
+}
+
 /** MCP 配置存储（配置 CRUD 的唯一接缝；密钥明文经 SKSP，KKV 只存 ref）。 */
 export interface McpConfigStore {
     /** 读取全部归一配置（含 disabled；读路径容错，损坏值回空列表缺省）。 */
     list(): Promise<Result<readonly McpServerConfig[], AppError>>;
-    /** 保存（按 id upsert）；写路径失败沿 Result.err 返回。 */
+    /** 保存（按 id upsert：同 id 覆盖原位置、新 id 追加）；写路径失败沿 Result.err 返回。 */
     save(config: McpServerConfig): Promise<Result<void, AppError>>;
+    /** 新建：id 已存在时拒绝（Result.err），不覆盖既有配置；编辑与换 ID 分别走 save / rename。 */
+    create(config: McpServerConfig): Promise<Result<void, AppError>>;
+    /** 换 ID 保存：新 id 与其它 server 撞名时拒绝；成功 = 新配置原位落库 + SKSP 密钥（bearer / headers / oauth）迁到新 ref + 清旧条目与旧 ref（先写新后清旧，不留旧删新未写的中间态）。 */
+    rename(oldId: string, config: McpServerConfig): Promise<Result<McpRenameOutcome, AppError>>;
     /** 删除 server，并连带清掉它的 SKSP refs（bearer / headers / oauth）。 */
     remove(serverId: string): Promise<Result<void, AppError>>;
-    /** 导入外部格式（如 Claude Desktop 的 `{mcpServers:{...}}`）：解析归一 + 识别出的 bearer 明文落 SKSP + 整表持久化。 */
-    importExternal(raw: unknown): Promise<Result<readonly McpServerConfig[], AppError>>;
 }

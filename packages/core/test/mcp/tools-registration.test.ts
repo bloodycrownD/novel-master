@@ -38,8 +38,8 @@ const mockToolCtx: BuiltinToolContext = {
 /** 注册测试不触达调用通道的 stub 管理器（callTool 恒失败，防误用静默通过）。 */
 const stubManager = (): McpConnectionManager => ({ snapshotTools: async () => [], serverStatuses: () => [], callTool: async () => Result.err({ kind: "protocol", action: "report", detail: "stub: 注册测试不应触达 callTool" }), invalidate: () => {}, closeAll: async () => {} });
 
-/** 快照条目工厂：serverName 沿 serverId（slug 源是 serverId，展示名不影响本组用例）。 */
-const mcpSnapshot = (serverId: string, toolNames: readonly string[], toolDescription?: string): readonly McpToolSnapshot[] => toolNames.map((toolName) => ({ serverId, serverName: serverId, toolName, ...(toolDescription === undefined ? {} : {toolDescription}) }));
+/** 快照条目工厂：本组用例只关心 serverId 与工具名。 */
+const mcpSnapshot = (serverId: string, toolNames: readonly string[], toolDescription?: string): readonly McpToolSnapshot[] => toolNames.map((toolName) => ({ serverId, toolName, ...(toolDescription === undefined ? {} : {toolDescription}) }));
 
 /** BuiltinTools.register + registerMcpTools 的公共装配（内置 11 件 + 传入快照）。 */
 const makeRegistry = (snapshot: readonly McpToolSnapshot[], manager: McpConnectionManager = stubManager()): ToolRegistry<BuiltinToolContext> => {
@@ -137,7 +137,7 @@ describe("撞名 server 标 failed{protocol,report}（spec §六，连接管理�
             }
             return { status: 500, headers: { "content-type": "text/plain" }, bodyText: `mock: 未覆盖的方法 ${message.method}` };
         };
-        const listServers = (): readonly McpServerConfig[] => servers.map((server) => ({ id: server.id, name: server.id, enabled: true, transport: { type: "http", url: `https://mcp.${server.id}.example.com/mcp` }, timeoutMs: 120_000, auth: { type: "none" } }));
+        const listServers = (): readonly McpServerConfig[] => servers.map((server) => ({ id: server.id, description: "", enabled: true, transport: { type: "http", url: `https://mcp.${server.id}.example.com/mcp` }, timeoutMs: 120_000, auth: { type: "none" } }));
         return { manager: McpConnectionManagerFactory.create({ listServers, requestFn, bearerToken: async () => null, assemblyBudgetMs: 2_000 }), listCalls: () => listCount };
     };
 

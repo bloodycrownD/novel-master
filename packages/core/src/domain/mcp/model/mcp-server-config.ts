@@ -30,7 +30,8 @@ export type McpTransportConfig =
 /** 单个 MCP 服务器的归一配置（KKV 模块 `nm-mcp` 的存储形态）。 */
 export interface McpServerConfig {
     readonly id: string;
-    readonly name: string;
+    /** 描述（选填，可为空串）；原「名称」语义，仅供展示，不参与工具命名。 */
+    readonly description: string;
     readonly enabled: boolean;
     readonly transport: McpTransportConfig;
     /** 单个 HTTP 请求的超时上限（毫秒，握手 / tools/list / tools/call 各自适用）。 */
@@ -44,7 +45,12 @@ export const MCP_DEFAULT_TIMEOUT_MS = 120_000;
 /** `timeoutMs` 归一下限：0 / 负数钳到此值（原生层对 <= 0 会落回 600 秒默认预算，spec §七）。 */
 export const MCP_MIN_TIMEOUT_MS = 1_000;
 
+/** ID 规则（`mcp__<ID>__<tool>` 注册名的服务器段）：只允许英文字母、数字和下划线。 */
+const MCP_ID_PATTERN = /^[A-Za-z0-9_]+$/;
+
 /** 传输可用性判定（spec Step 11）：首版只有 http 可连；stdio / sse 由连接管理器报 `unsupported`。 */
 export const McpServerConfigOps = {
     isTransportSupported: (config: McpServerConfig): boolean => config.transport.type === "http",
+    // ID 表单判定：先剥边缘空白再判（表单输入容忍首尾空格），限英文字母 / 数字 / 下划线；强制校验在 app 表单层，KKV 读路径宽容不在此拦。
+    isValidId: (id: string): boolean => MCP_ID_PATTERN.test(id.trim()),
 } as const;

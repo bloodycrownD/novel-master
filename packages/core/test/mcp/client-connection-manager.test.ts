@@ -29,7 +29,7 @@ interface Harness {
 
 const urlOf = (id: string): string => `https://mcp.${id}.example.com/mcp`;
 
-const configFor = (spec: StubSpec): McpServerConfig => ({ id: spec.id, name: spec.id, enabled: spec.enabled ?? true, transport: spec.type === "stdio" ? { type: "stdio" } : { type: "http", url: urlOf(spec.id) }, timeoutMs: 120_000, auth: { type: "none" } });
+const configFor = (spec: StubSpec): McpServerConfig => ({ id: spec.id, description: "", enabled: spec.enabled ?? true, transport: spec.type === "stdio" ? { type: "stdio" } : { type: "http", url: urlOf(spec.id) }, timeoutMs: 120_000, auth: { type: "none" } });
 
 const jsonReply = (id: number | string | undefined, result: unknown): McpHttpResponse => ({ status: 200, headers: { "content-type": "application/json" }, bodyText: JSON.stringify({ jsonrpc: "2.0", id, result }) });
 
@@ -66,7 +66,6 @@ describe("McpConnectionManagerFactory.create", () => {
         const harness = makeHarness([{ id: "ok-server", mode: "ok" }, { id: "bad-server", mode: "http500" }], { assemblyBudgetMs: 2_000 });
         const snapshots = await harness.manager.snapshotTools();
         assert.deepEqual(snapshots.map((snapshot) => [snapshot.serverId, snapshot.toolName]), [["ok-server", "read"]]);
-        assert.equal(snapshots[0]?.serverName, "ok-server");
         const ok = statusOf(harness.manager, "ok-server");
         assert.equal(ok?.state, "ready");
         assert.equal(ok?.toolCount, 1);

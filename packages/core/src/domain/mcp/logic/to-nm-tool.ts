@@ -41,14 +41,14 @@ export interface McpToolCallDeps {
 const NEVER_ABORTED_SIGNAL: AbortSignal = new AbortController().signal;
 
 /** 失败 detail 的原文前缀（与 description 同一命名约定）。 */
-const detailPrefix = (serverName: string): string => `[MCP:${serverName}]`;
+const detailPrefix = (serverId: string): string => `[MCP:${serverId}]`;
 
 export const McpToolAdapter = {
     /** 快照条目 → nm 工具（name / description / inputSchema 同步可得；run 委托 call）。 */
     toNmTool: (snapshot: McpToolSnapshot, deps: McpToolCallDeps): Tool<unknown, string, BuiltinToolContext> => {
         const name = McpToolSlug.toolName(snapshot.serverId, snapshot.toolName);
-        const description = `${detailPrefix(snapshot.serverName)} ${snapshot.toolDescription ?? snapshot.toolName}`;
-        const prefix = detailPrefix(snapshot.serverName);
+        const description = `${detailPrefix(snapshot.serverId)} ${snapshot.toolDescription ?? snapshot.toolName}`;
+        const prefix = detailPrefix(snapshot.serverId);
         return {
             name,
             description: () => description,
