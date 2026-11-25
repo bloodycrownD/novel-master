@@ -131,7 +131,10 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
         const directoryZipNames: string[] = [];
         const entriesUnderScope = await this.repo.listEntriesUnderPrefix(sk, directoryPath);
         // 目标目录自身跳过；越出目标前缀即不变量破坏。
-        const basePrefix = directoryPath === "/" ? directoryPath : directoryPath.endsWith("/") ? directoryPath.slice(0, -1) : directoryPath;
+        let basePrefix = directoryPath;
+        if (directoryPath !== "/" && directoryPath.endsWith("/")) {
+            basePrefix = directoryPath.slice(0, -1);
+        }
         for (const entry of entriesUnderScope) {
             if (entry.kind !== "directory" || entry.path === basePrefix) {
                 continue;

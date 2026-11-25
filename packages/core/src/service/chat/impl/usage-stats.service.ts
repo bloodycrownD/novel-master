@@ -157,7 +157,10 @@ export class DefaultUsageStatsService implements UsageStatsService {
         const configured = new Set(await this.listModels());
         const merged = new Map<string, UsageStatsModelRow>();
         for (const row of mapped) {
-            const modelKey = row.providerId == null ? null : row.modelName != null && configured.has(row.modelName) ? row.modelName : null;
+            let modelKey: string | null = null;
+            if (row.providerId != null && row.modelName != null && configured.has(row.modelName)) {
+                modelKey = row.modelName;
+            }
             const key = `${row.providerId ?? ""}\u0000${modelKey ?? ""}`;
             const prev = merged.get(key);
             merged.set(key, {

@@ -35,7 +35,13 @@ function compareEntries(a: VfsListEntry, b: VfsListEntry): number {
     }
     const ka = a.label ?? Path.basename(a.path);
     const kb = b.label ?? Path.basename(b.path);
-    return ka < kb ? -1 : ka > kb ? 1 : 0;
+    if (ka < kb) {
+        return -1;
+    }
+    if (ka > kb) {
+        return 1;
+    }
+    return 0;
 }
 
 /** 挂载点根的合成目录行（`/template`、`/meta`、`/projects` 域根无表行）。 */

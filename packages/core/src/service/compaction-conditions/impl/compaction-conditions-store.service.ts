@@ -17,7 +17,13 @@ const KEY_POLICY = "policy";
 
 /** v2/v3 文档的 visibleFloor 兼容两种键（camelCase 与历史 kebab-case）。 */
 function visibleFloorOf(doc: Record<string, unknown>): number | undefined {
-    return typeof doc.visibleFloor === "number" ? doc.visibleFloor : typeof doc["visible-floor"] === "number" ? (doc["visible-floor"] as number) : undefined;
+    if (typeof doc.visibleFloor === "number") {
+        return doc.visibleFloor;
+    }
+    if (typeof doc["visible-floor"] === "number") {
+        return doc["visible-floor"] as number;
+    }
+    return undefined;
 }
 
 /** decode 失败转码：CONFIG_DECODE_INVALID_SCHEMA → 本域码。 */

@@ -528,6 +528,14 @@ function buildMessageCards(message: ChatMessageData, results: ReadonlyMap<string
       const resultBlock = results.get(block.id);
       const ok = resultBlock !== undefined && ToolResultBlock.resolveOk(resultBlock);
       const inputJson = JSON.stringify(block.input, null, 2);
+      let status: "lost" | "ok" | "error";
+      if (resultBlock === undefined) {
+        status = "lost";
+      } else if (ok) {
+        status = "ok";
+      } else {
+        status = "error";
+      }
       cards.push({
         type: "toolGroup",
         id: `group-${block.id}`,
@@ -543,7 +551,7 @@ function buildMessageCards(message: ChatMessageData, results: ReadonlyMap<string
                 // cards 是显示层口径 → 剥行号；同源 wire 正文在 items/body 段原样保留。
                 body: Text.stripLinePrefix(ToolOutput.formatContentForDisplay(resultBlock.content), TOOL_RESULT_LINE_PREFIX),
               },
-        status: resultBlock === undefined ? "lost" : ok ? "ok" : "error",
+        status,
         parallel,
       });
       return;

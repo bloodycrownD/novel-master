@@ -40,7 +40,15 @@ interface WorkplaceServiceDeps {
  * Workplace service backed by vfs_entry and workplace tables.
  */
 /** 规则表按 logicalPath 的确定性排序比较器（读时校验签名采样用，零捕获纯函数）。 */
-const byLogicalPath = (a: { logicalPath: string }, b: { logicalPath: string }): number => (a.logicalPath < b.logicalPath ? -1 : a.logicalPath > b.logicalPath ? 1 : 0);
+const byLogicalPath = (a: { logicalPath: string }, b: { logicalPath: string }): number => {
+    if (a.logicalPath < b.logicalPath) {
+        return -1;
+    }
+    if (a.logicalPath > b.logicalPath) {
+        return 1;
+    }
+    return 0;
+};
 
 export class DefaultWorkplaceService implements WorkplaceService {
     readonly scope: WorkplaceScopeType;

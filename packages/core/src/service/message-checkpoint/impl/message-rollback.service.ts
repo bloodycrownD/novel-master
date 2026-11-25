@@ -446,7 +446,15 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
     private async computeFileTreeFingerprint(conn: TdbcConnection, projectId: string, sessionId: string): Promise<ReadonlyArray<readonly [string, number]>> {
         const { entryRepo } = MessageCheckpointFactory.createRepoDeps(conn);
         const heads = await SessionFiles.listHeads(entryRepo, projectId, sessionId);
-        return heads.map((head): readonly [string, number] => [head.logicalPath, head.headVersion]).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+        return heads.map((head): readonly [string, number] => [head.logicalPath, head.headVersion]).sort((a, b) => {
+            if (a[0] < b[0]) {
+                return -1;
+            }
+            if (a[0] > b[0]) {
+                return 1;
+            }
+            return 0;
+        });
     }
 
     /**

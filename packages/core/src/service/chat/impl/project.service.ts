@@ -167,9 +167,10 @@ export class DefaultProjectService implements ProjectService {
         if (!r.ok) return Result.err(r.error);
         const current = await this.getAgentConfig(id);
         if (!current.ok) return current;
+        const definition = patch.definition !== undefined ? patch.definition : current.value.definition;
         const merged: ProjectAgentConfig = {
             mode: patch.mode ?? current.value.mode,
-            ...(patch.definition !== undefined ? { definition: patch.definition } : current.value.definition !== undefined ? { definition: current.value.definition } : {}),
+            ...(definition === undefined ? {} : { definition }),
         };
         const wire = projectAgentConfigSchema.toWire(merged);
         if (!wire.ok) return Result.err(wire.error);

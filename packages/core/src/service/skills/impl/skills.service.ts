@@ -265,7 +265,14 @@ export class SkillsService implements SkillService {
         const rel = resolveSkillRelPath(name, path);
         if (!rel.ok) return Result.err(rel.error);
         const relPath = rel.value;
-        const candidates: SkillDomain[] = domain != null ? [domain] : projectId != null && projectId.length > 0 ? ["project", "global"] : ["global"];
+        let candidates: SkillDomain[];
+        if (domain != null) {
+            candidates = [domain];
+        } else if (projectId != null && projectId.length > 0) {
+            candidates = ["project", "global"];
+        } else {
+            candidates = ["global"];
+        }
         for (const candidate of candidates) {
             const vfsRes = this.vfsForDomain(candidate, projectId);
             if (!vfsRes.ok) return Result.err(vfsRes.error);
