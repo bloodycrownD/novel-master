@@ -187,7 +187,7 @@ export const McpRuntimeFactory = {
             },
             rename: async (serverId: string, config: McpServerConfig) => {
                 if (serverId === config.id) {
-                    await save(config);
+                    await persistServers(state.servers.map(candidate => (candidate.id === config.id ? config : candidate)), config.id);
                     return;
                 }
                 if (state.servers.some(candidate => candidate.id === config.id)) {

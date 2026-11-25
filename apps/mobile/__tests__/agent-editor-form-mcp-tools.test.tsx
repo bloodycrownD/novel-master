@@ -202,11 +202,11 @@ describe('AgentEditorForm 的 MCP 快照接线（spec §九移动端）', () => 
     });
 
     it('页面打开时刻把快照映射成注册名窄视图传给 ToolPolicyPicker', async () => {
-        mockSnapshotTools.mockResolvedValue([{serverId: 'demo', serverName: '演示服务', toolName: 'echo', toolDescription: '回声工具'}]);
+        mockSnapshotTools.mockResolvedValue([{serverId: 'demo', toolName: 'echo', toolDescription: '回声工具'}]);
         await renderEditor(wireWithAllowPolicy);
         const pickerProps = mockPickerProps[mockPickerProps.length - 1];
         expect(pickerProps).toBeDefined();
-        expect(pickerProps?.mcpTools).toEqual([{registeredName: 'mcp__demo__echo', serverName: '演示服务', toolDescription: '回声工具'}]);
+        expect(pickerProps?.mcpTools).toEqual([{registeredName: 'mcp__demo__echo', serverId: 'demo', toolDescription: '回声工具'}]);
     });
 
     it('快照读取失败静默回落空数组（picker 侧组装「未配置」占位）', async () => {

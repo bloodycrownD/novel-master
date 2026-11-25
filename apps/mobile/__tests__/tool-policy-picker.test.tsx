@@ -267,8 +267,8 @@ describe('ToolPolicyPicker (mobile) — T-P1/T-P2/T-P3', () => {
             selected: ['mcp__fs__read'],
             onChange,
             mcpTools: [
-                {registeredName: 'mcp__fs__read', serverName: 'fs', toolDescription: 'Read files'},
-                {registeredName: 'mcp__fs__write', serverName: 'fs'},
+                {registeredName: 'mcp__fs__read', serverId: 'fs', toolDescription: 'Read files'},
+                {registeredName: 'mcp__fs__write', serverId: 'fs'},
             ],
         });
         expect(JSON.stringify(renderer.toJSON())).toContain('已选工具（1/13）');
