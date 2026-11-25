@@ -59,6 +59,7 @@ export class HttpMcpTransport implements Transport {
         this.onclose?.();
     }
 
+    // nm-throw: keep — 平台协议例外（spec §三）：官方 SDK 的 Transport.send 只以 reject 报错、没有 Result 通道；本方法内的每一处 throw 都是这个契约，抛出的 McpTransportError 带着原始响应（status / contentType / body / www-authenticate）供上层归一
     async send(message: JSONRPCMessage, options?: TransportSendOptions): Promise<void> {
         const headers = McpRequestHeaders.build({ authToken: this.deps.authToken, sessionId: this.sessionIdValue, protocolVersion: this.protocolVersion, extraHeaders: options?.headers === undefined ? this.deps.extraHeaders : { ...this.deps.extraHeaders, ...options.headers } });
         const request: McpHttpRequest = { url: this.deps.url, method: "POST", headers, body: serializeMessage(message), signal: options?.requestSignal };
