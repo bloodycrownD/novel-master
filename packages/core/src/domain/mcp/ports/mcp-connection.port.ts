@@ -25,7 +25,7 @@ export interface McpConnectionManager {
     callTool(serverId: string, toolName: string, args: unknown, signal: AbortSignal): Promise<Result<unknown, McpFailure>>;
     /** 失效某 server 的工具快照与在途连接（配置保存、手动刷新、换 ID 时调）：之后再回来的在途结果会被丢弃，下次 snapshotTools 重拉。 */
     invalidate(serverId: string): void;
-    /** 关闭全部常驻连接并作废在途结果。回合之间连接常驻复用，不在这里关；两端 runtime 目前都没有在应用退出时调它（连接随进程结束）。 */
+    /** 关闭全部常驻连接并作废在途结果。回合之间连接常驻复用，不在这里关；桌面在应用退出时调（before-quit，最多等 1.5 秒），移动端在 runtime 重建前调（没有应用退出钩子，进程被回收时连接随进程结束）。 */
     closeAll(): Promise<void>;
 }
 
