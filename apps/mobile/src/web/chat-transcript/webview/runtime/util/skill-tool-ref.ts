@@ -42,7 +42,14 @@ export const SkillToolRef = {
         const rawDomain = input.domain;
         // domain 缺省：write/edit 补工具同款默认 project；load/read 缺省读生效副本，
         // 实际命中域只有工具输出知道——返回 undefined，等行数据透传的 skillRef。
-        const domain = rawDomain === 'global' || rawDomain === 'project' ? rawDomain : action === 'load' || action === 'read' ? undefined : 'project';
+        let domain: 'global' | 'project' | undefined;
+        if (rawDomain === 'global' || rawDomain === 'project') {
+            domain = rawDomain;
+        } else if (action === 'load' || action === 'read') {
+            domain = undefined;
+        } else {
+            domain = 'project';
+        }
         if (domain == null) return undefined;
         return {
             domain,

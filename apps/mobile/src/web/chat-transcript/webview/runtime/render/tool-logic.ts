@@ -25,11 +25,28 @@ export const ToolLogic = {
     // （R6 波 4a 改为查 labels ui map，文案单源在 core catalog），内联会在渲染组件里复制状态阶梯。
     /** 状态 → `ui.transcript.tool_status.*` 文案；未知状态回空串（原语义）。 */
     statusLabel: (status: string | undefined, ui: Readonly<Record<string, string>>): string => {
-        const key = status === 'success' ? 'ui.transcript.tool_status.success'
-            : status === 'error' ? 'ui.transcript.tool_status.error'
-            : status === 'pending' ? 'ui.transcript.tool_status.pending'
-            : status === 'interrupted' ? 'ui.transcript.tool_status.interrupted'
-            : '';
+        let key = '';
+        switch (status) {
+            case 'success': {
+                key = 'ui.transcript.tool_status.success';
+                break;
+            }
+            case 'error': {
+                key = 'ui.transcript.tool_status.error';
+                break;
+            }
+            case 'pending': {
+                key = 'ui.transcript.tool_status.pending';
+                break;
+            }
+            case 'interrupted': {
+                key = 'ui.transcript.tool_status.interrupted';
+                break;
+            }
+            default: {
+                key = '';
+            }
+        }
         return key === '' ? '' : ui[key] ?? '';
     },
 

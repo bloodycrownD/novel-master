@@ -42,6 +42,17 @@ export function ThinkingSection({
     if (expanded && showDividerBelow) {
         bodyClass += ' thinking-body-divided';
     }
+    // 展开才渲染正文；流式行交 renderBody 保护增量 DOM，否则富文本 / 纯文本
+    let bodyNode: ComponentChildren = null;
+    if (expanded) {
+        if (renderBody != null) {
+            bodyNode = renderBody(bodyClass, useRich);
+        } else if (useRich) {
+            bodyNode = <TrustedHtml html={thinkingHtml!} className={bodyClass} />;
+        } else {
+            bodyNode = <div className={bodyClass}>{trimmed}</div>;
+        }
+    }
     return (
         <div className="thinking-section" data-thinking-key={thinkingKey}>
             <CollapsibleHeader
@@ -52,15 +63,7 @@ export function ThinkingSection({
                 dataValue={thinkingKey}
                 expanded={expanded}
             />
-            {expanded ? (
-                renderBody != null ? (
-                    renderBody(bodyClass, useRich)
-                ) : useRich ? (
-                    <TrustedHtml html={thinkingHtml!} className={bodyClass} />
-                ) : (
-                    <div className={bodyClass}>{trimmed}</div>
-                )
-            ) : null}
+            {bodyNode}
         </div>
     );
 }

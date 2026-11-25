@@ -5,6 +5,7 @@
  * 「生成中」条只属于流式行（StreamingMessageRow），这里不再承载。
  */
 import type {ToolCallRow} from '../../runtime/state/state';
+import type {ComponentChildren} from 'preact';
 import type {TranscriptLabels} from '../labels';
 import {TrustedHtml} from '@web/shared/ui/TrustedHtml';
 import {ThinkingSection} from './ThinkingSection';
@@ -46,6 +47,24 @@ export function AssistantBubbleInner({
     const hasText = !!(text && String(text).trim());
     const useRichText = !!(richText && textHtml);
 
+    // 正文优先富文本；无正文但仅有 thinking 时预置空壳（供 text 增量挂载）
+    let bodyNode: ComponentChildren = null;
+    if (hasText) {
+        if (useRichText) {
+            bodyNode = <TrustedHtml html={textHtml!} className="bubble-body rich" />;
+        } else {
+            bodyNode = <div className="bubble-body">{String(text)}</div>;
+        }
+    } else if (hasThinking) {
+        // WHY: 仅有 thinking、正文为空时预置空壳，供后续 text 增量挂载。
+        bodyNode = (
+            <div
+                className={'bubble-body' + (useRichText ? ' rich' : '')}
+                data-text-shell="1"
+            />
+        );
+    }
+
     return (
         <>
             {hasThinking ? (
@@ -59,19 +78,7 @@ export function AssistantBubbleInner({
                     richText={richText}
                 />
             ) : null}
-            {hasText ? (
-                useRichText ? (
-                    <TrustedHtml html={textHtml!} className="bubble-body rich" />
-                ) : (
-                    <div className="bubble-body">{String(text)}</div>
-                )
-            ) : hasThinking ? (
-                // WHY: 仅有 thinking、正文为空时预置空壳，供后续 text 增量挂载。
-                <div
-                    className={'bubble-body' + (useRichText ? ' rich' : '')}
-                    data-text-shell="1"
-                />
-            ) : null}
+            {bodyNode}
             {hasTools ? (
                 <ToolGroup
                     tools={tools!}

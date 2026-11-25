@@ -77,13 +77,30 @@ export function ToolGroup({
                 const statusClass = ToolLogic.statusClass(tool.status);
                 const statusInner = ToolLogic.statusLabel(tool.status, labels.ui);
                 // prettier-ignore
-                const openKind = hasSubagent
-                    ? Labels.uiText(labels, 'ui.transcript.open_kind.subagent')
-                    : hasSkill
-                    ? Labels.uiText(labels, 'ui.transcript.open_kind.skill')
-                    : hasResult
-                    ? Labels.uiText(labels, 'ui.transcript.open_kind.result')
-                    : Labels.uiText(labels, 'ui.transcript.open_kind.workspace');
+                // 点击种类（提示文案与跳转动作共用阶梯）：子会话 > 技能 > 结果阅读 > 工作区文件
+                let openKind: string;
+                if (hasSubagent) {
+                    openKind = Labels.uiText(labels, 'ui.transcript.open_kind.subagent');
+                } else if (hasSkill) {
+                    openKind = Labels.uiText(labels, 'ui.transcript.open_kind.skill');
+                } else if (hasResult) {
+                    openKind = Labels.uiText(labels, 'ui.transcript.open_kind.result');
+                } else {
+                    openKind = Labels.uiText(labels, 'ui.transcript.open_kind.workspace');
+                }
+                // 跳转动作按同一优先级；全无则不写 data-action（卡片不可点）
+                let openAction: string | undefined;
+                if (hasSubagent) {
+                    openAction = 'open-subagent-session';
+                } else if (hasSkill) {
+                    openAction = 'open-skill';
+                } else if (filePath != null) {
+                    openAction = 'open-tool-file';
+                } else if (hasResult) {
+                    openAction = 'open-tool-result';
+                } else {
+                    openAction = undefined;
+                }
                 const openHint = Labels.uiText(labels, 'ui.transcript.open_hint', {kind: openKind});
                 return (
                     <div
@@ -91,17 +108,7 @@ export function ToolGroup({
                         className={
                             'tool-group-item tool-card' + (canOpen ? ' tappable' : '')
                         }
-                        data-action={
-                            hasSubagent
-                                ? 'open-subagent-session'
-                                : hasSkill
-                                ? 'open-skill'
-                                : filePath != null
-                                ? 'open-tool-file'
-                                : hasResult
-                                ? 'open-tool-result'
-                                : undefined
-                        }
+                        data-action={openAction}
                         data-session-id={hasSubagent ? subagentSessionId : undefined}
                         data-domain={hasSkill ? skillRef!.domain : undefined}
                         data-project-id={
