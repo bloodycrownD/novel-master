@@ -1,4 +1,4 @@
-// T-TA1~T-TA4：throw-audit——四形态识别与属性列 / 判定矩阵五分支 / gate（未登记拦、UNTRIAGED 显数不拦）/
+// T-TA1~T-TA4：throw-audit——六形态识别与属性列 / 判定矩阵五分支 / gate（未登记拦、UNTRIAGED 显数不拦）/
 // write-baseline salvage；外加 CLI 用法错误（--write-baseline 与 --gate 互斥、gate 无基线 exit 2）。
 // git 依赖用例在包内 gitignored 的 tmp-git-test/ 下构造（子目录名带 tta- 前缀），用完即删。
 import { test } from "node:test";
@@ -34,7 +34,7 @@ const MATRIX_SRC = [
 
 const matrixSites = (file = "packages/core/src/matrix.ts") => throwSitesOfText(file, MATRIX_SRC);
 
-test("T-TA1 四形态识别与属性列（fn 路径 / ret 八值桶 / catch / keep 理由 / 稳定键）", () => {
+test("T-TA1 六形态识别与属性列（fn 路径 / ret 八值桶 / catch / keep 理由 / 稳定键）", () => {
   const sites = matrixSites();
   assert.equal(sites.length, 10);
   const [t1, t4b, t4v, t2, t3b, kept, t3o, t4n, t4never, t4pp] = sites;
@@ -202,4 +202,20 @@ test("T-TA6 CLI 用法：--write-baseline 与 --gate 互斥 exit 2；gate 无基
   assert.equal(runCli(["throw-audit", "--gate"], repo).status, 2);
   assert.equal(runCli(["throw-audit"], repo).status, 0, "默认全量表只出报告");
   fs.rmSync(repo, { recursive: true, force: true });
+});
+
+test("T-TA7 自定义错误类（T5）与再抛 / 其它表达式（T6）也进盘点，不再漏网；判定矩阵同口径", () => {
+  const NL = String.fromCharCode(10);
+  const src = [
+    "function rethrow(e: unknown): void { throw e; }",
+    "class TransportError extends Error { constructor(message: string, readonly raw: unknown) { super(message); } }",
+    "async function send(): Promise<void> { throw new TransportError('bad', 1); }",
+    "async function call(pick: boolean, a: Error, b: Error): Promise<void> { throw pick ? a : b; }",
+    "function inResult(r: { ok: boolean; error?: Error }): Result<void, AppError> { if (!r.ok) throw r.error; return r as Result<void, AppError>; }",
+  ].join(NL);
+  const sites = throwSitesOfText("packages/core/src/ta7.ts", src);
+  assert.deepEqual(sites.map((s) => s.form), ["T6", "T5", "T6", "T1"]);
+  assert.deepEqual(sites.map((s) => s.verdict), ["VIOLATION-B", "VIOLATION-B", "VIOLATION-B", "VIOLATION"]);
+  assert.equal(sites[1].text, "throw new TransportError('bad', 1);");
+  assert.equal(sites[1].key, "packages/core/src/ta7.ts#throw new TransportError('bad', 1);");
 });

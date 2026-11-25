@@ -1,7 +1,10 @@
 /**
- * throw-audit 规则（p26 R3）：四形态 throw 全量盘点 + 判定矩阵 + baseline 门禁。
- * 四形态（spec §5.1）：T1 `throw <expr>.error`（unwrap throw，与门⑦同口径——属性链以 .error 收尾）、
- * T2 `throw createAbortError(...)`、T3 `throw new AppError(...)`、T4 `throw new Error(...)`。
+ * throw-audit 规则（p26 R3）：六形态 throw 全量盘点 + 判定矩阵 + baseline 门禁。
+ * 六形态（spec §5.1 的前四个 + 后补的两个，堵「自定义错误类 / 再抛」的盲区）：
+ * T1 `throw <expr>.error`（unwrap throw，与门⑦同口径——属性链以 .error 收尾）、
+ * T2 `throw createAbortError(...)`、T3 `throw new AppError(...)`、T4 `throw new Error(...)`、
+ * T5 `throw new <其它错误类>(...)`（McpTransportError / NativeSseAbortError / TypeError…）、
+ * T6 `throw <其它表达式>`（再抛 `throw e`、三元、await、调用结果等）。
  * 每站点产出：形态 | file:line | 所在函数（类方法含类名，匿名箭头 <arrow>，模块顶层 <module>）|
  * 函数返回形态（八值桶：result/outcome/async-result/async-outcome/promise-plain/plain/never/none）|
  * 同函数有 catch? | 邻近 nm-throw: keep 注释（九期既有约定，理由必填）。
@@ -36,7 +39,7 @@ import { toolVersion } from "./bare-exports.js";
 
 // ---------- 公开类型 ----------
 
-export type ThrowForm = "T1" | "T2" | "T3" | "T4";
+export type ThrowForm = "T1" | "T2" | "T3" | "T4" | "T5" | "T6";
 export type ThrowVerdict = "VIOLATION" | "VIOLATION-B" | "BOUNDARY" | "ALLOWED" | "KEEP";
 /** 返回形态八值（spec §5.1「八值形态」列）：Result/Outcome × 同步异步 + 普通标注 + Promise 普通类型 + never + 无标注。 */
 export type RetBucket = "result" | "outcome" | "async-result" | "async-outcome" | "promise-plain" | "plain" | "never" | "none";
@@ -95,12 +98,13 @@ const ALLOWED_FILE_RULES: ReadonlyArray<{ category: string; test: (rel: string) 
 
 // ---------- 单站点判定 ----------
 
-function formOf(expr: ts.Expression): ThrowForm | null {
+function formOf(expr: ts.Expression): ThrowForm {
     if (ts.isPropertyAccessExpression(expr) && ts.isIdentifier(expr.name) && expr.name.text === "error") return "T1";
     if (ts.isCallExpression(expr) && isAbortFactoryText(expr.expression)) return "T2";
     if (ts.isNewExpression(expr) && ts.isIdentifier(expr.expression) && expr.expression.text === "AppError") return "T3";
     if (ts.isNewExpression(expr) && ts.isIdentifier(expr.expression) && expr.expression.text === "Error") return "T4";
-    return null;
+    if (ts.isNewExpression(expr)) return "T5";
+    return "T6";
 }
 
 /** T2 载荷识别（p29 补丁）：工厂 namespace 化后 `AbortError.create()`（属性访问）与旧名 `createAbortError()`（裸标识符）都要认——p23 改名曾让 T2 全量漏网。 */
@@ -268,8 +272,7 @@ export function throwSitesOfText(file: string, text: string): ThrowSite[] {
 
 function collectThrowSites(node: ts.Node, sites: ThrowSite[], file: string): void {
     if (ts.isThrowStatement(node) && node.expression != null) {
-        const form = formOf(node.expression);
-        if (form != null) sites.push(buildSite(node, form, file));
+        sites.push(buildSite(node, formOf(node.expression), file));
     }
     ts.forEachChild(node, (child) => collectThrowSites(child, sites, file));
 }

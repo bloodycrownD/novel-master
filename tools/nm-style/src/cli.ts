@@ -31,7 +31,7 @@ const USAGE_LINES = [
     "  gate         dup | bare [--baseline <path>] [--include-tests]",
     "  list         bare --summary | --bucket <桶> | clusters --all  [--json] [--include-tests]",
     "  baseline     write dup | bare  --baseline <path>",
-    "  throw-audit  [--gate] [--write-baseline] [--baseline <path>] [--include-tests] [--json]   # 四形态 throw 盘点（默认全量表）",
+    "  throw-audit  [--gate] [--write-baseline] [--baseline <path>] [--include-tests] [--json]   # 六形态 throw 盘点（默认全量表）",
     "  closures     [--include-tests] [--json]   # 函数内命名闭包盘点 + 捕获集分类（hoist/method/parametrize），盘点不阻断",
     "  index        [--json]",
     "",
@@ -219,7 +219,7 @@ function runCheck(argv: string[]): number {
     }
     console.log("\n== dup（gate 透传，不阻断；dup=同名+形态 组数，(+新增/-消除)）==");
     for (const line of dup.lines) console.log(line);
-    console.log("\n== throw-audit（gate 透传，不阻断；四形态 throw 盘点，详见 nm-style throw-audit --gate）==");
+    console.log("\n== throw-audit（gate 透传，不阻断；六形态 throw 盘点，详见 nm-style throw-audit --gate）==");
     for (const line of throwAudit.lines) console.log(line);
     const bareSegment = flags.changed ? String(bareBlocked.length) : `INFO(${bareFindings.length})`;
     const oopSegment = flags.strict ? String(countBlockingOf(reported, "oop")) : `INFO(${oopFindings.length})`;
@@ -489,7 +489,7 @@ function writeBareBaseline(baselinePath: string, includeTests: boolean): number 
 
 /**
  * `throw-audit [--gate] [--write-baseline] [--baseline <path>] [--include-tests] [--json]`（p26 R3）。
- * 默认打四形态全量表；--gate 与 baseline 比对（未登记 VIOLATION/VIOLATION-B/BOUNDARY → exit 1，
+ * 默认打六形态全量表；--gate 与 baseline 比对（未登记 VIOLATION/VIOLATION-B/BOUNDARY → exit 1，
  * UNTRIAGED 不拦但首行显数）；--write-baseline 落盘当前站点（旧 disposition 按 key salvage）。
  */
 /** closures 子命令：局部命名闭包盘点（不阻断），按建议桶分组输出。 */
@@ -588,7 +588,7 @@ function runThrowAudit(argv: string[]): number {
         }
     }
 
-    console.log(`== nm-style throw-audit ==（四形态 ${sites.length} 站点；T1=unwrap throw / T2=createAbortError / T3=new AppError / T4=new Error）`);
+    console.log(`== nm-style throw-audit ==（六形态 ${sites.length} 站点；T1=unwrap throw / T2=createAbortError / T3=new AppError / T4=new Error / T5=new 自定义错误类 / T6=再抛或其它表达式）`);
     const byForm = new Map<string, number>();
     const byVerdict = new Map<string, number>();
     for (const site of sites) {

@@ -51,6 +51,7 @@ description: novel-master 的代码优化与重构原则。写新代码、重构
 - 不要为了"统一"把本来有 code 的域错误包成 `Error` 或丢失 code；要么保留域错误，要么迁到统一 `AppError` 注册表，别造中间壳。
 - **编程错误不占产品码**：不变量破坏用 `assert(cond, msg)`（抛 `AssertionError`，不被 `isAppError` 命中），不要 `throw new AppError("*_INVARIANT_VIOLATION")`。
 - zod 的 `preprocess` / `transform` 是例外：它的失败协议就是 throw，没有 Result 通道。Result 边界放在 `decode` 和校验函数，不要在 schema 里硬塞 Result 再 throw 回去。
+- **抛异常的写法只有六种，盘点工具全都认**：`throw r.error`、`throw createAbortError()` / `AbortError.create()`、`throw new AppError`、`throw new Error`、`throw new <其它错误类>`、`throw <其它表达式>`（再抛 `throw e`、三元、调用结果等）。后两种曾经是盲区（2026-11-26 补上），不要以为换成自定义错误类或 `catch (e) { …; throw e; }` 就不算抛。自己写的函数之间用 `Result` 传递失败；只有平台契约逼着你抛的地方才抛，并在现场写 `// nm-throw: keep — 理由`。跑 `nm-style throw-audit --gate` 看未登记站点，`nm-style throw-audit` 出全量表。
 
 ## 4. 不为抽象而抽象
 
@@ -286,6 +287,7 @@ nm-style gate bare                             # bare-exports 基线门禁（新
 | `dup` | 增量判据透传（新增重复组才红），基线在 `scripts/dup-signatures-baseline.json` | 按 §5.1 语义族归类；不阻断（门禁走独立 `gate dup`） |
 | `top-let` | `TOP_LEVEL_LET`（模块顶层 / namespace 体内裸 `let`） | 改成对象槽；确有理由写 `nm-style: keep-top-let` |
 | `chained-ternary` | `CHAINED_TERNARY`（真 / 假分支里再接一个三元，允许外套括号） | 改成 if / else 或 switch（§2）；确有理由写 `nm-style: keep-ternary` |
+| `throw-audit`（独立命令，check 里只透传数量） | 六形态 throw 盘点：T1 unwrap / T2 取消 / T3 AppError / T4 Error / T5 自定义错误类 / T6 再抛或其它表达式 | 所在函数返回 Result/Outcome 却 throw → `VIOLATION`（改 return）；普通函数无 catch → `VIOLATION-B`（该改 Result）；普通函数有 catch → `BOUNDARY`（合法边界，须在 baseline 登记理由）；`nm-throw: keep — 理由` → `KEEP` |
 | `oop` | `OOP_CANDIDATE`（共享状态 + 多导出）、`MANY_EXPORTS`（导出 ≥6） | INFO 呈现；`--strict` 才阻断；见 §9.3 |
 
 **汇总行记法**：`nm-style: PASS|FINDINGS（signatures=N hygiene=N bare-exports=INFO(N)|N dup=… oop=INFO(N)|N）`。`INFO(N)` 表示该段只计数不阻断——bare-exports 在非增量模式（`--all`/指定目录）恒 `INFO(N)`，`--range`/`--since` 下 bare 段恒 INFO（增量按 hunk 语义不可判）；`|` 右侧是阻断数。hygiene 一个数并入旧 inline/methods/exports 三段的阻断合计。
