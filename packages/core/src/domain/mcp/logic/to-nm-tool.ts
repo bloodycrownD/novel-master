@@ -19,6 +19,7 @@
 import { z } from "zod";
 import { Encoding } from "@/common/encoding.js";
 import { Guards } from "@/common/guards.js";
+import { Json } from "@/common/json.js";
 import { Text } from "@/common/text.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
@@ -32,6 +33,9 @@ import { McpToolResultRenderer } from "./render-mcp-tool-result.js";
 import { McpToolSlug } from "./slugify-mcp-tool-name.js";
 
 /** `toNmTool` 依赖：serverId 已绑定的调用通道（serverId 由装配点闭包进 call）。 */
+/** 工具结果整理成多行时的行宽（字符）。 */
+const TOOL_RESULT_LINE_WIDTH = 300;
+
 export interface McpToolCallDeps {
     /** MCP 侧原始工具名 + 入参 + 取消信号；取消以 AbortError reject，已知失败沿 Result.err。 */
     readonly call: (toolName: string, args: unknown, signal: AbortSignal) => Promise<Result<unknown, McpFailure>>;
@@ -65,7 +69,9 @@ export const McpToolAdapter = {
                 }
                 if (!called.ok) return Result.err(new AppError("TOOL_FAILED", {toolName: name, cause: called.error, detail: `${prefix} ${called.error.detail}`}));
                 const payload = Guards.isRecord(called.value) ? called.value : {};
-                const text = McpToolResultRenderer.render(Array.isArray(payload.content) ? payload.content : []);
+                const rendered = McpToolResultRenderer.render(Array.isArray(payload.content) ? payload.content : []);
+                // 结果是 JSON 就整理成多行再交给模型（与 curl / search 的落盘同一口径），其余文本原样。
+                const text = Json.prettyJson(rendered, TOOL_RESULT_LINE_WIDTH) ?? rendered;
                 // isError: true 不抛异常：模型收到「失败 + 原文」，原文全量保留在 detail。
                 if (payload.isError === true) return Result.err(new AppError("TOOL_FAILED", {toolName: name, detail: `${prefix} ${text}`}));
                 const bytes = Encoding.utf8ByteLength(text);

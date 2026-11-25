@@ -95,6 +95,18 @@ describe("BuiltinTools.registerMcpTools", () => {
         assert.equal(result.value, "pong");
         assert.deepEqual(calls, [{ serverId: "fs", toolName: "ping", args: { x: 1 } }]);
     });
+
+    it("工具结果是 JSON 时整理成多行返回，非 JSON 文本原样", async () => {
+        const managerWith = (text: string): McpConnectionManager => ({ ...stubManager(), callTool: async () => Result.ok({ content: [{ type: "text", text }], isError: false }) });
+        const json = makeRegistry(mcpSnapshot("kb", ["query"]), managerWith('{"hits":[{"id":1798274923044444160,"title":"a"}]}')).get("mcp__kb__query");
+        const plain = makeRegistry(mcpSnapshot("kb", ["query"]), managerWith("第一行\n第二行 plain text")).get("mcp__kb__query");
+        assert.ok(json != null && plain != null);
+        const jsonResult = await json.run({}, mockToolCtx);
+        const plainResult = await plain.run({}, mockToolCtx);
+        assert.ok(jsonResult.ok && plainResult.ok);
+        assert.equal(jsonResult.value, '{\n  "hits": [\n    {\n      "id": 1798274923044444160,\n      "title": "a"\n    }\n  ]\n}');
+        assert.equal(plainResult.value, "第一行\n第二行 plain text");
+    });
 });
 
 describe("mcp__ 复合名的 policy 归一（T-M21）", () => {
