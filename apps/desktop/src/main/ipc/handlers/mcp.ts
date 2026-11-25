@@ -31,7 +31,7 @@ import type {
     McpToolRowDto,
     McpToolSnapshotDto,
 } from "../../../../shared/ipc-types.js";
-import { MCP_DEFAULT_TIMEOUT_MS, MCP_MIN_TIMEOUT_MS, McpSecretRefs, McpToolRefs, McpToolSlug, McpServerConfigOps, type McpServerConfig, type McpServerStatus } from "@novel-master/core/mcp";
+import { MCP_DEFAULT_TIMEOUT_MS, MCP_MIN_TIMEOUT_MS, McpSecretRefs, McpToolRefs, McpToolSlug, McpServerConfigOps, type McpAuthConfig, type McpServerConfig, type McpServerStatus, type McpTransportConfig } from "@novel-master/core/mcp";
 import { AppError } from "@novel-master/core/errors";
 import { DesktopRuntimeSingleton } from "../../runtime/desktop-runtime-singleton.js";
 import { FormatIpcError } from "../ipc-error.js";
@@ -109,13 +109,29 @@ export namespace Mcp {
             if (!McpServerConfigOps.isValidId(id)) return { ok: false, error: FormatIpcError.format(new AppError("INFRA_VALIDATION_FAILED", { detail: "ID 只能使用英文字母、数字和下划线" })) };
             const url = req.url?.trim() ?? "";
             if (req.transportType !== "stdio" && !/^https?:\/\//i.test(url)) return { ok: false, error: FormatIpcError.format(new AppError("INFRA_VALIDATION_FAILED", { detail: "URL 必须以 http:// 或 https:// 开头" })) };
+            let transport: McpTransportConfig;
+            if (req.transportType === "stdio") {
+                transport = { type: "stdio" };
+            } else if (req.transportType === "sse") {
+                transport = { type: "sse", url };
+            } else {
+                transport = { type: "http", url };
+            }
+            let auth: McpAuthConfig;
+            if (req.authType === "oauth") {
+                auth = { type: "oauth" };
+            } else if (req.authType === "bearer") {
+                auth = { type: "bearer", secretRef: McpSecretRefs.bearer(id) };
+            } else {
+                auth = { type: "none" };
+            }
             const config: McpServerConfig = {
                 id,
                 description: req.description.trim(),
                 enabled: req.enabled !== false,
-                transport: req.transportType === "stdio" ? { type: "stdio" } : req.transportType === "sse" ? { type: "sse", url } : { type: "http", url },
+                transport,
                 timeoutMs: req.timeoutMs != null && Number.isFinite(req.timeoutMs) && req.timeoutMs > 0 ? Math.max(MCP_MIN_TIMEOUT_MS, Math.trunc(req.timeoutMs)) : MCP_DEFAULT_TIMEOUT_MS,
-                auth: req.authType === "oauth" ? { type: "oauth" } : req.authType === "bearer" ? { type: "bearer", secretRef: McpSecretRefs.bearer(id) } : { type: "none" },
+                auth,
             };
             const previousId = req.previousId?.trim();
             // bearer 明文：undefined=保留、空串=清除、非空=覆盖（SKSP 直写，SecretStore 无 Result 通道、失败以 throw 收进 catch）。

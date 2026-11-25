@@ -112,6 +112,12 @@ export function McpServerDetailView({ nav }: { nav: SettingsNavHandle }) {
 
     // 编辑态首次读库完成前只显示加载提示（避免空表单闪一下再被回填覆盖）。
     if (!isCreate && !loaded) {
+        let saveButtonLabel = settingsTranslator({ key: "settings.mcp.detail.save_action" });
+        if (saving) {
+            saveButtonLabel = settingsTranslator({ key: "settings.mcp.detail.saving.desktop" });
+        } else if (isCreate) {
+            saveButtonLabel = settingsTranslator({ key: "settings.mcp.detail.create.desktop" });
+        }
         return (
             <SettingsPanel>
                 <p className="settings-hint">{settingsTranslator({ key: "settings.mcp.list.loading.desktop" })}</p>
@@ -143,6 +149,14 @@ export function McpServerDetailView({ nav }: { nav: SettingsNavHandle }) {
                 setError(settingsTranslator({ key: "settings.mcp.validation.id_exists" }));
                 return null;
             }
+            // bearer 明文：填了新值就带上；没填但勾了清除就带空串；都没有则不传（保留原密钥）。
+            const bearerField: { bearerToken?: string } = {};
+            const trimmedToken = token.trim();
+            if (trimmedToken !== "") {
+                bearerField.bearerToken = trimmedToken;
+            } else if (clearToken) {
+                bearerField.bearerToken = "";
+            }
             const res = await ipcMcpSaveServer({
                 id: nextId,
                 ...(isCreate ? { create: true } : { previousId: effectiveId }),
@@ -151,7 +165,7 @@ export function McpServerDetailView({ nav }: { nav: SettingsNavHandle }) {
                 url: form.transportType === "stdio" ? undefined : form.url.trim(),
                 timeoutMs: form.timeoutText.trim() !== "" && Number.isFinite(timeoutValue) && timeoutValue > 0 ? timeoutValue : undefined,
                 authType: form.authType,
-                ...(token.trim() !== "" ? { bearerToken: token.trim() } : clearToken ? { bearerToken: "" } : {}),
+                ...bearerField,
             });
             if (!res.ok) {
                 setError(res.error.message);
@@ -178,7 +192,7 @@ export function McpServerDetailView({ nav }: { nav: SettingsNavHandle }) {
                 title={isCreate ? settingsTranslator({ key: "settings.mcp.detail.create_action" }) : form.id}
                 footer={
                     <Button variant="primary" disabled={busy} onClick={() => void save().then((id) => id != null && toastSettingsSuccess(settingsTranslator({ key: "settings.mcp.toast.saved" })))}>
-                        {saving ? settingsTranslator({ key: "settings.mcp.detail.saving.desktop" }) : isCreate ? settingsTranslator({ key: "settings.mcp.detail.create.desktop" }) : settingsTranslator({ key: "settings.mcp.detail.save_action" })}
+                        {saveButtonLabel}
                     </Button>
                 }
             >

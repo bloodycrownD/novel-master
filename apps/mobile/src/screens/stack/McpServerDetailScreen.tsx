@@ -21,7 +21,7 @@ import {useCallback, useEffect, useRef, useState} from 'react';
 import {ActivityIndicator, Pressable, StyleSheet, Text, View} from 'react-native';
 import {useFocusEffect, useNavigation, useRoute, type RouteProp} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import {MCP_DEFAULT_TIMEOUT_MS, MCP_MIN_TIMEOUT_MS, McpSecretRefs, McpServerConfigOps, type McpServerConfig, type McpServerStatus, type McpToolSnapshot} from '@novel-master/core/mcp';
+import {MCP_DEFAULT_TIMEOUT_MS, MCP_MIN_TIMEOUT_MS, McpSecretRefs, McpServerConfigOps, type McpAuthConfig, type McpServerConfig, type McpServerStatus, type McpToolSnapshot} from '@novel-master/core/mcp';
 import type {SettingsMessageKey} from '@novel-master/core/settings';
 import {FormChipGroup, type ChipOption} from '@/components/form/FormChipGroup';
 import {FormField} from '@/components/form/FormField';
@@ -134,13 +134,19 @@ export function McpServerDetailScreen() {
                 if (servers == null) {
                     setDraft(EMPTY_DRAFT);
                 } else {
+                    let authType: 'oauth' | 'bearer' | 'none' = 'none';
+                    if (servers.auth.type === 'oauth') {
+                        authType = 'oauth';
+                    } else if (servers.auth.type === 'bearer') {
+                        authType = 'bearer';
+                    }
                     setDraft({
                         id: servers.id,
                         description: servers.description,
                         transport: servers.transport.type === 'sse' ? 'sse' : 'http',
                         url: servers.transport.type === 'stdio' ? '' : servers.transport.url,
                         timeoutSeconds: String(Math.round(servers.timeoutMs / 1000)),
-                        authType: servers.auth.type === 'oauth' ? 'oauth' : servers.auth.type === 'bearer' ? 'bearer' : 'none',
+                        authType,
                     });
                 }
                 setApiKeyDraft('');
@@ -234,13 +240,21 @@ export function McpServerDetailScreen() {
         }
         const timeoutSeconds = Number.parseInt(draft.timeoutSeconds.trim(), 10);
         const timeoutMs = Number.isFinite(timeoutSeconds) && timeoutSeconds > 0 ? Math.max(MCP_MIN_TIMEOUT_MS, timeoutSeconds * 1000) : MCP_DEFAULT_TIMEOUT_MS;
+        let auth: McpAuthConfig;
+        if (draft.authType === 'oauth') {
+            auth = {type: 'oauth'};
+        } else if (draft.authType === 'bearer') {
+            auth = {type: 'bearer', secretRef: McpSecretRefs.bearer(id)};
+        } else {
+            auth = {type: 'none'};
+        }
         const config: McpServerConfig = {
             id,
             description,
             enabled: savedConfig.current?.enabled ?? true,
             transport: draft.transport === 'sse' ? {type: 'sse', url} : {type: 'http', url},
             timeoutMs,
-            auth: draft.authType === 'oauth' ? {type: 'oauth'} : draft.authType === 'bearer' ? {type: 'bearer', secretRef: McpSecretRefs.bearer(id)} : {type: 'none'},
+            auth,
         };
         await runWrite('save', async () => {
             const renamed = serverId != null && serverId !== id;

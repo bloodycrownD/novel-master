@@ -75,7 +75,10 @@ export const McpFailureClassifier = {
             }
             const businessCode = Coerce.strictNumber(body.code) ?? Coerce.strictNumber(Guards.isRecord(body.error) ? body.error.code : undefined) ?? Coerce.strictNumber(body.error_code);
             if (businessCode != null) {
-                return buildFailure(businessCode === 401 ? "auth" : businessCode === 403 ? "permission" : businessCode === 429 ? "rate-limit" : "server", detailFrom(p.body), p.status);
+                if (businessCode === 401) return buildFailure("auth", detailFrom(p.body), p.status);
+                if (businessCode === 403) return buildFailure("permission", detailFrom(p.body), p.status);
+                if (businessCode === 429) return buildFailure("rate-limit", detailFrom(p.body), p.status);
+                return buildFailure("server", detailFrom(p.body), p.status);
             }
         }
         // 第 4 层：isError 文本嗅探升级（forbidden 措辞归 permission，其余 auth）。
@@ -87,9 +90,16 @@ export const McpFailureClassifier = {
      * kind → action 固定映射（spec §四）；知道 server 鉴权配置的调用方传
      * `authType` 细化 auth 的去向（bearer → fix-config，其余 → reauthorize）。
      */
-    actionForKind: (kind: McpFailureKind, authType?: McpAuthType): McpFailureAction =>
-        kind === "auth" ? (authType === "bearer" ? "fix-config" : "reauthorize")
-            : kind === "permission" ? "fix-config"
-                : kind === "rate-limit" || kind === "server" || kind === "network" ? "retry"
-                    : "report",
+    actionForKind: (kind: McpFailureKind, authType?: McpAuthType): McpFailureAction => {
+        if (kind === "auth") {
+            return authType === "bearer" ? "fix-config" : "reauthorize";
+        }
+        if (kind === "permission") {
+            return "fix-config";
+        }
+        if (kind === "rate-limit" || kind === "server" || kind === "network") {
+            return "retry";
+        }
+        return "report";
+    },
 } as const;

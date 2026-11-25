@@ -30,6 +30,7 @@ import {useToast} from '@/components/chrome/ToastHost';
 import {ToastMessage} from '@/errors/toast-message';
 import {coreT} from '@/i18n/core';
 import {settingsTranslator} from '@/i18n/settings';
+import type {SettingsMessageKey} from '@novel-master/core/settings';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -40,6 +41,17 @@ interface McpServerRow {
 }
 
 const EMPTY_ROWS: readonly McpServerRow[] = [];
+
+/** 列表状态标签：已连接 / 连接中 / 未连接（失败原因另由副标题直显 failure.detail）。 */
+const statusLabelKey = (status: McpServerStatus): SettingsMessageKey => {
+    if (status.state === 'ready') {
+        return 'settings.mcp.list.connected';
+    }
+    if (status.state === 'connecting') {
+        return 'settings.mcp.list.connecting';
+    }
+    return 'settings.mcp.list.disconnected';
+};
 
 export function McpServersScreen() {
     const {tokens} = useTheme();
@@ -157,7 +169,7 @@ export function McpServersScreen() {
                                         {/* 状态胶囊（照 ApiKeyStatusTag 的 hex-alpha 底色形态）：只有两态，失败原文进详情页。 */}
                                         <View style={[styles.stateTag, {backgroundColor: item.status.state === 'ready' ? `${tokens.success}1A` : `${tokens.textSecondary}1A`}]}>
                                             <Text style={{color: item.status.state === 'ready' ? tokens.success : tokens.text, fontSize: 12, fontWeight: '600'}}>
-                                                {settingsTranslator({key: item.status.state === 'ready' ? 'settings.mcp.list.connected' : item.status.state === 'connecting' ? 'settings.mcp.list.connecting' : 'settings.mcp.list.disconnected'})}
+                                                {settingsTranslator({key: statusLabelKey(item.status)})}
                                             </Text>
                                         </View>
                                         <Switch

@@ -19,7 +19,7 @@ import { Coerce } from "@/common/coerce.js";
 import { Guards } from "@/common/guards.js";
 import { Json } from "@/common/json.js";
 import { MCP_DEFAULT_TIMEOUT_MS, MCP_MIN_TIMEOUT_MS } from "../model/mcp-server-config.js";
-import type { McpServerConfig, McpTransportConfig, McpTransportType } from "../model/mcp-server-config.js";
+import type { McpAuthConfig, McpServerConfig, McpTransportConfig, McpTransportType } from "../model/mcp-server-config.js";
 
 /** type 别名表（大小写不敏感；spec §七）。 */
 const TYPE_ALIASES: Readonly<Record<string, McpTransportType>> = {
@@ -53,10 +53,24 @@ export const McpConfigParser = {
             const url = (Coerce.strictText(transportRecord?.url ?? entry.url) ?? "").trim();
             // type 归一：显式 type 查别名表（大小写不敏感）；缺 type 按 Claude Desktop 形态推断（command → stdio、url → http）。
             const typeText = Coerce.strictText(transportRecord?.type ?? entry.type);
-            const type = typeText != null ? TYPE_ALIASES[typeText.trim().toLowerCase()] ?? null : Coerce.strictText(transportRecord?.command ?? entry.command) != null ? "stdio" : url !== "" ? "http" : null;
+            let type: McpTransportType | null = null;
+            if (typeText != null) {
+                type = TYPE_ALIASES[typeText.trim().toLowerCase()] ?? null;
+            } else if (Coerce.strictText(transportRecord?.command ?? entry.command) != null) {
+                type = "stdio";
+            } else if (url !== "") {
+                type = "http";
+            }
             if (type == null) return null;
             if (type !== "stdio" && url === "") return null;
-            const transport: McpTransportConfig = type === "stdio" ? {type: "stdio"} : type === "sse" ? {type: "sse", url} : {type: "http", url};
+            let transport: McpTransportConfig;
+            if (type === "stdio") {
+                transport = {type: "stdio"};
+            } else if (type === "sse") {
+                transport = {type: "sse", url};
+            } else {
+                transport = {type: "http", url};
+            }
             // 0 / 负数钳到下限（原生层对 <= 0 会落回 600 秒默认预算）；非数字回缺省。
             const timeoutRaw = Coerce.number(entry.timeoutMs);
             const timeoutMs = timeoutRaw === undefined ? MCP_DEFAULT_TIMEOUT_MS : Math.max(MCP_MIN_TIMEOUT_MS, timeoutRaw);
@@ -64,13 +78,21 @@ export const McpConfigParser = {
             const storedAuth = Guards.isRecord(entry.auth) ? entry.auth : null;
             const storedAuthType = Coerce.strictText(storedAuth?.type);
             const secretRef = storedAuthType === "bearer" ? (Coerce.strictText(storedAuth?.secretRef)?.trim() ?? null) : null;
+            let auth: McpAuthConfig;
+            if (storedAuthType === "oauth") {
+                auth = {type: "oauth"};
+            } else if (secretRef != null) {
+                auth = {type: "bearer", secretRef};
+            } else {
+                auth = {type: "none"};
+            }
             return {
                 id,
                 description,
                 enabled: entry.enabled !== false,
                 transport,
                 timeoutMs,
-                auth: storedAuthType === "oauth" ? {type: "oauth"} : secretRef != null ? {type: "bearer", secretRef} : {type: "none"},
+                auth,
             };
         }).filter((config): config is McpServerConfig => config != null);
     },
@@ -82,7 +104,11 @@ export const McpConfigParser = {
     // nm-style: keep-public — 同 parse：存储值的归一规则属领域纯函数，与 infra 的 IO 读通道分离
     parseDisabledTools: (raw: unknown): Record<string, string[]> => {
         const text = typeof raw === "string" ? Json.parseText(raw) : null;
-        const value: unknown = text == null ? raw : text.ok ? text.value : null;
+        // 非字符串（已解析的对象）原样判形状；字符串解析失败按损坏处理。
+        let value: unknown = raw;
+        if (text != null) {
+            value = text.ok ? text.value : null;
+        }
         if (!Guards.isRecord(value)) return {};
         return Object.fromEntries(Object.entries(value).filter((entry): entry is [string, string[]] => Array.isArray(entry[1]) && entry[1].every((name) => typeof name === "string")));
     },
