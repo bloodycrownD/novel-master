@@ -167,7 +167,12 @@ export const AnthropicSseParser = {
         } else if (typeof start.model === "string") {
             merged.model = start.model;
         }
-        const startUsage = Guards.isRecord(startMessage?.usage) ? startMessage!.usage : Guards.isRecord(start.usage) ? start.usage : undefined;
+        let startUsage: Record<string, unknown> | undefined;
+        if (startMessage != null && Guards.isRecord(startMessage.usage)) {
+            startUsage = startMessage.usage;
+        } else if (Guards.isRecord(start.usage)) {
+            startUsage = start.usage;
+        }
         const usage: Record<string, unknown> = {};
         if (startUsage != null) {
             const inputSideKeys = [ANTHROPIC_USAGE_FIELDS.prompt, ANTHROPIC_USAGE_FIELDS.cacheRead, ANTHROPIC_USAGE_FIELDS.cacheCreationFlat, ANTHROPIC_USAGE_FIELDS.cacheCreationNested];

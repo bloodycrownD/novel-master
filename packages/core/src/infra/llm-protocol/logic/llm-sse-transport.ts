@@ -353,7 +353,14 @@ export const LlmSseTransport = {
         // 测试强制位优先于真实注册位；native 未注册时同进程自动回落 XHR。
         const transport = transportSlots.overrideForTests ?? transportSlots.registered;
         const usedRegisteredTransport = transport != null;
-        const kind: "native" | "xhr" | "fetch" = usedRegisteredTransport ? "native" : LlmSseTransport.shouldUseXhr() ? "xhr" : "fetch";
+        let kind: "native" | "xhr" | "fetch";
+        if (usedRegisteredTransport) {
+            kind = "native";
+        } else if (LlmSseTransport.shouldUseXhr()) {
+            kind = "xhr";
+        } else {
+            kind = "fetch";
+        }
 
         LlmSseTransport.logSse(logTag, "→", { method, url, transport: kind });
 

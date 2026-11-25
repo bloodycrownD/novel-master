@@ -121,7 +121,12 @@ export const AnthropicMapper = {
                     }
                     break;
                 case "thinking": {
-                    const text = typeof item.thinking === "string" ? item.thinking : typeof item.text === "string" ? item.text : "";
+                    let text = "";
+                    if (typeof item.thinking === "string") {
+                        text = item.thinking;
+                    } else if (typeof item.text === "string") {
+                        text = item.text;
+                    }
                     const signature = typeof item.signature === "string" && item.signature !== "" ? item.signature : undefined;
                     if (text !== "" || signature != null) {
                         blocks.push({

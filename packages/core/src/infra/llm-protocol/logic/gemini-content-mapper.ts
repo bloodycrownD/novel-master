@@ -182,7 +182,14 @@ export const GeminiMapper = {
             const functionResponse = part.functionResponse;
             if (Guards.isRecord(functionResponse) && typeof functionResponse.name === "string") {
                 const response = functionResponse.response;
-                const content = Guards.isRecord(response) && typeof response.output === "string" ? response.output : typeof response === "string" ? response : JSON.stringify(response ?? "");
+                let content: string;
+                if (Guards.isRecord(response) && typeof response.output === "string") {
+                    content = response.output;
+                } else if (typeof response === "string") {
+                    content = response;
+                } else {
+                    content = JSON.stringify(response ?? "");
+                }
                 const functionName = functionResponse.name;
                 const toolUseId = typeof functionResponse.id === "string" && functionResponse.id !== "" ? functionResponse.id : options.toolUseIdByFunctionName?.get(functionName) ?? functionName;
                 blocks.push({

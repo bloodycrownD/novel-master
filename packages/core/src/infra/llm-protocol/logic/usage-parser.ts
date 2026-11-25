@@ -86,7 +86,14 @@ export const UsageParser = {
         }
         const promptTokens = UsageParser.num(UsageParser.readPath(usage, shape.prompt));
         const completionTokens = UsageParser.num(UsageParser.readPath(usage, shape.completion));
-        const totalTokens = shape.total === "sum" ? (promptTokens != null && completionTokens != null ? promptTokens + completionTokens : undefined) : UsageParser.num(UsageParser.readPath(usage, shape.total));
+        let totalTokens: number | undefined;
+        switch (shape.total) {
+            case "sum":
+                totalTokens = promptTokens != null && completionTokens != null ? promptTokens + completionTokens : undefined;
+                break;
+            default:
+                totalTokens = UsageParser.num(UsageParser.readPath(usage, shape.total));
+        }
         const present: Record<UsageTokenField, boolean> = { prompt: promptTokens != null, completion: completionTokens != null, total: totalTokens != null };
         if (!shape.requireAny.some((field) => present[field])) {
             return undefined;

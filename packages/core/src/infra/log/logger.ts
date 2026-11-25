@@ -36,7 +36,20 @@ export interface Logger {
 const consoleSink: LogSink = {
     write(record) {
         const line = `[${record.scope}] ${record.message}`;
-        const method = record.level === "debug" ? console.debug : record.level === "warn" ? console.warn : record.level === "error" ? console.error : console.log;
+        let method: (...args: unknown[]) => void;
+        switch (record.level) {
+            case "debug":
+                method = console.debug;
+                break;
+            case "warn":
+                method = console.warn;
+                break;
+            case "error":
+                method = console.error;
+                break;
+            default:
+                method = console.log;
+        }
         if (record.detail === undefined) {
             method(line);
         } else {
