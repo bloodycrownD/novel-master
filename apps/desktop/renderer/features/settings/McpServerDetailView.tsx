@@ -3,17 +3,21 @@
  * `navState.editingMcpServerId` 定位单 server，编辑 + create 模式（哨兵复用本 viewId）。
  * 表单：ID（`mcp__<ID>__<tool>` 的服务器段，只允许英文字母、数字和下划线，编辑时可改——
  * 换 ID 由 main 侧 rename 改写 agent 工具引用并迁移密钥）/ 描述（选填）/ 传输类型（HTTP /
- * SSE / stdio——后两者只归一不可连，不可用原因由 server 状态位置的 `failure.detail` 事实
- * 提示承担）/ 地址 / 超时时间 / 认证三态（无 / Bearer / OAuth）。Bearer 明文只在输入框
- * 停留，保存经 IPC 写 SKSP（留空保留、清除按钮传空串）；OAuth 区显示授权状态并在「发起
- * 授权」时走 main 侧 loopback 回调（invoke 挂起至浏览器授权完成）。测试连接先静默保存
- * （main 按已存配置测），结果读 `McpServerStatus`——失败时 `failure.detail` 原文展示。
+ * SSE——与移动端同选项集；存量 stdio 配置做归一但不可连，不可用原因由 server 状态位置的
+ * `failure.detail` 事实提示承担）/ 地址 / 超时时间 / 认证三态（无 / Bearer / OAuth）。
+ * Bearer 明文只在输入框停留，保存经 IPC 写 SKSP（留空保留、清除按钮传空串）；OAuth 区
+ * 显示授权状态并在「发起授权」时走 main 侧 loopback 回调（invoke 挂起至浏览器授权完成）。
+ * 工具分组（编辑态、有工具时才出现）：该 server 每个工具的启停开关，描述默认两行截断、
+ * 点描述展开/收起；被关的工具不注册进 agent（过滤在连接管理器快照出口，无需重连）。
+ * 测试连接先静默保存（main 按已存配置测），结果读 `McpServerStatus`——失败时 `failure.detail`
+ * 原文展示。
  */
 import { useCallback, useEffect, useState } from "react";
 import { McpId } from "@shared/logic/mcp-id";
-import type { McpAuthType, McpServerStatus, McpTransportType } from "@shared/ipc-types";
-import { ipcMcpListServers, ipcMcpOAuthStart, ipcMcpOAuthStatuses, ipcMcpSaveServer, ipcMcpTestConnection } from "@/ipc/client";
+import type { McpAuthType, McpServerStatus, McpToolRowDto, McpTransportType } from "@shared/ipc-types";
+import { ipcMcpListServers, ipcMcpOAuthStart, ipcMcpOAuthStatuses, ipcMcpSaveServer, ipcMcpSetToolDisabled, ipcMcpTestConnection, ipcMcpToolList } from "@/ipc/client";
 import { Button } from "@/components/ui/Button";
+import { Switch } from "@/components/ui/Switch";
 import { toastSettingsSuccess } from "@/utils/settings-feedback";
 import { coreT } from "@shared/logic/core-i18n";
 import { settingsTranslator } from "../../i18n/settings";
@@ -47,6 +51,10 @@ export function McpServerDetailView({ nav }: { nav: SettingsNavHandle }) {
     /** 最近一次测试连接的结果（tag + 原文展示）；null = 本会话未测过。 */
     const [testStatus, setTestStatus] = useState<McpServerStatus | null>(null);
     const [oauthAuthorized, setOauthAuthorized] = useState(false);
+    /** 该 server 的工具行（快照条目 + 禁用位；空 = 未连接或无工具，分组不显示）。 */
+    const [tools, setTools] = useState<readonly McpToolRowDto[]>([]);
+    /** 描述展开中的工具名（默认两行截断，点描述切换）。 */
+    const [expandedTools, setExpandedTools] = useState<ReadonlySet<string>>(new Set());
 
     const isCreate = serverId === NEW_MCP_SERVER_SENTINEL && savedId == null;
     // 早退守卫保证 serverId 非空；`?? NEW_MCP_SERVER_SENTINEL` 只是类型收窄（闭包里拿不到早退信息）。
@@ -69,6 +77,13 @@ export function McpServerDetailView({ nav }: { nav: SettingsNavHandle }) {
         if (entry != null) {
             setForm({ id: entry.id, description: entry.description, transportType: entry.transport.type, url: entry.transport.type === "stdio" ? "" : entry.transport.url, timeoutText: String(entry.timeoutMs), authType: entry.auth.type });
             if (entry.auth.type === "oauth") void reloadOAuth(entry.id);
+        }
+        // 工具行渐次填充（快照读取会顺带连上 pending 的 server）；拉取失败不阻断表单，
+        // 保持旧列表（连接失败在「测试连接」区可见）。
+        const toolsRes = await ipcMcpToolList({ serverId });
+        if (toolsRes.ok) {
+            setTools(toolsRes.data);
+            setExpandedTools(new Set());
         }
         setLoaded(true);
     }, [serverId, reloadOAuth]);
@@ -177,7 +192,6 @@ export function McpServerDetailView({ nav }: { nav: SettingsNavHandle }) {
                     <select value={form.transportType} onChange={(e) => setForm({ ...form, transportType: e.target.value as McpTransportType })}>
                         <option value="http">{settingsTranslator({ key: "settings.mcp.detail.transport_http" })}</option>
                         <option value="sse">{settingsTranslator({ key: "settings.mcp.detail.transport_sse" })}</option>
-                        <option value="stdio">{settingsTranslator({ key: "settings.mcp.detail.transport_stdio.desktop" })}</option>
                     </select>
                 </SettingsField>
                 {form.transportType !== "stdio" ? (
@@ -242,6 +256,52 @@ export function McpServerDetailView({ nav }: { nav: SettingsNavHandle }) {
                 ) : null}
                 <SettingsStatus message={testStatus?.state === "ready" ? mcpStatusLabel(testStatus) : undefined} error={error} />
             </SettingsFormSection>
+            {!isCreate && tools.length > 0 ? (
+                <SettingsSection title={settingsTranslator({ key: "settings.mcp.detail.tools_section" })}>
+                    {tools.map((tool) => {
+                        const expanded = expandedTools.has(tool.toolName);
+                        const hasDesc = tool.toolDescription != null && tool.toolDescription.trim() !== "";
+                        return (
+                            <div key={tool.toolName} className="settings-mcp-tool">
+                                <div className="settings-mcp-tool__text">
+                                    <span className="settings-mcp-tool__name">{tool.toolName}</span>
+                                    {hasDesc ? (
+                                        // 描述默认两行截断，点描述文字展开/收起（移动端 descriptionLines=2 同口径）
+                                        <span
+                                            className={expanded ? "settings-mcp-tool__desc settings-mcp-tool__desc--open" : "settings-mcp-tool__desc"}
+                                            onClick={() =>
+                                                setExpandedTools((current) => {
+                                                    const next = new Set(current);
+                                                    if (next.delete(tool.toolName)) return next;
+                                                    next.add(tool.toolName);
+                                                    return next;
+                                                })
+                                            }
+                                        >
+                                            {tool.toolDescription}
+                                        </span>
+                                    ) : null}
+                                </div>
+                                {/* 每工具启停：乐观翻转 + 写 KKV 禁用表，失败回滚列表并置页内错误；被关的工具下一次装配自然不注册，无需重连。 */}
+                                <Switch
+                                    checked={!tool.disabled}
+                                    aria-label={tool.toolName}
+                                    onChange={(next) => {
+                                        const previous = tools;
+                                        setTools(previous.map((entry) => (entry.toolName === tool.toolName ? { ...entry, disabled: !next } : entry)));
+                                        void ipcMcpSetToolDisabled({ serverId: effectiveId, toolName: tool.toolName, disabled: !next }).then((res) => {
+                                            if (!res.ok) {
+                                                setTools(previous);
+                                                setError(res.error.message);
+                                            }
+                                        });
+                                    }}
+                                />
+                            </div>
+                        );
+                    })}
+                </SettingsSection>
+            ) : null}
             <SettingsSection title={settingsTranslator({ key: "settings.mcp.detail.test_connection" })}>
                 {/* 测试连接：先静默保存（main 按已存配置测），失败态展示 failure.detail 原文（busy 互斥态就地维护）。 */}
                 <Button

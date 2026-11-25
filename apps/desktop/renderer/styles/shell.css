@@ -2505,6 +2505,49 @@ html:not([data-theme="dark"]) .chat-composer__send:not(:disabled) {
   border-left: 1px solid var(--settings-item-border);
 }
 
+/* MCP 详情页「工具」卡行：名 + 描述左、开关右；描述默认两行截断，点文字展开/收起
+   （移动端 FormSwitchRow descriptionLines=2 同口径）。 */
+.settings-mcp-tool {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+}
+
+.settings-mcp-tool__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.settings-mcp-tool__name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  word-break: break-all;
+}
+
+.settings-mcp-tool__desc {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  word-break: break-word;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.settings-mcp-tool__desc--open {
+  display: block;
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+}
+
 /* 智能排序规则列表（SettingsViews SmartSortRulesView，spec D9 拖拽） */
 .smart-sort-rule__drag-handle {
   flex-shrink: 0;

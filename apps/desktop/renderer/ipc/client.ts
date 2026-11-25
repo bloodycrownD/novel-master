@@ -178,6 +178,8 @@ export const {
     ipcMcpTestConnection,
     ipcMcpServerStatuses,
     ipcMcpToolsSnapshot,
+    ipcMcpToolList,
+    ipcMcpSetToolDisabled,
     ipcMcpOAuthStart,
     ipcMcpOAuthStatuses,
     ipcShellMenuPopup,

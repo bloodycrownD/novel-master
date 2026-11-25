@@ -142,7 +142,10 @@ import {
     type McpSaveServerRequest,
     type McpServerConfig,
     type McpServerStatus,
+    type McpSetToolDisabledRequest,
     type McpTestConnectionRequest,
+    type McpToolListRequest,
+    type McpToolRowDto,
     type McpToolSnapshotDto,
 } from "@shared/ipc-types";
 
@@ -329,6 +332,8 @@ export function createInvokeClient(invoke: InvokeFn) {
         ipcMcpTestConnection: withReq<McpTestConnectionRequest, IpcResult<McpServerStatus>>(invoke, IPC_CHANNELS.MCP_TEST_CONNECTION),
         ipcMcpServerStatuses: noArg<IpcResult<readonly McpServerStatus[]>>(invoke, IPC_CHANNELS.MCP_SERVER_STATUSES),
         ipcMcpToolsSnapshot: noArg<IpcResult<readonly McpToolSnapshotDto[]>>(invoke, IPC_CHANNELS.MCP_TOOLS_SNAPSHOT),
+        ipcMcpToolList: withReq<McpToolListRequest, IpcResult<readonly McpToolRowDto[]>>(invoke, IPC_CHANNELS.MCP_TOOL_LIST),
+        ipcMcpSetToolDisabled: withReq<McpSetToolDisabledRequest, IpcResult<void>>(invoke, IPC_CHANNELS.MCP_SET_TOOL_DISABLED),
         ipcMcpOAuthStart: withReq<McpOAuthStartRequest, IpcResult<{ readonly authorizeUrl: string }>>(invoke, IPC_CHANNELS.MCP_OAUTH_START),
         ipcMcpOAuthStatuses: noArg<IpcResult<McpOAuthStatusesDto>>(invoke, IPC_CHANNELS.MCP_OAUTH_STATUSES),
         ipcShellMenuPopup: withReq<ShellMenuPopupRequest, IpcResult<null>>(invoke, IPC_CHANNELS.SHELL_MENU_POPUP),

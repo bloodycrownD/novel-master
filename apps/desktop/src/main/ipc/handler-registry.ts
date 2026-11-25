@@ -267,6 +267,8 @@ export const HandlerRegistry = {
         HandlerRegistry.bindReq(IPC_CHANNELS.MCP_TEST_CONNECTION, Mcp.testConnection);
         HandlerRegistry.bindNoArg(IPC_CHANNELS.MCP_SERVER_STATUSES, Mcp.serverStatuses);
         HandlerRegistry.bindNoArg(IPC_CHANNELS.MCP_TOOLS_SNAPSHOT, Mcp.toolsSnapshot);
+        HandlerRegistry.bindReq(IPC_CHANNELS.MCP_TOOL_LIST, Mcp.toolList);
+        HandlerRegistry.bindReq(IPC_CHANNELS.MCP_SET_TOOL_DISABLED, Mcp.setToolDisabled);
         HandlerRegistry.bindReq(IPC_CHANNELS.MCP_OAUTH_START, Mcp.oauthStart);
         HandlerRegistry.bindNoArg(IPC_CHANNELS.MCP_OAUTH_STATUSES, Mcp.oauthStatuses);
 

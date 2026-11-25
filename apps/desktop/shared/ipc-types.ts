@@ -215,6 +215,8 @@ export const IPC_CHANNELS = {
     MCP_TEST_CONNECTION: "nm:mcp/testConnection",
     MCP_SERVER_STATUSES: "nm:mcp/serverStatuses",
     MCP_TOOLS_SNAPSHOT: "nm:mcp/toolsSnapshot",
+    MCP_TOOL_LIST: "nm:mcp/toolList",
+    MCP_SET_TOOL_DISABLED: "nm:mcp/setToolDisabled",
     MCP_OAUTH_START: "nm:mcp/oauthStart",
     MCP_OAUTH_STATUSES: "nm:mcp/oauthStatuses",
 
@@ -1881,6 +1883,25 @@ export type McpOAuthStartRequest = {
  */
 export type McpToolSnapshotDto = McpToolSnapshot & {
     readonly registeredName: string;
+};
+
+/** 详情页「工具」卡的单行：快照条目 + 禁用位（disabled 只读配置禁用表，快照出口已滤掉被关工具）。 */
+export type McpToolRowDto = {
+    readonly toolName: string;
+    readonly toolDescription?: string;
+    readonly disabled: boolean;
+};
+
+/** 详情页工具清单请求（指定 server）。 */
+export type McpToolListRequest = {
+    readonly serverId: string;
+};
+
+/** 每工具启停写入（KKV `nm-mcp/disabledTools`；被关的工具下一次装配自然不注册，无需重连）。 */
+export type McpSetToolDisabledRequest = {
+    readonly serverId: string;
+    readonly toolName: string;
+    readonly disabled: boolean;
 };
 
 /** OAuth 授权状态（serverId → 是否已持 token）；只含 auth.type==="oauth" 的 server。 */
