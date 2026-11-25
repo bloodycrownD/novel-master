@@ -182,7 +182,7 @@ export namespace Mcp {
         }
     }
 
-    export async function serverStatuses(): Promise<IpcResult<readonly McpServerStatus[]>> {
+    export async function listServerStatuses(): Promise<IpcResult<readonly McpServerStatus[]>> {
         try {
             const built = await DesktopRuntimeSingleton.get();
             if (!built.ok) return { ok: false, error: FormatIpcError.format(built.error) };

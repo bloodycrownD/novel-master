@@ -23,7 +23,7 @@ import type {AgentRegistryService} from '@novel-master/core/agent';
 import {Result, type AppError} from '@novel-master/core/errors';
 import type {KkvService} from '@novel-master/core/kkv';
 import {LogFactory} from '@novel-master/core/log';
-import {McpConfigStoreFactory, McpConnectionManagerFactory, McpOAuthFactory, McpToolRefs, MCP_DEFAULT_TIMEOUT_MS, type McpConnectionManager, type McpOAuth, type McpRequestFn, type McpServerConfig} from '@novel-master/core/mcp';
+import {McpConfigStoreFactory, McpConnectionManagerFactory, McpOAuthFactory, McpToolRefs, MCP_DEFAULT_TIMEOUT_MS, type McpConnectionManager, type McpHttpRequest, type McpHttpResponse, type McpOAuth, type McpRequestFn, type McpServerConfig} from '@novel-master/core/mcp';
 import type {SecretStore} from '@novel-master/core/sksp';
 
 const log = LogFactory.create('mcp.config');
@@ -98,25 +98,23 @@ export const McpRuntimeFactory = {
         // nm-style: keep-local — 连接管理器依赖与切片成员共用的镜像读闭包（读共享 state）。
         const disabledToolsOf = (serverId: string): readonly string[] => state.disabledTools[serverId] ?? [];
 
+        // nm-style: keep-local — 按各 server 的 timeoutMs 选建请求函数并 memo 复用（超时归一后缓存键有限）；闭包内被连接管理器依赖引用。
         const requestFnCache = new Map<number, McpRequestFn>();
-        // nm-style: keep-local — 闭包内被 baseManager 的 requestFn 引用（同名计数看不到闭包内引用）。
-        const requestFnFor = (timeoutMs: number): McpRequestFn => {
-            const cached = requestFnCache.get(timeoutMs);
-            if (cached != null) {
-                return cached;
-            }
-            const built = deps.requestFnFor(timeoutMs);
-            requestFnCache.set(timeoutMs, built);
-            return built;
-        };
-        // nm-style: keep-local — 闭包内被 baseManager 的 requestFn 引用（同名计数看不到闭包内引用）。
+        // nm-style: keep-local — 闭包内被 requestFnFor 引用（闭包内引用按名计数看不到）
         const timeoutOf = (url: string): number => state.servers.find(candidate => candidate.transport.type !== 'stdio' && candidate.transport.url === url)?.timeoutMs ?? MCP_DEFAULT_TIMEOUT_MS;
+        // nm-style: keep-public — McpConnectionManagerDeps.requestFn 契约的实现（按 server 超时选建并 memo），作为依赖对象成员注入而不是调用
+        const requestFnFor = (req: McpHttpRequest): Promise<McpHttpResponse> => {
+            const timeoutMs = timeoutOf(req.url);
+            const cached = requestFnCache.get(timeoutMs) ?? deps.requestFnFor(timeoutMs);
+            requestFnCache.set(timeoutMs, cached);
+            return cached(req);
+        };
         const connectionManager = McpConnectionManagerFactory.create({
             listServers: () => state.servers,
-            requestFn: req => requestFnFor(timeoutOf(req.url))(req),
+            requestFn: requestFnFor,
             disabledTools: disabledToolsOf,
             // SKSP get 的失败（infra 异常）由连接管理器按「无 token」兜底（服务器 401 会归 auth）。
-            bearerToken: secretRef => deps.secretStore.get(secretRef),
+            bearerToken: deps.secretStore.get.bind(deps.secretStore),
         });
 
         // nm-style: keep-local — 写路径共用管线：core 落库成功后一次刷新两份镜像并 invalidate 对应 server（工具过滤走连接管理器出口的活镜像，setToolDisabled 无需 invalidate）。

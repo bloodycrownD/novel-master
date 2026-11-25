@@ -20,9 +20,3 @@ export function mcpStatusLabel(status: McpServerStatus): string {
     return settingsTranslator({ key: "settings.mcp.detail.status_pending" });
 }
 
-/** 状态标签的色调类（settings-tag 变体）；pending / disabled 中性、ready 绿、failed / unsupported 暖。 */
-export function mcpStatusTagClass(state: McpServerStatus["state"]): string {
-    if (state === "ready") return "settings-tag settings-tag--ok";
-    if (state === "failed" || state === "unsupported") return "settings-tag settings-tag--warn";
-    return "settings-tag settings-tag--muted";
-}

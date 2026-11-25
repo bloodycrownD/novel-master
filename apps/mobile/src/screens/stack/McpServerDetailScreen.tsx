@@ -190,6 +190,24 @@ export function McpServerDetailScreen() {
     }, [loading, navigation, serverId, showToast]);
 
     // nm-style: keep-local — 保存分流 create / save / rename 三分支，共享 writeOp 互斥态、密钥写入与失败回读；内联进 footer 按钮会拆散互斥与回读状态机
+    // nm-style: keep-local — 写操作互斥模板：保存与清除密钥共用 writeOp 互斥态、失败 toast 映射与失败后重读。
+    const runWrite = async (op: WriteOp, go: () => Promise<void>): Promise<void> => {
+        if (writeOp != null) {
+            return;
+        }
+        setWriteOp(op);
+        try {
+            await go();
+        } catch (cause) {
+            const failKeys: Record<WriteOp, SettingsMessageKey> = {save: 'settings.mcp.toast.save_failed.mobile', clear_key: 'settings.mcp.toast.clear_key_failed.mobile'};
+            showToast(ToastMessage.toast(settingsTranslator({key: failKeys[op]}), cause));
+            await load({silent: true});
+        } finally {
+            setWriteOp(null);
+        }
+    };
+
+    // nm-style: keep-local — 保存按钮的事件处理函数，唯一调用点是 onPress 绑定（事件处理函数不内联进 JSX）
     const handleSave = async () => {
         if (writeOp != null) {
             return;
@@ -224,8 +242,7 @@ export function McpServerDetailScreen() {
             timeoutMs,
             auth: draft.authType === 'oauth' ? {type: 'oauth'} : draft.authType === 'bearer' ? {type: 'bearer', secretRef: McpSecretRefs.bearer(id)} : {type: 'none'},
         };
-        setWriteOp('save');
-        try {
+        await runWrite('save', async () => {
             const renamed = serverId != null && serverId !== id;
             const keyDraft = apiKeyDraft.trim();
             // bearer 明文写 SKSP（ref 按目标 id）：三支路各自择时，见各分支注释。
@@ -256,29 +273,9 @@ export function McpServerDetailScreen() {
                 return;
             }
             await load({silent: true});
-        } catch (cause) {
-            showToast(ToastMessage.toast(settingsTranslator({key: 'settings.mcp.toast.save_failed.mobile'}), cause));
-            await load({silent: true});
-        } finally {
-            setWriteOp(null);
-        }
+        });
     };
 
-    // nm-style: keep-local — 短写操作互斥模板：clear_key 与保存共用 writeOp 互斥态与失败 toast 映射；内联进各按钮会复制互斥状态机
-    const runWrite = async (op: WriteOp, go: (id: string) => Promise<void>) => {
-        if (serverId == null || writeOp != null) {
-            return;
-        }
-        setWriteOp(op);
-        try {
-            await go(serverId);
-        } catch (cause) {
-            const failKeys: Record<WriteOp, SettingsMessageKey> = {save: 'settings.mcp.toast.save_failed.mobile', clear_key: 'settings.mcp.toast.clear_key_failed.mobile'};
-            showToast(ToastMessage.toast(settingsTranslator({key: failKeys[op]}), cause));
-        } finally {
-            setWriteOp(null);
-        }
-    };
 
     if (loading) {
         return (
@@ -304,9 +301,9 @@ export function McpServerDetailScreen() {
         if (status.state === 'ready') {
             return {text: `${settingsTranslator({key: 'settings.mcp.detail.status_ready'})} · ${settingsTranslator({key: 'settings.mcp.list.tool_count', params: {count: status.toolCount ?? tools.length}})}`, color: tokens.success};
         }
-                if (status.state === 'connecting') {
-                    return {text: settingsTranslator({key: 'settings.mcp.detail.status_connecting'}), color: tokens.textSecondary};
-                }
+        if (status.state === 'connecting') {
+            return {text: settingsTranslator({key: 'settings.mcp.detail.status_connecting'}), color: tokens.textSecondary};
+        }
         if (status.state === 'pending') {
             return {text: settingsTranslator({key: 'settings.mcp.detail.status_pending'}), color: tokens.textSecondary};
         }
@@ -379,8 +376,11 @@ export function McpServerDetailScreen() {
                                 fullWidth
                                 label={writeOp === 'clear_key' ? settingsTranslator({key: 'settings.mcp.detail.clearing_key'}) : settingsTranslator({key: 'settings.mcp.detail.clear_key.mobile'})}
                                 onPress={() => {
-                                    void runWrite('clear_key', async id => {
-                                        await runtime.secretStore.delete(McpSecretRefs.bearer(id));
+                                    void runWrite('clear_key', async () => {
+                                        if (serverId == null) {
+                                            return;
+                                        }
+                                        await runtime.secretStore.delete(McpSecretRefs.bearer(serverId));
                                         setHasBearerKey(false);
                                         showToast(settingsTranslator({key: 'settings.mcp.toast.key_cleared'}));
                                     });

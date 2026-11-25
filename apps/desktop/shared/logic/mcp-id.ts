@@ -12,5 +12,9 @@ export const MCP_ID_PATTERN = /^[A-Za-z0-9]+(_[A-Za-z0-9]+)*$/;
 
 /** ID 判定（先剥边缘空白）；非法时 UI 用 settings.mcp.validation.id_invalid 文案。 */
 export const McpId = {
-    isValid: (id: string): boolean => MCP_ID_PATTERN.test(id.trim()),
+    // nm-style: keep-public — renderer 跨 bundle 的 ID 规则契约副本（main / renderer 不能值引用 core），表单按名字调用而不是各自复制正则
+    isValid: (id: string): boolean => {
+        const trimmed = id.trim();
+        return trimmed !== "" && MCP_ID_PATTERN.test(trimmed);
+    },
 } as const;

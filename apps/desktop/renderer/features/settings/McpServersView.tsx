@@ -17,7 +17,10 @@ import { toastSettingsSuccess } from "@/utils/settings-feedback";
 import { coreT } from "@shared/logic/core-i18n";
 import { settingsTranslator } from "../../i18n/settings";
 import type { SettingsNavHandle } from "./settings-nav";
-import { mcpStatusLabel, mcpStatusTagClass, NEW_MCP_SERVER_SENTINEL } from "./mcp-server-meta";
+import { mcpStatusLabel, NEW_MCP_SERVER_SENTINEL } from "./mcp-server-meta";
+
+/** 状态标签的色调变体（settings-tag）；pending / connecting / disabled 中性、ready 绿、failed / unsupported 暖。 */
+const MCP_STATUS_TAG_VARIANT: Readonly<Partial<Record<McpServerStatus["state"], string>>> = { ready: "settings-tag--ok", failed: "settings-tag--warn", unsupported: "settings-tag--warn" };
 import { SettingsListSection, SettingsPanel, SettingsStatus } from "./settings-ui";
 
 export function McpServersView({ nav }: { nav: SettingsNavHandle }) {
@@ -156,7 +159,7 @@ export function McpServersView({ nav }: { nav: SettingsNavHandle }) {
                                         : status.failure != null
                                           ? // 状态不可用：状态位置直显 core 事实提示（failure.detail），不自写文案（超长由 meta 的 ellipsis 截断，原文进详情页）
                                             <span style={{ color: "var(--warning, #b45309)" }}>{status.failure.detail}</span>
-                                          : <span className={mcpStatusTagClass(status.state)}>{mcpStatusLabel(status)}</span>}
+                                          : <span className={`settings-tag ${MCP_STATUS_TAG_VARIANT[status.state] ?? "settings-tag--muted"}`}>{mcpStatusLabel(status)}</span>}
                                 </span>
                                 <span className="settings-list-item__chevron" aria-hidden="true">
                                     ›
