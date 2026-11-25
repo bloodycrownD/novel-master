@@ -192,7 +192,13 @@ export class AppError<K extends ErrorKey = ErrorKey> extends Error {
         this.messageKey = descriptor?.key ?? def.messageKey;
         // descriptor 命中时 messageParams 只取 descriptor.params（为空即 undefined，与旧 VfsError
         // wire 一致）；不再回退 toSnakeCase(params)——那会把 descriptor 对象自身当参数透传出去。
-        this.messageParams = descriptor != null ? descriptor.params : params == null ? undefined : (AppErrorOps.toSnakeCase(params as Record<string, unknown>) as MessageParams);
+        if (descriptor != null) {
+            this.messageParams = descriptor.params;
+        } else if (params == null) {
+            this.messageParams = undefined;
+        } else {
+            this.messageParams = AppErrorOps.toSnakeCase(params as Record<string, unknown>) as MessageParams;
+        }
         this.details = params as Record<string, unknown> | undefined;
     }
 

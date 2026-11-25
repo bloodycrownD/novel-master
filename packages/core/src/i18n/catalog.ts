@@ -39,7 +39,15 @@ export const Catalog = {
                 }
                 if (value === null || typeof value !== "object" || Array.isArray(value)) {
                     // nm-throw: keep — catalog 结构不变量：构建期内嵌资源写坏即打包错误，非用户可触发失败。
-                    throw new Error(`[parseCoreCatalog] ${key || "<根>"} 的中间节点必须是对象映射、叶子必须是字符串（形似数字/布尔的裸值必须加引号），实际是 ${value === null ? "null" : Array.isArray(value) ? "数组" : typeof value}`);
+                    let actualType: string;
+                    if (value === null) {
+                        actualType = "null";
+                    } else if (Array.isArray(value)) {
+                        actualType = "数组";
+                    } else {
+                        actualType = typeof value;
+                    }
+                    throw new Error(`[parseCoreCatalog] ${key || "<根>"} 的中间节点必须是对象映射、叶子必须是字符串（形似数字/布尔的裸值必须加引号），实际是 ${actualType}`);
                 }
                 pending.push([value as Record<string, unknown>, key]);
             }
@@ -50,7 +58,17 @@ export const Catalog = {
                 throw new Error(`[parseCoreCatalog] key 不匹配 keyRule（^(error|label|ui)\\.域.名字段，全小写 snake_case，3-5 段）：${key}`);
             }
             const [area, domain] = key.split(".") as [string, string];
-            const domains: readonly string[] = area === "error" ? ERROR_KEY_DOMAINS : area === "label" ? LABEL_KEY_DOMAINS : UI_KEY_DOMAINS;
+            let domains: readonly string[];
+            switch (area) {
+                case "error":
+                    domains = ERROR_KEY_DOMAINS;
+                    break;
+                case "label":
+                    domains = LABEL_KEY_DOMAINS;
+                    break;
+                default:
+                    domains = UI_KEY_DOMAINS;
+            }
             if (!domains.includes(domain)) {
                 // nm-throw: keep — catalog 结构不变量：构建期内嵌资源写坏即打包错误，非用户可触发失败。
                 throw new Error(`[parseCoreCatalog] key 的域不在词表内（${area}.* 只允许 ${domains.join(" / ")}）：${key}`);
