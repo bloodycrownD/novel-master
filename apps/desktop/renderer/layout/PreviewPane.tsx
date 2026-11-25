@@ -4,6 +4,7 @@ import {
     useMemo,
     useRef,
     useState,
+    type ReactNode,
 } from "react";
 import { coreT } from "@shared/logic/core-i18n";
 import { MermaidMarkdown } from "../components/MermaidMarkdown";
@@ -330,6 +331,83 @@ export function PreviewPane() {
 
     const showMissing = fileMissing || previewFile?.isDeleted;
 
+    let paneBody: ReactNode;
+    if (!previewFile) {
+        paneBody = (
+            <div className="preview-body" id="preview-body">
+                <p className="preview-empty">
+                    {mode === "edit"
+                        ? coreT({key: "ui.vfs.select_to_edit"})
+                        : coreT({key: "ui.vfs.select_to_preview"})}
+                </p>
+            </div>
+        );
+    } else if (showMissing) {
+        paneBody = (
+            <div className="preview-body" id="preview-body">
+                <p className="preview-empty preview-empty--deleted">
+                    {coreT({key: "ui.vfs.file_missing"})}
+                </p>
+            </div>
+        );
+    } else if (loading) {
+        paneBody = (
+            <div className="preview-body" id="preview-body">
+                <p className="preview-empty">{coreT({key: "ui.common.loading"})}</p>
+            </div>
+        );
+    } else if (mode === "read") {
+        if (isMarkdown) {
+            if (content) {
+                paneBody = (
+                    <div className="preview-body" id="preview-body">
+                        <div className="preview-markdown" ref={mdRootRef}>
+                            <MermaidMarkdown content={content} />
+                        </div>
+                    </div>
+                );
+            } else {
+                paneBody = (
+                    <div className="preview-body" id="preview-body">
+                        <p className="preview-empty">{coreT({key: "ui.common.empty_file"})}</p>
+                    </div>
+                );
+            }
+        } else {
+            paneBody = (
+                <div className="preview-body" id="preview-body">
+                    <pre className="preview-text">{content || coreT({key: "ui.common.empty_file"})}</pre>
+                </div>
+            );
+        }
+    } else {
+        paneBody = (
+            <div className="preview-editor-shell">
+                <CodeEditor
+                    id="preview-editor"
+                    aria-label={coreT({key: "ui.vfs.editor_title"})}
+                    value={content}
+                    languagePath={previewFile.path}
+                    onChange={setContent}
+                    onSave={() => void save()}
+                />
+                <div className="preview-editor-status">
+                    <span>{coreT({key: "ui.vfs.line_count", params: {count: lineCount}})}</span>
+                    <div className="preview-editor-status__right">
+                        <span className="preview-editor-status__hint">{coreT({key: "ui.vfs.ctrl_s_hint"})}</span>
+                        <span
+                            className={
+                                isDirty ? "preview-editor-status__dirty" : undefined
+                            }
+                        >
+                            {isDirty ? coreT({key: "ui.common.unsaved_title"}) : coreT({key: "ui.common.saved"})}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <>
             <header className="column-header" id="preview-header" aria-label={coreT({key: "ui.vfs.preview_title"})}>
@@ -358,63 +436,7 @@ export function PreviewPane() {
                 </div>
             </header>
             <section id="preview-pane" aria-label={coreT({key: "ui.vfs.preview_title"})}>
-                {!previewFile ? (
-                    <div className="preview-body" id="preview-body">
-                        <p className="preview-empty">
-                            {mode === "edit"
-                                ? coreT({key: "ui.vfs.select_to_edit"})
-                                : coreT({key: "ui.vfs.select_to_preview"})}
-                        </p>
-                    </div>
-                ) : showMissing ? (
-                    <div className="preview-body" id="preview-body">
-                        <p className="preview-empty preview-empty--deleted">
-                            {coreT({key: "ui.vfs.file_missing"})}
-                        </p>
-                    </div>
-                ) : loading ? (
-                    <div className="preview-body" id="preview-body">
-                        <p className="preview-empty">{coreT({key: "ui.common.loading"})}</p>
-                    </div>
-                ) : mode === "read" ? (
-                    <div className="preview-body" id="preview-body">
-                        {isMarkdown ? (
-                            content ? (
-                                <div className="preview-markdown" ref={mdRootRef}>
-                                    <MermaidMarkdown content={content} />
-                                </div>
-                            ) : (
-                                <p className="preview-empty">{coreT({key: "ui.common.empty_file"})}</p>
-                            )
-                        ) : (
-                            <pre className="preview-text">{content || coreT({key: "ui.common.empty_file"})}</pre>
-                        )}
-                    </div>
-                ) : (
-                    <div className="preview-editor-shell">
-                        <CodeEditor
-                            id="preview-editor"
-                            aria-label={coreT({key: "ui.vfs.editor_title"})}
-                            value={content}
-                            languagePath={previewFile.path}
-                            onChange={setContent}
-                            onSave={() => void save()}
-                        />
-                        <div className="preview-editor-status">
-                            <span>{coreT({key: "ui.vfs.line_count", params: {count: lineCount}})}</span>
-                            <div className="preview-editor-status__right">
-                                <span className="preview-editor-status__hint">{coreT({key: "ui.vfs.ctrl_s_hint"})}</span>
-                                <span
-                                    className={
-                                        isDirty ? "preview-editor-status__dirty" : undefined
-                                    }
-                                >
-                                    {isDirty ? coreT({key: "ui.common.unsaved_title"}) : coreT({key: "ui.common.saved"})}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                )}
+                {paneBody}
             </section>
             {annotateEnabled && floating != null ? (
                 <PreviewAnnotateFloatingBar

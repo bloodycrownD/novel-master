@@ -422,6 +422,15 @@ function DesktopOverlays() {
         }
     }, [workspaceConfirm, projectId, workspaceSessionId, notifyWorkspaceMutated]);
 
+    let workspacePromptTitle: string;
+    if (workspacePrompt?.kind === 'create-file') {
+        workspacePromptTitle = coreT({key: "ui.vfs.create_file"});
+    } else if (workspacePrompt?.kind === 'create-folder') {
+        workspacePromptTitle = coreT({key: "ui.vfs.menu_create_folder"});
+    } else {
+        workspacePromptTitle = coreT({key: "ui.common.rename"});
+    }
+
     return (
         <>
             <div id="app">
@@ -506,13 +515,7 @@ function DesktopOverlays() {
 
             <TextPromptModal
                 open={workspacePrompt != null}
-                title={
-                    workspacePrompt?.kind === 'create-file'
-                        ? coreT({key: "ui.vfs.create_file"})
-                        : workspacePrompt?.kind === 'create-folder'
-                        ? coreT({key: "ui.vfs.menu_create_folder"})
-                        : coreT({key: "ui.common.rename"})
-                }
+                title={workspacePromptTitle}
                 placeholder={
                     workspacePrompt?.kind === 'create-folder' ? coreT({key: "ui.vfs.folder_name_label"}) : coreT({key: "ui.common.name"})
                 }

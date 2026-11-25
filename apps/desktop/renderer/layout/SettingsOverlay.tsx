@@ -193,7 +193,13 @@ export const SettingsOverlay = forwardRef<SettingsOverlayHandle, SettingsOverlay
     else if (viewId === "searchEngineDetail") {
         // 详情页复用同一 viewId：哨兵值 = 新建自定义引擎（create 模式）
         const label = engineLabel(navState.editingEngineId);
-        mainTitle = navState.editingEngineId === NEW_ENGINE_SENTINEL ? coreT({key: "ui.provider.custom_engine_create_title"}) : label ? `${coreT({key: "ui.nav.search_engines"})} · ${label}` : coreT({key: "ui.nav.search_engines"});
+        if (navState.editingEngineId === NEW_ENGINE_SENTINEL) {
+            mainTitle = coreT({key: "ui.provider.custom_engine_create_title"});
+        } else if (label) {
+            mainTitle = `${coreT({key: "ui.nav.search_engines"})} · ${label}`;
+        } else {
+            mainTitle = coreT({key: "ui.nav.search_engines"});
+        }
     } else if (viewId === "mcpServerDetail") {
         mainTitle = coreT({key: "ui.nav.mcp_servers"});
     } else if (viewId === "skillDetail") {

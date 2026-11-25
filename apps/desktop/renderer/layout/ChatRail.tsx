@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { coreT } from '@shared/logic/core-i18n';
 import type { ProjectDto, SessionDto } from '@shared/ipc-types';
 import { BatchCheckbox } from '../components/batch/BatchCheckbox';
@@ -418,6 +418,205 @@ export function ChatRail({
 
     const showBack = viewId === 'sessions' || viewId === 'conversation' || viewId === 'subagent-conversation';
 
+    let backAction: string;
+    let backHandler: () => void;
+    if (viewId === 'sessions') {
+        backAction = 'back-to-projects';
+        backHandler = goBackToProjects;
+    } else if (viewId === 'subagent-conversation') {
+        backAction = 'back-to-conversation';
+        backHandler = goBackToConversation;
+    } else {
+        backAction = 'back-to-sessions';
+        backHandler = goBackToSessions;
+    }
+
+    let railTitle: ReactNode;
+    if (viewId === 'sessions') {
+        railTitle = (
+            <span className="column-header__title column-header__title--truncate">
+                {projectName ?? '—'}
+            </span>
+        );
+    } else if (viewId === 'conversation') {
+        railTitle = (
+            <span className="column-header__title column-header__title--truncate">
+                {sessionName ?? '—'}
+            </span>
+        );
+    } else if (viewId === 'subagent-conversation') {
+        railTitle = (
+            <span className="column-header__title column-header__title--truncate">
+                {navSubagentSessionName || coreT({key: "ui.nav.subagent_session_view"})}
+            </span>
+        );
+    } else {
+        railTitle = (
+            <span className="column-header__title">
+                {railPaneNavTitle(viewId)}
+            </span>
+        );
+    }
+
+    let projectListNode: ReactNode;
+    if (loadingProjects) {
+        projectListNode = (
+            <li className="chat-list__item">
+                <span className="chat-list__label">{coreT({key: "ui.common.loading"})}</span>
+            </li>
+        );
+    } else if (projects.length === 0) {
+        projectListNode = (
+            <li className="chat-list__item chat-list__item--empty">
+                <span className="chat-list__label">{coreT({key: "ui.project.empty_desktop"})}</span>
+                <button
+                    type="button"
+                    className="chat-list__create-btn"
+                    onClick={() => setNamePrompt({ mode: 'create-project' })}
+                >
+                    {coreT({key: "ui.project.new_title"})}
+                </button>
+            </li>
+        );
+    } else {
+        projectListNode = projects.map(project => (
+            <li
+                key={project.id}
+                className={`chat-list__item${
+                    isProjectSelected(project.id) ? ' is-selected' : ''
+                }`}
+                data-project-id={project.id}
+                data-project-name={project.name}
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                    if (projectBatchActive) {
+                        toggleProjectBatch(project.id);
+                    } else {
+                        void openProject(project);
+                    }
+                }}
+                onKeyDown={e => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        if (projectBatchActive) {
+                            toggleProjectBatch(project.id);
+                        } else {
+                            void openProject(project);
+                        }
+                    }
+                }}
+            >
+                {projectBatchActive ? (
+                    <BatchCheckbox
+                        checked={isProjectSelected(project.id)}
+                        onToggle={() => toggleProjectBatch(project.id)}
+                    />
+                ) : (
+                    <span className="chat-list__icon">📚</span>
+                )}
+                <span className="chat-list__label">{project.name}</span>
+                {!projectBatchActive ? (
+                    <>
+                        <button
+                            type="button"
+                            className="chat-list__menu-btn"
+                            aria-label={coreT({key: "ui.nav.project_actions"})}
+                            onClick={e => openProjectMenu(project, e)}
+                        >
+                            ⋮
+                        </button>
+                        <span className="chat-list__chevron">›</span>
+                    </>
+                ) : null}
+            </li>
+        ));
+    }
+
+    let sessionListNode: ReactNode;
+    if (loadingSessions) {
+        sessionListNode = (
+            <li className="chat-list__item">
+                <span className="chat-list__label">{coreT({key: "ui.common.loading"})}</span>
+            </li>
+        );
+    } else if (sessions.length === 0) {
+        sessionListNode = (
+            <li className="chat-list__item chat-list__item--empty">
+                <span className="chat-list__label">{coreT({key: "ui.project.empty_sessions"})}</span>
+                <button
+                    type="button"
+                    className="chat-list__create-btn"
+                    onClick={() => void createSession()}
+                >
+                    {coreT({key: "ui.project.new_session"})}
+                </button>
+            </li>
+        );
+    } else {
+        sessionListNode = sessions.map(session => (
+            <li
+                key={session.id}
+                className={`chat-list__item${
+                    isSessionSelected(session.id) ? ' is-selected' : ''
+                }`}
+                data-session-id={session.id}
+                data-session-name={session.title ?? ''}
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                    if (sessionBatchActive) {
+                        toggleSessionBatch(session.id);
+                    } else {
+                        void openSession(session, projectName ?? '—');
+                    }
+                }}
+                onKeyDown={e => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        if (sessionBatchActive) {
+                            toggleSessionBatch(session.id);
+                        } else {
+                            void openSession(session, projectName ?? '—');
+                        }
+                    }
+                }}
+            >
+                {sessionBatchActive ? (
+                    <BatchCheckbox
+                        checked={isSessionSelected(session.id)}
+                        onToggle={() => toggleSessionBatch(session.id)}
+                    />
+                ) : null}
+                <span className="chat-list__label">
+                    {session.title ?? coreT({key: "ui.nav.untitled_session"})}
+                </span>
+                {!sessionBatchActive ? (
+                    <>
+                        <button
+                            type="button"
+                            className="chat-list__menu-btn"
+                            aria-label={coreT({key: "ui.nav.session_actions"})}
+                            onClick={e => openSessionMenu(session, e)}
+                        >
+                            ⋮
+                        </button>
+                        <span className="chat-list__chevron">›</span>
+                    </>
+                ) : null}
+            </li>
+        ));
+    }
+
+    let namePromptInitial: string;
+    if (namePrompt?.mode === 'rename-project') {
+        namePromptInitial = namePrompt.initialName;
+    } else if (namePrompt?.mode === 'rename-session') {
+        namePromptInitial = namePrompt.initialName;
+    } else {
+        namePromptInitial = '';
+    }
+
     return (
         <>
             <header className="column-header" id="rail-header" aria-label={coreT({key: "ui.nav.chat_nav_aria"})}>
@@ -426,42 +625,14 @@ export function ChatRail({
                         <button
                             type="button"
                             className="chat-nav-back"
-                            data-action={
-                                viewId === 'sessions'
-                                    ? 'back-to-projects'
-                                    : viewId === 'subagent-conversation'
-                                        ? 'back-to-conversation'
-                                        : 'back-to-sessions'
-                            }
+                            data-action={backAction}
                             aria-label={coreT({key: "ui.common.back"})}
-                            onClick={
-                                viewId === 'sessions'
-                                    ? goBackToProjects
-                                    : viewId === 'subagent-conversation'
-                                        ? goBackToConversation
-                                        : goBackToSessions
-                            }
+                            onClick={backHandler}
                         >
                             ‹
                         </button>
                     ) : null}
-                    {viewId === 'sessions' ? (
-                        <span className="column-header__title column-header__title--truncate">
-                            {projectName ?? '—'}
-                        </span>
-                    ) : viewId === 'conversation' ? (
-                        <span className="column-header__title column-header__title--truncate">
-                            {sessionName ?? '—'}
-                        </span>
-                    ) : viewId === 'subagent-conversation' ? (
-                        <span className="column-header__title column-header__title--truncate">
-                            {navSubagentSessionName || coreT({key: "ui.nav.subagent_session_view"})}
-                        </span>
-                    ) : (
-                        <span className="column-header__title">
-                            {railPaneNavTitle(viewId)}
-                        </span>
-                    )}
+                    {railTitle}
                 </div>
             </header>
             <section id="chat-rail" aria-label={coreT({key: "ui.nav.chat_content_aria"})}>
@@ -491,75 +662,7 @@ export function ChatRail({
                         }
                     />
                     <ul className="chat-list" id="project-list">
-                        {loadingProjects ? (
-                            <li className="chat-list__item">
-                                <span className="chat-list__label">{coreT({key: "ui.common.loading"})}</span>
-                            </li>
-                        ) : projects.length === 0 ? (
-                            <li className="chat-list__item chat-list__item--empty">
-                                <span className="chat-list__label">{coreT({key: "ui.project.empty_desktop"})}</span>
-                                <button
-                                    type="button"
-                                    className="chat-list__create-btn"
-                                    onClick={() => setNamePrompt({ mode: 'create-project' })}
-                                >
-                                    {coreT({key: "ui.project.new_title"})}
-                                </button>
-                            </li>
-                        ) : (
-                            projects.map(project => (
-                                <li
-                                    key={project.id}
-                                    className={`chat-list__item${
-                    isProjectSelected(project.id) ? ' is-selected' : ''
-                  }`}
-                                    data-project-id={project.id}
-                                    data-project-name={project.name}
-                                    role="button"
-                                    tabIndex={0}
-                                    onClick={() => {
-                                        if (projectBatchActive) {
-                                            toggleProjectBatch(project.id);
-                                        } else {
-                                            void openProject(project);
-                                        }
-                                    }}
-                                    onKeyDown={e => {
-                                        if (e.key === 'Enter' || e.key === ' ') {
-                                            e.preventDefault();
-                                            if (projectBatchActive) {
-                                                toggleProjectBatch(project.id);
-                                            } else {
-                                                void openProject(project);
-                                            }
-                                        }
-                                    }}
-                                >
-                                    {projectBatchActive ? (
-                                        <BatchCheckbox
-                                            checked={isProjectSelected(project.id)}
-                                            onToggle={() => toggleProjectBatch(project.id)}
-                                        />
-                                    ) : (
-                                        <span className="chat-list__icon">📚</span>
-                                    )}
-                                    <span className="chat-list__label">{project.name}</span>
-                                    {!projectBatchActive ? (
-                                        <>
-                                            <button
-                                                type="button"
-                                                className="chat-list__menu-btn"
-                                                aria-label={coreT({key: "ui.nav.project_actions"})}
-                                                onClick={e => openProjectMenu(project, e)}
-                                            >
-                                                ⋮
-                                            </button>
-                                            <span className="chat-list__chevron">›</span>
-                                        </>
-                                    ) : null}
-                                </li>
-                            ))
-                        )}
+                        {projectListNode}
                     </ul>
                 </div>
 
@@ -589,75 +692,7 @@ export function ChatRail({
                         }
                     />
                     <ul className="chat-list" id="session-list">
-                        {loadingSessions ? (
-                            <li className="chat-list__item">
-                                <span className="chat-list__label">{coreT({key: "ui.common.loading"})}</span>
-                            </li>
-                        ) : sessions.length === 0 ? (
-                            <li className="chat-list__item chat-list__item--empty">
-                                <span className="chat-list__label">{coreT({key: "ui.project.empty_sessions"})}</span>
-                                <button
-                                    type="button"
-                                    className="chat-list__create-btn"
-                                    onClick={() => void createSession()}
-                                >
-                                    {coreT({key: "ui.project.new_session"})}
-                                </button>
-                            </li>
-                        ) : (
-                            sessions.map(session => (
-                                <li
-                                    key={session.id}
-                                    className={`chat-list__item${
-                    isSessionSelected(session.id) ? ' is-selected' : ''
-                  }`}
-                                    data-session-id={session.id}
-                                    data-session-name={session.title ?? ''}
-                                    role="button"
-                                    tabIndex={0}
-                                    onClick={() => {
-                                        if (sessionBatchActive) {
-                                            toggleSessionBatch(session.id);
-                                        } else {
-                                            void openSession(session, projectName ?? '—');
-                                        }
-                                    }}
-                                    onKeyDown={e => {
-                                        if (e.key === 'Enter' || e.key === ' ') {
-                                            e.preventDefault();
-                                            if (sessionBatchActive) {
-                                                toggleSessionBatch(session.id);
-                                            } else {
-                                                void openSession(session, projectName ?? '—');
-                                            }
-                                        }
-                                    }}
-                                >
-                                    {sessionBatchActive ? (
-                                        <BatchCheckbox
-                                            checked={isSessionSelected(session.id)}
-                                            onToggle={() => toggleSessionBatch(session.id)}
-                                        />
-                                    ) : null}
-                                    <span className="chat-list__label">
-                                        {session.title ?? coreT({key: "ui.nav.untitled_session"})}
-                                    </span>
-                                    {!sessionBatchActive ? (
-                                        <>
-                                            <button
-                                                type="button"
-                                                className="chat-list__menu-btn"
-                                                aria-label={coreT({key: "ui.nav.session_actions"})}
-                                                onClick={e => openSessionMenu(session, e)}
-                                            >
-                                                ⋮
-                                            </button>
-                                            <span className="chat-list__chevron">›</span>
-                                        </>
-                                    ) : null}
-                                </li>
-                            ))
-                        )}
+                        {sessionListNode}
                     </ul>
                 </div>
 
@@ -727,13 +762,7 @@ export function ChatRail({
             <TextPromptModal
                 open={namePrompt != null}
                 title={namePromptTitle}
-                initialValue={
-                    namePrompt?.mode === 'rename-project'
-                        ? namePrompt.initialName
-                        : namePrompt?.mode === 'rename-session'
-                        ? namePrompt.initialName
-                        : ''
-                }
+                initialValue={namePromptInitial}
                 placeholder={coreT({key: "ui.chat.rename_prompt"})}
                 onClose={() => setNamePrompt(null)}
                 onConfirm={handleNamePromptConfirm}
