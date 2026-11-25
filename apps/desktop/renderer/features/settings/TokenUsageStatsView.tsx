@@ -13,7 +13,7 @@
  * 服务商展示名经 ipcProvidersList（AgentEditorView 同源通道）解析；
  * 功能口径对齐 mobile 侧 TokenUsageStatsScreen，交互按桌面惯例。
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ipcProvidersList, ipcUsageStatsQuery } from "@/ipc/client";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import type {
@@ -647,9 +647,25 @@ export function TokenUsageStatsView() {
 
     const selectedSlice = selectedSliceKey != null ? (pieSlices.find((s) => s.key === selectedSliceKey) ?? null) : null;
 
-    const modelSelectValue = modelFilter === undefined ? MODEL_OPTION_ALL : modelFilter === null ? MODEL_OPTION_UNLOGGED : modelFilter;
+    let modelSelectValue: string;
+    if (modelFilter === undefined) {
+        modelSelectValue = MODEL_OPTION_ALL;
+    } else if (modelFilter === null) {
+        modelSelectValue = MODEL_OPTION_UNLOGGED;
+    } else {
+        modelSelectValue = modelFilter;
+    }
 
-    const rangeLabel = rangeKind === "custom" && customFrom.length > 0 && customTo.length > 0 ? `${customFrom} — ${customTo}` : rangeKind === "today" ? coreT({key: "ui.stats.range_today"}) : rangeKind === "last30" ? coreT({key: "ui.stats.range_30d"}) : coreT({key: "ui.stats.range_7d"});
+    let rangeLabel: string;
+    if (rangeKind === "custom" && customFrom.length > 0 && customTo.length > 0) {
+        rangeLabel = `${customFrom} — ${customTo}`;
+    } else if (rangeKind === "today") {
+        rangeLabel = coreT({key: "ui.stats.range_today"});
+    } else if (rangeKind === "last30") {
+        rangeLabel = coreT({key: "ui.stats.range_30d"});
+    } else {
+        rangeLabel = coreT({key: "ui.stats.range_7d"});
+    }
 
     const empty = summary != null && summary.calls === 0 && summary.totalTokens === 0;
 
@@ -683,6 +699,266 @@ export function TokenUsageStatsView() {
             cancelled = true;
         };
     }, [empty]);
+
+    // 空态三页签统一（需求①勘误后）：窗口空（库非空）时流水页签同样显示区间
+    // 空态——流水跟随时间窗口，窗口外无数据可展示；库全空探底命中时为
+    // 冷启动引导文案。
+    let pageBody: ReactNode;
+    if (empty) {
+        pageBody = (
+            <SettingsSection title={coreT({key: "ui.nav.token_stats"})}>
+                {libraryEmpty ? (
+                    <SettingsListEmpty>
+                        {coreT({key: "ui.stats.empty_db"})}
+                    </SettingsListEmpty>
+                ) : (
+                    <SettingsListEmpty>
+                        {coreT({key: "ui.stats.empty_filtered"})}
+                    </SettingsListEmpty>
+                )}
+            </SettingsSection>
+        );
+    } else if (pageTab === "summary") {
+        pageBody = (
+            <>
+                <SettingsSection title={coreT({key: "ui.stats.overview_title", params: {range: rangeLabel}})} desc={coreT({key: "ui.stats.overview_desc"})}>
+                    <div className="token-stats-cards token-stats-cards--metrics">
+                        <div className="token-stats-card" data-metric="totalTokens">
+                            <span className="token-stats-card__label">{coreT({key: "ui.stats.total_tokens"})}</span>
+                            <span className="token-stats-card__value">
+                                {formatTokenCount(summary?.totalTokens ?? 0)}
+                            </span>
+                        </div>
+                        <div className="token-stats-card" data-metric="promptTokens">
+                            <span className="token-stats-card__label">{coreT({key: "ui.stats.input_label"})}</span>
+                            <span className="token-stats-card__value">
+                                {formatTokenCount(summary?.promptTokens ?? 0)}
+                            </span>
+                        </div>
+                        <div className="token-stats-card" data-metric="completionTokens">
+                            <span className="token-stats-card__label">{coreT({key: "ui.stats.output_label"})}</span>
+                            <span className="token-stats-card__value">
+                                {formatTokenCount(summary?.completionTokens ?? 0)}
+                            </span>
+                        </div>
+                        <div className="token-stats-card" data-metric="calls">
+                            <span className="token-stats-card__label">{coreT({key: "ui.stats.calls_label"})}</span>
+                            <span className="token-stats-card__value">{String(summary?.calls ?? 0)}</span>
+                        </div>
+                        <div className="token-stats-card" data-metric="hitRate">
+                            <span className="token-stats-card__label">{coreT({key: "ui.stats.hit_rate"})}</span>
+                            <span className="token-stats-card__value token-stats-card__value--success">
+                                {formatHitRate(
+                                    hitRate(summary?.cacheReadTokens ?? 0, summary?.billedInputTokens ?? 0),
+                                )}
+                            </span>
+                        </div>
+                        {/* 新指标卡：无有效行为 null → 空态文案而非 0 */}
+                        <div className="token-stats-card" data-metric="avgTokensPerSecond">
+                            <span className="token-stats-card__label">{coreT({key: "ui.stats.avg_rate"})}</span>
+                            <span className="token-stats-card__value">
+                                {formatTokensPerSecond(summary?.avgTokensPerSecond ?? null)}
+                            </span>
+                        </div>
+                        <div className="token-stats-card" data-metric="avgFirstTokenMs">
+                            <span className="token-stats-card__label">{coreT({key: "ui.stats.avg_first_token"})}</span>
+                            <span className="token-stats-card__value">
+                                {formatDurationMs(summary?.avgFirstTokenMs ?? null)}
+                            </span>
+                            {/* 口径注记：非流式请求的 TTFT 取完成时刻，避免误导 */}
+                            <span className="token-stats-card__hint">{coreT({key: "ui.stats.nonstream_hint"})}</span>
+                        </div>
+                    </div>
+                </SettingsSection>
+
+                <SettingsSection
+                    title={coreT({key: "ui.stats.pie_section"})}
+                    desc={coreT({key: "ui.stats.pie_desc"})}
+                >
+                    <div className="token-stats-pie-block">
+                        <PieChart
+                            slices={pieSlices}
+                            selectedKey={selectedSliceKey}
+                            onSelect={handleSliceSelect}
+                        />
+                        {selectedSlice != null ? (
+                            <p
+                                className="token-stats-pie-block__detail"
+                                data-slice-detail={selectedSlice.key}
+                            >
+                                {/* 同文借用 ui.stats.slice_aria（aria 键用于展示详情行，模板同形）——对号表外借待 3c 裁决。 */}
+                                {coreT({
+                                    key: "ui.stats.slice_aria",
+                                    params: {
+                                        label: selectedSlice.label,
+                                        value: formatTokenCount(selectedSlice.row.totalTokens),
+                                        calls: selectedSlice.row.calls,
+                                        share: selectedSlice.share == null ? "—" : `${Math.round(selectedSlice.share * 100)}%`,
+                                    },
+                                })}
+                            </p>
+                        ) : null}
+                    </div>
+                </SettingsSection>
+            </>
+        );
+    } else if (pageTab === "requests") {
+        pageBody = (
+            <SettingsSection
+                title={coreT({key: "ui.stats.requests_title", params: {count: reqTotal}})}
+                desc={coreT({key: "ui.stats.requests_desc"})}
+            >
+                <div className="token-stats-requests">
+                    <div className="token-stats-requests__row token-stats-requests__row--head">
+                        <span>{coreT({key: "ui.stats.col_time"})}</span>
+                        <span>{coreT({key: "ui.common.model"})}</span>
+                        <span>{coreT({key: "ui.stats.input_label"})}</span>
+                        <span>{coreT({key: "ui.stats.output_label"})}</span>
+                        <span>{coreT({key: "ui.stats.col_cache_read"})}</span>
+                        <span>{coreT({key: "ui.stats.col_first_token"})}</span>
+                        <span>{coreT({key: "ui.stats.col_total_time"})}</span>
+                    </div>
+                    {reqRows.map((row, index) => (
+                        <div
+                            key={`${row.createdAtMs}-${index}`}
+                            className="token-stats-requests__row"
+                        >
+                            <span>{formatRequestTime(row.createdAtMs)}</span>
+                            <span className="token-stats-requests__name">
+                                {row.modelName ?? "—"}
+                            </span>
+                            <span>{formatTokenCount(row.promptTokens)}</span>
+                            <span>{formatTokenCount(row.completionTokens)}</span>
+                            <span>
+                                {row.cacheReadTokens == null
+                                    ? "—"
+                                    : formatTokenCount(row.cacheReadTokens)}
+                            </span>
+                            <span>{formatDurationMs(row.firstTokenMs)}</span>
+                            <span>{formatDurationMs(row.durationMs)}</span>
+                        </div>
+                    ))}
+                    {reqRows.length === 0 && !reqLoading ? (
+                        <div className="token-stats-requests__row">—</div>
+                    ) : null}
+                </div>
+                {reqTotal > 0 ? (
+                    <div className="token-stats-requests__pager">
+                        <button
+                            type="button"
+                            className="token-stats-requests__page-btn"
+                            disabled={reqLoading || reqPage === 0}
+                            onClick={() => void loadRequests(requestsFilter, reqPage - 1)}
+                        >
+                            {coreT({key: "ui.stats.page_prev"})}
+                        </button>
+                        {pageWindowItems(
+                            reqPage + 1,
+                            Math.max(1, Math.ceil(reqTotal / REQUESTS_PAGE_SIZE)),
+                        ).map((item, index) =>
+                            item === "…" ? (
+                                <span key={`gap-${index}`} className="token-stats-requests__pager-gap">
+                                    …
+                                </span>
+                            ) : (
+                                <button
+                                    key={`page-${item}`}
+                                    type="button"
+                                    className={`token-stats-requests__page-num${
+                  item === reqPage + 1 ? " token-stats-requests__page-num--active" : ""
+                }`}
+                                    disabled={reqLoading}
+                                    onClick={() => void loadRequests(requestsFilter, item - 1)}
+                                >
+                                    {String(item)}
+                                </button>
+                            ),
+                        )}
+                        <button
+                            type="button"
+                            className="token-stats-requests__page-btn"
+                            disabled={
+                                reqLoading || (reqPage + 1) * REQUESTS_PAGE_SIZE >= reqTotal
+                            }
+                            onClick={() => void loadRequests(requestsFilter, reqPage + 1)}
+                        >
+                            {coreT({key: "ui.stats.page_next"})}
+                        </button>
+                    </div>
+                ) : null}
+            </SettingsSection>
+        );
+    } else if (rangeKind === "today") {
+        // 「今天」模式（T-D4）：跳过按天图（单日柱无信息量），直出当天汇总行 +
+        // 按小时图；当天汇总行取 dailyBuckets 的选中天桶（即唯一桶），无数据日
+        // 显示零值文案。hourly 数据由 selectedDay 自动补选（P1-1）触发拉取。
+        pageBody = (
+            <SettingsSection title={coreT({key: "ui.stats.day_hourly_title"})} desc={coreT({key: "ui.stats.day_hourly_desc"})}>
+                <div
+                    className="token-stats-view__day-detail"
+                    data-day-detail={selectedDay ?? undefined}
+                >
+                    <p className="token-stats-view__day-detail-summary">
+                        {/* 拼接句用标签键拼；「调用 {n} 次」同文外借 ui.stats.chart_calls_aria（对号表外借待 3c 裁决）。 */}
+                        {coreT({key: "ui.stats.input_label"})} {formatTokenCount((selectedDayBucket ?? ZERO_BUCKET).promptTokens)} · {coreT({key: "ui.stats.output_label"})}{" "}
+                        {formatTokenCount((selectedDayBucket ?? ZERO_BUCKET).completionTokens)} · {coreT({key: "ui.stats.hit_rate"})}{" "}
+                        {formatHitRate(
+                            hitRate(
+                                (selectedDayBucket ?? ZERO_BUCKET).cacheReadTokens,
+                                (selectedDayBucket ?? ZERO_BUCKET).billedInputTokens,
+                            ),
+                        )}{" "}
+                        · {coreT({key: "ui.stats.chart_calls_aria", params: {count: (selectedDayBucket ?? ZERO_BUCKET).calls}})} · {coreT({key: "ui.stats.avg_rate"})}{" "}
+                        {formatTokensPerSecond((selectedDayBucket ?? ZERO_BUCKET).avgTokensPerSecond)} · {coreT({key: "ui.stats.avg_first_token"})}{" "}
+                        {formatDurationMs((selectedDayBucket ?? ZERO_BUCKET).avgFirstTokenMs)}
+                    </p>
+                    <TokenStatsChart
+                        buckets={hourlyBuckets ?? []}
+                        chart="hourly"
+                        keyOf={(_b, index) => String(index)}
+                        labelOf={(key) => coreT({key: "ui.stats.hour_label", params: {hour: Number(key)}})}
+                    />
+                </div>
+            </SettingsSection>
+        );
+    } else {
+        pageBody = (
+            <SettingsSection title={coreT({key: "ui.stats.by_day_title"})}>
+                <TokenStatsChart
+                    buckets={dailyBuckets}
+                    chart="daily"
+                    keyOf={(b) => toLocalDayKey(b.bucketStartMs)}
+                    labelOf={(key) => key.slice(8)}
+                    selectedKey={selectedDay ?? undefined}
+                    onSelect={(key) => setSelectedDay((prev) => (prev === key ? null : key))}
+                />
+                {selectedDay != null && selectedDayBucket != null ? (
+                    <div className="token-stats-view__day-detail" data-day-detail={selectedDay}>
+                        <p className="token-stats-view__day-detail-title">{coreT({key: "ui.stats.day_hourly_template", params: {day: selectedDay}})}</p>
+                        <p className="token-stats-view__day-detail-summary">
+                            {coreT({key: "ui.stats.input_label"})} {formatTokenCount(selectedDayBucket.promptTokens)} · {coreT({key: "ui.stats.output_label"})}{" "}
+                            {formatTokenCount(selectedDayBucket.completionTokens)} · {coreT({key: "ui.stats.hit_rate"})}{" "}
+                            {formatHitRate(
+                                hitRate(
+                                    selectedDayBucket.cacheReadTokens,
+                                    selectedDayBucket.billedInputTokens,
+                                ),
+                            )}{" "}
+                            · {coreT({key: "ui.stats.chart_calls_aria", params: {count: selectedDayBucket.calls}})} · {coreT({key: "ui.stats.avg_rate"})}{" "}
+                            {formatTokensPerSecond(selectedDayBucket.avgTokensPerSecond)} · {coreT({key: "ui.stats.avg_first_token"})}{" "}
+                            {formatDurationMs(selectedDayBucket.avgFirstTokenMs)}
+                        </p>
+                        <TokenStatsChart
+                            buckets={hourlyBuckets ?? []}
+                            chart="hourly"
+                            keyOf={(_b, index) => String(index)}
+                            labelOf={(key) => coreT({key: "ui.stats.hour_label", params: {hour: Number(key)}})}
+                        />
+                    </div>
+                ) : null}
+            </SettingsSection>
+        );
+    }
 
     return (
         <SettingsPanel>
@@ -728,15 +1004,17 @@ export function TokenUsageStatsView() {
                         className="token-stats-view__model-select"
                         aria-label={coreT({key: "ui.stats.model_filter_aria"})}
                         value={modelSelectValue}
-                        onChange={(e) =>
-                            setModelFilter(
-                                e.target.value === MODEL_OPTION_ALL
-                                    ? undefined
-                                    : e.target.value === MODEL_OPTION_UNLOGGED
-                                        ? null
-                                        : e.target.value,
-                            )
-                        }
+                        onChange={(e) => {
+                            let next: string | null | undefined;
+                            if (e.target.value === MODEL_OPTION_ALL) {
+                                next = undefined;
+                            } else if (e.target.value === MODEL_OPTION_UNLOGGED) {
+                                next = null;
+                            } else {
+                                next = e.target.value;
+                            }
+                            setModelFilter(next);
+                        }}
                     >
                         <option value={MODEL_OPTION_ALL}>{coreT({key: "ui.stats.model_all"})}</option>
                         {models.map((m) => (
@@ -764,254 +1042,7 @@ export function TokenUsageStatsView() {
                 />
             </div>
 
-            {/* 空态三页签统一（需求①勘误后）：窗口空（库非空）时流水页签同样显示区间 */}
-            {/* 空态——流水跟随时间窗口，窗口外无数据可展示；库全空探底命中时为 */}
-            {/* 冷启动引导文案。 */}
-            {empty ? (
-                <SettingsSection title={coreT({key: "ui.nav.token_stats"})}>
-                    {libraryEmpty ? (
-                        <SettingsListEmpty>
-                            {coreT({key: "ui.stats.empty_db"})}
-                        </SettingsListEmpty>
-                    ) : (
-                        <SettingsListEmpty>
-                            {coreT({key: "ui.stats.empty_filtered"})}
-                        </SettingsListEmpty>
-                    )}
-                </SettingsSection>
-            ) : pageTab === "summary" ? (
-                <>
-                    <SettingsSection title={coreT({key: "ui.stats.overview_title", params: {range: rangeLabel}})} desc={coreT({key: "ui.stats.overview_desc"})}>
-                        <div className="token-stats-cards token-stats-cards--metrics">
-                            <div className="token-stats-card" data-metric="totalTokens">
-                                <span className="token-stats-card__label">{coreT({key: "ui.stats.total_tokens"})}</span>
-                                <span className="token-stats-card__value">
-                                    {formatTokenCount(summary?.totalTokens ?? 0)}
-                                </span>
-                            </div>
-                            <div className="token-stats-card" data-metric="promptTokens">
-                                <span className="token-stats-card__label">{coreT({key: "ui.stats.input_label"})}</span>
-                                <span className="token-stats-card__value">
-                                    {formatTokenCount(summary?.promptTokens ?? 0)}
-                                </span>
-                            </div>
-                            <div className="token-stats-card" data-metric="completionTokens">
-                                <span className="token-stats-card__label">{coreT({key: "ui.stats.output_label"})}</span>
-                                <span className="token-stats-card__value">
-                                    {formatTokenCount(summary?.completionTokens ?? 0)}
-                                </span>
-                            </div>
-                            <div className="token-stats-card" data-metric="calls">
-                                <span className="token-stats-card__label">{coreT({key: "ui.stats.calls_label"})}</span>
-                                <span className="token-stats-card__value">{String(summary?.calls ?? 0)}</span>
-                            </div>
-                            <div className="token-stats-card" data-metric="hitRate">
-                                <span className="token-stats-card__label">{coreT({key: "ui.stats.hit_rate"})}</span>
-                                <span className="token-stats-card__value token-stats-card__value--success">
-                                    {formatHitRate(
-                                        hitRate(summary?.cacheReadTokens ?? 0, summary?.billedInputTokens ?? 0),
-                                    )}
-                                </span>
-                            </div>
-                            {/* 新指标卡：无有效行为 null → 空态文案而非 0 */}
-                            <div className="token-stats-card" data-metric="avgTokensPerSecond">
-                                <span className="token-stats-card__label">{coreT({key: "ui.stats.avg_rate"})}</span>
-                                <span className="token-stats-card__value">
-                                    {formatTokensPerSecond(summary?.avgTokensPerSecond ?? null)}
-                                </span>
-                            </div>
-                            <div className="token-stats-card" data-metric="avgFirstTokenMs">
-                                <span className="token-stats-card__label">{coreT({key: "ui.stats.avg_first_token"})}</span>
-                                <span className="token-stats-card__value">
-                                    {formatDurationMs(summary?.avgFirstTokenMs ?? null)}
-                                </span>
-                                {/* 口径注记：非流式请求的 TTFT 取完成时刻，避免误导 */}
-                                <span className="token-stats-card__hint">{coreT({key: "ui.stats.nonstream_hint"})}</span>
-                            </div>
-                        </div>
-                    </SettingsSection>
-
-                    <SettingsSection
-                        title={coreT({key: "ui.stats.pie_section"})}
-                        desc={coreT({key: "ui.stats.pie_desc"})}
-                    >
-                        <div className="token-stats-pie-block">
-                            <PieChart
-                                slices={pieSlices}
-                                selectedKey={selectedSliceKey}
-                                onSelect={handleSliceSelect}
-                            />
-                            {selectedSlice != null ? (
-                                <p
-                                    className="token-stats-pie-block__detail"
-                                    data-slice-detail={selectedSlice.key}
-                                >
-                                    {/* 同文借用 ui.stats.slice_aria（aria 键用于展示详情行，模板同形）——对号表外借待 3c 裁决。 */}
-                                    {coreT({
-                                        key: "ui.stats.slice_aria",
-                                        params: {
-                                            label: selectedSlice.label,
-                                            value: formatTokenCount(selectedSlice.row.totalTokens),
-                                            calls: selectedSlice.row.calls,
-                                            share: selectedSlice.share == null ? "—" : `${Math.round(selectedSlice.share * 100)}%`,
-                                        },
-                                    })}
-                                </p>
-                            ) : null}
-                        </div>
-                    </SettingsSection>
-                </>
-            ) : pageTab === "requests" ? (
-                <SettingsSection
-                    title={coreT({key: "ui.stats.requests_title", params: {count: reqTotal}})}
-                    desc={coreT({key: "ui.stats.requests_desc"})}
-                >
-                    <div className="token-stats-requests">
-                        <div className="token-stats-requests__row token-stats-requests__row--head">
-                            <span>{coreT({key: "ui.stats.col_time"})}</span>
-                            <span>{coreT({key: "ui.common.model"})}</span>
-                            <span>{coreT({key: "ui.stats.input_label"})}</span>
-                            <span>{coreT({key: "ui.stats.output_label"})}</span>
-                            <span>{coreT({key: "ui.stats.col_cache_read"})}</span>
-                            <span>{coreT({key: "ui.stats.col_first_token"})}</span>
-                            <span>{coreT({key: "ui.stats.col_total_time"})}</span>
-                        </div>
-                        {reqRows.map((row, index) => (
-                            <div
-                                key={`${row.createdAtMs}-${index}`}
-                                className="token-stats-requests__row"
-                            >
-                                <span>{formatRequestTime(row.createdAtMs)}</span>
-                                <span className="token-stats-requests__name">
-                                    {row.modelName ?? "—"}
-                                </span>
-                                <span>{formatTokenCount(row.promptTokens)}</span>
-                                <span>{formatTokenCount(row.completionTokens)}</span>
-                                <span>
-                                    {row.cacheReadTokens == null
-                                        ? "—"
-                                        : formatTokenCount(row.cacheReadTokens)}
-                                </span>
-                                <span>{formatDurationMs(row.firstTokenMs)}</span>
-                                <span>{formatDurationMs(row.durationMs)}</span>
-                            </div>
-                        ))}
-                        {reqRows.length === 0 && !reqLoading ? (
-                            <div className="token-stats-requests__row">—</div>
-                        ) : null}
-                    </div>
-                    {reqTotal > 0 ? (
-                        <div className="token-stats-requests__pager">
-                            <button
-                                type="button"
-                                className="token-stats-requests__page-btn"
-                                disabled={reqLoading || reqPage === 0}
-                                onClick={() => void loadRequests(requestsFilter, reqPage - 1)}
-                            >
-                                {coreT({key: "ui.stats.page_prev"})}
-                            </button>
-                            {pageWindowItems(
-                                reqPage + 1,
-                                Math.max(1, Math.ceil(reqTotal / REQUESTS_PAGE_SIZE)),
-                            ).map((item, index) =>
-                                item === "…" ? (
-                                    <span key={`gap-${index}`} className="token-stats-requests__pager-gap">
-                                        …
-                                    </span>
-                                ) : (
-                                    <button
-                                        key={`page-${item}`}
-                                        type="button"
-                                        className={`token-stats-requests__page-num${
-                      item === reqPage + 1 ? " token-stats-requests__page-num--active" : ""
-                    }`}
-                                        disabled={reqLoading}
-                                        onClick={() => void loadRequests(requestsFilter, item - 1)}
-                                    >
-                                        {String(item)}
-                                    </button>
-                                ),
-                            )}
-                            <button
-                                type="button"
-                                className="token-stats-requests__page-btn"
-                                disabled={
-                                    reqLoading || (reqPage + 1) * REQUESTS_PAGE_SIZE >= reqTotal
-                                }
-                                onClick={() => void loadRequests(requestsFilter, reqPage + 1)}
-                            >
-                                {coreT({key: "ui.stats.page_next"})}
-                            </button>
-                        </div>
-                    ) : null}
-                </SettingsSection>
-            ) : rangeKind === "today" ? (
-                // 「今天」模式（T-D4）：跳过按天图（单日柱无信息量），直出当天汇总行 +
-                // 按小时图；当天汇总行取 dailyBuckets 的选中天桶（即唯一桶），无数据日
-                // 显示零值文案。hourly 数据由 selectedDay 自动补选（P1-1）触发拉取。
-                <SettingsSection title={coreT({key: "ui.stats.day_hourly_title"})} desc={coreT({key: "ui.stats.day_hourly_desc"})}>
-                    <div
-                        className="token-stats-view__day-detail"
-                        data-day-detail={selectedDay ?? undefined}
-                    >
-                        <p className="token-stats-view__day-detail-summary">
-                            {/* 拼接句用标签键拼；「调用 {n} 次」同文外借 ui.stats.chart_calls_aria（对号表外借待 3c 裁决）。 */}
-                            {coreT({key: "ui.stats.input_label"})} {formatTokenCount((selectedDayBucket ?? ZERO_BUCKET).promptTokens)} · {coreT({key: "ui.stats.output_label"})}{" "}
-                            {formatTokenCount((selectedDayBucket ?? ZERO_BUCKET).completionTokens)} · {coreT({key: "ui.stats.hit_rate"})}{" "}
-                            {formatHitRate(
-                                hitRate(
-                                    (selectedDayBucket ?? ZERO_BUCKET).cacheReadTokens,
-                                    (selectedDayBucket ?? ZERO_BUCKET).billedInputTokens,
-                                ),
-                            )}{" "}
-                            · {coreT({key: "ui.stats.chart_calls_aria", params: {count: (selectedDayBucket ?? ZERO_BUCKET).calls}})} · {coreT({key: "ui.stats.avg_rate"})}{" "}
-                            {formatTokensPerSecond((selectedDayBucket ?? ZERO_BUCKET).avgTokensPerSecond)} · {coreT({key: "ui.stats.avg_first_token"})}{" "}
-                            {formatDurationMs((selectedDayBucket ?? ZERO_BUCKET).avgFirstTokenMs)}
-                        </p>
-                        <TokenStatsChart
-                            buckets={hourlyBuckets ?? []}
-                            chart="hourly"
-                            keyOf={(_b, index) => String(index)}
-                            labelOf={(key) => coreT({key: "ui.stats.hour_label", params: {hour: Number(key)}})}
-                        />
-                    </div>
-                </SettingsSection>
-            ) : (
-                <SettingsSection title={coreT({key: "ui.stats.by_day_title"})}>
-                    <TokenStatsChart
-                        buckets={dailyBuckets}
-                        chart="daily"
-                        keyOf={(b) => toLocalDayKey(b.bucketStartMs)}
-                        labelOf={(key) => key.slice(8)}
-                        selectedKey={selectedDay ?? undefined}
-                        onSelect={(key) => setSelectedDay((prev) => (prev === key ? null : key))}
-                    />
-                    {selectedDay != null && selectedDayBucket != null ? (
-                        <div className="token-stats-view__day-detail" data-day-detail={selectedDay}>
-                            <p className="token-stats-view__day-detail-title">{coreT({key: "ui.stats.day_hourly_template", params: {day: selectedDay}})}</p>
-                            <p className="token-stats-view__day-detail-summary">
-                                {coreT({key: "ui.stats.input_label"})} {formatTokenCount(selectedDayBucket.promptTokens)} · {coreT({key: "ui.stats.output_label"})}{" "}
-                                {formatTokenCount(selectedDayBucket.completionTokens)} · {coreT({key: "ui.stats.hit_rate"})}{" "}
-                                {formatHitRate(
-                                    hitRate(
-                                        selectedDayBucket.cacheReadTokens,
-                                        selectedDayBucket.billedInputTokens,
-                                    ),
-                                )}{" "}
-                                · {coreT({key: "ui.stats.chart_calls_aria", params: {count: selectedDayBucket.calls}})} · {coreT({key: "ui.stats.avg_rate"})}{" "}
-                                {formatTokensPerSecond(selectedDayBucket.avgTokensPerSecond)} · {coreT({key: "ui.stats.avg_first_token"})}{" "}
-                                {formatDurationMs(selectedDayBucket.avgFirstTokenMs)}
-                            </p>
-                            <TokenStatsChart
-                                buckets={hourlyBuckets ?? []}
-                                chart="hourly"
-                                keyOf={(_b, index) => String(index)}
-                                labelOf={(key) => coreT({key: "ui.stats.hour_label", params: {hour: Number(key)}})}
-                            />
-                        </div>
-                    ) : null}
-                </SettingsSection>
-            )}
+            {pageBody}
         </SettingsPanel>
     );
 }

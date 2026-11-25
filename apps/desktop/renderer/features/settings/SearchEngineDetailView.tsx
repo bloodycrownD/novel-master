@@ -405,7 +405,21 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
     const authFields = (
         <>
             <SettingsField label={settingsTranslator({ key: "settings.search.auth.style_label.mobile" })}>
-                <select value={form.authStyle} disabled={isPreset} onChange={(e) => setForm({ ...form, authStyle: e.target.value === "bearer" ? "bearer" : e.target.value === "header" ? "header" : "none" })}>
+                <select value={form.authStyle} disabled={isPreset} onChange={(e) => {
+                    let next: AuthStyle;
+                    switch (e.target.value) {
+                        case "bearer":
+                            next = "bearer";
+                            break;
+                        case "header":
+                            next = "header";
+                            break;
+                        default:
+                            next = "none";
+                            break;
+                    }
+                    setForm({ ...form, authStyle: next });
+                }}>
                     {authStyleOptions.map((option) => (
                         <option key={option.value} value={option.value}>
                             {option.label}
@@ -444,24 +458,32 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
         </>
     );
 
+    let sectionDesc: string;
+    if (isCreate) {
+        sectionDesc = settingsTranslator({ key: "settings.search.detail.desc_create.desktop" });
+    } else if (customDef != null) {
+        sectionDesc = settingsTranslator({ key: "settings.search.detail.desc_custom.desktop" });
+    } else {
+        sectionDesc = `${engineMeta(engineId)?.desc ?? ""} · ${settingsTranslator({ key: "settings.search.meta.preset_label.desktop" })}`;
+    }
+
+    let saveActionLabel: string;
+    if (saving) {
+        saveActionLabel = settingsTranslator({ key: "settings.search.detail.saving.desktop" });
+    } else if (isCreate) {
+        saveActionLabel = settingsTranslator({ key: "settings.search.detail.create_action.desktop" });
+    } else {
+        saveActionLabel = settingsTranslator({ key: "settings.search.detail.save_action.desktop" });
+    }
+
     return (
         <SettingsPanel>
             <SettingsFormSection
                 title={title}
-                desc={
-                    isCreate
-                        ? settingsTranslator({ key: "settings.search.detail.desc_create.desktop" })
-                        : customDef != null
-                        ? settingsTranslator({ key: "settings.search.detail.desc_custom.desktop" })
-                        : `${engineMeta(engineId)?.desc ?? ""} · ${settingsTranslator({ key: "settings.search.meta.preset_label.desktop" })}`
-                }
+                desc={sectionDesc}
                 footer={
                     <Button variant="primary" disabled={saving || clearing} onClick={() => void save()}>
-                        {saving
-                            ? settingsTranslator({ key: "settings.search.detail.saving.desktop" })
-                            : isCreate
-                            ? settingsTranslator({ key: "settings.search.detail.create_action.desktop" })
-                            : settingsTranslator({ key: "settings.search.detail.save_action.desktop" })}
+                        {saveActionLabel}
                     </Button>
                 }
             >

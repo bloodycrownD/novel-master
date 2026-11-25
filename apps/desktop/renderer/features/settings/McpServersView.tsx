@@ -6,7 +6,7 @@
  * 详情页；页首「新建服务器」进详情页 create 模式（`NEW_MCP_SERVER_SENTINEL` 哨兵，不新增
  * viewId）。详细说明收进页首「?」帮助弹窗，页内不铺长文案（双端同构口径）。
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import type { IpcResult, McpServerConfig, McpServerStatus } from "@shared/ipc-types";
 import { ipcMcpDeleteServer, ipcMcpListServers, ipcMcpSaveServer, ipcMcpServerStatuses, ipcMcpTestConnection } from "@/ipc/client";
 import { Button } from "@/components/ui/Button";
@@ -139,6 +139,15 @@ export function McpServersView({ nav }: { nav: SettingsNavHandle }) {
                     const status = statuses.find((entry) => entry.serverId === server.id);
                     // 连接进行中该行只读（移动端同口径）：开关与行菜单都禁点，避免交错发起连接。
                     const connecting = status?.state === "connecting";
+                    let statusMeta: ReactNode = null;
+                    if (status != null) {
+                        if (status.failure != null) {
+                            // 状态不可用：状态位置直显 core 事实提示（failure.detail），不自写文案（超长由 meta 的 ellipsis 截断，原文进详情页）
+                            statusMeta = <span style={{ color: "var(--warning, #b45309)" }}>{status.failure.detail}</span>;
+                        } else {
+                            statusMeta = <span className={`settings-tag ${MCP_STATUS_TAG_VARIANT[status.state] ?? "settings-tag--muted"}`}>{mcpStatusLabel(status)}</span>;
+                        }
+                    }
                     return (
                         <div key={server.id} className="settings-list-item-row">
                             <button
@@ -154,12 +163,7 @@ export function McpServersView({ nav }: { nav: SettingsNavHandle }) {
                                     {server.description.trim().length === 0 ? null : <span className="settings-row__desc">{server.description}</span>}
                                 </span>
                                 <span className="settings-list-item__meta">
-                                    {status == null
-                                        ? null
-                                        : status.failure != null
-                                          ? // 状态不可用：状态位置直显 core 事实提示（failure.detail），不自写文案（超长由 meta 的 ellipsis 截断，原文进详情页）
-                                            <span style={{ color: "var(--warning, #b45309)" }}>{status.failure.detail}</span>
-                                          : <span className={`settings-tag ${MCP_STATUS_TAG_VARIANT[status.state] ?? "settings-tag--muted"}`}>{mcpStatusLabel(status)}</span>}
+                                    {statusMeta}
                                 </span>
                                 <span className="settings-list-item__chevron" aria-hidden="true">
                                     ›

@@ -113,9 +113,10 @@ describe("SmartSortRuleEditorView 评审修复 round 4（dtcli/B-1/B-2/B-3）", 
 
     it("B-1：清空后结果区回 idle 占位文案（源码级断言，偏弱：锁占位分支存在）", () => {
         // idle 占位已迁 coreT（ui.smart_sort.test_result_pending，3c-c 前置补键立齐），锁 coreT 形态+键名。
+        // （链式三元改 if / else 后占位分支为 testResult 赋值形态，2026-11-25）
         assert.match(
             source,
-            /: \(\s*coreT\(\{key: "ui\.smart_sort\.test_result_pending"\}\)\s*\)/,
+            /testResult = coreT\(\{key: "ui\.smart_sort\.test_result_pending"\}\);/,
         );
     });
 

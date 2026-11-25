@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { coreT } from "@shared/logic/core-i18n";
 import { Text } from "@shared/logic/common";
 export { AgentEditorView } from "./AgentEditorView";
@@ -995,48 +995,54 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
                         }}
                     />
                 ) : null}
-                {visibleRows.map((row) => (
-                    <SettingsListItem
-                        key={row.agentId}
-                        title={row.name}
-                        meta={
-                            row.invalid != null ? (
-                                <span className="settings-list-item__meta-row">
-                                    <span className="settings-tag settings-tag--warn">
-                                        {AGENT_LIST_LABELS.configInvalid}
-                                    </span>
-                                    {row.mode == null || row.mode === "all" ? (
-                                        <span className="settings-tag settings-tag--muted">
-                                            {coreT({key: "ui.common.all"})}
-                                        </span>
-                                    ) : null}
-                                    <span
-                                        className="settings-list-item__meta-error"
-                                        title={row.invalid.message}
-                                    >
-                                        {Text.truncate(invalidReason(row.invalid.code), 80)}
-                                    </span>
+                {visibleRows.map((row) => {
+                    let agentMeta: ReactNode;
+                    if (row.invalid != null) {
+                        agentMeta = (
+                            <span className="settings-list-item__meta-row">
+                                <span className="settings-tag settings-tag--warn">
+                                    {AGENT_LIST_LABELS.configInvalid}
                                 </span>
-                            ) : row.mode == null || row.mode === "all" ? (
-                                <span className="settings-tag settings-tag--muted">{coreT({key: "ui.common.all"})}</span>
-                            ) : undefined
-                        }
-                        batchMode={batch.active}
-                        selected={batch.isSelected(row.agentId)}
+                                {row.mode == null || row.mode === "all" ? (
+                                    <span className="settings-tag settings-tag--muted">
+                                        {coreT({key: "ui.common.all"})}
+                                    </span>
+                                ) : null}
+                                <span
+                                    className="settings-list-item__meta-error"
+                                    title={row.invalid.message}
+                                >
+                                    {Text.truncate(invalidReason(row.invalid.code), 80)}
+                                </span>
+                            </span>
+                        );
+                    } else if (row.mode == null || row.mode === "all") {
+                        agentMeta = <span className="settings-tag settings-tag--muted">{coreT({key: "ui.common.all"})}</span>;
+                    } else {
+                        agentMeta = undefined;
+                    }
+                    return (
+                        <SettingsListItem
+                            key={row.agentId}
+                            title={row.name}
+                            meta={agentMeta}
+                            batchMode={batch.active}
+                            selected={batch.isSelected(row.agentId)}
                         onToggleSelect={() => batch.toggle(row.agentId)}
                         onClick={() => {
                             openAgentEditor(row.agentId, row.name);
                         }}
-                        onMenu={(e) => {
-                            const rect = e.currentTarget.getBoundingClientRect();
-                            setAgentMenu({
-                                agentId: row.agentId,
-                                x: Math.max(8, rect.left),
-                                y: Math.max(8, rect.bottom + 4),
-                            });
-                        }}
-                    />
-                ))}
+                            onMenu={(e) => {
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                setAgentMenu({
+                                    agentId: row.agentId,
+                                    x: Math.max(8, rect.left),
+                                    y: Math.max(8, rect.bottom + 4),
+                                });
+                            }}
+                        />
+                    );
+                })}
             </SettingsListSection>
             <ContextMenu
                 open={agentMenu != null}
@@ -1660,31 +1666,35 @@ export function ProviderDetailView({ nav }: { nav: Nav }) {
                             />
                         }
                     >
-                        {models.map((m) => (
-                            <SettingsListItem
-                                key={m.id}
-                                title={m.displayName || m.vendorModelId}
-                                meta={
-                                    duplicateVendorCount[m.vendorModelId]! > 1
-                                        ? m.vendorModelId
-                                        : m.modelName !== m.vendorModelId
-                                        ? m.vendorModelId
-                                        : undefined
-                                }
-                                batchMode={batch.active}
-                                selected={batch.isSelected(m.id)}
-                                onToggleSelect={() => batch.toggle(m.id)}
-                                onClick={() => openModelEditor(m.id)}
-                                onMenu={(e) => {
-                                    const rect = e.currentTarget.getBoundingClientRect();
-                                    setModelMenu({
-                                        savedModelId: m.id,
-                                        x: Math.max(8, rect.left),
-                                        y: Math.max(8, rect.bottom + 4),
-                                    });
-                                }}
-                            />
-                        ))}
+                        {models.map((m) => {
+                            let modelMeta: string | undefined;
+                            if (duplicateVendorCount[m.vendorModelId]! > 1) {
+                                modelMeta = m.vendorModelId;
+                            } else if (m.modelName !== m.vendorModelId) {
+                                modelMeta = m.vendorModelId;
+                            } else {
+                                modelMeta = undefined;
+                            }
+                            return (
+                                <SettingsListItem
+                                    key={m.id}
+                                    title={m.displayName || m.vendorModelId}
+                                    meta={modelMeta}
+                                    batchMode={batch.active}
+                                    selected={batch.isSelected(m.id)}
+                                    onToggleSelect={() => batch.toggle(m.id)}
+                                    onClick={() => openModelEditor(m.id)}
+                                    onMenu={(e) => {
+                                        const rect = e.currentTarget.getBoundingClientRect();
+                                        setModelMenu({
+                                            savedModelId: m.id,
+                                            x: Math.max(8, rect.left),
+                                            y: Math.max(8, rect.bottom + 4),
+                                        });
+                                    }}
+                                />
+                            );
+                        })}
                     </SettingsListSection>
                     <FetchModelsModal
                         open={fetchModalOpen}
@@ -2430,6 +2440,57 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
 
     const ruleDesc = draft.name.trim() || (ruleId ? coreT({key: "ui.smart_sort.unnamed_rule"}) : coreT({key: "ui.smart_sort.new_rule_title"}));
 
+    let captureHint: string;
+    switch (draft.captureKind) {
+        case "smart":
+            captureHint = coreT({key: "ui.smart_sort.capture_smart_hint"});
+            break;
+        case "fixed_min":
+            captureHint = coreT({key: "ui.smart_sort.capture_hint_before"});
+            break;
+        default:
+            captureHint = coreT({key: "ui.smart_sort.capture_hint_after"});
+            break;
+    }
+
+    let testResult: ReactNode;
+    if (segments != null) {
+        testResult = (
+            <>
+                {segments.map((seg, i) =>
+                    seg.matched ? (
+                        <span key={i} style={{ color: "var(--primary)" }}>
+                            {seg.text}
+                        </span>
+                    ) : (
+                        <span key={i}>{seg.text}</span>
+                    )
+                )}
+                {"\n"}
+                {/* 每处匹配的提取元组小字（D13）：匹配文本 → tuple 展示，
+                      null 显「无序号」；固定档恒显哨兵文案。 */}
+                {matchResult?.ok
+                    ? matchResult.matches.map((m, i) => (
+                            <span
+                                key={`${m.index}-${i}`}
+                                style={{ color: "var(--text-secondary)" }}
+                            >
+                                {/* (空匹配) 收口全角键文 ui.smart_sort.no_match_text（3c-a 裁决）。 */}
+                                {`${m.text || coreT({key: "ui.smart_sort.no_match_text"})} → ${m.tuple ?? coreT({key: "ui.smart_sort.no_tuple"})}\n`}
+                            </span>
+                        ))
+                    : null}
+                <span style={{ color: "var(--text-secondary)" }}>
+                    {matchCount > 0 ? coreT({key: "ui.smart_sort.match_count", params: {count: matchCount}}) : coreT({key: "ui.smart_sort.no_matches"})}
+                </span>
+            </>
+        );
+    } else if (matchResult != null && !matchResult.ok) {
+        testResult = coreT({key: "ui.smart_sort.regex_invalid", params: {detail: matchResult.error}});
+    } else {
+        testResult = coreT({key: "ui.smart_sort.test_result_pending"});
+    }
+
     return (
         <SettingsPanel>
             <SettingsFormSection
@@ -2478,13 +2539,7 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
                     </p>
                     <SettingsField
                         label={coreT({key: "ui.smart_sort.capture_label"})}
-                        hint={
-                            draft.captureKind === "smart"
-                                ? coreT({key: "ui.smart_sort.capture_smart_hint"})
-                                : draft.captureKind === "fixed_min"
-                                ? coreT({key: "ui.smart_sort.capture_hint_before"})
-                                : coreT({key: "ui.smart_sort.capture_hint_after"})
-                        }
+                        hint={captureHint}
                     >
                         <select
                             value={draft.captureKind}
@@ -2540,41 +2595,7 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
               testError != null ? " settings-preview-box--error" : ""
             }`}
                     >
-                        {testError ??
-                            (segments != null ? (
-                                <>
-                                    {segments.map((seg, i) =>
-                                        seg.matched ? (
-                                            <span key={i} style={{ color: "var(--primary)" }}>
-                                                {seg.text}
-                                            </span>
-                                        ) : (
-                                            <span key={i}>{seg.text}</span>
-                                        )
-                                    )}
-                                    {"\n"}
-                                    {/* 每处匹配的提取元组小字（D13）：匹配文本 → tuple 展示，
-                      null 显「无序号」；固定档恒显哨兵文案。 */}
-                                    {matchResult?.ok
-                                        ? matchResult.matches.map((m, i) => (
-                                                <span
-                                                    key={`${m.index}-${i}`}
-                                                    style={{ color: "var(--text-secondary)" }}
-                                                >
-                                                    {/* (空匹配) 收口全角键文 ui.smart_sort.no_match_text（3c-a 裁决）。 */}
-                                                    {`${m.text || coreT({key: "ui.smart_sort.no_match_text"})} → ${m.tuple ?? coreT({key: "ui.smart_sort.no_tuple"})}\n`}
-                                                </span>
-                                            ))
-                                        : null}
-                                    <span style={{ color: "var(--text-secondary)" }}>
-                                        {matchCount > 0 ? coreT({key: "ui.smart_sort.match_count", params: {count: matchCount}}) : coreT({key: "ui.smart_sort.no_matches"})}
-                                    </span>
-                                </>
-                            ) : matchResult != null && !matchResult.ok ? (
-                                coreT({key: "ui.smart_sort.regex_invalid", params: {detail: matchResult.error}})
-                            ) : (
-                                coreT({key: "ui.smart_sort.test_result_pending"})
-                            ))}
+                        {testError ?? testResult}
                     </pre>
                 </SettingsSection>
             </SettingsFormSection>

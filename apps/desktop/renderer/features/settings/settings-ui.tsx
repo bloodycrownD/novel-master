@@ -195,6 +195,18 @@ export function SettingsFormSection({
     children: ReactNode;
     footer?: ReactNode;
 }) {
+    let descNode: ReactNode = null;
+    if (desc) {
+        if (typeof desc === "string") {
+            descNode = <p className="settings-section__desc">{desc}</p>;
+        } else {
+            descNode = (
+                <div className="settings-section__desc settings-section__desc--inline">
+                    {desc}
+                </div>
+            );
+        }
+    }
     return (
         <section className="settings-section settings-section--form">
             <div className="settings-form-header">
@@ -203,15 +215,7 @@ export function SettingsFormSection({
                     <div className="settings-form-toolbar">{toolbar}</div>
                 ) : null}
             </div>
-            {desc ? (
-                typeof desc === "string" ? (
-                    <p className="settings-section__desc">{desc}</p>
-                ) : (
-                    <div className="settings-section__desc settings-section__desc--inline">
-                        {desc}
-                    </div>
-                )
-            ) : null}
+            {descNode}
             <div className="settings-fields">{children}</div>
             {footer ? <div className="settings-section__footer">{footer}</div> : null}
         </section>

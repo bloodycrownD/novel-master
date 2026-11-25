@@ -59,6 +59,15 @@ export function ToolPolicyPicker({ selected, onChange, mcpTools }: Props) {
 
     const close = () => setOpen(false);
 
+    let triggerLabel: string;
+    if (selected.length === 0) {
+        triggerLabel = coreT({key: "ui.agent.no_tools_selected", params: {total}});
+    } else if (selected.length >= total) {
+        triggerLabel = coreT({key: "ui.agent.all_tools_selected", params: {total}});
+    } else {
+        triggerLabel = coreT({key: "ui.agent.selected_tools_aria", params: {selected: selected.length, total}});
+    }
+
     return (
         <>
             <button
@@ -67,11 +76,7 @@ export function ToolPolicyPicker({ selected, onChange, mcpTools }: Props) {
                 onClick={() => setOpen(true)}
             >
                 <span className="tool-policy-picker__trigger-label">
-                    {selected.length === 0
-                        ? coreT({key: "ui.agent.no_tools_selected", params: {total}})
-                        : selected.length >= total
-                        ? coreT({key: "ui.agent.all_tools_selected", params: {total}})
-                        : coreT({key: "ui.agent.selected_tools_aria", params: {selected: selected.length, total}})}
+                    {triggerLabel}
                 </span>
                 <span className="tool-policy-picker__trigger-caret" aria-hidden>
                     ▼

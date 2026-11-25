@@ -7,7 +7,7 @@
  * - 未保存离开（切文件 / 返回）时确认拦截。
  * - 技能被删（清单不再含）时安全踢回上一级。
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { coreT } from "@shared/logic/core-i18n";
 import { ipcProjectsList, ipcSkillsList, ipcSkillsRead, ipcSkillsWrite, ipcVfsDelete } from "@/ipc/client";
 import { CodeEditor } from "@/components/ui/CodeEditor";
@@ -262,6 +262,29 @@ export function SkillDetailView({ nav }: { nav: SettingsNavHandle }) {
         );
     }
 
+    let fileBody: ReactNode;
+    if (loading) {
+        fileBody = <p className="skill-detail__empty">{coreT({key: "ui.common.loading"})}</p>;
+    } else if (mode === "read") {
+        fileBody = <pre className="skill-detail__content">{content || coreT({key: "ui.common.empty_file"})}</pre>;
+    } else {
+        fileBody = (
+            <>
+                <CodeEditor
+                    id="skill-editor"
+                    aria-label={coreT({key: "ui.skills.editor_title"})}
+                    value={content}
+                    languagePath={selected}
+                    onChange={setContent}
+                    onSave={() => void save()}
+                />
+                <div className="skill-detail__status">
+                    <span>{isDirty ? coreT({key: "ui.skills.unsaved_hint"}) : coreT({key: "ui.common.saved"})}</span>
+                </div>
+            </>
+        );
+    }
+
     return (
         <SettingsPanel>
             <div className="skill-detail__head">
@@ -341,25 +364,7 @@ export function SkillDetailView({ nav }: { nav: SettingsNavHandle }) {
                         ) : null}
                         <Button onClick={() => guarded(() => nav.pop())}>{coreT({key: "ui.common.back"})}</Button>
                     </div>
-                    {loading ? (
-                        <p className="skill-detail__empty">{coreT({key: "ui.common.loading"})}</p>
-                    ) : mode === "read" ? (
-                        <pre className="skill-detail__content">{content || coreT({key: "ui.common.empty_file"})}</pre>
-                    ) : (
-                        <>
-                            <CodeEditor
-                                id="skill-editor"
-                                aria-label={coreT({key: "ui.skills.editor_title"})}
-                                value={content}
-                                languagePath={selected}
-                                onChange={setContent}
-                                onSave={() => void save()}
-                            />
-                            <div className="skill-detail__status">
-                                <span>{isDirty ? coreT({key: "ui.skills.unsaved_hint"}) : coreT({key: "ui.common.saved"})}</span>
-                            </div>
-                        </>
-                    )}
+                    {fileBody}
                 </div>
             </div>
 

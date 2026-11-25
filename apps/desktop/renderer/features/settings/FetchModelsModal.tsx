@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { coreT } from "@shared/logic/core-i18n";
 import { BatchCheckbox } from "@/components/batch/BatchCheckbox";
 import { Button } from "@/components/ui/Button";
@@ -162,6 +162,137 @@ export function FetchModelsModal({
         }
     };
 
+    let statusNode: ReactNode;
+    if (loading) {
+        statusNode = (
+            <div className="fetch-models-modal__status fetch-models-modal__status--loading">
+                <p>{coreT({key: "ui.provider.fetching"})}</p>
+                <button
+                    type="button"
+                    className="fetch-models-modal__cancel"
+                    disabled={cancelling}
+                    // providerModels 的取消键形态是 `models:<providerId>`（ABORT_KEY.providerModels），
+                    // id 直接复用弹窗的 providerId；取消请求本身不弹 toast，终态由 load 的 IPC_ABORTED 分支收口。
+                    onClick={() => {
+                        if (cancelling) {
+                            return;
+                        }
+                        setCancelling(true);
+                        void (async () => {
+                            try {
+                                await ipcRunAbort({ kind: "models", id: providerId });
+                            } catch {
+                                // IPC bridge 不可用时保持 loading，用户可再次点击取消。
+                            } finally {
+                                setCancelling(false);
+                            }
+                        })();
+                    }}
+                >
+                    {settingsTranslator({ key: "settings.long_task.cancel" })}
+                </button>
+            </div>
+        );
+    } else if (cancelled) {
+        statusNode = (
+            <div className="fetch-models-modal__status fetch-models-modal__status--cancelled">
+                <p>{settingsTranslator({ key: "settings.long_task.cancelled" })}</p>
+                <button
+                    type="button"
+                    className="fetch-models-modal__retry"
+                    onClick={() => void load()}
+                >
+                    {coreT({key: "ui.common.retry"})}
+                </button>
+            </div>
+        );
+    } else if (error) {
+        statusNode = (
+            <div className="fetch-models-modal__status fetch-models-modal__status--error">
+                <p>{error}</p>
+                <button
+                    type="button"
+                    className="fetch-models-modal__retry"
+                    onClick={() => void load()}
+                >
+                    {coreT({key: "ui.common.retry"})}
+                </button>
+            </div>
+        );
+    } else if (rows.length === 0) {
+        statusNode = (
+            <p className="fetch-models-modal__status">
+                {coreT({key: "ui.provider.no_models_fetched"})}
+            </p>
+        );
+    } else {
+        statusNode = (
+            <>
+                <div className="fetch-models-modal__filter-bar">
+                    <input
+                        type="text"
+                        className="fetch-models-modal__filter"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        placeholder={coreT({key: "ui.provider.filter_models_placeholder"})}
+                    />
+                    <button
+                        type="button"
+                        className="fetch-models-modal__select-all"
+                        disabled={saving || selectableFilteredRows.length === 0}
+                        onClick={handleSelectAll}
+                    >
+                        {allFilteredSelected ? coreT({key: "ui.common.select_none"}) : coreT({key: "ui.common.select_all"})}
+                    </button>
+                </div>
+                {filteredRows.length === 0 ? (
+                    <p className="fetch-models-modal__status">{coreT({key: "ui.provider.no_matching_models"})}</p>
+                ) : (
+                    <ul className="fetch-models-modal__list">
+                        {filteredRows.map((row) => {
+                            const saved = savedSet.has(row.vendorModelId);
+                            const selected = isSelected(row.vendorModelId);
+                            const title = row.displayName.trim() || row.vendorModelId;
+                            const showMeta = row.displayName.trim() && row.displayName.trim() !== row.vendorModelId;
+                            return (
+                                <li key={row.vendorModelId}>
+                                    <button
+                                        type="button"
+                                        className={`fetch-models-modal__row${selected ? " is-selected" : ""}${saved ? " is-saved" : ""}`}
+                                        disabled={saved || saving}
+                                        onClick={() => {
+                                            if (!saved) {
+                                                toggle(row.vendorModelId);
+                                            }
+                                        }}
+                                    >
+                                        {saved ? (
+                                            <span className="fetch-models-modal__row-spacer" aria-hidden="true" />
+                                        ) : (
+                                            <BatchCheckbox
+                                                checked={selected}
+                                                onToggle={() => toggle(row.vendorModelId)}
+                                            />
+                                        )}
+                                        <span className="fetch-models-modal__row-text">
+                                            <span className="fetch-models-modal__row-title">{title}</span>
+                                            {showMeta ? (
+                                                <span className="fetch-models-modal__row-meta">{row.vendorModelId}</span>
+                                            ) : null}
+                                        </span>
+                                        {saved ? (
+                                            <span className="fetch-models-modal__row-badge">{coreT({key: "ui.common.added"})}</span>
+                                        ) : null}
+                                    </button>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                )}
+            </>
+        );
+    }
+
     return (
         <div className="text-prompt-overlay" onClick={onClose}>
             <div
@@ -178,125 +309,7 @@ export function FetchModelsModal({
                     {coreT({key: "ui.provider.fetch_models_hint"})}
                 </p>
 
-                {loading ? (
-                    <div className="fetch-models-modal__status fetch-models-modal__status--loading">
-                        <p>{coreT({key: "ui.provider.fetching"})}</p>
-                        <button
-                            type="button"
-                            className="fetch-models-modal__cancel"
-                            disabled={cancelling}
-                            // providerModels 的取消键形态是 `models:<providerId>`（ABORT_KEY.providerModels），
-                            // id 直接复用弹窗的 providerId；取消请求本身不弹 toast，终态由 load 的 IPC_ABORTED 分支收口。
-                            onClick={() => {
-                                if (cancelling) {
-                                    return;
-                                }
-                                setCancelling(true);
-                                void (async () => {
-                                    try {
-                                        await ipcRunAbort({ kind: "models", id: providerId });
-                                    } catch {
-                                        // IPC bridge 不可用时保持 loading，用户可再次点击取消。
-                                    } finally {
-                                        setCancelling(false);
-                                    }
-                                })();
-                            }}
-                        >
-                            {settingsTranslator({ key: "settings.long_task.cancel" })}
-                        </button>
-                    </div>
-                ) : cancelled ? (
-                    <div className="fetch-models-modal__status fetch-models-modal__status--cancelled">
-                        <p>{settingsTranslator({ key: "settings.long_task.cancelled" })}</p>
-                        <button
-                            type="button"
-                            className="fetch-models-modal__retry"
-                            onClick={() => void load()}
-                        >
-                            {coreT({key: "ui.common.retry"})}
-                        </button>
-                    </div>
-                ) : error ? (
-                    <div className="fetch-models-modal__status fetch-models-modal__status--error">
-                        <p>{error}</p>
-                        <button
-                            type="button"
-                            className="fetch-models-modal__retry"
-                            onClick={() => void load()}
-                        >
-                            {coreT({key: "ui.common.retry"})}
-                        </button>
-                    </div>
-                ) : rows.length === 0 ? (
-                    <p className="fetch-models-modal__status">
-                        {coreT({key: "ui.provider.no_models_fetched"})}
-                    </p>
-                ) : (
-                    <>
-                        <div className="fetch-models-modal__filter-bar">
-                            <input
-                                type="text"
-                                className="fetch-models-modal__filter"
-                                value={query}
-                                onChange={(e) => setQuery(e.target.value)}
-                                placeholder={coreT({key: "ui.provider.filter_models_placeholder"})}
-                            />
-                            <button
-                                type="button"
-                                className="fetch-models-modal__select-all"
-                                disabled={saving || selectableFilteredRows.length === 0}
-                                onClick={handleSelectAll}
-                            >
-                                {allFilteredSelected ? coreT({key: "ui.common.select_none"}) : coreT({key: "ui.common.select_all"})}
-                            </button>
-                        </div>
-                        {filteredRows.length === 0 ? (
-                            <p className="fetch-models-modal__status">{coreT({key: "ui.provider.no_matching_models"})}</p>
-                        ) : (
-                            <ul className="fetch-models-modal__list">
-                                {filteredRows.map((row) => {
-                                    const saved = savedSet.has(row.vendorModelId);
-                                    const selected = isSelected(row.vendorModelId);
-                                    const title = row.displayName.trim() || row.vendorModelId;
-                                    const showMeta = row.displayName.trim() && row.displayName.trim() !== row.vendorModelId;
-                                    return (
-                                        <li key={row.vendorModelId}>
-                                            <button
-                                                type="button"
-                                                className={`fetch-models-modal__row${selected ? " is-selected" : ""}${saved ? " is-saved" : ""}`}
-                                                disabled={saved || saving}
-                                                onClick={() => {
-                                                    if (!saved) {
-                                                        toggle(row.vendorModelId);
-                                                    }
-                                                }}
-                                            >
-                                                {saved ? (
-                                                    <span className="fetch-models-modal__row-spacer" aria-hidden="true" />
-                                                ) : (
-                                                    <BatchCheckbox
-                                                        checked={selected}
-                                                        onToggle={() => toggle(row.vendorModelId)}
-                                                    />
-                                                )}
-                                                <span className="fetch-models-modal__row-text">
-                                                    <span className="fetch-models-modal__row-title">{title}</span>
-                                                    {showMeta ? (
-                                                        <span className="fetch-models-modal__row-meta">{row.vendorModelId}</span>
-                                                    ) : null}
-                                                </span>
-                                                {saved ? (
-                                                    <span className="fetch-models-modal__row-badge">{coreT({key: "ui.common.added"})}</span>
-                                                ) : null}
-                                            </button>
-                                        </li>
-                                    );
-                                })}
-                            </ul>
-                        )}
-                    </>
-                )}
+                {statusNode}
 
                 {!loading && selectableRows.length > 0 ? (
                     <p className="fetch-models-modal__count">{coreT({key: "ui.common.selected_count", params: {count: selectedCount}})}</p>

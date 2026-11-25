@@ -726,6 +726,15 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     );
 
 
+    let modelSelectValue: string;
+    if (unresolvedId != null) {
+        modelSelectValue = UNRESOLVED_MODEL_OPTION_VALUE;
+    } else if (modelEnabled) {
+        modelSelectValue = savedModelId;
+    } else {
+        modelSelectValue = "";
+    }
+
     return (
         <SettingsPanel>
             {loading ? <p className="settings-hint">{coreT({key: "ui.common.loading"})}</p> : null}
@@ -812,13 +821,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                         hint={coreT({key: "ui.agent.model_follow_hint"})}
                     >
                         <select
-                            value={
-                                unresolvedId != null
-                                    ? UNRESOLVED_MODEL_OPTION_VALUE
-                                    : modelEnabled
-                                    ? savedModelId
-                                    : ""
-                            }
+                            value={modelSelectValue}
                             disabled={isBuiltin}
                             onChange={(e) => handleModelSelect(e.target.value)}
                         >
