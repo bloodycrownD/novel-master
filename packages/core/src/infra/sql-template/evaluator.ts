@@ -3,7 +3,9 @@
  * Produces final SQL text and ordered parameters for prepared statements.
  */
 
+import { Result } from "@/errors/either.js";
 import { SqlTemplateContext, type ContextStack } from "./context.js";
+import { SqlTemplateError } from "./errors.js";
 import { SqlTemplateExpression } from "./expression.js";
 import { SqlTemplatePlaceholder } from "./placeholder.js";
 import { SqlTemplateForeach } from "./tags/foreach.js";
@@ -23,17 +25,15 @@ interface EvaluateState {
 export class TemplateEvaluator {
     constructor(private readonly placeholder: string) {}
 
-    evaluate(nodes: AstNode[], params: Record<string, unknown>): SqlParseResult {
+    evaluate(nodes: AstNode[], params: Record<string, unknown>): Result<SqlParseResult, SqlTemplateError> {
         const stack: ContextStack = [params];
         const state: EvaluateState = { parts: [], parameters: [] };
-        this.evaluateNodes(nodes, stack, state);
-        return {
-            sql: state.parts.join(""),
-            parameters: state.parameters,
-        };
+        const evaluated = this.evaluateNodes(nodes, stack, state);
+        if (!evaluated.ok) return Result.err(evaluated.error);
+        return Result.ok({ sql: state.parts.join(""), parameters: state.parameters });
     }
 
-    private evaluateNodes(nodes: AstNode[], stack: ContextStack, state: EvaluateState): void {
+    private evaluateNodes(nodes: AstNode[], stack: ContextStack, state: EvaluateState): Result<null, SqlTemplateError> {
         for (const node of nodes) {
             switch (node.type) {
                 case "text":
@@ -45,14 +45,19 @@ export class TemplateEvaluator {
                     state.parameters.push(...parameters);
                     break;
                 }
-                case "if":
-                    if (SqlTemplateExpression.evaluateTest(node.test, stack, { offset: node.testOffset })) {
-                        this.evaluateNodes(node.children, stack, state);
+                case "if": {
+                    const test = SqlTemplateExpression.evaluateTest(node.test, stack, { offset: node.testOffset });
+                    if (!test.ok) return Result.err(test.error);
+                    if (test.value) {
+                        const children = this.evaluateNodes(node.children, stack, state);
+                        if (!children.ok) return Result.err(children.error);
                     }
                     break;
+                }
                 case "where": {
                     const innerState: EvaluateState = { parts: [], parameters: [] };
-                    this.evaluateNodes(node.children, stack, innerState);
+                    const children = this.evaluateNodes(node.children, stack, innerState);
+                    if (!children.ok) return Result.err(children.error);
                     state.parameters.push(...innerState.parameters);
                     const wrapped = SqlTemplateWhere.wrap(innerState.parts.join(""));
                     if (wrapped) state.parts.push(wrapped);
@@ -68,7 +73,9 @@ export class TemplateEvaluator {
                     const separator = node.attrs.separator ?? "";
                     const chunks: string[] = [];
 
-                    items.forEach((item, index) => {
+                    // forEach 回调无法短路递归失败，改下标循环保持迭代顺序不变。
+                    for (let index = 0; index < items.length; index++) {
+                        const item = items[index];
                         const frame: Record<string, unknown> = {
                             [node.attrs.item]: item,
                         };
@@ -77,17 +84,19 @@ export class TemplateEvaluator {
                         }
                         const childStack = SqlTemplateContext.pushScope(stack, frame);
                         const chunkState: EvaluateState = { parts: [], parameters: [] };
-                        this.evaluateNodes(node.children, childStack, chunkState);
+                        const chunk = this.evaluateNodes(node.children, childStack, chunkState);
+                        if (!chunk.ok) return Result.err(chunk.error);
                         state.parameters.push(...chunkState.parameters);
                         chunks.push(chunkState.parts.join(""));
-                    });
+                    }
 
                     state.parts.push(open + chunks.join(separator) + close);
                     break;
                 }
                 case "trim": {
                     const innerState: EvaluateState = { parts: [], parameters: [] };
-                    this.evaluateNodes(node.children, stack, innerState);
+                    const children = this.evaluateNodes(node.children, stack, innerState);
+                    if (!children.ok) return Result.err(children.error);
                     state.parameters.push(...innerState.parameters);
                     state.parts.push(SqlTemplateTrim.applyOverrides(innerState.parts.join(""), node.attrs));
                     break;
@@ -95,14 +104,18 @@ export class TemplateEvaluator {
                 case "choose": {
                     let matched = false;
                     for (const when of node.whens) {
-                        if (SqlTemplateExpression.evaluateTest(when.test, stack, { offset: when.testOffset })) {
-                            this.evaluateNodes(when.children, stack, state);
+                        const test = SqlTemplateExpression.evaluateTest(when.test, stack, { offset: when.testOffset });
+                        if (!test.ok) return Result.err(test.error);
+                        if (test.value) {
+                            const children = this.evaluateNodes(when.children, stack, state);
+                            if (!children.ok) return Result.err(children.error);
                             matched = true;
                             break;
                         }
                     }
                     if (!matched && node.otherwise) {
-                        this.evaluateNodes(node.otherwise, stack, state);
+                        const children = this.evaluateNodes(node.otherwise, stack, state);
+                        if (!children.ok) return Result.err(children.error);
                     }
                     break;
                 }
@@ -112,5 +125,6 @@ export class TemplateEvaluator {
                 }
             }
         }
+        return Result.ok(null);
     }
 }

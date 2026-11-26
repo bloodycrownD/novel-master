@@ -13,12 +13,15 @@ describe("expression", () => {
 
     it("evaluates and / != null with undefined properties", () => {
         const stack = [{ enabled: true, name: "" }];
-        assert.equal(SqlTemplateExpression.evaluateTest("enabled", stack), true);
-        assert.equal(SqlTemplateExpression.evaluateTest("missing != null", stack), false);
-        assert.equal(
-            SqlTemplateExpression.evaluateTest("name != null and name != ''", stack),
-            false,
-        );
+        const enabled = SqlTemplateExpression.evaluateTest("enabled", stack);
+        assert.ok(enabled.ok);
+        assert.equal(enabled.value, true);
+        const missing = SqlTemplateExpression.evaluateTest("missing != null", stack);
+        assert.ok(missing.ok);
+        assert.equal(missing.value, false);
+        const combined = SqlTemplateExpression.evaluateTest("name != null and name != ''", stack);
+        assert.ok(combined.ok);
+        assert.equal(combined.value, false);
     });
 
     it("does not rewrite and/or/not inside string literals", () => {
@@ -38,9 +41,15 @@ describe("expression", () => {
 
     it("evaluates comparisons against literal and/or", () => {
         const stack = [{ name: "and", status: "or" }];
-        assert.equal(SqlTemplateExpression.evaluateTest("name == 'and'", stack), true);
-        assert.equal(SqlTemplateExpression.evaluateTest('status == "or"', stack), true);
-        assert.equal(SqlTemplateExpression.evaluateTest("name == 'or'", stack), false);
+        const nameAnd = SqlTemplateExpression.evaluateTest("name == 'and'", stack);
+        assert.ok(nameAnd.ok);
+        assert.equal(nameAnd.value, true);
+        const statusOr = SqlTemplateExpression.evaluateTest('status == "or"', stack);
+        assert.ok(statusOr.ok);
+        assert.equal(statusOr.value, true);
+        const nameOr = SqlTemplateExpression.evaluateTest("name == 'or'", stack);
+        assert.ok(nameOr.ok);
+        assert.equal(nameOr.value, false);
     });
 
     it("rejects constructor sandbox escape vectors", () => {
@@ -50,11 +59,9 @@ describe("expression", () => {
             "constructor",
             "obj.constructor",
         ]) {
-            assert.throws(
-                () => SqlTemplateExpression.evaluateTest(expr, stack),
-                (err: unknown) => err instanceof SqlTemplateError,
-                expr,
-            );
+            const rejected = SqlTemplateExpression.evaluateTest(expr, stack);
+            assert.ok(!rejected.ok, expr);
+            assert.ok(rejected.error instanceof SqlTemplateError, expr);
         }
     });
 });

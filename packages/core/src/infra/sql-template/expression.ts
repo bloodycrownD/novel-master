@@ -2,6 +2,7 @@
  * MyBatis-style `test` expression normalization and evaluation via `__ctx__` proxy.
  */
 
+import { Result } from "@/errors/either.js";
 import { SqlTemplateError } from "./errors.js";
 import type { ContextStack } from "./context.js";
 import { SqlTemplateContextProxy } from "./context-proxy.js";
@@ -97,14 +98,14 @@ export const SqlTemplateExpression = {
    * Evaluates a `test` expression against the current context stack.
    * Missing properties read as `undefined` via a chained Proxy.
    */
-    evaluateTest(expr: string, stack: ContextStack, options?: EvaluateTestOptions): boolean {
+    evaluateTest(expr: string, stack: ContextStack, options?: EvaluateTestOptions): Result<boolean, SqlTemplateError> {
         const normalized = SqlTemplateExpression.bindToContext(SqlTemplateExpression.normalize(expr));
         const errorOptions = options?.offset !== undefined ? { offset: options.offset } : undefined;
         if (!normalized) {
-            throw new SqlTemplateError("EXPRESSION_ERROR", "Empty test expression", errorOptions);
+            return Result.err(new SqlTemplateError("EXPRESSION_ERROR", "Empty test expression", errorOptions));
         }
         if (FORBIDDEN_PATTERN.test(normalized)) {
-            throw new SqlTemplateError("EXPRESSION_ERROR", `Disallowed syntax in test expression: ${expr}`, errorOptions);
+            return Result.err(new SqlTemplateError("EXPRESSION_ERROR", `Disallowed syntax in test expression: ${expr}`, errorOptions));
         }
 
         const ctx = SqlTemplateContextProxy.mergedForExpression(stack);
@@ -114,9 +115,9 @@ export const SqlTemplateExpression = {
                 fn = new Function("__ctx__", `return (${normalized});`) as (ctx: unknown) => unknown;
                 compiledTestFunctionCache.set(normalized, fn);
             }
-            return Boolean(fn(ctx));
+            return Result.ok(Boolean(fn(ctx)));
         } catch (err) {
-            throw new SqlTemplateError("EXPRESSION_ERROR", `Failed to evaluate test expression: ${expr}`, { ...errorOptions, cause: err });
+            return Result.err(new SqlTemplateError("EXPRESSION_ERROR", `Failed to evaluate test expression: ${expr}`, { ...errorOptions, cause: err }));
         }
     },
 } as const;

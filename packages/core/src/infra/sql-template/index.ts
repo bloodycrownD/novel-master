@@ -18,8 +18,10 @@ export { SqlTemplateParse, TemplateParser } from "./parser.js";
 export { SqlTemplateExpression } from "./expression.js";
 export type { EvaluateTestOptions } from "./expression.js";
 
+import { Result } from "@/errors/either.js";
 import { TemplateEvaluator } from "./evaluator.js";
 import { TemplateParser } from "./parser.js";
+import type { SqlTemplateError } from "./errors.js";
 import type { ParseOptions, SqlParseResult } from "./types.js";
 
 /**
@@ -46,10 +48,13 @@ export class SqlTemplateParser {
    * **not** added to `parameters`. Only use `${...}` with trusted, validated values
    * (for example fixed column names from an allow-list). Untrusted input in `${...}`
    * can cause SQL injection. Prefer `#{name}` for user-supplied values.
+   * 失败沿 `Result.err` 携带 {@link SqlTemplateError}（码、offset、tagName 保持），
+   * 不抛异常；reject 语义由 tdbc 桥（TdbcTemplate）统一转码。
    */
-    parse(template: string, params: Record<string, unknown>): SqlParseResult {
+    parse(template: string, params: Record<string, unknown>): Result<SqlParseResult, SqlTemplateError> {
         const ast = this.parser.parse(template);
+        if (!ast.ok) return Result.err(ast.error);
         const evaluator = new TemplateEvaluator(this.placeholder);
-        return evaluator.evaluate(ast, params);
+        return evaluator.evaluate(ast.value, params);
     }
 }

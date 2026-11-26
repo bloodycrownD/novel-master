@@ -10,7 +10,8 @@ describe("evaluator if / where", () => {
             "SELECT 1<if test=\"enabled\"> AND status = 1</if>",
             { enabled: true },
         );
-        assert.ok(r.sql.includes("AND status = 1"));
+        assert.ok(r.ok);
+        assert.ok(r.value.sql.includes("AND status = 1"));
     });
 
     it("#4 if false omits body", () => {
@@ -18,7 +19,8 @@ describe("evaluator if / where", () => {
             "SELECT 1<if test=\"enabled\"> AND status = 1</if>",
             { enabled: false },
         );
-        assert.ok(!r.sql.includes("AND status = 1"));
+        assert.ok(r.ok);
+        assert.ok(!r.value.sql.includes("AND status = 1"));
     });
 
     it("#5 missing property is falsy without throw", () => {
@@ -26,8 +28,9 @@ describe("evaluator if / where", () => {
             '<if test="missing != null">AND x = 1</if>',
             {},
         );
-        assert.ok(!r.sql.includes("AND x = 1"));
-        assert.equal(r.parameters.length, 0);
+        assert.ok(r.ok);
+        assert.ok(!r.value.sql.includes("AND x = 1"));
+        assert.equal(r.value.parameters.length, 0);
     });
 
     it("#6 where strips AND and adds WHERE", () => {
@@ -35,9 +38,10 @@ describe("evaluator if / where", () => {
             "SELECT * FROM user <where><if test=\"id\">AND id = #{id}</if></where>",
             { id: 42 },
         );
-        assert.ok(r.sql.includes("WHERE id = ?"));
-        assert.ok(!r.sql.includes("AND id"));
-        assert.deepEqual(r.parameters, [42]);
+        assert.ok(r.ok);
+        assert.ok(r.value.sql.includes("WHERE id = ?"));
+        assert.ok(!r.value.sql.includes("AND id"));
+        assert.deepEqual(r.value.parameters, [42]);
     });
 
     it("#7 where with all false if emits no WHERE", () => {
@@ -45,6 +49,7 @@ describe("evaluator if / where", () => {
             "SELECT * FROM user <where><if test=\"id\">AND id = #{id}</if></where>",
             {},
         );
-        assert.ok(!r.sql.includes("WHERE"));
+        assert.ok(r.ok);
+        assert.ok(!r.value.sql.includes("WHERE"));
     });
 });

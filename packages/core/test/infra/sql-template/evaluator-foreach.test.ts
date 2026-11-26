@@ -10,20 +10,23 @@ describe("evaluator foreach", () => {
 
     it("#8 expands collection with placeholders", () => {
         const r = parser.parse(template, { ids: [1, 2, 3] });
-        assert.ok(r.sql.includes("WHERE id IN (?,?,?)"));
-        assert.deepEqual(r.parameters, [1, 2, 3]);
+        assert.ok(r.ok);
+        assert.ok(r.value.sql.includes("WHERE id IN (?,?,?)"));
+        assert.deepEqual(r.value.parameters, [1, 2, 3]);
     });
 
     it("#9 empty array omits foreach fragment", () => {
         const r = parser.parse(template, { ids: [] });
-        assert.ok(!r.sql.includes("IN ()"));
-        assert.equal(r.parameters.length, 0);
+        assert.ok(r.ok);
+        assert.ok(!r.value.sql.includes("IN ()"));
+        assert.equal(r.value.parameters.length, 0);
     });
 
     it("#9 null collection omits foreach fragment", () => {
         const r = parser.parse(template, { ids: null });
-        assert.ok(!r.sql.includes("("));
-        assert.equal(r.parameters.length, 0);
+        assert.ok(r.ok);
+        assert.ok(!r.value.sql.includes("("));
+        assert.equal(r.value.parameters.length, 0);
     });
 
     it("#16 nested foreach preserves parameter order", () => {
@@ -34,6 +37,7 @@ describe("evaluator foreach", () => {
         const r = parser.parse(nested, {
             rows: [{ items: [1, 2] }, { items: [3] }],
         });
-        assert.deepEqual(r.parameters, [1, 2, 3]);
+        assert.ok(r.ok);
+        assert.deepEqual(r.value.parameters, [1, 2, 3]);
     });
 });

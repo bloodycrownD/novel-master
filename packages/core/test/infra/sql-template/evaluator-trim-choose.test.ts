@@ -10,8 +10,9 @@ describe("evaluator trim / choose", () => {
             '<trim prefix="WHERE " prefixOverrides="AND">AND col = 1</trim>',
             {},
         );
-        assert.ok(r.sql.includes("WHERE col = 1"));
-        assert.ok(!r.sql.includes("AND col"));
+        assert.ok(r.ok);
+        assert.ok(r.value.sql.includes("WHERE col = 1"));
+        assert.ok(!r.value.sql.includes("AND col"));
     });
 
     it("#11 choose picks first matching when", () => {
@@ -23,7 +24,8 @@ describe("evaluator trim / choose", () => {
                 "</choose>",
             {},
         );
-        assert.equal(r.sql.trim(), "B");
+        assert.ok(r.ok);
+        assert.equal(r.value.sql.trim(), "B");
     });
 
     it("#12 choose falls back to otherwise", () => {
@@ -34,6 +36,7 @@ describe("evaluator trim / choose", () => {
                 "</choose>",
             {},
         );
-        assert.equal(r.sql.trim(), "D");
+        assert.ok(r.ok);
+        assert.equal(r.value.sql.trim(), "D");
     });
 });
