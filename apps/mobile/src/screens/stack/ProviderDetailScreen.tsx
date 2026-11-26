@@ -185,7 +185,7 @@ export function ProviderDetailScreen() {
             setMenuSavedModelId(undefined);
         } catch (error) {
             showToast(ToastMessage.toast(coreT({key: "ui.common.rename_failed"}), error));
-            // nm-throw: keep — UI 回调解包边界：toast 后原样上抛交上层回调链收口（React 回调，调用方改不动）
+            // nm-throw: keep — 失败不关弹窗：这里 rethrow 是为了阻断 handleConfirm 的 onClose（让弹窗保持打开）；promise 由其调用点的 `.catch(() => undefined)` 静默收尾（TextPromptModal.tsx）。不是平台契约，但换成返回值要改 TextPromptModal 的确认协议
             throw error;
         }
     };

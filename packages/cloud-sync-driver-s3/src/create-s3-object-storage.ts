@@ -75,7 +75,7 @@ export namespace S3ObjectStorage {
                     ) {
                         return { exists: false };
                     }
-                    // nm-throw: keep — 平台强制：ObjectStoragePort.head 契约为 throw 通道（接口在 core、返回非 Result，跨包协议），S3 非 404 异常原样上抛由 coordinator/service 收口。
+                    // nm-throw: keep — 平台强制：ObjectStoragePort.head 契约为 throw 通道（接口在 core、返回 Promise 非 Result，跨包协议）；coordinator 的 readRemoteStatus 不接它，实际由桌面云同步 handler 的 doPull catch 收口（apps/desktop/src/main/ipc/handlers/cloud-sync.ts）。
                     throw error;
                 }
             },
