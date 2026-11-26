@@ -139,6 +139,7 @@ export namespace AndroidNativeBridge {
                 return await nativeModule.countPromptCancelable(request.serialized, request.family, request.vendorModelId, requestId);
             } catch (error) {
                 if (isNativeCancelledError(error)) {
+                    // nm-throw: keep — RN 原生桥的失败通道是 reject（平台契约）的取消哨兵：取消不得落 JS 兜底重算（tokenizer-native-cancel），转 PromptCountCancelledError 上抛，由 count-prompt-llm-input 的 catch 链识别放行、驱动入口 count() 的调用方接住
                     throw new PromptCountCancelledError();
                 }
                 return null;
@@ -160,6 +161,7 @@ export namespace AndroidNativeBridge {
             return await nativeModule.countPrompt(request.serialized, request.family, request.vendorModelId);
         } catch (error) {
             if (isNativeCancelledError(error)) {
+                // nm-throw: keep — 同上：RN 原生桥 reject 通道的取消哨兵，转 PromptCountCancelledError 上抛（取消不得落兜底），由 count-prompt-llm-input 的 catch 链放行、驱动入口 count() 的调用方接住
                 throw new PromptCountCancelledError();
             }
             return null;

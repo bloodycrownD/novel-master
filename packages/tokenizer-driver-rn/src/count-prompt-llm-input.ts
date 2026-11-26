@@ -361,6 +361,7 @@ export namespace PromptLlmInputCounter {
             };
         } catch (error) {
             if (error instanceof PromptCountCancelledError) {
+                // nm-throw: keep — 取消哨兵穿透不变量（tokenizer-native-cancel）：取消不得落兜底重算，沿异常通道穿透到驱动入口 count() 的调用方（读口/服务层）接住
                 throw error;
             }
             return null;
@@ -437,6 +438,7 @@ export namespace PromptLlmInputCounter {
             const ms = ` ms=${Date.now() - probeT0}`;
             const route = ` route=${probe.route} thrown=${error instanceof Error ? error.name : "unknown"}`;
             probeLog(head + ms + route);
+            // nm-throw: keep — 探针日志壳的再抛：失败统计后原样上行（catch 内要用 error 记 route，finally 拿不到它），取消哨兵沿此穿透到驱动入口 count() 的调用方接住
             throw error;
         }
     }
@@ -575,6 +577,7 @@ export namespace PromptLlmInputCounter {
             };
         } catch (error) {
             if (error instanceof PromptCountCancelledError) {
+                // nm-throw: keep — 同 countGptViaNative：取消哨兵穿透不变量（tokenizer-native-cancel），沿异常通道穿透到驱动入口 count() 的调用方接住
                 throw error;
             }
             return null;

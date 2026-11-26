@@ -31,18 +31,21 @@ const androidStrategy: SkspCryptoStrategy = {
             // 存 base64 文本，不走 Uint8Array BLOB 绑定（quick-sqlite heap 损伤）。
             return { ciphertext: enc.ciphertext, iv: enc.iv };
         } catch (cause) {
+            // nm-throw: keep — SecretStore 端口的失败通道是 Promise reject（core 契约，sksp-android.test 以 assert.rejects 锁定）：Android Keystore 原生桥只以 reject 报错，此处转 SkspError 交 BaseSqliteSecretStore.set 的调用方经 reject 接住
             throw new SkspError("ENCRYPT_FAILED", `Keystore encrypt failed for ${ref}`, { ref, cause },);
         }
     },
     async decrypt(ref, row: Row) {
         const iv = row.iv;
         if (iv == null) {
+            // nm-throw: keep — SecretStore 端口的失败通道是 Promise reject（core 契约）：strategy.decrypt 无 Result 通道，DB 行缺 IV 转 SkspError 交 store.get 的调用方经 reject 接住
             throw new SkspError("DECRYPT_FAILED", `Missing IV for ${ref}`, { ref });
         }
         const native = SkspNative.get();
         try {
             return await native.decrypt(ref, Encoding.bytesToBase64(AndroidSecretStoreFactory.decodeBlob(row.ciphertext)), Encoding.bytesToBase64(AndroidSecretStoreFactory.decodeBlob(iv)),);
         } catch (cause) {
+            // nm-throw: keep — SecretStore 端口的失败通道是 Promise reject（core 契约，sksp-android.test 以 assert.rejects 锁定）：Keystore 原生桥只以 reject 报错，此处转 SkspError 交 store.get 的调用方经 reject 接住
             throw new SkspError("DECRYPT_FAILED", `Keystore decrypt failed for ${ref}. Re-configure apiKey.`, { ref, cause },);
         }
     },
@@ -66,6 +69,7 @@ export namespace AndroidSecretStoreFactory {
         if (typeof value === "string") {
             return Encoding.base64ToBytes(value);
         }
+        // nm-throw: keep — 驱动转码链一环：DB blob 列形态损坏（数据损坏非代码不变量）转 SkspError(DB_ERROR)，唯一调用方 androidStrategy.decrypt 在 try 内 catch 转 DECRYPT_FAILED 交 SecretStore 端口 reject 通道
         throw new SkspError("DB_ERROR", "Invalid blob column");
     }
 
