@@ -190,7 +190,7 @@ export function SmartSortRulesScreen() {
                             text: coreT({key: "ui.common.import"}),
                             onPress: () => {
                                 // 替换式导入（spec D10）：schema/decode 单源在 core
-                                // `smart-sort-rule-io`；存储/事务类故障原样上抛、其余照旧套
+                                // `smart-sort-rule-io`；存储/事务类故障原样透传、其余照旧套
                                 // 「YAML 无效」前缀——判据与前缀都在 core 的
                                 // `Errors.normalizeSmartSortImport` 里（desktop 侧调同一个函数）。
                                 let importedCount: number | null = null;
@@ -202,8 +202,9 @@ export function SmartSortRulesScreen() {
                                         importedCount = rules.value.length;
                                         return Result.ok(undefined);
                                     } catch (error) {
-                                        // 存储/事务类故障原样上抛、其余照旧套「YAML 无效」前缀——判据在 core。
-                                        throw Errors.normalizeSmartSortImport(error);
+                                        // 存储/事务类故障原样透传、其余照旧套「YAML 无效」前缀——判据在 core；
+                                        // 归一后沿 Result.err 接力（consume 回调声明的失败通道，下方 !ok 同终端 toast）。
+                                        return Result.err(Errors.normalizeSmartSortImport(error));
                                     }
                                 })
                                     .then(async imported => {

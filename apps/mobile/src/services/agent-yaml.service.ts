@@ -25,7 +25,7 @@ export namespace AgentYamlService {
         return YamlShared.exportWithDialog(yaml, `${agentId}.agent.yaml`);
     }
 
-    /** 校验失败套「YAML 无效」前缀沿 Result 接力；decode/upsert 的平台异常仍走 reject。 */
+    /** 校验失败套「YAML 无效」前缀沿 Result 接力；decode/upsert 的平台异常归一后同走 Result.err。 */
     // nm-style: keep-public — agent-yaml.service.test.ts 多用例直接 import 断言校验管线；agent-editor-form 测试 mock 接缝，测试锁名
     export async function importYaml(runtime: MobileNovelMasterRuntime, agentId: string): Promise<Result<void, Error>> {
         return YamlShared.importWithDialog(async yaml => {
@@ -47,7 +47,7 @@ export namespace AgentYamlService {
                 }
                 return Result.ok(undefined);
             } catch (error) {
-                throw Errors.normalizeYaml(error, 'Agent YAML 无效');
+                return Result.err(Errors.normalizeYaml(error, 'Agent YAML 无效'));
             }
         });
     }
