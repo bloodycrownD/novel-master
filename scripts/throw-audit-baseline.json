@@ -1,36 +1,48 @@
 {
   "note": "throw-audit 基线（p26 R3）。站点键 = 文件 + throw 语句空白归一原文；disposition：ALLOWED（白名单三类）/ BOUNDARY（合法边界转码，理由必填）/ KEEP（nm-throw: keep 存量）/ UNTRIAGED（定性不了的欠账——gate 不拦但报告显数）。gate 拦矩阵判 VIOLATION/VIOLATION-B/BOUNDARY 且未登记的站点；重建：nm-style throw-audit --write-baseline。",
   "toolVersion": "0.1.0",
-  "generatedAt": "2026-11-22T01:55:53.355Z",
+  "generatedAt": "2026-11-26T05:03:33.925Z",
   "includeTests": false,
   "sites": {
+    "apps/desktop/renderer/components/MermaidMarkdown.tsx#throw err;": {
+      "form": "T6",
+      "line": 241,
+      "disposition": "KEEP",
+      "reason": "renderer 不引 core 运行时（bundle 约束）无 Result 通道，导出 API 失败通道是 Promise reject：写失败缓存后 rethrow 让共享 inflight 的等待方同收错误，由 MermaidBlock effect 的 .catch 接住（mermaid-markdown.test 以 assert.rejects 同口径锁定）"
+    },
+    "apps/desktop/renderer/features/workspace/vfs-tree-utils.ts#throw new RangeError(`segment index 越界: ${index}`);": {
+      "form": "T5",
+      "line": 21,
+      "disposition": "KEEP",
+      "reason": "不变量破坏（index 由 ancestorDirPaths 循环边界与渲染层段切分保证，代码写错才可达），不占产品码；renderer 不引 core 运行时无法用 AssertionError，vfs-tree-utils.test 以 assert.throws 锁定 RangeError 通道"
+    },
     "apps/desktop/renderer/features/workspace/workspace-actions.ts#throw new Error(picked.error.message || coreT({key: \"ui.vfs.pick_file_failed\"}));": {
       "form": "T4",
-      "line": 228,
+      "line": 241,
       "disposition": "KEEP",
       "reason": "renderer 侧 IpcResult 解包边界（线格式无 Result 通道），抛给上层 try/catch"
     },
     "apps/desktop/renderer/features/workspace/workspace-actions.ts#throw new Error(result.error.message || coreT({key: \"ui.common.import_failed\"}));": {
       "form": "T4",
-      "line": 269,
+      "line": 282,
       "disposition": "KEEP",
       "reason": "renderer 侧 IpcResult 解包边界"
     },
     "apps/desktop/renderer/features/workspace/workspace-actions.ts#throw new Error(coreT({key: \"ui.vfs.import_incomplete\"}));": {
       "form": "T4",
-      "line": 274,
+      "line": 287,
       "disposition": "KEEP",
       "reason": "两段式协议不变量破坏（带 overwriteConfirmed 仍回 needs_confirm），属不可达分支。"
     },
     "apps/desktop/renderer/features/workspace/workspace-actions.ts#throw new Error(single.error.message || coreT({key: \"ui.common.export_failed\"}));": {
       "form": "T4",
-      "line": 302,
+      "line": 315,
       "disposition": "KEEP",
       "reason": "renderer 侧 IpcResult 解包边界"
     },
     "apps/desktop/renderer/features/workspace/workspace-actions.ts#throw new Error(zip.error.message || coreT({key: \"ui.common.export_failed\"}));": {
       "form": "T4",
-      "line": 311,
+      "line": 324,
       "disposition": "KEEP",
       "reason": "renderer 侧 IpcResult 解包边界"
     },
@@ -94,11 +106,29 @@
       "disposition": "KEEP",
       "reason": "缺理由：nm-throw: keep 注释未带理由，须补"
     },
+    "apps/desktop/src/main/ipc/handlers/skills.ts#throw new AssertionError(\"Skills.list 未注入 hooks，listSkills 不应产生 cancelled\");": {
+      "form": "T5",
+      "line": 53,
+      "disposition": "KEEP",
+      "reason": "不变量破坏（本 handler 不注入 hooks，cancelled 不可达，代码写错才可达），按总纲走 AssertionError，不占产品码，由 IpcResults.from 的兜底转码收口"
+    },
+    "apps/desktop/src/main/ipc/handlers/skills.ts#throw new AssertionError(\"Skills.list 未注入 hooks，listSkills 不应产生 replaced\");": {
+      "form": "T5",
+      "line": 57,
+      "disposition": "KEEP",
+      "reason": "不变量破坏（同上，replaced 不可达），按总纲走 AssertionError，不占产品码，由 IpcResults.from 的兜底转码收口"
+    },
     "apps/desktop/src/main/ipc/run-scope.ts#throw AbortError.create();": {
       "form": "T2",
       "line": 99,
       "disposition": "KEEP",
       "reason": "缺理由：nm-throw: keep 注释未带理由，须补"
+    },
+    "apps/desktop/src/main/ipc/run-scope.ts#throw error;": {
+      "form": "T6",
+      "line": 103,
+      "disposition": "KEEP",
+      "reason": "IPC handler 边界统一错误出口（signal-abort-scope §五三分派）：failed 的业务失败在此转 throw，由同函数 catch 收进 formatIpcError 转码，与上方 cancelled/replaced 分支同款"
     },
     "apps/desktop/src/main/runtime/desktop-runtime-singleton.ts#throw new Error(\"Desktop runtime not initialized\");": {
       "form": "T4",
@@ -106,9 +136,15 @@
       "disposition": "KEEP",
       "reason": "同步访问器的不变量：调用方契约保证 bootstrap 已完成（名字即契约），未初始化属编程错误。"
     },
+    "apps/desktop/src/main/services/prompt-preview.service.ts#throw new AssertionError(\"prompt preview 未传 shouldBail，弃权不应出现\");": {
+      "form": "T5",
+      "line": 52,
+      "disposition": "KEEP",
+      "reason": "不变量破坏（预览固定不传 shouldBail，弃权分支代码写错才可达），按总纲走 AssertionError，不占产品码，由 IpcResults.from 的兜底转码收口"
+    },
     "apps/mobile/src/components/agent/AgentList.tsx#throw def.error;": {
       "form": "T1",
-      "line": 412,
+      "line": 425,
       "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
@@ -172,6 +208,18 @@
       "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
+    "apps/mobile/src/db/connection.ts#throw openErr;": {
+      "form": "T6",
+      "line": 67,
+      "disposition": "KEEP",
+      "reason": "TdbcOpen/op-sqlite 驱动的平台异常：catch 只补 cause 链日志后原样透传，失败通道由调用方（bootstrap catch / 备份回滚 catch）统一收口"
+    },
+    "apps/mobile/src/db/connection.ts#throw bootErr;": {
+      "form": "T6",
+      "line": 80,
+      "disposition": "KEEP",
+      "reason": "NovelMasterBootstrap 的平台异常：catch 只补 cause 链日志并清完连接后原样透传，失败通道由调用方（bootstrap catch / 备份回滚 catch）统一收口"
+    },
     "apps/mobile/src/db/db-file-path.ts#throw new Error('无法定位应用数据库目录');": {
       "form": "T4",
       "line": 40,
@@ -204,7 +252,7 @@
     },
     "apps/mobile/src/runtime/novel-master-context.tsx#throw new Error('useNovelMaster must be used within NovelMasterProvider');": {
       "form": "T4",
-      "line": 424,
+      "line": 438,
       "disposition": "KEEP",
       "reason": "Provider 外调用 hook 属编程错误；渲染期同步返回值无 Result 通道（desktop/mobile 7 处 hook 守卫同族同判）"
     },
@@ -231,6 +279,12 @@
       "line": 111,
       "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
+    },
+    "apps/mobile/src/screens/stack/McpServersScreen.tsx#throw read.error;": {
+      "form": "T1",
+      "line": 99,
+      "disposition": "KEEP",
+      "reason": "fetcher 槽位契约：读失败进 useFocusListReload 的 error 态（UI 边界展示通道）"
     },
     "apps/mobile/src/screens/stack/ModelSamplingScreen.tsx#throw got.error;": {
       "form": "T1",
@@ -264,7 +318,7 @@
     },
     "apps/mobile/src/screens/stack/ProviderDetailScreen.tsx#throw got.error;": {
       "form": "T1",
-      "line": 352,
+      "line": 366,
       "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
@@ -292,9 +346,15 @@
       "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
+    "apps/mobile/src/screens/stack/ProviderDetailScreen.tsx#throw error;": {
+      "form": "T6",
+      "line": 189,
+      "disposition": "KEEP",
+      "reason": "失败不关弹窗：这里 rethrow 是为了阻断 handleConfirm 的 onClose（让弹窗保持打开）；promise 由其调用点的 `.catch(() => undefined)` 静默收尾（TextPromptModal.tsx）。不是平台契约，但换成返回值要改 TextPromptModal 的确认协议"
+    },
     "apps/mobile/src/screens/stack/ProviderDetailScreen.tsx#throw listed.error;": {
       "form": "T1",
-      "line": 356,
+      "line": 370,
       "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
@@ -364,15 +424,33 @@
       "disposition": "KEEP",
       "reason": "mobile UI 回调边界：port 解包 throw 交本地 catch / 上层 catch 设错误态（UI 惯例，消费方全部 catch 收口）。"
     },
+    "apps/mobile/src/services/cloud-sync.service.ts#throw CloudSyncSdkErrorMapper.map(listError ?? headError);": {
+      "form": "T6",
+      "line": 255,
+      "disposition": "ALLOWED",
+      "reason": "白名单自动判定（control-signal）"
+    },
     "apps/mobile/src/services/cloud-sync.service.ts#throw AbortError.create();": {
       "form": "T2",
       "line": 464,
       "disposition": "ALLOWED",
       "reason": "白名单自动判定（control-signal）"
     },
+    "apps/mobile/src/services/cloud-sync.service.ts#throw error;": {
+      "form": "T6",
+      "line": 520,
+      "disposition": "ALLOWED",
+      "reason": "白名单自动判定（control-signal）"
+    },
+    "apps/mobile/src/services/cloud-sync.service.ts#throw CloudSyncSdkErrorMapper.map(error);": {
+      "form": "T6",
+      "line": 504,
+      "disposition": "ALLOWED",
+      "reason": "白名单自动判定（control-signal）"
+    },
     "apps/mobile/src/services/db-backup.service.ts#throw AbortError.create();": {
       "form": "T2",
-      "line": 221,
+      "line": 222,
       "disposition": "KEEP",
       "reason": "缺理由：nm-throw: keep 注释未带理由，须补"
     },
@@ -382,17 +460,125 @@
       "disposition": "KEEP",
       "reason": "第三方 SDK（react-native-documents/picker）返回的错误，原样上抛由业务域映射"
     },
+    "apps/mobile/src/services/document-io.ts#throw error;": {
+      "form": "T6",
+      "line": 104,
+      "disposition": "KEEP",
+      "reason": "编排层契约：非取消错误原样上抛，由业务域 catch 映射（本文件头约定的 throw 通道）"
+    },
+    "apps/mobile/src/services/document-io.ts#throw options.buildCopyError?.(copyResult.copyError) ?? new Error(copyResult.copyError ?? '无法读取所选文件');": {
+      "form": "T6",
+      "line": 122,
+      "disposition": "KEEP",
+      "reason": "编排层契约：失败以注入的 buildCopyError 抛给业务域 catch（本文件头约定的 throw 通道）"
+    },
+    "apps/mobile/src/services/document-io.ts#throw options.buildTooLargeError(stat.size);": {
+      "form": "T6",
+      "line": 191,
+      "disposition": "KEEP",
+      "reason": "编排层契约：超限以注入的 buildTooLargeError 抛给业务域 catch（本文件头约定的 throw 通道）"
+    },
+    "apps/mobile/src/services/document-io.ts#throw buildMissingError?.(fsPath) ?? new Error(`文件不存在: ${fsPath}`);": {
+      "form": "T6",
+      "line": 200,
+      "disposition": "KEEP",
+      "reason": "编排层契约：文件缺失以注入的 buildMissingError 抛给业务域 catch（本文件头约定的 throw 通道）"
+    },
+    "apps/mobile/src/services/document-pick.ts#throw error;": {
+      "form": "T6",
+      "line": 30,
+      "disposition": "KEEP",
+      "reason": "@react-native-documents/picker 官方 SDK 只以 reject 报错：catch 只归一用户取消为 null，非取消错误原样透传给上层 document-io 编排层的 throw 通道（该层 keep 约定：非取消错误由业务域 catch 映射）"
+    },
+    "apps/mobile/src/services/llm-native-fetch-shim.ts#throw new NativeSseAbortError(requestId);": {
+      "form": "T5",
+      "line": 271,
+      "disposition": "KEEP",
+      "reason": "平台强制（fetch AbortError）：native abort 回传统一成 AbortError reject"
+    },
     "apps/mobile/src/services/llm-native-fetch-shim.ts#throw new Error(`llm-native-fetch 仅支持 GET/POST 非流式请求（收到 ${method}）`);": {
       "form": "T4",
-      "line": 197,
+      "line": 226,
       "disposition": "KEEP",
       "reason": "native bridge fetch 适配层：fetch 形状契约以 reject 报错（测试钉 'GET/POST' 拒绝）"
     },
     "apps/mobile/src/services/llm-native-fetch-shim.ts#throw new Error(`llm-native-fetch 仅支持 string body（收到 ${typeof rawBody}）`);": {
       "form": "T4",
-      "line": 206,
+      "line": 235,
       "disposition": "KEEP",
       "reason": "native bridge fetch 适配层：fetch 形状契约以 reject 报错"
+    },
+    "apps/mobile/src/services/llm-native-fetch-shim.ts#throw err;": {
+      "form": "T6",
+      "line": 278,
+      "disposition": "KEEP",
+      "reason": "平台强制（fetch AbortError 同族）：未知 bridge 错误原样 reject（fetch 契约）"
+    },
+    "apps/mobile/src/services/llm-native-fetch-shim.ts#throw new NativeSseTransportError(code, err instanceof Error ? err.message : String(err), requestId);": {
+      "form": "T5",
+      "line": 275,
+      "disposition": "KEEP",
+      "reason": "平台强制（fetch AbortError 同族）：network/timeout 映射 transport 错误 reject"
+    },
+    "apps/mobile/src/services/mcp-config.store.ts#throw written.error;": {
+      "form": "T1",
+      "line": 124,
+      "disposition": "KEEP",
+      "reason": "写路径口径（见文件头）：core 的业务失败转 throw，由 UI 边界收口"
+    },
+    "apps/mobile/src/services/mcp-config.store.ts#throw refreshed.error;": {
+      "form": "T1",
+      "line": 150,
+      "disposition": "KEEP",
+      "reason": "同上"
+    },
+    "apps/mobile/src/services/mcp-config.store.ts#throw renamed.error;": {
+      "form": "T1",
+      "line": 147,
+      "disposition": "KEEP",
+      "reason": "写路径口径（见文件头）：core 的业务失败转 throw，由 UI 边界收口"
+    },
+    "apps/mobile/src/services/mcp-request-adapter.ts#throw new NativeSseAbortError(requestId);": {
+      "form": "T5",
+      "line": 185,
+      "disposition": "KEEP",
+      "reason": "平台强制（AbortError）：native abort 回传统一成 AbortError"
+    },
+    "apps/mobile/src/services/mcp-request-adapter.ts#throw new McpNativeRequestError({kind: 'network', action: 'retry', detail: `call timeout after ${deps.timeoutMs}ms`});": {
+      "form": "T5",
+      "line": 139,
+      "disposition": "KEEP",
+      "reason": "平台强制（Promise 无 Result 通道）：传输失败以 reject 上行交 transport 归一"
+    },
+    "apps/mobile/src/services/mcp-request-adapter.ts#throw new McpNativeRequestError({kind: 'network', action: 'retry', detail: err instanceof Error ? err.message : String(err)});": {
+      "form": "T5",
+      "line": 193,
+      "disposition": "KEEP",
+      "reason": "同上"
+    },
+    "apps/mobile/src/services/mcp-request-adapter.ts#throw new McpNativeRequestError({kind: 'protocol', action: 'report', detail: `mcp-request 仅支持 GET/POST（收到 ${req.method}）`});": {
+      "form": "T5",
+      "line": 158,
+      "disposition": "KEEP",
+      "reason": "平台强制（Promise 无 Result 通道）：误用以 reject 上行"
+    },
+    "apps/mobile/src/services/mcp-request-adapter.ts#throw err;": {
+      "form": "T6",
+      "line": 179,
+      "disposition": "KEEP",
+      "reason": "平台强制（AbortError 原样上抛交 core 识别）"
+    },
+    "apps/mobile/src/services/mcp-request-adapter.ts#throw new McpNativeRequestError({kind: 'protocol', action: 'report', detail: err instanceof Error ? err.message : String(err)});": {
+      "form": "T5",
+      "line": 189,
+      "disposition": "KEEP",
+      "reason": "平台强制（Promise 无 Result 通道）：spec Step 6 映射 invalid → protocol/report"
+    },
+    "apps/mobile/src/services/prompt-preview.service.ts#throw new AssertionError('prompt preview 未传 shouldBail，弃权不应出现');": {
+      "form": "T5",
+      "line": 72,
+      "disposition": "KEEP",
+      "reason": "不变量破坏（代码写错才可达），按总纲走 assert/AssertionError，不占产品码"
     },
     "apps/mobile/src/services/rn-file-io.ts#throw new AppError('INFRA_UNSUPPORTED_PLATFORM', {detail: 'react-native-blob-util.fs unavailable'});": {
       "form": "T3",
@@ -430,15 +616,21 @@
       "disposition": "KEEP",
       "reason": "越根校验，沙箱内安全护栏"
     },
+    "apps/mobile/src/web/shared/mermaid-core.ts#throw err;": {
+      "form": "T6",
+      "line": 77,
+      "disposition": "KEEP",
+      "reason": "mermaid 第三方 SDK 的 render 只以 reject 报错：catch 只清理 d<id> 残留错误元素后原样透传，终端 renderCodeBlocks 的 catch 收口成 UI 失败标记"
+    },
     "apps/mobile/src/webview-host/typed-message-bridge.ts#throw new Error(versionError);": {
       "form": "T4",
-      "line": 30,
+      "line": 45,
       "disposition": "KEEP",
       "reason": "webview bridge 边界：坏信封由宿主 onMessage catch 后静默丢弃"
     },
     "apps/mobile/src/webview-host/typed-message-bridge.ts#throw new Error(shapeError);": {
       "form": "T4",
-      "line": 34,
+      "line": 49,
       "disposition": "KEEP",
       "reason": "webview bridge 边界：坏信封由宿主 onMessage catch 后静默丢弃"
     },
@@ -466,6 +658,12 @@
       "disposition": "KEEP",
       "reason": "平台边界：仅 android/ios 有 WebView 资产布局，同步 API 无失败位"
     },
+    "packages/cloud-sync-driver-s3/src/create-s3-object-storage.ts#throw error;": {
+      "form": "T6",
+      "line": 79,
+      "disposition": "KEEP",
+      "reason": "平台强制：ObjectStoragePort.head 契约为 throw 通道（接口在 core、返回 Promise 非 Result，跨包协议）；coordinator 的 readRemoteStatus 不接它，实际由桌面云同步 handler 的 doPull catch 收口（apps/desktop/src/main/ipc/handlers/cloud-sync.ts）。"
+    },
     "packages/cloud-sync-driver-s3/src/create-s3-object-storage.ts#throw new Error(`S3 GetObject 未返回 ETag: ${key}`);": {
       "form": "T4",
       "line": 88,
@@ -477,6 +675,12 @@
       "line": 93,
       "disposition": "KEEP",
       "reason": "S3 第三方 SDK 边界：GetObject 响应缺 Body 属服务端异常，由上层基础设施错误收口。"
+    },
+    "packages/core/src/common/assert.ts#throw new AssertionError(message);": {
+      "form": "T5",
+      "line": 18,
+      "disposition": "KEEP",
+      "reason": "不变量破坏（代码写错才可达），按总纲走 assert/AssertionError，不占产品码。"
     },
     "packages/core/src/common/update-check.ts#throw new Error(`无法解析版本标签: ${tagName}`);": {
       "form": "T4",
@@ -520,21 +724,39 @@
       "disposition": "KEEP",
       "reason": "AbortController 超时是 fetch 平台边界（策略 §2 硬例外），在适配层转成用户文案。"
     },
+    "packages/core/src/common/update-check.ts#throw err;": {
+      "form": "T6",
+      "line": 114,
+      "disposition": "KEEP",
+      "reason": "原样再抛保留原始网络错误信息；resolveLatest 属 GitHub API 边界（infra 适配层），reject 由 IPC 边界 formatIpcError 收口。"
+    },
     "packages/core/src/common/update-check.ts#throw new Error(\"网络不可用，无法检查更新\");": {
       "form": "T4",
-      "line": 116,
+      "line": 117,
       "disposition": "KEEP",
       "reason": "非 Error 抛出值来自注入的 fetchFn（网络边界），update-check 属 infra 适配层。"
     },
     "packages/core/src/common/update-check.ts#throw new Error(\"更新检查已禁用（测试环境）\");": {
       "form": "T4",
-      "line": 136,
+      "line": 137,
       "disposition": "KEEP",
       "reason": "e2e 专用短路钩子，刻意走 reject 模拟「更新检查失败」错误态；update-check 属 infra 适配层。"
     },
+    "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts#throw corruptMessageRow(row, \"content_json\", content.error);": {
+      "form": "T6",
+      "line": 75,
+      "disposition": "KEEP",
+      "reason": "repository 读边界约定：存储行损坏转 CHAT_MESSAGE_CORRUPT 抛出，损坏数据没有可继续的业务语义，由调用侧 catch 收口展示。"
+    },
+    "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts#throw corruptMessageRow(row, \"raw_json\", error);": {
+      "form": "T6",
+      "line": 95,
+      "disposition": "KEEP",
+      "reason": "repository 读边界约定：raw_json 解析失败转 CHAT_MESSAGE_CORRUPT 抛出，由调用侧 catch 收口展示（同 rowToMessage 口径）。"
+    },
     "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts#throw AbortError.create();": {
       "form": "T2",
-      "line": 392,
+      "line": 337,
       "disposition": "KEEP",
       "reason": "缺理由：nm-throw: keep 注释未带理由，须补"
     },
@@ -550,29 +772,35 @@
       "disposition": "ALLOWED",
       "reason": "白名单自动判定（transaction）"
     },
+    "packages/core/src/domain/tool/logic/tool-runner.ts#throw e;": {
+      "form": "T6",
+      "line": 148,
+      "disposition": "KEEP",
+      "reason": "在途取消竞速的 reject 是平台协议例外（Promise 无 Result 通道），AbortError 载荷原样上行供 isAbortLikeError 识别。"
+    },
     "packages/core/src/domain/vfs/content-store/impl/sqlite-vfs-content-store.ts#throw new AppError(\"VFS_CONTENT_BLOB_MISSING\", { detail: `vfs_content_blob 缺失且无可回退明文: ${contentHash}`, contentHash });": {
       "form": "T3",
-      "line": 283,
+      "line": 259,
       "disposition": "KEEP",
       "reason": "blob 缺失且无回退明文=数据受损域失败；消费方均在事务回调内（restore-path 持 tx、vfs-tree-copy replaceSubtree/Outcome 边界转 createAbortError、seed 链），抛错即回滚，service 边界 unwrapTxDomainError 收进 Result.err。"
     },
     "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts#throw new AppError(\"VFS_NOT_FOUND\", { path: oldBase, detail: `Path not found: ${oldBase}` });": {
       "form": "T3",
-      "line": 689,
+      "line": 636,
       "disposition": "KEEP",
       "reason": "幽灵路径按既定设计抛错回滚：唯一消费链 renamePrefix（revision-aware-vfs）注释明言 repo 抛 VFS_NOT_FOUND，边界已 unwrapTxDomainError 转 Err。"
     },
-    "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.ts#throw new AppError(\"VFS_NOT_FOUND\", { detail: `Revision not found: entry ${entryId}@${version}`, entryId, version });": {
+    "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.ts#throw new AppError(\"VFS_NOT_FOUND\", {detail: `Revision not found: entry ${entryId}@${version}`, entryId, version});": {
       "form": "T3",
-      "line": 278,
+      "line": 201,
       "disposition": "KEEP",
-      "reason": "守护 T-RB-REF-MISSING 不变量（ref_count 不得悬空）：adjustRefCount delta>0 命中 0 行即单条缺失；消费方 RevisionRefCount.adjust 链全部落在事务回调内，抛错回滚 + service 边界转码。"
+      "reason": "port 契约锁定：vfs-revision.port.ts adjustRefCount 声明 Promise<void> 且 @throws"
     },
-    "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.ts#throw new AppError(\"VFS_NOT_FOUND\", { detail: `Revision not found: entry ${first.entryId}@${first.version} （共 ${missing.length} 条缺失）`, missing });": {
+    "packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.ts#throw new AppError(\"VFS_NOT_FOUND\", {detail: `Revision not found: entry ${first.entryId}@${first.version} （共 ${missing.length} 条缺失）`, missing});": {
       "form": "T3",
-      "line": 306,
+      "line": 229,
       "disposition": "KEEP",
-      "reason": "同 adjustRefCount：batchAdjustRefCountWithDelta 批量 +1 前置存在性校验，守护 T-RB-REF-MISSING 不变量；事务回调内抛错回滚 + service 边界转码。"
+      "reason": "port 契约锁定：vfs-revision.port.ts batchAdjustRefCount(WithDelta) 的 @throws 契约"
     },
     "packages/core/src/errors/either.ts#throw new Error(\"Result.revive 收到非 Result 线上形态：调用方对载荷的形状断言不成立\");": {
       "form": "T4",
@@ -594,19 +822,19 @@
     },
     "packages/core/src/i18n/catalog.ts#throw new Error(`[parseCoreCatalog] ${key || \"<根>\"} 的中间节点必须是对象映射、叶子必须是字符串（形似数字/布尔的裸值必须加引号），实际是 ${actualType}`);": {
       "form": "T4",
-      "line": 40,
+      "line": 50,
       "disposition": "KEEP",
       "reason": "catalog 结构不变量：构建期内嵌资源写坏即打包错误，非用户可触发失败。"
     },
     "packages/core/src/i18n/catalog.ts#throw new Error(`[parseCoreCatalog] key 不匹配 keyRule（^(error|label|ui)\\\\.域.名字段，全小写 snake_case，3-5 段）：${key}`);": {
       "form": "T4",
-      "line": 48,
+      "line": 58,
       "disposition": "KEEP",
       "reason": "catalog 结构不变量：构建期内嵌资源写坏即打包错误，非用户可触发失败。"
     },
     "packages/core/src/i18n/catalog.ts#throw new Error(`[parseCoreCatalog] key 的域不在词表内（${area}.* 只允许 ${domains.join(\" / \")}）：${key}`);": {
       "form": "T4",
-      "line": 54,
+      "line": 74,
       "disposition": "KEEP",
       "reason": "catalog 结构不变量：构建期内嵌资源写坏即打包错误，非用户可触发失败。"
     },
@@ -624,31 +852,43 @@
     },
     "packages/core/src/infra/llm-protocol/impl/anthropic.adapter.ts#throw fetched.error;": {
       "form": "T1",
-      "line": 100,
+      "line": 101,
       "disposition": "KEEP",
       "reason": "llm-protocol port 出口（总纲 §五例外 5）：port 契约无失败位，ProviderError 走 throw 通道供 retry 按 catch+code 分派。"
+    },
+    "packages/core/src/infra/llm-protocol/impl/anthropic.adapter.ts#throw error;": {
+      "form": "T6",
+      "line": 76,
+      "disposition": "KEEP",
+      "reason": "adapter 层契约：chat 以 reject 报错（Promise<LlmChatResult> 无失败分支），由 model-request.service 的 catch 收口成 Result。"
     },
     "packages/core/src/infra/llm-protocol/impl/gemini.adapter.ts#throw fetched.error;": {
       "form": "T1",
-      "line": 77,
+      "line": 78,
       "disposition": "KEEP",
       "reason": "llm-protocol port 出口（总纲 §五例外 5）：port 契约无失败位，ProviderError 走 throw 通道供 retry 按 catch+code 分派。"
     },
+    "packages/core/src/infra/llm-protocol/impl/gemini.adapter.ts#throw error;": {
+      "form": "T6",
+      "line": 54,
+      "disposition": "KEEP",
+      "reason": "adapter 层契约：chat 以 reject 报错（Promise<LlmChatResult> 无失败分支），由 model-request.service 的 catch 收口成 Result。"
+    },
     "packages/core/src/infra/llm-protocol/impl/gemini.adapter.ts#throw mapped.error;": {
       "form": "T1",
-      "line": 92,
+      "line": 93,
       "disposition": "KEEP",
       "reason": "llm-protocol port 出口（总纲 §五例外 5）：port 契约无失败位，ProviderError 走 throw 通道供 retry 按 catch+code 分派。"
     },
     "packages/core/src/infra/llm-protocol/impl/gemini.adapter.ts#throw parts.error;": {
       "form": "T1",
-      "line": 97,
+      "line": 98,
       "disposition": "KEEP",
       "reason": "llm-protocol port 出口（总纲 §五例外 5）：port 契约无失败位，ProviderError 走 throw 通道供 retry 按 catch+code 分派。"
     },
     "packages/core/src/infra/llm-protocol/impl/openai.adapter.ts#throw fetched.error;": {
       "form": "T1",
-      "line": 106,
+      "line": 107,
       "disposition": "KEEP",
       "reason": "llm-protocol port 出口（总纲 §五例外 5）：port 契约无失败位，ProviderError 走 throw 通道供 retry 按 catch+code 分派。"
     },
@@ -658,21 +898,27 @@
       "disposition": "KEEP",
       "reason": "llm-protocol port 出口（总纲 §五例外 5）：port 契约无失败位，ProviderError 走 throw 通道供 retry 按 catch+code 分派。"
     },
+    "packages/core/src/infra/llm-protocol/impl/openai.adapter.ts#throw error;": {
+      "form": "T6",
+      "line": 80,
+      "disposition": "KEEP",
+      "reason": "adapter 层契约：chat 以 reject 报错（Promise<LlmChatResult> 无失败分支），由 model-request.service 的 catch 收口成 Result。"
+    },
     "packages/core/src/infra/llm-protocol/impl/openai.adapter.ts#throw mapped.error;": {
       "form": "T1",
-      "line": 127,
+      "line": 128,
       "disposition": "KEEP",
       "reason": "llm-protocol port 出口（总纲 §五例外 5）：port 契约无失败位，ProviderError 走 throw 通道供 retry 按 catch+code 分派。"
     },
     "packages/core/src/infra/llm-protocol/impl/openai.adapter.ts#throw content.error;": {
       "form": "T1",
-      "line": 132,
+      "line": 133,
       "disposition": "KEEP",
       "reason": "llm-protocol port 出口（总纲 §五例外 5）：port 契约无失败位，ProviderError 走 throw 通道供 retry 按 catch+code 分派。"
     },
     "packages/core/src/infra/llm-protocol/logic/anthropic-sse-parser.ts#throw asserted.error;": {
       "form": "T1",
-      "line": 280,
+      "line": 285,
       "disposition": "KEEP",
       "reason": "llm-protocol port 出口（总纲 §五例外 5）：port 契约无失败位，ProviderError 走 throw 通道供 retry 按 catch+code 分派。"
     },
@@ -688,11 +934,257 @@
       "disposition": "KEEP",
       "reason": "llm-protocol port 出口（总纲 §五例外 5）：port 契约无失败位，ProviderError 走 throw 通道供 retry 按 catch+code 分派。"
     },
+    "packages/core/src/infra/mcp/impl/create-mcp-connection-manager.ts#throw RequestAbort.isAbortLikeError(error) ? error : AbortError.create();": {
+      "form": "T6",
+      "line": 267,
+      "disposition": "KEEP",
+      "reason": "平台协议例外（spec §五）：取消不进 Result，AbortError 透传给工具 run 转成 TOOL_CANCELLED"
+    },
+    "packages/core/src/infra/mcp/impl/http-mcp-transport.ts#throw cause;": {
+      "form": "T6",
+      "line": 72,
+      "disposition": "KEEP",
+      "reason": "官方 SDK Transport.send 只以 reject 报错（无 Result 通道），abort-like / McpTransportError 原样透传。"
+    },
+    "packages/core/src/infra/mcp/impl/http-mcp-transport.ts#throw new McpTransportError(`MCP request failed: ${cause instanceof Error ? cause.message : String(cause)}`);": {
+      "form": "T5",
+      "line": 74,
+      "disposition": "KEEP",
+      "reason": "官方 SDK Transport.send 只以 reject 报错（无 Result 通道），未知故障包 McpTransportError 上行。"
+    },
+    "packages/core/src/infra/mcp/impl/http-mcp-transport.ts#throw new McpTransportError(`MCP server returned HTTP ${response.status}`, raw, McpRequestHeaders.pick(response.headers, \"www-authenticate\"));": {
+      "form": "T5",
+      "line": 83,
+      "disposition": "KEEP",
+      "reason": "官方 SDK Transport.send 只以 reject 报错（无 Result 通道），非 2xx 转 McpTransportError 带 raw。"
+    },
+    "packages/core/src/infra/mcp/impl/http-mcp-transport.ts#throw new McpTransportError(\"MCP SSE response contained no valid JSON-RPC frame\", raw);": {
+      "form": "T5",
+      "line": 92,
+      "disposition": "KEEP",
+      "reason": "官方 SDK Transport.send 只以 reject 报错（无 Result 通道），SSE 全坏帧转 McpTransportError 带 raw。"
+    },
+    "packages/core/src/infra/mcp/impl/http-mcp-transport.ts#throw new McpTransportError(\"MCP response body is not valid JSON\", raw);": {
+      "form": "T5",
+      "line": 102,
+      "disposition": "KEEP",
+      "reason": "官方 SDK Transport.send 只以 reject 报错（无 Result 通道），body 非法 JSON 转 McpTransportError 带 raw。"
+    },
+    "packages/core/src/infra/mcp/impl/http-mcp-transport.ts#throw new McpTransportError(\"MCP JSON response contained no valid JSON-RPC message\", raw);": {
+      "form": "T5",
+      "line": 117,
+      "disposition": "KEEP",
+      "reason": "官方 SDK Transport.send 只以 reject 报错（无 Result 通道），JSON 全坏帧转 McpTransportError 带 raw。"
+    },
+    "packages/core/src/infra/mcp/impl/http-mcp-transport.ts#throw new McpTransportError(`Unsupported MCP response content-type: ${raw.contentType ?? \"(missing)\"}`, raw);": {
+      "form": "T5",
+      "line": 124,
+      "disposition": "KEEP",
+      "reason": "官方 SDK Transport.send 只以 reject 报错（无 Result 通道），不支持的 content-type 转 McpTransportError 带 raw。"
+    },
+    "packages/core/src/infra/mcp/impl/mcp-oauth-provider.ts#throw new Error(`缺少 PKCE codeVerifier：${this.ref}（授权发起记录丢失，请重新发起授权）`);": {
+      "form": "T4",
+      "line": 142,
+      "disposition": "KEEP",
+      "reason": "OAuthClientProvider 契约边界：codeVerifier(): Promise<string> 无 Result 通道，缺失只能以异常上行、由官方 auth() 收口。"
+    },
+    "packages/core/src/infra/sksp/impl/base-sqlite-secret-store.ts#throw new SkspError(\"DECRYPT_FAILED\", `Unsupported algo for ${ref}. Re-run: nm provider edit --apiKey`, { ref });": {
+      "form": "T5",
+      "line": 41,
+      "disposition": "KEEP",
+      "reason": "SKSP 的 SkspCryptoStrategy / SecretStore 端口是 Promise reject 契约（sksp-strategy.port.ts、secret-store.port.ts 签名都不是 Result），兄弟实现同口径；最终由桌面 provider IPC handler 的 catch 收口"
+    },
+    "packages/core/src/infra/sksp/impl/sksp-node-factory.ts#throw new SkspError(operation === \"encrypt\" ? \"ENCRYPT_FAILED\" : \"DECRYPT_FAILED\", operation === \"encrypt\" ? `${displayName} is only available on ${platform}` : `${displayName} decrypt failed for ${ref} (not on ${platform}). Re-run: nm provider edit --apiKey`, { ref });": {
+      "form": "T5",
+      "line": 99,
+      "disposition": "KEEP",
+      "reason": "SKSP 的 SkspCryptoStrategy / SecretStore 端口是 Promise reject 契约（sksp-strategy.port.ts、secret-store.port.ts 签名都不是 Result），兄弟实现同口径；最终由桌面 provider IPC handler 的 catch 收口"
+    },
+    "packages/core/src/infra/sksp/impl/sksp-node-factory.ts#throw new SkspError(\"DECRYPT_FAILED\", `Invalid master key in ${label} for ${ref}. Re-run: nm provider edit --apiKey`, { ref });": {
+      "form": "T5",
+      "line": 109,
+      "disposition": "KEEP",
+      "reason": "SKSP 的 SkspCryptoStrategy / SecretStore 端口是 Promise reject 契约（sksp-strategy.port.ts、secret-store.port.ts 签名都不是 Result），兄弟实现同口径；最终由桌面 provider IPC handler 的 catch 收口"
+    },
+    "packages/core/src/infra/sksp/impl/sksp-node-factory.ts#throw cause;": {
+      "form": "T6",
+      "line": 119,
+      "disposition": "KEEP",
+      "reason": "SKSP 的 SkspCryptoStrategy / SecretStore 端口是 Promise reject 契约（sksp-strategy.port.ts、secret-store.port.ts 签名都不是 Result），兄弟实现同口径；最终由桌面 provider IPC handler 的 catch 收口"
+    },
+    "packages/core/src/infra/sksp/impl/sksp-node-factory.ts#throw new SkspError(code, code === \"ENCRYPT_FAILED\" ? `${label} access failed for ${ref}` : `${label} access failed for ${ref}. Re-run: nm provider edit --apiKey`, { ref, cause });": {
+      "form": "T5",
+      "line": 122,
+      "disposition": "KEEP",
+      "reason": "SKSP 的 SkspCryptoStrategy / SecretStore 端口是 Promise reject 契约（sksp-strategy.port.ts、secret-store.port.ts 签名都不是 Result），兄弟实现同口径；最终由桌面 provider IPC handler 的 catch 收口"
+    },
+    "packages/core/src/infra/sksp/logic/aes-gcm.ts#throw new SkspError(\"ENCRYPT_FAILED\", `AES encrypt failed for ${ref}`, { ref, cause });": {
+      "form": "T5",
+      "line": 26,
+      "disposition": "KEEP",
+      "reason": "SKSP 的 SkspCryptoStrategy / SecretStore 端口是 Promise reject 契约（sksp-strategy.port.ts、secret-store.port.ts 签名都不是 Result），兄弟实现同口径；最终由桌面 provider IPC handler 的 catch 收口"
+    },
     "packages/core/src/infra/sksp/logic/aes-gcm.ts#throw new Error(\"ciphertext too short\");": {
       "form": "T4",
-      "line": 35,
+      "line": 36,
       "disposition": "KEEP",
       "reason": "OS 加密解密边界：密文短于 GCM tag 属输入损坏检错，随即由 SkspError 收口。"
+    },
+    "packages/core/src/infra/sksp/logic/aes-gcm.ts#throw new SkspError(\"DECRYPT_FAILED\", `AES decrypt failed for ${ref}. Re-run: nm provider edit --apiKey`, { ref, cause });": {
+      "form": "T5",
+      "line": 45,
+      "disposition": "KEEP",
+      "reason": "SKSP 的 SkspCryptoStrategy / SecretStore 端口是 Promise reject 契约（sksp-strategy.port.ts、secret-store.port.ts 签名都不是 Result），兄弟实现同口径；最终由桌面 provider IPC handler 的 catch 收口"
+    },
+    "packages/core/src/infra/sksp/logic/row-binary.ts#throw new SkspError(\"DB_ERROR\", \"Invalid ciphertext column type\");": {
+      "form": "T5",
+      "line": 23,
+      "disposition": "KEEP",
+      "reason": "SKSP 的 SkspCryptoStrategy / SecretStore 端口是 Promise reject 契约（sksp-strategy.port.ts、secret-store.port.ts 签名都不是 Result），兄弟实现同口径；最终由桌面 provider IPC handler 的 catch 收口"
+    },
+    "packages/core/src/infra/sksp/logic/row-binary.ts#throw new SkspError(\"DECRYPT_FAILED\", `Missing IV for ${ref}`, { ref });": {
+      "form": "T5",
+      "line": 31,
+      "disposition": "KEEP",
+      "reason": "SKSP 的 SkspCryptoStrategy / SecretStore 端口是 Promise reject 契约（sksp-strategy.port.ts、secret-store.port.ts 签名都不是 Result），兄弟实现同口径；最终由桌面 provider IPC handler 的 catch 收口"
+    },
+    "packages/core/src/infra/sksp/logic/row-binary.ts#throw new SkspError(\"DB_ERROR\", \"Invalid iv column type\");": {
+      "form": "T5",
+      "line": 40,
+      "disposition": "KEEP",
+      "reason": "SKSP 的 SkspCryptoStrategy / SecretStore 端口是 Promise reject 契约（sksp-strategy.port.ts、secret-store.port.ts 签名都不是 Result），兄弟实现同口径；最终由桌面 provider IPC handler 的 catch 收口"
+    },
+    "packages/core/src/infra/sksp/sksp-error.ts#throw new SkspError(\"INVALID_REF\", `Invalid secret ref: ${ref}`, { ref });": {
+      "form": "T5",
+      "line": 37,
+      "disposition": "KEEP",
+      "reason": "SKSP 的 SkspCryptoStrategy / SecretStore 端口是 Promise reject 契约（sksp-strategy.port.ts、secret-store.port.ts 签名都不是 Result），兄弟实现同口径；最终由桌面 provider IPC handler 的 catch 收口"
+    },
+    "packages/core/src/infra/sql-template/expression.ts#throw new SqlTemplateError(\"EXPRESSION_ERROR\", \"Empty test expression\", errorOptions);": {
+      "form": "T5",
+      "line": 104,
+      "disposition": "UNTRIAGED",
+      "reason": "定性欠账（2026-11-26）：SQL 模板解析器在递归下降内部用 throw 传递 SqlTemplateError，外层沿 TdbcTemplate 查询链以 reject 报错；改成 Result 要整体改造 parser / expression 的错误传递与全部调用面，不在本轮范围，另起一轮处理"
+    },
+    "packages/core/src/infra/sql-template/expression.ts#throw new SqlTemplateError(\"EXPRESSION_ERROR\", `Disallowed syntax in test expression: ${expr}`, errorOptions);": {
+      "form": "T5",
+      "line": 107,
+      "disposition": "UNTRIAGED",
+      "reason": "定性欠账（2026-11-26）：SQL 模板解析器在递归下降内部用 throw 传递 SqlTemplateError，外层沿 TdbcTemplate 查询链以 reject 报错；改成 Result 要整体改造 parser / expression 的错误传递与全部调用面，不在本轮范围，另起一轮处理"
+    },
+    "packages/core/src/infra/sql-template/expression.ts#throw new SqlTemplateError(\"EXPRESSION_ERROR\", `Failed to evaluate test expression: ${expr}`, { ...errorOptions, cause: err });": {
+      "form": "T5",
+      "line": 119,
+      "disposition": "UNTRIAGED",
+      "reason": "定性欠账（2026-11-26）：SQL 模板解析器在递归下降内部用 throw 传递 SqlTemplateError，外层沿 TdbcTemplate 查询链以 reject 报错；改成 Result 要整体改造 parser / expression 的错误传递与全部调用面，不在本轮范围，另起一轮处理"
+    },
+    "packages/core/src/infra/sql-template/parser.ts#throw new SqlTemplateError(\"UNCLOSED_TAG\", \"Unexpected trailing content\", { offset: pos.value, });": {
+      "form": "T5",
+      "line": 32,
+      "disposition": "UNTRIAGED",
+      "reason": "定性欠账（2026-11-26）：SQL 模板解析器在递归下降内部用 throw 传递 SqlTemplateError，外层沿 TdbcTemplate 查询链以 reject 报错；改成 Result 要整体改造 parser / expression 的错误传递与全部调用面，不在本轮范围，另起一轮处理"
+    },
+    "packages/core/src/infra/sql-template/parser.ts#throw new SqlTemplateError(\"UNCLOSED_TAG\", `Unclosed tag <${closeTag}>`, { offset: pos.value, tagName: closeTag, });": {
+      "form": "T5",
+      "line": 48,
+      "disposition": "UNTRIAGED",
+      "reason": "定性欠账（2026-11-26）：SQL 模板解析器在递归下降内部用 throw 传递 SqlTemplateError，外层沿 TdbcTemplate 查询链以 reject 报错；改成 Result 要整体改造 parser / expression 的错误传递与全部调用面，不在本轮范围，另起一轮处理"
+    },
+    "packages/core/src/infra/sql-template/parser.ts#throw new SqlTemplateError(\"MALFORMED_TAG\", \"Unclosed #{ binding\", { offset: start, });": {
+      "form": "T5",
+      "line": 89,
+      "disposition": "UNTRIAGED",
+      "reason": "定性欠账（2026-11-26）：SQL 模板解析器在递归下降内部用 throw 传递 SqlTemplateError，外层沿 TdbcTemplate 查询链以 reject 报错；改成 Result 要整体改造 parser / expression 的错误传递与全部调用面，不在本轮范围，另起一轮处理"
+    },
+    "packages/core/src/infra/sql-template/parser.ts#throw new SqlTemplateError(\"MALFORMED_TAG\", \"Unclosed ${ binding\", { offset: start, });": {
+      "form": "T5",
+      "line": 101,
+      "disposition": "UNTRIAGED",
+      "reason": "定性欠账（2026-11-26）：SQL 模板解析器在递归下降内部用 throw 传递 SqlTemplateError，外层沿 TdbcTemplate 查询链以 reject 报错；改成 Result 要整体改造 parser / expression 的错误传递与全部调用面，不在本轮范围，另起一轮处理"
+    },
+    "packages/core/src/infra/sql-template/parser.ts#throw new SqlTemplateError(\"MALFORMED_TAG\", `Unexpected closing tag </${close.name}>`, { offset: start, tagName: close.name });": {
+      "form": "T5",
+      "line": 120,
+      "disposition": "UNTRIAGED",
+      "reason": "定性欠账（2026-11-26）：SQL 模板解析器在递归下降内部用 throw 传递 SqlTemplateError，外层沿 TdbcTemplate 查询链以 reject 报错；改成 Result 要整体改造 parser / expression 的错误传递与全部调用面，不在本轮范围，另起一轮处理"
+    },
+    "packages/core/src/infra/sql-template/parser.ts#throw new SqlTemplateError(\"MALFORMED_TAG\", `Mismatched closing tag: expected </${closeTag}>, got </${close.name}>`, { offset: start, tagName: close.name });": {
+      "form": "T5",
+      "line": 123,
+      "disposition": "UNTRIAGED",
+      "reason": "定性欠账（2026-11-26）：SQL 模板解析器在递归下降内部用 throw 传递 SqlTemplateError，外层沿 TdbcTemplate 查询链以 reject 报错；改成 Result 要整体改造 parser / expression 的错误传递与全部调用面，不在本轮范围，另起一轮处理"
+    },
+    "packages/core/src/infra/sql-template/parser.ts#throw new SqlTemplateError(\"UNKNOWN_TAG\", `Unknown tag <${unknown[1]}>`, { offset: start, tagName: unknown[1], });": {
+      "form": "T5",
+      "line": 133,
+      "disposition": "UNTRIAGED",
+      "reason": "定性欠账（2026-11-26）：SQL 模板解析器在递归下降内部用 throw 传递 SqlTemplateError，外层沿 TdbcTemplate 查询链以 reject 报错；改成 Result 要整体改造 parser / expression 的错误传递与全部调用面，不在本轮范围，另起一轮处理"
+    },
+    "packages/core/src/infra/sql-template/parser.ts#throw new SqlTemplateError(\"MALFORMED_TAG\", `<${tagName}> must appear inside <choose>`, { offset: start, tagName });": {
+      "form": "T5",
+      "line": 146,
+      "disposition": "UNTRIAGED",
+      "reason": "定性欠账（2026-11-26）：SQL 模板解析器在递归下降内部用 throw 传递 SqlTemplateError，外层沿 TdbcTemplate 查询链以 reject 报错；改成 Result 要整体改造 parser / expression 的错误传递与全部调用面，不在本轮范围，另起一轮处理"
+    },
+    "packages/core/src/infra/sql-template/parser.ts#throw new SqlTemplateError(\"MALFORMED_TAG\", \"Only <when> and <otherwise> allowed inside <choose>\", { offset: tagStart });": {
+      "form": "T5",
+      "line": 203,
+      "disposition": "UNTRIAGED",
+      "reason": "定性欠账（2026-11-26）：SQL 模板解析器在递归下降内部用 throw 传递 SqlTemplateError，外层沿 TdbcTemplate 查询链以 reject 报错；改成 Result 要整体改造 parser / expression 的错误传递与全部调用面，不在本轮范围，另起一轮处理"
+    },
+    "packages/core/src/infra/sql-template/parser.ts#throw new SqlTemplateError(\"MALFORMED_TAG\", \"Duplicate <otherwise> in <choose>\", { offset: tagStart });": {
+      "form": "T5",
+      "line": 225,
+      "disposition": "UNTRIAGED",
+      "reason": "定性欠账（2026-11-26）：SQL 模板解析器在递归下降内部用 throw 传递 SqlTemplateError，外层沿 TdbcTemplate 查询链以 reject 报错；改成 Result 要整体改造 parser / expression 的错误传递与全部调用面，不在本轮范围，另起一轮处理"
+    },
+    "packages/core/src/infra/sql-template/parser.ts#throw new SqlTemplateError(\"MALFORMED_TAG\", `Invalid child <${unknownChild[1]}> inside <choose>`, { offset: tagStart, tagName: unknownChild[1] });": {
+      "form": "T5",
+      "line": 244,
+      "disposition": "UNTRIAGED",
+      "reason": "定性欠账（2026-11-26）：SQL 模板解析器在递归下降内部用 throw 传递 SqlTemplateError，外层沿 TdbcTemplate 查询链以 reject 报错；改成 Result 要整体改造 parser / expression 的错误传递与全部调用面，不在本轮范围，另起一轮处理"
+    },
+    "packages/core/src/infra/sql-template/parser.ts#throw new SqlTemplateError(\"UNKNOWN_TAG\", \"Unknown tag inside <choose>\", { offset: tagStart, });": {
+      "form": "T5",
+      "line": 247,
+      "disposition": "UNTRIAGED",
+      "reason": "定性欠账（2026-11-26）：SQL 模板解析器在递归下降内部用 throw 传递 SqlTemplateError，外层沿 TdbcTemplate 查询链以 reject 报错；改成 Result 要整体改造 parser / expression 的错误传递与全部调用面，不在本轮范围，另起一轮处理"
+    },
+    "packages/core/src/infra/sql-template/parser.ts#throw new SqlTemplateError(\"UNCLOSED_TAG\", \"Unclosed <choose>\", { offset: start, tagName: \"choose\", });": {
+      "form": "T5",
+      "line": 252,
+      "disposition": "UNTRIAGED",
+      "reason": "定性欠账（2026-11-26）：SQL 模板解析器在递归下降内部用 throw 传递 SqlTemplateError，外层沿 TdbcTemplate 查询链以 reject 报错；改成 Result 要整体改造 parser / expression 的错误传递与全部调用面，不在本轮范围，另起一轮处理"
+    },
+    "packages/core/src/infra/sql-template/parser.ts#throw new SqlTemplateError(\"UNKNOWN_TAG\", `Unknown tag <${tagName}>`, { offset: start, tagName, });": {
+      "form": "T5",
+      "line": 258,
+      "disposition": "UNTRIAGED",
+      "reason": "定性欠账（2026-11-26）：SQL 模板解析器在递归下降内部用 throw 传递 SqlTemplateError，外层沿 TdbcTemplate 查询链以 reject 报错；改成 Result 要整体改造 parser / expression 的错误传递与全部调用面，不在本轮范围，另起一轮处理"
+    },
+    "packages/core/src/infra/sql-template/parser.ts#throw new SqlTemplateError(\"MALFORMED_TAG\", \"Invalid closing tag\", { offset, });": {
+      "form": "T5",
+      "line": 268,
+      "disposition": "UNTRIAGED",
+      "reason": "定性欠账（2026-11-26）：SQL 模板解析器在递归下降内部用 throw 传递 SqlTemplateError，外层沿 TdbcTemplate 查询链以 reject 报错；改成 Result 要整体改造 parser / expression 的错误传递与全部调用面，不在本轮范围，另起一轮处理"
+    },
+    "packages/core/src/infra/sql-template/parser.ts#throw new SqlTemplateError(\"UNCLOSED_TAG\", `Unclosed <${tagName}>`, { offset, tagName, });": {
+      "form": "T5",
+      "line": 279,
+      "disposition": "UNTRIAGED",
+      "reason": "定性欠账（2026-11-26）：SQL 模板解析器在递归下降内部用 throw 传递 SqlTemplateError，外层沿 TdbcTemplate 查询链以 reject 报错；改成 Result 要整体改造 parser / expression 的错误传递与全部调用面，不在本轮范围，另起一轮处理"
+    },
+    "packages/core/src/infra/sql-template/parser.ts#throw new SqlTemplateError(\"MALFORMED_TAG\", `Malformed attributes on <${tagName}>`, { offset, tagName });": {
+      "form": "T5",
+      "line": 297,
+      "disposition": "UNTRIAGED",
+      "reason": "定性欠账（2026-11-26）：SQL 模板解析器在递归下降内部用 throw 传递 SqlTemplateError，外层沿 TdbcTemplate 查询链以 reject 报错；改成 Result 要整体改造 parser / expression 的错误传递与全部调用面，不在本轮范围，另起一轮处理"
+    },
+    "packages/core/src/infra/sql-template/parser.ts#throw new SqlTemplateError(\"MALFORMED_TAG\", `Missing required attribute \"${name}\" on <${tagName}>`, { offset, tagName });": {
+      "form": "T5",
+      "line": 305,
+      "disposition": "UNTRIAGED",
+      "reason": "定性欠账（2026-11-26）：SQL 模板解析器在递归下降内部用 throw 传递 SqlTemplateError，外层沿 TdbcTemplate 查询链以 reject 报错；改成 Result 要整体改造 parser / expression 的错误传递与全部调用面，不在本轮范围，另起一轮处理"
     },
     "packages/core/src/infra/tdbc/logic/open.ts#throw parsed.error;": {
       "form": "T1",
@@ -700,11 +1192,29 @@
       "disposition": "ALLOWED",
       "reason": "白名单自动判定（tdbc-driver）"
     },
+    "packages/core/src/infra/tdbc/logic/transaction-helper.ts#throw error;": {
+      "form": "T6",
+      "line": 32,
+      "disposition": "ALLOWED",
+      "reason": "白名单自动判定（transaction）"
+    },
     "packages/core/src/infra/tdbc/logic/transaction-helper.ts#throw r.error;": {
       "form": "T1",
       "line": 46,
       "disposition": "ALLOWED",
       "reason": "白名单自动判定（transaction）"
+    },
+    "packages/core/src/service/agent/impl/agent-runner.ts#throw e;": {
+      "form": "T6",
+      "line": 815,
+      "disposition": "KEEP",
+      "reason": "主 catch 最终出口的未知异常按转码矩阵保持 reject（Result 的 E 只装业务失败，不谎报），由 IPC 入口壳收口。"
+    },
+    "packages/core/src/service/agent/impl/agent-runner.ts#throw error;": {
+      "form": "T6",
+      "line": 932,
+      "disposition": "KEEP",
+      "reason": "转抛 helper 契约：把主 try 内的解包失败送进 run 主 catch 统一收尾（FAILED 事件 / 失败消息落库 / AppError 分流），return 会跳过收尾丢终态。"
     },
     "packages/core/src/service/agent/impl/chat-agent-session.ts#throw read.error;": {
       "form": "T1",
@@ -718,21 +1228,33 @@
       "disposition": "KEEP",
       "reason": "AgentSession.list 同款契约（总纲 §五7c）：listVisibleSessionMessages dep 与 chat-agent-session 是同一契约两端。"
     },
+    "packages/core/src/service/agent/logic/run-agent-turn.ts#throw error;": {
+      "form": "T6",
+      "line": 1130,
+      "disposition": "KEEP",
+      "reason": "主 catch 最终出口的未知异常按转码矩阵保持 reject（Result 的 E 只装业务失败，不谎报），由 IPC 入口壳收口。"
+    },
+    "packages/core/src/service/agent/logic/run-agent-turn.ts#throw failure;": {
+      "form": "T6",
+      "line": 361,
+      "disposition": "KEEP",
+      "reason": "转抛进调用方主 catch 统一收尾（终态补发判定 / onRunFailed / AppError 分流），技能装配点无 Result 通道（plain 签名）。"
+    },
     "packages/core/src/service/agent/logic/run-agent-turn.ts#throw result.error;": {
       "form": "T1",
-      "line": 439,
+      "line": 466,
       "disposition": "KEEP",
       "reason": "runner 收口漏斗（总纲 §五7a）：throw 喂同函数 catch 的统一收口——FAILED('') 补发 + onRunFailed 记账，直接 return 会跳过终态事件；mapResolveError 是 desktop rejection 契约的 OrThrow 边界。"
     },
     "packages/core/src/service/agent/logic/run-agent-turn.ts#throw new AppError(\"AGENT_MESSAGE_EMPTY\");": {
       "form": "T3",
-      "line": 647,
+      "line": 674,
       "disposition": "KEEP",
       "reason": "runner 收口漏斗（总纲 §五7a）：throw 喂同函数 catch 的统一收口——FAILED('') 补发 + onRunFailed 记账，直接 return 会跳过终态事件；mapResolveError 是 desktop rejection 契约的 OrThrow 边界。"
     },
     "packages/core/src/service/agent/logic/run-agent-turn.ts#throw tailRead.error;": {
       "form": "T1",
-      "line": 636,
+      "line": 663,
       "disposition": "KEEP",
       "reason": "runner 收口漏斗（总纲 §五7a）：throw 喂同函数 catch 的统一收口——FAILED('') 补发 + onRunFailed 记账，直接 return 会跳过终态事件；mapResolveError 是 desktop rejection 契约的 OrThrow 边界。"
     },
@@ -774,27 +1296,39 @@
     },
     "packages/core/src/service/chat/impl/session.service.ts#throw new AppError(\"CHAT_NOT_FOUND\", { detail: `session not found: ${session.id}`, kind: \"session\", id: session.id });": {
       "form": "T3",
-      "line": 223,
+      "line": 224,
       "disposition": "KEEP",
       "reason": "事务回调内必须靠抛错回滚——改 return 会在「子树已删、根删失败」时提交半删事务；delete() 边界已补 unwrapTxDomainError 收进 Result.err（p27 R1 修复）。"
     },
     "packages/core/src/service/chat/impl/session.service.ts#throw vfsCopied.error;": {
       "form": "T1",
-      "line": 363,
+      "line": 364,
       "disposition": "ALLOWED",
       "reason": "白名单自动判定（transaction）"
     },
     "packages/core/src/service/chat/impl/session.service.ts#throw AbortError.create();": {
       "form": "T2",
-      "line": 367,
+      "line": 368,
       "disposition": "ALLOWED",
       "reason": "白名单自动判定（transaction）"
     },
     "packages/core/src/service/chat/impl/session.service.ts#throw inserted.error;": {
       "form": "T1",
-      "line": 366,
+      "line": 367,
       "disposition": "ALLOWED",
       "reason": "白名单自动判定（transaction）"
+    },
+    "packages/core/src/service/compaction-conditions/impl/compaction-conditions-store.service.ts#throw invalidSchemaError(validated.error);": {
+      "form": "T6",
+      "line": 91,
+      "disposition": "KEEP",
+      "reason": "端口签名是 Promise<void>、没有失败位（port 注明由 apps 按异常收口）；要改 Result 须先改端口与两端调用方，不在这条调用链里单点改"
+    },
+    "packages/core/src/service/compaction-conditions/impl/compaction-conditions-store.service.ts#throw error;": {
+      "form": "T6",
+      "line": 104,
+      "disposition": "KEEP",
+      "reason": "端口签名是 Promise<void>、没有失败位（port 注明由 apps 按异常收口）；要改 Result 须先改端口与两端调用方，不在这条调用链里单点改"
     },
     "packages/core/src/service/message-checkpoint/impl/message-rollback.service.ts#throw new AppError(\"SESSION_FS_ROLLBACK_CONFLICT\", { descriptor: { key: \"error.session_fs.rollback_conflict\", params: { expected_message_count: plan.messageCountSnapshot, actual_message_count: currentCount } }, expectedMessageCount: plan.messageCountSnapshot, actualMessageCount: currentCount, sessionId, messageId: anchorMessageId, });": {
       "form": "T3",
@@ -820,15 +1354,27 @@
       "disposition": "ALLOWED",
       "reason": "白名单自动判定（transaction）"
     },
+    "packages/core/src/service/persistent-state/impl/persistent-state.service.ts#throw error;": {
+      "form": "T6",
+      "line": 133,
+      "disposition": "KEEP",
+      "reason": "端口签名是 Promise<void>、没有失败位（port 注明由 apps 按异常收口）；要改 Result 须先改端口与两端调用方，不在这条调用链里单点改"
+    },
+    "packages/core/src/service/provider/impl/model-request.service.ts#throw error;": {
+      "form": "T6",
+      "line": 224,
+      "disposition": "KEEP",
+      "reason": "取消是控制流不是失败：AbortError 沿 reject 透传（平台协议例外，AbortSignal 链路无 Result 通道），不进 Result。"
+    },
     "packages/core/src/service/skills/impl/skills.service.ts#throw new AppError(\"SKILL_MISSING_PROJECT_ID\", { descriptor: { key: \"error.skill.missing_project_id\", params: { skill_name: location.name } }, skillName: location.name });": {
       "form": "T3",
-      "line": 369,
+      "line": 391,
       "disposition": "ALLOWED",
       "reason": "白名单自动判定（transaction）"
     },
     "packages/core/src/service/skills/impl/skills.service.ts#throw new AppError(\"SKILL_ALREADY_EXISTS\", { descriptor: { key: \"error.skill.already_exists\", params: { skill_name: newName! } }, skillName: newName! });": {
       "form": "T3",
-      "line": 442,
+      "line": 464,
       "disposition": "ALLOWED",
       "reason": "白名单自动判定（transaction）"
     },
@@ -844,33 +1390,39 @@
       "disposition": "KEEP",
       "reason": "平台强制 P2：事务回调内抛错驱动整体回滚；外层 catch 把 AppError 原形收进 Result.err。"
     },
+    "packages/core/src/service/vfs/impl/character-card-import.service.ts#throw error;": {
+      "form": "T6",
+      "line": 251,
+      "disposition": "KEEP",
+      "reason": "测试故障注入点：调用方按 \"test import failure\" 原文案直供抛回（用例断言该 message），非业务错误。"
+    },
     "packages/core/src/service/vfs/impl/character-card-import.service.ts#throw new Error(\"test import failure\");": {
       "form": "T4",
-      "line": 227,
+      "line": 228,
       "disposition": "KEEP",
       "reason": "测试故障注入点：调用方按 \"test import failure\" 原文案直供抛回（用例断言该 message），非业务错误。"
     },
     "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts#throw new AppError(\"VFS_NOT_FOUND\", { path: normalized, detail: `Path not found: ${normalized}` });": {
       "form": "T3",
-      "line": 112,
+      "line": 113,
       "disposition": "KEEP",
       "reason": "事务回调内失败靠抛错回滚（总纲 §五例外 2）；方法边界已 unwrapTxDomainError 收进 Err（RB4b 教训）。（非递归删根不存在）"
     },
     "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts#throw new AppError(\"VFS_NOT_FOUND\", { path: normalized, detail: `cannot resetHeadToVersion: entry missing for ${normalized}` });": {
       "form": "T3",
-      "line": 166,
+      "line": 168,
       "disposition": "KEEP",
       "reason": "事务回调内失败靠抛错回滚（总纲 §五例外 2）；方法边界已 unwrapTxDomainError 收进 Err（RB4b 教训）。（entry 缺失）"
     },
     "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts#throw new AppError(\"VFS_NOT_FOUND\", { path: normalized, detail: `cannot resetHeadToVersion: revision missing or deleted for ${normalized}@${version}` });": {
       "form": "T3",
-      "line": 173,
+      "line": 175,
       "disposition": "KEEP",
       "reason": "事务回调内失败靠抛错回滚（总纲 §五例外 2）；方法边界已 unwrapTxDomainError 收进 Err（RB4b 教训）（revision 缺失/已删）"
     },
     "packages/core/src/service/vfs/impl/revision-aware-vfs.service.ts#throw new AppError(\"VFS_NOT_FOUND\", { path: normalized, detail: `cannot resetHeadToVersion: active revision has no content for ${normalized}@${version}` });": {
       "form": "T3",
-      "line": 177,
+      "line": 179,
       "disposition": "KEEP",
       "reason": "事务回调内失败靠抛错回滚（总纲 §五例外 2）；方法边界已 unwrapTxDomainError 收进 Err（RB4b 教训）（active revision 无内容）"
     },
@@ -892,17 +1444,47 @@
       "disposition": "KEEP",
       "reason": "只在 import 段 B0 的 conn.transaction 回调内调用，失败靠抛错回滚（函数 doc 明言）；import 外层 catch 收口，方法内 unwrapOrRollback 同款形态。"
     },
+    "packages/core/src/service/vfs/impl/vfs-zip-io.service.ts#throw error;": {
+      "form": "T6",
+      "line": 241,
+      "disposition": "KEEP",
+      "reason": "测试故障注入点：调用方按 \"test import failure\" 原文案直供抛回（用例断言该 message），非业务错误。"
+    },
     "packages/core/src/service/vfs/impl/vfs-zip-io.service.ts#throw new Error(\"test import failure\");": {
       "form": "T4",
-      "line": 214,
+      "line": 218,
       "disposition": "KEEP",
       "reason": "测试故障注入点：调用方按 \"test import failure\" 原文案直供抛回（用例断言该 message），非业务错误。"
     },
     "packages/llm-sse-native/src/native.ts#throw new Error(\"LlmSseNative 模块不可用（非 Android 或未 autolink）；请先经 NativeSse.isAvailable() 判定\",);": {
       "form": "T4",
-      "line": 91,
+      "line": 85,
       "disposition": "KEEP",
       "reason": "native bridge 边界：LlmSseNative 模块不可用（非 Android / 未 autolink），须先经 isAvailable 判定。"
+    },
+    "packages/sksp-android/src/android-secret-store.ts#throw new SkspError(\"ENCRYPT_FAILED\", `Keystore encrypt failed for ${ref}`, { ref, cause },);": {
+      "form": "T5",
+      "line": 35,
+      "disposition": "KEEP",
+      "reason": "SecretStore 端口的失败通道是 Promise reject（core 契约，sksp-android.test 以 assert.rejects 锁定）：Android Keystore 原生桥只以 reject 报错，此处转 SkspError 交 BaseSqliteSecretStore.set 的调用方经 reject 接住"
+    },
+    "packages/sksp-android/src/android-secret-store.ts#throw new SkspError(\"DECRYPT_FAILED\", `Missing IV for ${ref}`, { ref });": {
+      "form": "T5",
+      "line": 42,
+      "disposition": "KEEP",
+      "reason": "SecretStore 端口的失败通道是 Promise reject（core 契约）：strategy.decrypt 无 Result 通道，DB 行缺 IV 转 SkspError 交 store.get 的调用方经 reject 接住"
+    },
+    "packages/sksp-android/src/android-secret-store.ts#throw new SkspError(\"DECRYPT_FAILED\", `Keystore decrypt failed for ${ref}. Re-configure apiKey.`, { ref, cause },);": {
+      "form": "T5",
+      "line": 49,
+      "disposition": "KEEP",
+      "reason": "SecretStore 端口的失败通道是 Promise reject（core 契约，sksp-android.test 以 assert.rejects 锁定）：Keystore 原生桥只以 reject 报错，此处转 SkspError 交 store.get 的调用方经 reject 接住"
+    },
+    "packages/sksp-android/src/android-secret-store.ts#throw new SkspError(\"DB_ERROR\", \"Invalid blob column\");": {
+      "form": "T5",
+      "line": 73,
+      "disposition": "KEEP",
+      "reason": "驱动转码链一环：DB blob 列形态损坏（数据损坏非代码不变量）转 SkspError(DB_ERROR)，唯一调用方 androidStrategy.decrypt 在 try 内 catch 转 DECRYPT_FAILED 交 SecretStore 端口 reject 通道"
     },
     "packages/sksp-android/src/native.ts#throw new Error(\"SkspModule is not linked (Android only)\");": {
       "form": "T4",
@@ -910,17 +1492,113 @@
       "disposition": "KEEP",
       "reason": "native bridge 边界：SkspModule 未链接（Android 原生侧装配缺失）。"
     },
+    "packages/sksp-windows/src/dpapi.ts#throw new SkspError(\"ENCRYPT_FAILED\", \"DPAPI is only available on Windows\", { ref },);": {
+      "form": "T5",
+      "line": 36,
+      "disposition": "KEEP",
+      "reason": "跨包协议：SkspCryptoStrategy 契约为 throw 通道（接口在 core/sksp），非 Windows 场景按 sksp 协议抛 SkspError。"
+    },
     "packages/sksp-windows/src/dpapi.ts#throw new Error(\"DPAPI platform not supported\");": {
       "form": "T4",
       "line": 70,
       "disposition": "KEEP",
       "reason": "OS 加密平台边界：DPAPI 能力探测失败，随即由 SkspError 收口。"
     },
+    "packages/sksp-windows/src/dpapi.ts#throw new SkspError(\"ENCRYPT_FAILED\", `DPAPI encrypt failed for ${ref}`, { ref, cause, });": {
+      "form": "T5",
+      "line": 47,
+      "disposition": "KEEP",
+      "reason": "跨包协议：SkspCryptoStrategy 契约为 throw 通道（接口在 core/sksp），catch 出口统一转 SkspError（ENCRYPT_FAILED）。"
+    },
+    "packages/sksp-windows/src/dpapi.ts#throw new SkspError(\"DECRYPT_FAILED\", `DPAPI decrypt failed for ${ref} (not on Windows). Re-run: nm provider edit --apiKey`, { ref },);": {
+      "form": "T5",
+      "line": 64,
+      "disposition": "KEEP",
+      "reason": "跨包协议：SkspCryptoStrategy 契约为 throw 通道（接口在 core/sksp），非 Windows 场景按 sksp 协议抛 SkspError。"
+    },
+    "packages/sksp-windows/src/dpapi.ts#throw new SkspError(\"DECRYPT_FAILED\", `DPAPI decrypt failed for ${ref}. Re-run: nm provider edit --apiKey`, { ref, cause },);": {
+      "form": "T5",
+      "line": 76,
+      "disposition": "KEEP",
+      "reason": "跨包协议：SkspCryptoStrategy 契约为 throw 通道（接口在 core/sksp），catch 出口统一转 SkspError（DECRYPT_FAILED）。"
+    },
     "packages/tdbc-conformance/src/suite.ts#throw new Error(\"rollback me\");": {
       "form": "T4",
       "line": 179,
       "disposition": "KEEP",
       "reason": "conformance 测试夹具：故意抛错验证事务回滚，非业务错误。"
+    },
+    "packages/tdbc-driver-better-sqlite3/src/connection.ts#throw new TdbcError(\"NESTED_TRANSACTION\", \"Nested transactions are not supported\", { driver: \"better-sqlite3\" },);": {
+      "form": "T5",
+      "line": 46,
+      "disposition": "ALLOWED",
+      "reason": "白名单自动判定（tdbc-driver）"
+    },
+    "packages/tdbc-driver-better-sqlite3/src/connection.ts#throw cause;": {
+      "form": "T6",
+      "line": 61,
+      "disposition": "ALLOWED",
+      "reason": "白名单自动判定（tdbc-driver）"
+    },
+    "packages/tdbc-driver-better-sqlite3/src/connection.ts#throw this.wrapSqlite(cause);": {
+      "form": "T6",
+      "line": 102,
+      "disposition": "ALLOWED",
+      "reason": "白名单自动判定（tdbc-driver）"
+    },
+    "packages/tdbc-driver-better-sqlite3/src/connection.ts#throw new TdbcError(\"BATCH_FAILED\", \"Batch execution failed\", { driver: \"better-sqlite3\", cause, });": {
+      "form": "T5",
+      "line": 127,
+      "disposition": "ALLOWED",
+      "reason": "白名单自动判定（tdbc-driver）"
+    },
+    "packages/tdbc-driver-better-sqlite3/src/connection.ts#throw new TdbcError(\"CONNECTION_CLOSED\", \"Connection is closed\", { driver: \"better-sqlite3\", });": {
+      "form": "T5",
+      "line": 136,
+      "disposition": "ALLOWED",
+      "reason": "白名单自动判定（tdbc-driver）"
+    },
+    "packages/tdbc-driver-better-sqlite3/src/driver.ts#throw new TdbcError(\"SQLITE_ERROR\", \"Failed to open database\", { driver: this.name, cause, });": {
+      "form": "T5",
+      "line": 29,
+      "disposition": "ALLOWED",
+      "reason": "白名单自动判定（tdbc-driver）"
+    },
+    "packages/tdbc-driver-op-sqlite/src/connection.ts#throw new TdbcError(\"NESTED_TRANSACTION\", \"Nested transactions are not supported\", { driver: \"op-sqlite\" },);": {
+      "form": "T5",
+      "line": 46,
+      "disposition": "ALLOWED",
+      "reason": "白名单自动判定（tdbc-driver）"
+    },
+    "packages/tdbc-driver-op-sqlite/src/connection.ts#throw cause;": {
+      "form": "T6",
+      "line": 76,
+      "disposition": "ALLOWED",
+      "reason": "白名单自动判定（tdbc-driver）"
+    },
+    "packages/tdbc-driver-op-sqlite/src/connection.ts#throw this.wrapSqlite(cause);": {
+      "form": "T6",
+      "line": 115,
+      "disposition": "ALLOWED",
+      "reason": "白名单自动判定（tdbc-driver）"
+    },
+    "packages/tdbc-driver-op-sqlite/src/connection.ts#throw new TdbcError(\"BATCH_FAILED\", \"Batch execution failed\", { driver: \"op-sqlite\", cause, });": {
+      "form": "T5",
+      "line": 167,
+      "disposition": "ALLOWED",
+      "reason": "白名单自动判定（tdbc-driver）"
+    },
+    "packages/tdbc-driver-op-sqlite/src/connection.ts#throw new TdbcError(\"CONNECTION_CLOSED\", \"Connection is closed\", { driver: \"op-sqlite\", });": {
+      "form": "T5",
+      "line": 186,
+      "disposition": "ALLOWED",
+      "reason": "白名单自动判定（tdbc-driver）"
+    },
+    "packages/tdbc-driver-op-sqlite/src/driver.ts#throw new TdbcError(\"SQLITE_ERROR\", \"Failed to open database\", { driver: this.name, cause, });": {
+      "form": "T5",
+      "line": 61,
+      "disposition": "ALLOWED",
+      "reason": "白名单自动判定（tdbc-driver）"
     },
     "packages/tdbc-driver-op-sqlite/src/impl/op-sqlite-dynamic.adapter.ts#throw new Error(\"@op-engineering/op-sqlite 导出缺失（需要 open）\");": {
       "form": "T4",
@@ -939,6 +1617,18 @@
       "line": 24,
       "disposition": "KEEP",
       "reason": "tiktoken 第三方编码表加载边界：拿不到表按契约抛给驱动层降级。"
+    },
+    "packages/tokenizer-driver-rn/src/android-native-bridge.ts#throw new PromptCountCancelledError();": {
+      "form": "T5",
+      "line": 165,
+      "disposition": "KEEP",
+      "reason": "同上：RN 原生桥 reject 通道的取消哨兵，转 PromptCountCancelledError 上抛（取消不得落兜底），由 count-prompt-llm-input 的 catch 链放行、驱动入口 count() 的调用方接住"
+    },
+    "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts#throw error;": {
+      "form": "T6",
+      "line": 581,
+      "disposition": "KEEP",
+      "reason": "同 countGptViaNative：取消哨兵穿透不变量（tokenizer-native-cancel），沿异常通道穿透到驱动入口 count() 的调用方接住"
     }
   }
 }
