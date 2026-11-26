@@ -524,18 +524,21 @@ describe("assembleSkillsToolContext（主/子两装配点共用）", () => {
     }
 
     it("runtime.skills 缺省（未注入）时返回 undefined", async () => {
-        const ctx = await AgentTurnRunner.assembleSkillsToolContext({}, "p1", registryWithSkillOpt(false));
-        assert.equal(ctx, undefined);
+        const r = await AgentTurnRunner.assembleSkillsToolContext({}, "p1", registryWithSkillOpt(false));
+        assert.ok(r.ok);
+        assert.equal(r.value, undefined);
     });
 
     it("registry 含 skill 时预算 effective 清单并注入 projectId", async () => {
         const svc = fakeSkillService();
         const runtime = { skills: () => svc as SkillService };
-        const ctx = await AgentTurnRunner.assembleSkillsToolContext(
+        const r = await AgentTurnRunner.assembleSkillsToolContext(
             runtime,
             "proj-9",
             registryWithSkillOpt(false),
         );
+        assert.ok(r.ok);
+        const ctx = r.value;
         assert.ok(ctx != null);
         assert.equal(ctx.projectId, "proj-9");
         assert.equal(ctx.effective.length, 2);
@@ -549,8 +552,9 @@ describe("assembleSkillsToolContext（主/子两装配点共用）", () => {
         const runtime = { skills: () => svc as SkillService };
         const registry = registryWithSkillOpt(true);
         assert.ok(!registry.list().includes(SKILL_TOOL_NAME));
-        const ctx = await AgentTurnRunner.assembleSkillsToolContext(runtime, "proj-9", registry);
-        assert.equal(ctx, undefined);
+        const r = await AgentTurnRunner.assembleSkillsToolContext(runtime, "proj-9", registry);
+        assert.ok(r.ok);
+        assert.equal(r.value, undefined);
         assert.equal(
             svc.calls.filter((c) => c.method === "effectiveSkills").length,
             0,

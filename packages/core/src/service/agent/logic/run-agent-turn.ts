@@ -251,19 +251,13 @@ type ChildModelIds = {
 };
 
 /**
- * 聊天发送编排 namespace 的类型面。
- *
- * 显式注解整个对象类型是刻意的：TS 只对「对象类型来自显式注解」的属性访问
- * 调用做 never 返回的不可达收窄——`as const` 推断出的 rethrowRunFailure 在
- * `if (!x.ok) AgentTurnRunner.rethrowRunFailure(x.error); x.value` 这条既有
- * 收窄模式下会让 `x.value` 报 TS2339（run / 子 run 内多处依赖该收窄）。
+ * 聊天发送编排 namespace 的类型面（显式注解，`as const` 推断的方法类型
+ * 不参与属性访问的调用期收窄，注解后成员签名稳定可查）。
  */
 interface AgentTurnRunnerHelpers {
-    rethrowRunFailure(error: AppError): never;
-
     offsetToSourceLineCol(sourceText: string, offset: number): { readonly line: number; readonly col: number };
 
-    assembleSkillsToolContext(runtime: Pick<AgentTurnRuntimePort, "skills">, projectId: string, registry: AgentToolRegistry): Promise<BuiltinToolSkillsContext | undefined>;
+    assembleSkillsToolContext(runtime: Pick<AgentTurnRuntimePort, "skills">, projectId: string, registry: AgentToolRegistry): Promise<Result<BuiltinToolSkillsContext | undefined, AppError>>;
 
     assembleSearchToolContext(store: SearchConfigStore): Promise<BuiltinToolSearchContext>;
 
@@ -308,15 +302,6 @@ const preludeAbortResult = (scope: AbortScope): AgentRunResult | undefined => (s
  * 聊天发送编排 namespace（编排 + runner 装配 + 子代理派生 + 前奏收口）。
  */
 export const AgentTurnRunner: AgentTurnRunnerHelpers = {
-    /**
-     * runner.run / session.append 已知失败转异常：复用调用方 catch 的既有收口
-     * （终态补发判定 / onRunFailed / AppError→Result.err 分流），不新增解包字面。
-     */
-    rethrowRunFailure(error: AppError): never {
-        // 欠账（不是平台契约，不该靠抛异常做控制流；按规则应改成具名的失败收尾函数 + Result.err，待另起一轮）：转抛 helper 契约：把已知失败送进调用方 catch 的统一收口（终态补发判定 / onRunFailed / AppError 分流），return 会跳过收尾丢终态。
-        throw error;
-    },
-
     /** 0-based 字符偏移 → 1-based 行列；用于批注行号补算。 */
     offsetToSourceLineCol(sourceText: string, offset: number): { readonly line: number; readonly col: number } {
         let line = 1;
@@ -344,24 +329,21 @@ export const AgentTurnRunner: AgentTurnRunnerHelpers = {
      *
      * 清单按传入 projectId 解析（子代理传父会话 projectId，与「子代理共享
      * 父工作区」语义一致）。resolve 后 registry 不含 skill（policy deny，
-     * D4）时跳过 effectiveSkills 预算、返回 undefined——工具仍注册在 probe，
-     * 但本 run 的 toolCtx 不带 skills 闭包，LLM 也看不到该工具。
+     * D4）时跳过 effectiveSkills 预算、返回 `Result.ok(undefined)`——工具仍
+     * 注册在 probe，但本 run 的 toolCtx 不带 skills 闭包，LLM 也看不到该工具。
+     * effectiveSkills 读取失败沿 `Result.err` 交回，由调用方收口（主装配点交
+     * finishTurnFailure、子装配点交 task 工具），不静默降级成「无技能工具」。
      *
      * 注：skillsIndex（提示词技能索引）的 D4 置空联动属 Step 10，不在本函数范围。
      */
-    async assembleSkillsToolContext(runtime: Pick<AgentTurnRuntimePort, "skills">, projectId: string, registry: AgentToolRegistry): Promise<BuiltinToolSkillsContext | undefined> {
+    async assembleSkillsToolContext(runtime: Pick<AgentTurnRuntimePort, "skills">, projectId: string, registry: AgentToolRegistry): Promise<Result<BuiltinToolSkillsContext | undefined, AppError>> {
         const service = runtime.skills?.();
-        if (service == null) return undefined;
-        if (!registry.list().includes(SKILL_TOOL_NAME)) return undefined;
+        if (service == null) return Result.ok(undefined);
+        if (!registry.list().includes(SKILL_TOOL_NAME)) return Result.ok(undefined);
         const effective = await service.effectiveSkills(projectId);
-        if (!effective.ok) {
-            // 装配失败沿异常通道上抛（原行为）：技能清单读取失败不静默降级成「无技能工具」。
-            const failure = effective.error;
-            // 欠账（不是平台契约，不该靠抛异常做控制流；按规则应改成具名的失败收尾函数 + Result.err，待另起一轮）：转抛进调用方主 catch 统一收尾（终态补发判定 / onRunFailed / AppError 分流），技能装配点无 Result 通道（plain 签名）。
-            throw failure;
-        }
+        if (!effective.ok) return Result.err(effective.error);
         // referencedNames：seen 共享（方向 A）的可变集合，runner 每步 prepare 后回填
-        return {service, projectId, effective: effective.value, referencedNames: new Set<string>()};
+        return Result.ok({service, projectId, effective: effective.value, referencedNames: new Set<string>()});
     },
 
     /**
@@ -582,6 +564,44 @@ export const AgentTurnRunner: AgentTurnRunnerHelpers = {
 
             // 入参清洗：误传的 user_ops 预览一律丢弃，只保留 attach（workplace 为历史只读兼容，新数据不再产生）
             const composerAttachOnly = (options?.attachments ?? []).filter((a) => a.source === "attach");
+
+            /**
+             * 已知失败的统一收尾（自收口 catch 提取；主 catch 与 try 内 return 共用，
+             * 同步函数无 await）。原文语义逐字保留：
+             *
+             * 判据一（终态补发，看 `runnerEmittedTerminal`）：core 全程没发过真实 runId
+             * 的终态——前奏抛错、或 runner 自身的前置 IO 在 STARTED 之前就炸了
+             * （r3-run-2 把 STARTED 下移后新开的那一小段窗口）——都补发 FAILED(runId:'')
+             * 让双端走既有收口链路（composer 解锁 / 错误提示 / refcount 收敛）。
+             * 反之 agent-runner 主 try 的 catch 已发过一条**真实 runId** 的 FAILED，
+             * 此处绝不补发——否则同一次失败出两条 FAILED、双端双弹 toast。
+             *
+             * 判据二（onRunFailed，看 `runnerEntered`）：只有已经踏进 runner.run 的失败
+             * 才回调。前奏失败时 savedModelId 等快照字段尚未解析完毕，语义不成立，
+             * 保持既有行为（不调）。注意这一条与判据一是**正交**的——runner 前置 IO
+             * 抛错属于「已进 runner 但无终态」，它要补 FAILED('') 且不调 onRunFailed。
+             *
+             * 终态事件恰好一条：补发 FAILED('') 只在 core 全程没发过真实终态时发生。
+             */
+            const finishTurnFailure = (error: unknown): Result<AgentRunResult, AppError> => {
+                if (!runnerEmittedTerminal) {
+                    AgentTurnRunner.safePublish(runtime, EVENT_AGENT_RUN_FAILED, {
+                        sessionId: scope.sessionId,
+                        projectId: scope.projectId,
+                        runId: "",
+                        error: error instanceof Error ? error.message : String(error),
+                    });
+                }
+                if (runnerEntered) {
+                    options?.onRunFailed?.({stage, error, scope, savedModelId: failureSavedModelId ?? "", stream});
+                }
+                // 已知失败沿 Result 交回（四期门⑦）；未知异常保持 throw（转码矩阵「未知 throw」行）。
+                if (error instanceof AppError) {
+                    return Result.err(error);
+                }
+                // nm-throw: keep — 主收尾出口的未知异常按转码矩阵保持 reject（Result 的 E 只装业务失败，不谎报），由 IPC 入口壳收口。
+                throw error;
+            };
 
             // 前奏停止检查点（2026-09-30 真机实锤，用户连点 15 次停止需等 11s 前奏跑完
             // 才在 loop_start 兑现）：前奏各阶段之间检查根 scope 的 reason，命中即跳过剩余
@@ -924,7 +944,11 @@ export const AgentTurnRunner: AgentTurnRunnerHelpers = {
                 });
                 // skill 工具读取：装配期预算生效技能清单（description lambda 用）。
                 // deny 后 registry 不含 skill → 不注入闭包且不产生预算 IO（D4 注册表侧联动）。
-                const skillsCtx = await AgentTurnRunner.assembleSkillsToolContext(runtime, scope.projectId, registry);
+                // 装配失败（effectiveSkills Err）交统一失败收尾：原 throw 进主 catch 的
+                // FAILED('') 补发 + onRunFailed + Result.err 分流由 finishTurnFailure 逐字覆盖。
+                const skillsAssembled = await AgentTurnRunner.assembleSkillsToolContext(runtime, scope.projectId, registry);
+                if (!skillsAssembled.ok) return finishTurnFailure(skillsAssembled.error);
+                const skillsCtx = skillsAssembled.value;
 
                 // 检查点④（r3-run-4，:577 之后）：`assembleSkillsToolContext` 里的
                 // `effectiveSkills` 是前奏尾段的另一件实打实的 IO（读 KKV + 解析技能目录），
@@ -1078,10 +1102,10 @@ export const AgentTurnRunner: AgentTurnRunnerHelpers = {
                         onStream: options?.onStream
                     };
                     const runResult = await runner.run(runInput);
-                    // runner 已知失败沿返回值到达（五期门⑦）：转异常进本函数既有收口——
+                    // runner 已知失败沿返回值到达（五期门⑦）：交统一失败收尾 finishTurnFailure——
                     // runnerEmittedTerminal 已因 runner 内发过终态置真（不会重复补 FAILED('')），
                     // 判据二 onRunFailed 与 AppError→Result.err 分流照旧。
-                    if (!runResult.ok) AgentTurnRunner.rethrowRunFailure(runResult.error);
+                    if (!runResult.ok) return finishTurnFailure(runResult.error);
                     result = runResult.value;
                 } finally {
                     // 同步分发下这里退订不会漏事件；退订后 runnerEmittedTerminal 冻结为本 run 的事实。
@@ -1090,44 +1114,10 @@ export const AgentTurnRunner: AgentTurnRunnerHelpers = {
                 }
                 return Result.ok(result);
             } catch (error) {
-                // 收口分岔（r3-run-1 步骤 2）：本函数是「前奏期唯一终态事件出口」。
-                //
-                // 判据一（终态补发，看 `runnerEmittedTerminal`）：core 全程没发过真实 runId
-                // 的终态 —— 前奏抛错、或 runner 自身的前置 IO 在 STARTED 之前就炸了
-                // （r3-run-2 把 STARTED 下移后新开的那一小段窗口）——都补发 FAILED(runId:'')
-                // 让双端走既有收口链路（composer 解锁 / 错误提示 / refcount 收敛）。
-                // 反之 agent-runner 主 try 的 catch 已发过一条**真实 runId** 的 FAILED，
-                // 此处绝不补发——否则同一次失败出两条 FAILED、双端双弹 toast。
-                if (!runnerEmittedTerminal) {
-                    // 前奏期「抛错」的唯一终态出口：发 FAILED(runId:'') 后由本函数 rethrow 保留原错误。
-                    // 不发 = desktop main 侧 refcount 无人收敛、renderer 侧 uiRunning 永久 true
-                    // （停止按钮卡死、composer 锁住）；发出后两侧走与真实 FAILED 相同的收口链路。
-                    AgentTurnRunner.safePublish(runtime, EVENT_AGENT_RUN_FAILED, {
-                        sessionId: scope.sessionId,
-                        projectId: scope.projectId,
-                        runId: "",
-                        error: error instanceof Error ? error.message : String(error),
-                    });
-                }
-                // 判据二（onRunFailed，看 `runnerEntered`）：只有已经踏进 runner.run 的失败
-                // 才回调。前奏失败时 savedModelId 等快照字段尚未解析完毕，语义不成立，
-                // 保持既有行为（不调）。注意这一条与判据一是**正交**的——runner 前置 IO
-                // 抛错属于「已进 runner 但无终态」，它要补 FAILED('') 且不调 onRunFailed。
-                if (runnerEntered) {
-                    options?.onRunFailed?.({
-                        stage,
-                        error,
-                        scope,
-                        savedModelId: failureSavedModelId ?? "",
-                        stream,
-                    });
-                }
-                // 已知失败沿 Result 交回（四期门⑦）；未知异常保持 throw（转码矩阵「未知 throw」行）。
-                if (error instanceof AppError) {
-                    return Result.err(error);
-                }
-                // nm-throw: keep — 主 catch 最终出口的未知异常按转码矩阵保持 reject（Result 的 E 只装业务失败，不谎报），由 IPC 入口壳收口。
-                throw error;
+                // 收口 catch 瘦身：失败收尾（终态补发判定 / onRunFailed / AppError 分流）
+                // 已提取为上方 finishTurnFailure，判据一/判据二原文语义随闭包保留；
+                // 未知异常在其末尾按转码矩阵保持 throw。
+                return finishTurnFailure(error);
             } finally {
                 // 反注册带所有权比对：若期间 sessionId 被新 run 覆盖，不误删新 run 的 controller / partial。
                 runtime.agentAbortRegistry?.unregister(scope.sessionId, internalController);
@@ -1365,9 +1355,11 @@ export const AgentTurnRunner: AgentTurnRunnerHelpers = {
             // 预算候选子代理名单：mode !== "primary"、排除子 agent 自身。
             // task 是否对 LLM 可见由下方 AgentTools.resolveRegistry 的 depth 判断控制（depth>=2 deny）。
             const childAllDefsResult = await runtime.agentRegistry.list();
-            // 毒行 decode 失败（五期门⑦沿 Result 到达）转 catch 通道：streamHandle 的
-            // finally 反注册与终态记账由外层 run 的既有 catch 收口。
-            if (!childAllDefsResult.ok) AgentTurnRunner.rethrowRunFailure(childAllDefsResult.error);
+            // 毒行 decode 失败（五期门⑦沿 Result 到达）：沿 Result 交回 task 工具，
+            // 经 ToolRunner.call 的 normalizeToolFailure 同一出口收编（TOOL_* 直通判定
+            // 相同，与改前异常通道最终 outcome 逐字一致，error-channel-debt D-3），
+            // finally 反注册照跑。
+            if (!childAllDefsResult.ok) return Result.err(childAllDefsResult.error);
             const childAllDefs = childAllDefsResult.value;
             const callable = childAllDefs.filter((d) => d.mode !== "primary" && d.name !== def.name).map((d) => ({
                 name: d.name,
@@ -1379,7 +1371,11 @@ export const AgentTurnRunner: AgentTurnRunnerHelpers = {
 
             // skill（D2）：子代理同样注入，清单按父会话 projectId 解析——
             // 与「子代理共享父工作区」语义一致。子 agent 自己的 policy 同样生效（deny 时不注入）。
-            const skillsCtx = await AgentTurnRunner.assembleSkillsToolContext(runtime, parentProjectId, registry);
+            // 装配失败（effectiveSkills Err）沿 Result 交回 task 工具：经 ToolRunner.call
+            // 的 normalizeToolFailure 同一出口收编（与改前 throw 经异常通道同口）。
+            const skillsAssembled = await AgentTurnRunner.assembleSkillsToolContext(runtime, parentProjectId, registry);
+            if (!skillsAssembled.ok) return Result.err(skillsAssembled.error);
+            const skillsCtx = skillsAssembled.value;
 
             // 子检查点②（r3-run-3）：技能预算之后、`session.append(prompt)` 与
             // `runner.run` 之前。与①同款：命中即发 FINISHED('') 再返回合成 cancelled。
@@ -1419,7 +1415,9 @@ export const AgentTurnRunner: AgentTurnRunnerHelpers = {
                 };
                 const appended = await session.append("user", TextBlocks.of(opts.prompt ?? ""), appendOptions);
                 // prompt / 附件落库失败必须中断子 run：静默返回会让附件蒸发、模型毫不知情。
-                if (!appended.ok) AgentTurnRunner.rethrowRunFailure(appended.error);
+                // 沿 Result 交回 task 工具，经 ToolRunner.call 的 normalizeToolFailure 同一
+                // 出口收编（与改前异常通道同口），finally 反注册照跑。
+                if (!appended.ok) return Result.err(appended.error);
             }
             // search 装配前置（排障插桩版，同主 run）：先算 ctx 再展开，结果与 toolCtx 对账。
             const childSearchCtx = runtime.searchConfig != null ? await AgentTurnRunner.assembleSearchToolContext(runtime.searchConfig) : undefined;
@@ -1541,9 +1539,11 @@ export const AgentTurnRunner: AgentTurnRunnerHelpers = {
                 scope: childAbortScope,
             };
             const childResult = await runner.run(childRunInput);
-            // 子 run 已知失败沿返回值到达（五期门⑦）：转异常冒泡（本函数无 catch，
-            // 反注册 finally 照跑），与旧 throw 通道逐字一致。
-            if (!childResult.ok) AgentTurnRunner.rethrowRunFailure(childResult.error);
+            // 子 run 已知失败沿 Result 交回 task 工具：经 ToolRunner.call 的
+            // normalizeToolFailure 同一出口收编（TOOL_* 直通判定相同）——与改前
+            // 「reject 穿 task 工具被 call 的 catch 收编」最终 outcome 逐字相同
+            // （error-channel-debt D-3）；finally 反注册两形态都照跑，孙代理递归同理逐层透传。
+            if (!childResult.ok) return Result.err(childResult.error);
             return Result.ok(childResult.value);
         } finally {
             // 反注册带所有权比对，防误删新 run 的 controller / partial。

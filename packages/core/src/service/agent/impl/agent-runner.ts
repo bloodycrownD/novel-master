@@ -131,7 +131,6 @@ export class DefaultAgentRunner implements AgentRunnerPort {
         let stepsExecuted = 0;
         let finished = false;
         let stopReason: AgentRunResult["stopReason"] = "max_steps";
-        let runError: string | undefined;
         /**
      * 本轮 run 是否已有 assistant 消息落库（含 abort partial）。
      *
@@ -231,6 +230,72 @@ export class DefaultAgentRunner implements AgentRunnerPort {
             stopReason = "cancelled";
         };
 
+        // 已知失败的统一收尾（自主 catch else 分支提取，10 处解包点与两处内层 catch 共用）。
+        // 入口先做取消优先路由（原主 catch 的首条判定随提取搬入）：现状任何冒到主 catch
+        // 的异常——包括失败恰逢用户已点停止——只要 signal 已中止都会被路由进 handleAbort，
+        // 走 FINISHED(cancelled) 而非 FAILED；提取后该判定随函数走，全部调用点行为不变。
+        // - 取消分支：handleAbort + 内联取消收尾（FINISHED 事件、KKV 失效、Result.ok 取消
+        //   形态，与 break 落出主 try 后的正常收尾段逐项等价），不落失败消息、不发 FAILED；
+        // - 失败分支：失败消息落库（幂等守卫）→ KKV 失效 → FAILED 事件 → AppError 沿
+        //   Result.err 交回；非 AppError 的未知异常保持 throw（转码矩阵「未知 throw」行，策略不动）。
+        // 两条分支互斥，终态事件恰好一条。
+        const finishRunFailure = async (e: unknown): Promise<Result<AgentRunResult, AppError>> => {
+            if (signal?.aborted || (e instanceof Error && e.name === "AbortError")) {
+                await handleAbort("catch_abort");
+                if (publishRunLifecycle) {
+                    bus.publish(EVENT_AGENT_RUN_FINISHED, { sessionId, projectId, runId, stopReason, vfsMutated: vfsMutatedInRun });
+                }
+                void SessionApiPromptTokenEntry.invalidate(this.deps.sessionKkv, sessionId);
+                return Result.ok({ stepsExecuted, finished, stopReason, rounds });
+            }
+            const runError = e instanceof Error ? e.message : String(e);
+            // 失败收尾落一条 assistant 错误消息：会话尾部变 assistant 后，双端
+            // composer 的连续 user 守卫（lastMessageIsPlainUserText）自然解锁，
+            // 失败原因也从一次性 toast 变为持久可回查。豁免两条：
+            // ① persistMessages=false（EphemeralOverlay run，append 只进内存，
+            //    run 结束即丢，落了也不可见）；② 本轮已有 assistant 落库
+            //    （assistantAppendedInRun——秒败路径必然无 assistant：assistant
+            //    仅在 model request 成功返回后 append，request 抛错时标志必为
+            //    false；多步中途失败时尾部已是 assistant / tool_results user，
+            //    isPlainUserText 已为 false，无需再落，避免双条）。
+            // 落库须先于 FAILED 事件发出，保证下游 tail reload 时能读到这条消息。
+            if (persistMessages && !assistantAppendedInRun) {
+                try {
+                    const appended = await session.append("assistant", { blocks: [{ type: "text", text: `[生成失败] ${runError}` }] });
+                    // nm-throw: keep — 失败消息落库失败不掩盖原始失败：喂同函数本地 catch 记
+                    // 日志后继续发 FAILED（接住后唯一效果就是下方 catch 的 log.error）。
+                    if (!appended.ok) throw appended.error;
+                } catch (appendError) {
+                    // 错误消息落库失败不掩盖原始错误：记日志后继续发 FAILED 并抛原错。
+                    log.error("failure_message_append_failed", {
+                        stage: "failure_message_append",
+                        sessionId,
+                        projectId,
+                        error: appendError,
+                    });
+                }
+            }
+            // FAILED / 非 Abort throw 不到达 FINISHED：必清 API 占用（进程内热层 +
+            // session KKV 行双删），避免重启后从 KKV 读回旧值。
+            // run 收尾不等 IO：这里刻意保持 fire-and-forget（不 await KKV 删除）。
+            void SessionApiPromptTokenEntry.invalidate(this.deps.sessionKkv, sessionId);
+            if (publishRunLifecycle) {
+                bus.publish(EVENT_AGENT_RUN_FAILED, {
+                    sessionId,
+                    projectId,
+                    runId,
+                    error: runError,
+                });
+            }
+            // 已知失败沿返回值交入口壳（五期门⑦）：收尾（FAILED 事件 + 失败消息）已在上完成；
+            // 非 AppError 的未知异常保持 throw（转码矩阵「未知 throw」行）。
+            if (e instanceof AppError) {
+                return Result.err(e);
+            }
+            // nm-throw: keep — 主收尾出口的未知异常按转码矩阵保持 reject（Result 的 E 只装业务失败，不谎报），由 IPC 入口壳收口。
+            throw e;
+        };
+
         // 每 step usage 回锚的镜像：「最后一次写入携带的锚点」（含 undefined），run 收尾终值写沿用；写入点必须在本 step 全部消息落库之后（见 anchorStepUsage 注释）。
         let lastAnchorSeq: number | undefined;
 
@@ -260,7 +325,7 @@ export class DefaultAgentRunner implements AgentRunnerPort {
             let turnFiletree: string | undefined;
             if (wantsTree) {
                 const rendered = await wt.renderFileTree();
-                if (!rendered.ok) AgentRunner.raiseRunError(rendered.error);
+                if (!rendered.ok) return finishRunFailure(rendered.error);
                 turnFiletree = rendered.value;
             }
             for (let step = 0; step < maxSteps; step++) {
@@ -309,9 +374,9 @@ export class DefaultAgentRunner implements AgentRunnerPort {
                     break;
                 }
                 if (assembled.kind === "failed") {
-                    // 组装内的已知失败（如路径解析）：与旧 throw 同路径进 run 收尾
-                    // （FAILED 事件 + Result.err 分流），不吞成中断。
-                    AgentRunner.raiseRunError(assembled.error);
+                    // 组装内的已知失败（如路径解析）：交统一失败收尾（FAILED 事件 +
+                    // 失败消息落库 + Result.err 交回），不吞成中断。
+                    return finishRunFailure(assembled.error);
                 }
                 const { workplaceDisplay, files, prefixPaths, visiblePaths, fingerprint } = assembled.value;
                 if (signal?.aborted) {
@@ -338,7 +403,7 @@ export class DefaultAgentRunner implements AgentRunnerPort {
                     projectId,
                 };
                 const prepared = await PromptAssembler.prepare(visible, prepareRuntime);
-                if (!prepared.ok) AgentRunner.raiseRunError(prepared.error);
+                if (!prepared.ok) return finishRunFailure(prepared.error);
                 visible = prepared.value;
                 if (signal?.aborted) {
                     await handleAbort("after_prepare_user_messages");
@@ -380,7 +445,7 @@ export class DefaultAgentRunner implements AgentRunnerPort {
                     workplaceFingerprint: fingerprint,
                 };
                 const promptInputBuilt = await PromptBuilder.llmInput(options.definition.prompts, promptRenderCtx, { agentStepIndex: step });
-                if (!promptInputBuilt.ok) AgentRunner.raiseRunError(promptInputBuilt.error);
+                if (!promptInputBuilt.ok) return finishRunFailure(promptInputBuilt.error);
                 const promptInput = promptInputBuilt.value;
 
                 if (persistMessages && this.deps.compactionConditions != null) {
@@ -399,7 +464,7 @@ export class DefaultAgentRunner implements AgentRunnerPort {
                         visibleMessageCount,
                     };
                     const evaluated = await this.deps.compactionConditions.shouldRequestCompaction(this.deps.session, compactionEvaluation);
-                    if (!evaluated.ok) AgentRunner.raiseRunError(evaluated.error);
+                    if (!evaluated.ok) return finishRunFailure(evaluated.error);
                     const shouldCompact = evaluated.value;
                     if (signal?.aborted) {
                         await handleAbort("after_compaction_eval");
@@ -412,7 +477,7 @@ export class DefaultAgentRunner implements AgentRunnerPort {
                         const messages = this.deps.messages;
                         assert(messages != null, "compaction requires messages");
                         const hiddenDepth = await this.deps.compactionConditions!.getHideStartDepth();
-                        if (!hiddenDepth.ok) AgentRunner.raiseRunError(hiddenDepth.error);
+                        if (!hiddenDepth.ok) return finishRunFailure(hiddenDepth.error);
                         const hideStartDepth = hiddenDepth.value;
                         await Compaction.run({ sessionKkv: this.deps.sessionKkv, messages }, { sessionId, hideStartDepth });
                         stepCompactionEmitted = true;
@@ -498,8 +563,8 @@ export class DefaultAgentRunner implements AgentRunnerPort {
                 let result;
                 try {
                     // 五期门⑦：预检失败（模型未保存 / 服务商缺失 / 密钥未设 / policy 读取）
-                    // 收 `Result.err`，经 raiseRunError 保持「run 侧错误沿 catch 冒泡」既有语义；
-                    // 传输层错误仍由 request 直接抛。
+                    // 收 `Result.err`，交统一失败收尾 finishRunFailure（FAILED 事件 / 失败
+                    // 消息落库 / AppError 沿 Result.err 分流）；传输层错误仍由 request 直接抛。
                     const requestOptions: ModelRequestOptions = {
                         history: llmMessages,
                         toolUseLookupMessages,
@@ -510,15 +575,15 @@ export class DefaultAgentRunner implements AgentRunnerPort {
                         scope,
                     };
                     const requested = await this.deps.modelRequests.request(options.savedModelId, "", requestOptions);
-                    if (!requested.ok) AgentRunner.raiseRunError(requested.error);
+                    if (!requested.ok) return finishRunFailure(requested.error);
                     result = requested.value;
                 } catch (e: unknown) {
                     if (signal?.aborted || (e instanceof Error && e.name === "AbortError")) {
                         await handleAbort("model_request_catch");
                         break;
                     }
-                    // 欠账（不是平台契约，不该靠抛异常做控制流；按规则应改成具名的失败收尾函数 + Result.err，待另起一轮）：非取消异常转抛进 run 主 catch 统一收尾（FAILED 事件 / 失败消息落库 / AppError 分流），直接 return 会跳过收尾丢终态。
-                    throw e;
+                    // 非取消异常交统一失败收尾（FAILED 事件 / 失败消息落库 / AppError 分流）。
+                    return finishRunFailure(e);
                 }
 
                 // 总时长取 await 结束时刻而非监听 done 事件（done 不经 wrapStreamForBus 转发）。
@@ -591,7 +656,7 @@ export class DefaultAgentRunner implements AgentRunnerPort {
                         usage: { ...result.usage, firstTokenMs, durationMs },
                     };
                     const appended = await session.append("assistant", assistantContent, assistantAppendOptions);
-                    if (!appended.ok) AgentRunner.raiseRunError(appended.error);
+                    if (!appended.ok) return finishRunFailure(appended.error);
                     assistantMessage = appended.value;
                     assistantAppendedInRun = true;
                     if (publishRunLifecycle) {
@@ -630,7 +695,9 @@ export class DefaultAgentRunner implements AgentRunnerPort {
                 if (persistMessages && !assistantAppendedInRun) {
                     try {
                         const appended = await session.append("assistant", { blocks: [{ type: "text", text: "（本次生成无内容输出）" }] });
-                        if (!appended.ok) AgentRunner.raiseRunError(appended.error);
+                        // nm-throw: keep — 占位落库失败不把成功 run 翻成 FAILED：喂同函数本地
+                        // catch 记日志后照常收尾（接住后唯一效果就是下方 catch 的 log.error）。
+                        if (!appended.ok) throw appended.error;
                         assistantAppendedInRun = true;
                     } catch (appendError) {
                         // 占位落库失败不把成功 run 翻成 FAILED：记日志后照常收尾。
@@ -667,10 +734,10 @@ export class DefaultAgentRunner implements AgentRunnerPort {
                     usage: result.usage,
                 });
 
-                // 检测器只回报结果（不抛）：run 循环的收口语义仍靠这里沿 catch 收口。
+                // 检测器只回报结果（不抛）：run 循环的收口语义靠这里直接交失败收尾。
                 const doomLoopResult = doomLoop.checkStep(result.blocks);
                 if (!doomLoopResult.ok) {
-                    AgentRunner.raiseRunError(doomLoopResult.error);
+                    return finishRunFailure(doomLoopResult.error);
                 }
 
                 if (signal?.aborted) {
@@ -734,8 +801,10 @@ export class DefaultAgentRunner implements AgentRunnerPort {
                             messageId: assistantMessage.id,
                             error,
                         });
-                        // 欠账（不是平台契约，不该靠抛异常做控制流；按规则应改成具名的失败收尾函数 + Result.err，待另起一轮）：转抛进 run 主 catch 统一收尾（FAILED 事件 / 失败消息落库 / AppError 分流），直接 return 会跳过收尾丢终态。
-                        throw error;
+                        // capture 失败交统一失败收尾（FAILED 事件 / 失败消息落库 / AppError
+                        // 分流）；capture 失败恰逢 signal 已中止时由收尾入口的取消优先路由
+                        // 按取消处理（与改前冒到主 catch 的 handleAbort("catch_abort") 同款）。
+                        return finishRunFailure(error);
                     }
                 }
 
@@ -744,7 +813,7 @@ export class DefaultAgentRunner implements AgentRunnerPort {
                     break;
                 }
                 const appendedResults = await session.append("user", { blocks: toolResults });
-                if (!appendedResults.ok) AgentRunner.raiseRunError(appendedResults.error);
+                if (!appendedResults.ok) return finishRunFailure(appendedResults.error);
                 // chokepoint ②：tool_results 落库后回锚本 step 的 usage（锚点与
                 // usage 对齐到同一批可见消息——纯追加不失效基线，下一步评估走
                 // api 档零计数、锚点后增量由读口覆盖）。
@@ -766,53 +835,12 @@ export class DefaultAgentRunner implements AgentRunnerPort {
             }
         } catch (e: unknown) {
             if (signal?.aborted || (e instanceof Error && e.name === "AbortError")) {
-                // catch 命中 AbortError：走统一 abort 处理（保留 partial）
+                // catch 命中 AbortError：走统一 abort 处理（保留 partial）。
+                // 已知失败交收尾的路径不进这里——finishRunFailure 入口自带同款取消
+                // 优先路由，两处取消入口互斥，不会双发 FINISHED。
                 await handleAbort("catch_abort");
             } else {
-                runError = e instanceof Error ? e.message : String(e);
-                // 失败收尾落一条 assistant 错误消息：会话尾部变 assistant 后，双端
-                // composer 的连续 user 守卫（lastMessageIsPlainUserText）自然解锁，
-                // 失败原因也从一次性 toast 变为持久可回查。豁免两条：
-                // ① persistMessages=false（EphemeralOverlay run，append 只进内存，
-                //    run 结束即丢，落了也不可见）；② 本轮已有 assistant 落库
-                //    （assistantAppendedInRun——秒败路径必然无 assistant：assistant
-                //    仅在 model request 成功返回后 append，request 抛错时标志必为
-                //    false；多步中途失败时尾部已是 assistant / tool_results user，
-                //    isPlainUserText 已为 false，无需再落，避免双条）。
-                // 落库须先于 FAILED 事件发出，保证下游 tail reload 时能读到这条消息。
-                if (persistMessages && !assistantAppendedInRun) {
-                    try {
-                        const appended = await session.append("assistant", { blocks: [{ type: "text", text: `[生成失败] ${runError}` }] });
-                        if (!appended.ok) AgentRunner.raiseRunError(appended.error);
-                    } catch (appendError) {
-                        // 错误消息落库失败不掩盖原始错误：记日志后继续发 FAILED 并抛原错。
-                        log.error("failure_message_append_failed", {
-                            stage: "failure_message_append",
-                            sessionId,
-                            projectId,
-                            error: appendError,
-                        });
-                    }
-                }
-                // FAILED / 非 Abort throw 不到达 FINISHED：必清 API 占用（进程内热层 +
-                // session KKV 行双删），避免重启后从 KKV 读回旧值。
-                // run 收尾不等 IO：这里刻意保持 fire-and-forget（不 await KKV 删除）。
-                void SessionApiPromptTokenEntry.invalidate(this.deps.sessionKkv, sessionId);
-                if (publishRunLifecycle) {
-                    bus.publish(EVENT_AGENT_RUN_FAILED, {
-                        sessionId,
-                        projectId,
-                        runId,
-                        error: runError,
-                    });
-                }
-                // 已知失败沿返回值交入口壳（五期门⑦）：收尾（FAILED 事件 + 失败消息）已在上完成；
-                // 非 AppError 的未知异常保持 throw（转码矩阵「未知 throw」行）。
-                if (e instanceof AppError) {
-                    return Result.err(e);
-                }
-                // nm-throw: keep — 主 catch 最终出口的未知异常按转码矩阵保持 reject（Result 的 E 只装业务失败，不谎报），由 IPC 入口壳收口。
-                throw e;
+                return finishRunFailure(e);
             }
         }
 
@@ -908,30 +936,15 @@ type StreamBusWrapParams = {
 type StreamEventListener = (event: LlmStreamEvent) => void;
 
 /**
- * agent-runner 模块级 helper 集合的类型面。
- *
- * 显式注解整个对象类型是刻意的：TS 只对「对象类型来自显式注解」的属性访问
- * 调用做 never 返回的不可达收窄——`as const` 推断出的方法类型在
- * `if (!x.ok) AgentRunner.raiseRunError(x.error); x.value` 这条既有收窄模式下
- * 会让 `x.value` 报 TS2339（run 主循环内 15 处依赖该收窄）。
+ * agent-runner 模块级 helper 集合的类型面（显式注解，`as const` 推断的方法类型
+ * 不参与属性访问的调用期收窄，注解后成员签名稳定可查）。
  */
 interface AgentRunnerHelpers {
-    raiseRunError(error: unknown): never;
     wrapStreamForBus(p: StreamBusWrapParams): StreamEventListener | undefined;
 }
 
-/** agent-runner 模块级 helper 集合（run 主循环外的错误转抛与流式事件合批包装）。 */
+/** agent-runner 模块级 helper 集合（run 主循环外的流式事件合批包装）。 */
 export const AgentRunner: AgentRunnerHelpers = {
-    /**
-   * Result 失败转异常通道：复用 run() 主 catch 的既有收口（FAILED 事件 /
-   * 失败消息落库 / KKV 失效，最后 AppError 分流为 `Result.err`）。主 try 内的
-   * 解包一律经此进 catch——直接 `return Result.err` 会跳过收尾，终态事件丢失。
-   */
-    raiseRunError(error: unknown): never {
-        // 欠账（不是平台契约，不该靠抛异常做控制流；按规则应改成具名的失败收尾函数 + Result.err，待另起一轮）：转抛 helper 契约：把主 try 内的解包失败送进 run 主 catch 统一收尾（FAILED 事件 / 失败消息落库 / AppError 分流），return 会跳过收尾丢终态。
-        throw error;
-    },
-
     /**
    * @internal Exposed for stream-bus deferral unit tests.
    *
