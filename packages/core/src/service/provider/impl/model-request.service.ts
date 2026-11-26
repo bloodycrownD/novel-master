@@ -218,10 +218,16 @@ export class DefaultModelRequestService implements ModelRequestService {
                 };
                 return Result.ok(await adapter.chat(chatArgs));
             } catch (error) {
-                const canRetry = attempt <= policy.maxRetries && !attemptEmitted && isRetryableError(error);
                 // WHY: cancel must short-circuit retries so terminate actions feel immediate.
-                if (!canRetry || RequestAbort.isAbortLikeError(error)) {
+                if (RequestAbort.isAbortLikeError(error)) {
+                    // nm-throw: keep — 取消是控制流不是失败：AbortError 沿 reject 透传（平台协议例外，AbortSignal 链路无 Result 通道），不进 Result。
                     throw error;
+                }
+                const canRetry = attempt <= policy.maxRetries && !attemptEmitted && isRetryableError(error);
+                if (!canRetry) {
+                    // 不可重试的传输层失败收进 Err（本方法承诺 Result）：AppError 原样，未知异常包 INFRA。
+                    if (AppErrorOps.is(error)) return Result.err(error);
+                    return Result.err(new AppError("INFRA_UNEXPECTED_ERROR", { detail: error instanceof Error ? error.message : String(error) }, { cause: error }));
                 }
                 const retryPolicy = policy ?? DEFAULT_RETRY_POLICY;
                 const baseDelay = Math.min(retryPolicy.baseDelayMs * 2 ** Math.max(0, attempt - 1), retryPolicy.maxDelayMs);

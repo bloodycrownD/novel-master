@@ -146,9 +146,8 @@ export class SkillsService implements SkillService {
    */
     private async toWriteNotFoundError(p: SkillNotFoundProbeParams): Promise<AppError<"SKILL_NOT_FOUND">> {
         const { error, name, path, domain, projectId } = p;
-        if (!AppErrorOps.is(error, "VFS_NOT_FOUND")) {
-            throw error;
-        }
+        // nm-throw: keep — 不变量破坏（调用方传非 VFS_NOT_FOUND 属调用侧编程错误，两个调用点已先行守卫），按总纲走 assert/AssertionError，不占产品码。
+        assert(AppErrorOps.is(error, "VFS_NOT_FOUND"), "toWriteNotFoundError 仅处理 VFS_NOT_FOUND 的写失败");
         const otherDomain: SkillDomain = domain === "global" ? "project" : "global";
         let exists: boolean | null;
         if (otherDomain === "project" && (projectId == null || projectId.length === 0)) {
@@ -321,6 +320,8 @@ export class SkillsService implements SkillService {
         if (written.ok) {
             return Result.ok(written.value);
         }
+        // 非「文件不存在」的写失败原样交回（toWriteNotFoundError 只负责 VFS_NOT_FOUND 的三态探测加工）。
+        if (!AppErrorOps.is(written.error, "VFS_NOT_FOUND")) return Result.err(written.error);
         return Result.err(await this.toWriteNotFoundError({ error: written.error, name, path: rel.value, domain, projectId }));
     }
 
@@ -343,6 +344,8 @@ export class SkillsService implements SkillService {
         if (replaced.ok) {
             return Result.ok(replaced.value);
         }
+        // 非「文件不存在」的写失败原样交回（toWriteNotFoundError 只负责 VFS_NOT_FOUND 的三态探测加工）。
+        if (!AppErrorOps.is(replaced.error, "VFS_NOT_FOUND")) return Result.err(replaced.error);
         return Result.err(await this.toWriteNotFoundError({ error: replaced.error, name, path: rel.value, domain, projectId }));
     }
 
@@ -507,8 +510,10 @@ export class SkillsService implements SkillService {
             });
         } catch (error) {
             // 两 driver 的事务实现都会把非 TdbcError（含 AppError）包装成
-            // SQLITE_ERROR（cause 保留原错）：解包还原业务错误码（解不出原样上抛）
-            throw ErrorGuards.unwrapTxDomainError(error) ?? error;
+            // SQLITE_ERROR（cause 保留原错）：解包还原业务错误码（解不出包 INFRA）。
+            const domain = ErrorGuards.unwrapTxDomainError(error);
+            if (domain != null) return Result.err(domain);
+            return Result.err(new AppError("INFRA_UNEXPECTED_ERROR", { detail: error instanceof Error ? error.message : String(error) }, { cause: error }));
         }
         return Result.ok(undefined);
     }

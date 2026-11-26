@@ -176,7 +176,8 @@ export class DefaultSessionService implements SessionService {
         } catch (cause) {
             const domain = ErrorGuards.unwrapTxDomainError(cause);
             if (domain != null) return Result.err(domain);
-            throw cause;
+            // 非域异常（DB 故障等基础设施失败）包 INFRA 收进 Err：本方法承诺 Result，不再 reject。
+            return Result.err(new AppError("INFRA_UNEXPECTED_ERROR", { detail: cause instanceof Error ? cause.message : String(cause) }, { cause }));
         }
         await DeferredBlobGc.run(this.deps.conn);
         // file_cache 引用行随上面的事务删除，缓存 blob 的回收同样在提交后调度

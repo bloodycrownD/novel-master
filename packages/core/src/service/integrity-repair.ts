@@ -100,9 +100,8 @@ export class IntegrityRepairRegistry {
 
     /** 登记一个操作；同名重复登记直接抛错，防止悄悄覆盖。 */
     register(op: IntegrityRepairOperation): this {
-        if (!op || typeof op.detect !== "function" || typeof op.repair !== "function") {
-            throw new TypeError(`IntegrityRepairRegistry.register: 操作 ${op?.name ?? "<匿名>"} 缺少 detect/repair`);
-        }
+        // 形状不对属注册侧编程错误（不变量破坏），与下方同名覆盖同一 assert 口径。
+        assert(op != null && typeof op.detect === "function" && typeof op.repair === "function", `IntegrityRepairRegistry.register: 操作 ${op?.name ?? "<匿名>"} 缺少 detect/repair`);
         assert(!this.operations.has(op.name), `操作 ${op.name} 已登记，不允许覆盖`);
         this.operations.set(op.name, op);
         return this;

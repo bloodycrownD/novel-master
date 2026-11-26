@@ -591,16 +591,15 @@ describe("SkillService（T-SK5）", () => {
       unwrap(await skills.writeSkillFile({ domain: "global", name: victim, content: entry(victim, "占位技能") }));
       unwrap(await skills.writeSkillFile({ domain: "global", name: `src-${suffix}`, content: entry(`src-${suffix}`, "改名源") }));
 
-      // 撞名拒绝；域内查重在事务内重查，仍走 throw 回滚通道（port 契约）
-      await assert.rejects(
-        () =>
-          skills.updateSkillInfo(
-            { domain: "global", name: `src-${suffix}` },
-            { newName: victim },
-          ),
-        (error: unknown) =>
-          AppErrorOps.is(error, "SKILL_ALREADY_EXISTS") &&
-          renderError(error).includes("已存在同名技能"),
+      // 撞名拒绝；域内查重在事务内重查（事务内仍走 throw 回滚），事务边界解包还原错误码沿 Err 返回
+      const failed = await skills.updateSkillInfo(
+        { domain: "global", name: `src-${suffix}` },
+        { newName: victim },
+      );
+      assert.ok(!failed.ok, "撞名应返回 Err");
+      assert.ok(
+        AppErrorOps.is(failed.error, "SKILL_ALREADY_EXISTS") &&
+        renderError(failed.error).includes("已存在同名技能"),
       );
       // 拒绝后源技能原样（未半迁移）
       const list = outcomeValue(await skills.listSkills("global"));
@@ -639,17 +638,16 @@ describe("SkillService（T-SK5）", () => {
       unwrap(await skills.writeSkillFile({ domain: "global", name: src, content: entry(src, "想改成内置名") }));
 
       // 目标名 agent-config 在 global 域目录已存在（本体），先过保留名门
-      //（目录存在放行）再被域内查重拦下（事务内 throw）；project 域目录
-      // 不存在则直接被保留名门拒（Result.err）——两条通道都要验证
-      await assert.rejects(
-        () =>
-          skills.updateSkillInfo(
-            { domain: "global", name: src },
-            { newName: "agent-config" },
-          ),
-        (error: unknown) =>
-          AppErrorOps.is(error, "SKILL_BUILTIN_NAME_RESERVED") ||
-          AppErrorOps.is(error, "SKILL_ALREADY_EXISTS"),
+      //（目录存在放行）再被域内查重拦下（事务内 throw 回滚、事务外沿 Err 返回）；
+      // project 域目录不存在则直接被保留名门拒（Result.err）——两条通道都要验证
+      const failed = await skills.updateSkillInfo(
+        { domain: "global", name: src },
+        { newName: "agent-config" },
+      );
+      assert.ok(!failed.ok, "撞内置保留名应返回 Err");
+      assert.ok(
+        AppErrorOps.is(failed.error, "SKILL_BUILTIN_NAME_RESERVED") ||
+        AppErrorOps.is(failed.error, "SKILL_ALREADY_EXISTS"),
       );
 
       const project = unwrap(await ctx.projects.create(`P-TB-${suffix}`));

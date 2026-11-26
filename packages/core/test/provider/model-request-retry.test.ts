@@ -186,10 +186,10 @@ describe("DefaultModelRequestService retry", () => {
             retryPolicy: { maxRetries: 2, baseDelayMs: 0, maxDelayMs: 0, jitterRatio: 0 },
             resolveAdapter: () => adapter,
         });
-        await assert.rejects(
-            () => svc.request(SAVED_MODEL_ID, "hello"),
-            (error: unknown) => AppErrorOps.is(error, "PROVIDER_HTTP_ERROR"),
-        );
+        // 重试耗尽沿 Err 返回（不再 reject）。
+        const failed = await svc.request(SAVED_MODEL_ID, "hello");
+        assert.ok(!failed.ok, "重试耗尽应返回 Err");
+        assert.ok(AppErrorOps.is(failed.error, "PROVIDER_HTTP_ERROR"));
         assert.equal(calls, 3);
     });
 
@@ -239,10 +239,10 @@ describe("DefaultModelRequestService retry", () => {
             retryPolicy: { maxRetries: 3, baseDelayMs: 0, maxDelayMs: 0, jitterRatio: 0 },
             resolveAdapter: () => adapter,
         });
-        await assert.rejects(
-            () => svc.request(SAVED_MODEL_ID, "hello"),
-            (error: unknown) => AppErrorOps.is(error, "PROVIDER_HTTP_ERROR"),
-        );
+        // abort 形态 ProviderError 不可重试，沿 Err 返回（不再 reject）。
+        const failed = await svc.request(SAVED_MODEL_ID, "hello");
+        assert.ok(!failed.ok, "不可重试失败应返回 Err");
+        assert.ok(AppErrorOps.is(failed.error, "PROVIDER_HTTP_ERROR"));
         assert.equal(calls, 1, "abort 形态错误不应重试");
     });
 
@@ -292,11 +292,10 @@ describe("DefaultModelRequestService retry", () => {
             retryPolicy: { maxRetries: 3, baseDelayMs: 0, maxDelayMs: 0, jitterRatio: 0 },
             resolveAdapter: () => adapter,
         });
-        await assert.rejects(
-            () => svc.request(SAVED_MODEL_ID, "hello"),
-            (error: unknown) =>
-                AppErrorOps.is(error, "PROVIDER_STREAM_TIMEOUT") && error.details?.phase === "idle",
-        );
+        // idle 超时不可重试，沿 Err 返回（不再 reject）。
+        const failed = await svc.request(SAVED_MODEL_ID, "hello");
+        assert.ok(!failed.ok, "idle 超时应返回 Err");
+        assert.ok(AppErrorOps.is(failed.error, "PROVIDER_STREAM_TIMEOUT") && failed.error.details?.phase === "idle");
         assert.equal(calls, 1, "idle 超时不应重试");
     });
 
@@ -323,10 +322,10 @@ describe("DefaultModelRequestService retry", () => {
             resolveAdapter: () => adapter,
         });
         try {
-            await assert.rejects(
-                () => svc.request(SAVED_MODEL_ID, "hello"),
-                (error: unknown) => AppErrorOps.is(error, "PROVIDER_HTTP_ERROR"),
-            );
+            // HTTP 400 不可重试，沿 Err 返回（不再 reject）。
+            const failed = await svc.request(SAVED_MODEL_ID, "hello");
+            assert.ok(!failed.ok, "HTTP 400 应返回 Err");
+            assert.ok(AppErrorOps.is(failed.error, "PROVIDER_HTTP_ERROR"));
             assert.equal(calls, 1);
         } finally {
             if (savedDom !== undefined) {
@@ -357,14 +356,14 @@ describe("DefaultModelRequestService retry", () => {
             resolveAdapter: () => adapter,
         });
 
-        await assert.rejects(() =>
-            svc.request(SAVED_MODEL_ID, "hello", {
-                stream: true,
-                onStream: (ev) => {
-                    if (ev.type === "text-delta") seen.push(ev.text);
-                },
-            }),
-        );
+        // 已产出后中途失败沿 Err 返回（不再 reject）。
+        const failed = await svc.request(SAVED_MODEL_ID, "hello", {
+            stream: true,
+            onStream: (ev) => {
+                if (ev.type === "text-delta") seen.push(ev.text);
+            },
+        });
+        assert.ok(!failed.ok, "已产出后中途失败应返回 Err");
         assert.equal(calls, 1, "已产出后不得发起第二次 attempt");
         assert.equal(seen.length, 1, "onStream 只被驱动一次");
         assert.deepEqual(seen, ["半句"]);
@@ -429,17 +428,15 @@ describe("DefaultModelRequestService retry", () => {
             resolveAdapter: () => adapter,
         });
 
-        await assert.rejects(
-            () =>
-                svc.request(SAVED_MODEL_ID, "hello", {
-                    stream: true,
-                    onStream: (ev) => {
-                        if (ev.type === "text-delta") seen.push(ev.text);
-                    },
-                }),
-            (error: unknown) =>
-                AppErrorOps.is(error, "PROVIDER_STREAM_TIMEOUT") && error.details?.phase === "idle",
-        );
+        // 已产出的 idle 超时沿 Err 返回（不再 reject），归因不漂移。
+        const failed = await svc.request(SAVED_MODEL_ID, "hello", {
+            stream: true,
+            onStream: (ev) => {
+                if (ev.type === "text-delta") seen.push(ev.text);
+            },
+        });
+        assert.ok(!failed.ok, "已产出的 idle 超时应返回 Err");
+        assert.ok(AppErrorOps.is(failed.error, "PROVIDER_STREAM_TIMEOUT") && failed.error.details?.phase === "idle");
         assert.equal(calls, 1);
         assert.equal(seen.length, 1);
     });
