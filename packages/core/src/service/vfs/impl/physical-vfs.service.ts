@@ -67,7 +67,8 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
             return Result.ok(await p);
         } catch (error) {
             if (AppErrorOps.is(error)) return Result.err(error);
-            throw error;
+            // 未知异常包 INFRA 收进 Err：本方法承诺 Result，不再 reject（错误信息原文进 detail）。
+            return Result.err(new AppError("INFRA_UNEXPECTED_ERROR", { detail: error instanceof Error ? error.message : String(error) }, { cause: error }));
         }
     }
 
@@ -249,7 +250,8 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
             if (AppErrorOps.is(error)) {
                 return Result.err(error);
             }
-            throw error;
+            // 未知异常包 INFRA 收进 Err（同 wrapResult 口径，错误信息原文进 detail）。
+            return Result.err(new AppError("INFRA_UNEXPECTED_ERROR", { detail: error instanceof Error ? error.message : String(error) }, { cause: error }));
         }
         // inner 的 read 链失败走 Result 通道（错误通道迁移四期）：目录行按
         // 「无此文件」归一（本视图 read 只面向文件），抛出路径（旧 wiring）同款处理。

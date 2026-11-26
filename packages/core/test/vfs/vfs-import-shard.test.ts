@@ -188,18 +188,18 @@ describe("CS-05 导入分片提交（vfs-zip-io）", () => {
         files.set("a.md", "A");
         files.set("a.md/b.md", "B");
 
-        await assert.rejects(
-            () =>
-                VfsServiceFactory.createZipIo(conn).import(
-                    scope,
-                    VfsZipBuild.build(files),
-                    { confirmed: true }
-                ),
-            (e: unknown) =>
-                AppErrorOps.is(e, "VFS_IMPORT_FAILED") &&
-                (e as {messageKey?: string}).messageKey === "error.vfs.import_failed.with_progress" &&
-                (e as {messageParams?: {committed?: number; failed_shard?: number}}).messageParams?.committed === 1 &&
-                (e as {messageParams?: {committed?: number; failed_shard?: number}}).messageParams?.failed_shard === 2
+        // 真实失败沿 Err 返回（不再 reject）：IMPORT_FAILED 且消息带分片进度。
+        const failed = await VfsServiceFactory.createZipIo(conn).import(
+            scope,
+            VfsZipBuild.build(files),
+            { confirmed: true }
+        );
+        assert.ok(!failed.ok, "真实失败应返回 Err");
+        assert.ok(
+            AppErrorOps.is(failed.error, "VFS_IMPORT_FAILED") &&
+            (failed.error as {messageKey?: string}).messageKey === "error.vfs.import_failed.with_progress" &&
+            (failed.error as {messageParams?: {committed?: number; failed_shard?: number}}).messageParams?.committed === 1 &&
+            (failed.error as {messageParams?: {committed?: number; failed_shard?: number}}).messageParams?.failed_shard === 2
         );
 
         // 补偿照跑：目标前缀回到「空的可重试态」。

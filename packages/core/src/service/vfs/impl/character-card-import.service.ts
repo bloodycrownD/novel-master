@@ -199,6 +199,7 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
             // 测试钩子裸 Error（非域注入）维持直抛——测试按 instanceof Error 断言回滚；
             // AppError 原形进 Result.err（业务失败走返回值通道），其余包成 VFS_IMPORT_FAILED。
             if (error instanceof Error && error.message === "test import failure") {
+                // nm-throw: keep — 测试故障注入点：调用方按 "test import failure" 原文案直供抛回（用例断言该 message），非业务错误。
                 throw error;
             }
             if (AppErrorOps.is(error)) return Result.err(error);
@@ -246,6 +247,7 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
                 }
                 // 钩子直抛优先于包装与透传（用例断言原始 Error 原形）。
                 if (error instanceof Error && error.message === "test import failure") {
+                    // nm-throw: keep — 测试故障注入点：调用方按 "test import failure" 原文案直供抛回（用例断言该 message），非业务错误。
                     throw error;
                 }
                 if (AppErrorOps.is(error)) return Result.err(error);

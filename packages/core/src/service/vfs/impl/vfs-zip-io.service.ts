@@ -188,9 +188,10 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
             // 测试钩子直抛原形；其余（含事务内业务 AppError 与驱动层裸 Error）一律包成
             // VFS_IMPORT_FAILED——zip 侧业务错不透传，parentCheck 失败历来也落本码。
             if (error instanceof Error && error.message === "test import failure") {
+                // nm-throw: keep — 测试故障注入点：调用方按 "test import failure" 原文案直供抛回（用例断言该 message），非业务错误。
                 throw error;
             }
-            throw ImportFailure.create(error);
+            return Result.err(ImportFailure.create(error));
         }
 
         // 段 B0 提交后立刻收被替换掉的旧内容：sweep 把旧 blob 的 ref_count 递减到 0
@@ -236,9 +237,10 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
                     log.warn("import compensation failed", { error: compensateError });
                 }
                 if (error instanceof Error && error.message === "test import failure") {
+                    // nm-throw: keep — 测试故障注入点：调用方按 "test import failure" 原文案直供抛回（用例断言该 message），非业务错误。
                     throw error;
                 }
-                throw ImportFailure.create(error, committedShards, shardIndex + 1);
+                return Result.err(ImportFailure.create(error, committedShards, shardIndex + 1));
             }
             // 让步只落在片与片之间，绝不落在事务回调内部。
             await Concurrency.yieldToEventLoop();

@@ -140,7 +140,8 @@ export class RevisionAwareVfsService implements InternalVfsService {
         } catch (cause) {
             const domain = ErrorGuards.unwrapTxDomainError(cause);
             if (domain != null) return Result.err(domain);
-            throw cause;
+            // 非域异常（DB 故障等基础设施失败）包 INFRA 收进 Err：本方法承诺 Result，不再 reject。
+            return Result.err(new AppError("INFRA_UNEXPECTED_ERROR", { detail: cause instanceof Error ? cause.message : String(cause) }, { cause }));
         }
         return Result.ok(undefined);
     }
@@ -192,7 +193,8 @@ export class RevisionAwareVfsService implements InternalVfsService {
         } catch (cause) {
             const domain = ErrorGuards.unwrapTxDomainError(cause);
             if (domain != null && domain.key === "VFS_NOT_FOUND") return Result.err(domain);
-            throw cause;
+            // 非域异常（DB 故障等基础设施失败）包 INFRA 收进 Err：本方法承诺 Result，不再 reject。
+            return Result.err(new AppError("INFRA_UNEXPECTED_ERROR", { detail: cause instanceof Error ? cause.message : String(cause) }, { cause }));
         }
         return Result.ok(undefined);
     }
@@ -236,7 +238,8 @@ export class RevisionAwareVfsService implements InternalVfsService {
         } catch (cause) {
             const domain = ErrorGuards.unwrapTxDomainError(cause);
             if (domain != null && domain.key === "VFS_NOT_FOUND") return Result.err(domain);
-            throw cause;
+            // 非域异常（DB 故障等基础设施失败）包 INFRA 收进 Err：本方法承诺 Result，不再 reject。
+            return Result.err(new AppError("INFRA_UNEXPECTED_ERROR", { detail: cause instanceof Error ? cause.message : String(cause) }, { cause }));
         }
         return Result.ok(undefined);
     }
@@ -261,7 +264,8 @@ export class RevisionAwareVfsService implements InternalVfsService {
         } catch (cause) {
             const domain = ErrorGuards.unwrapTxDomainError(cause);
             if (domain != null && domain.key === "VFS_NOT_FOUND") return Result.err(domain);
-            throw cause;
+            // 非域异常（DB 故障等基础设施失败）包 INFRA 收进 Err：本方法承诺 Result，不再 reject。
+            return Result.err(new AppError("INFRA_UNEXPECTED_ERROR", { detail: cause instanceof Error ? cause.message : String(cause) }, { cause }));
         }
         return Result.ok(undefined);
     }
@@ -285,7 +289,8 @@ export class RevisionAwareVfsService implements InternalVfsService {
         } catch (cause) {
             const domain = ErrorGuards.unwrapTxDomainError(cause);
             if (domain != null && domain.key === "VFS_NOT_FOUND") return Result.err(domain);
-            throw cause;
+            // 非域异常（DB 故障等基础设施失败）包 INFRA 收进 Err：本方法承诺 Result，不再 reject。
+            return Result.err(new AppError("INFRA_UNEXPECTED_ERROR", { detail: cause instanceof Error ? cause.message : String(cause) }, { cause }));
         }
         return Result.ok(undefined);
     }
