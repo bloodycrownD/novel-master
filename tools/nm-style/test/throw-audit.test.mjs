@@ -1,5 +1,6 @@
-// T-TA1~T-TA4：throw-audit——六形态识别与属性列 / 判定矩阵五分支 / gate（未登记拦、UNTRIAGED 显数不拦）/
-// write-baseline salvage；外加 CLI 用法错误（--write-baseline 与 --gate 互斥、gate 无基线 exit 2）。
+// T-TA1~T-TA12：throw-audit——T1-T6 语句形态识别与属性列 / T7 转抛 helper 定义站点与 T8 调用站点
+// （error-channel-debt §5，含断言豁免、keep、传递链）/ 判定矩阵五分支 / gate（未登记拦、UNTRIAGED 显数
+// 不拦）/ write-baseline salvage；外加 CLI 用法错误（--write-baseline 与 --gate 互斥、gate 无基线 exit 2）。
 // git 依赖用例在包内 gitignored 的 tmp-git-test/ 下构造（子目录名带 tta- 前缀），用完即删。
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -34,10 +35,10 @@ const MATRIX_SRC = [
 
 const matrixSites = (file = "packages/core/src/matrix.ts") => throwSitesOfText(file, MATRIX_SRC);
 
-test("T-TA1 六形态识别与属性列（fn 路径 / ret 八值桶 / catch / keep 理由 / 稳定键）", () => {
+test("T-TA1 T1-T6 语句形态识别与属性列（fn 路径 / ret 八值桶 / catch / keep 理由 / 稳定键）；never 标注函数并存 T7 定义站点", () => {
   const sites = matrixSites();
-  assert.equal(sites.length, 10);
-  const [t1, t4b, t4v, t2, t3b, kept, t3o, t4n, t4never, t4pp] = sites;
+  assert.equal(sites.length, 11, "10 条语句站点 + neverReturns 的 T7 定义站点（error-channel-debt §5）");
+  const [t1, t4b, t4v, t2, t3b, kept, t3o, t4n, t4never, t7never, t4pp] = sites;
   assert.equal(t1.form, "T1");
   assert.equal(t1.fn, "t1Violation");
   assert.equal(t1.ret, "result");
@@ -62,6 +63,12 @@ test("T-TA1 六形态识别与属性列（fn 路径 / ret 八值桶 / catch / ke
   assert.equal(t4n.ret, "none");
   assert.equal(t4never.ret, "never");
   assert.equal(t4pp.ret, "promise-plain");
+  assert.equal(t7never.form, "T7");
+  assert.equal(t7never.text, "never-throw helper: neverReturns", "T7 键文本是合成文本，不与体内 T4 语句原文键碰撞");
+  assert.equal(t7never.key, "packages/core/src/matrix.ts#never-throw helper: neverReturns");
+  assert.equal(t7never.ret, "never");
+  assert.equal(t7never.hasCatch, false);
+  assert.equal(t7never.verdict, "VIOLATION-B");
   for (const site of sites) assert.ok(site.key.startsWith(site.file + "#"), "站点键 = 文件 # 语句原文");
   assert.equal(t1.text, "throw x.error;", "text 是 throw 语句本身（空白归一），不含同函数其余语句");
 });
@@ -218,4 +225,108 @@ test("T-TA7 自定义错误类（T5）与再抛 / 其它表达式（T6）也进�
   assert.deepEqual(sites.map((s) => s.verdict), ["VIOLATION-B", "VIOLATION-B", "VIOLATION-B", "VIOLATION"]);
   assert.equal(sites[1].text, "throw new TransportError('bad', 1);");
   assert.equal(sites[1].key, "packages/core/src/ta7.ts#throw new TransportError('bad', 1);");
+});
+
+// error-channel-debt §5：T7 转抛 helper 定义站点与 T8 调用站点（断言豁免 / keep / 传递链）。
+
+test("T-TA8 T7 定义站点：MethodDeclaration 与 PropertyAssignment 箭头两形态都报，键取合成文本，与体内 T6 并存各占一键", () => {
+  const src = [
+    "const Helpers = {",
+    "  raiseRunError(error: unknown): never { throw error; },",
+    "  rethrow: (e: unknown): never => { throw e; },",
+    "};",
+  ].join("\n");
+  const sites = throwSitesOfText("packages/core/src/ta8.ts", src);
+  assert.deepEqual(sites.map((s) => [s.form, s.text, s.key]), [
+    ["T6", "throw error;", "packages/core/src/ta8.ts#throw error;"],
+    ["T7", "never-throw helper: raiseRunError", "packages/core/src/ta8.ts#never-throw helper: raiseRunError"],
+    ["T6", "throw e;", "packages/core/src/ta8.ts#throw e;"],
+    ["T7", "never-throw helper: rethrow", "packages/core/src/ta8.ts#never-throw helper: rethrow"],
+  ]);
+  assert.deepEqual(sites.filter((s) => s.form === "T6").map((s) => s.fn), ["raiseRunError", "rethrow"], "体内 T6 的 fn 列是 helper 方法名");
+  for (const site of sites.filter((s) => s.form === "T7")) {
+    assert.equal(site.ret, "never");
+    assert.equal(site.hasCatch, false);
+    assert.equal(site.verdict, "VIOLATION-B", "never helper 定义站点无 catch → VIOLATION-B（唯一修法是删 helper）");
+    assert.equal(site.fn, "<module>", "对象字面量顶层定义 → <module>");
+  }
+});
+
+test("T-TA9 T8 调用站点：裸调用与属性链调用都报且带 helper 名，键取调用原文（含实参），判定随所在函数", () => {
+  const src = [
+    "function boom(e: unknown): never { throw e; }",
+    "const Runner = { boom(e: unknown): never { throw e; } };",
+    "async function run(r: { ok: boolean; error: AppError }): Promise<Result<void, AppError>> {",
+    "  if (!r.ok) boom(r.error);",
+    "  if (!r.ok) Runner.boom(r.error);",
+    "  return Result.ok(undefined);",
+    "}",
+  ].join("\n");
+  const sites = throwSitesOfText("packages/core/src/ta9.ts", src);
+  const t8s = sites.filter((s) => s.form === "T8");
+  assert.deepEqual(t8s.map((s) => [s.helper, s.text, s.key]), [
+    ["boom", "boom(r.error)", "packages/core/src/ta9.ts#boom(r.error)"],
+    ["boom", "Runner.boom(r.error)", "packages/core/src/ta9.ts#Runner.boom(r.error)"],
+  ]);
+  for (const site of t8s) {
+    assert.equal(site.ret, "async-result", "所在函数返回 Promise<Result> → async-result");
+    assert.equal(site.verdict, "VIOLATION", "Result 函数内的 helper 调用 → VIOLATION（改 return）");
+    assert.equal(site.fn, "run");
+    assert.equal(site.hasCatch, false);
+  }
+});
+
+test("T-TA10 断言豁免：assert 开头（大小写不敏感）与体内 throw new AssertionError 都不产生 T7/T8；豁免函数体内的语句站点照常", () => {
+  const src = [
+    "function assertNever(x: unknown): never { throw x; }",
+    "function ASSERT_OK(x: unknown): never { throw x; }",
+    "function die(x: unknown): never { throw new AssertionError('bad'); }",
+    "function chainToAssert(x: unknown): never { return assertNever(x); }",
+  ].join("\n");
+  const sites = throwSitesOfText("packages/core/src/ta10.ts", src);
+  assert.deepEqual(sites.filter((s) => s.form === "T7").map((s) => s.text), [], "豁免函数不产生 T7 定义站点");
+  assert.deepEqual(sites.filter((s) => s.form === "T8").map((s) => s.text), [], "豁免函数（assertNever 不在名单）的调用不产生 T8");
+  assert.deepEqual(sites.map((s) => s.form), ["T6", "T6", "T5"], "体内语句的 T1-T6 站点照常；chainToAssert 的 callee 不在名单 → 无站点");
+});
+
+test("T-TA11 keep 不豁免收集：体内注释与调用点注释都判 KEEP，站点照常入表", () => {
+  const src = [
+    "const Keep = {",
+    "  kept(e: unknown): never {",
+    "    // nm-throw: keep — 第三方 SDK 边界：由上层基础设施错误收口。",
+    "    throw e;",
+    "  },",
+    "};",
+    "async function run(r: { ok: boolean; error: AppError }): Promise<Result<void, AppError>> {",
+    "  // nm-throw: keep — 调用点豁免。",
+    "  if (!r.ok) Keep.kept(r.error);",
+    "  return Result.ok(undefined);",
+    "}",
+  ].join("\n");
+  const sites = throwSitesOfText("packages/core/src/ta11.ts", src);
+  const t7 = sites.find((s) => s.form === "T7");
+  const t8 = sites.find((s) => s.form === "T8");
+  assert.equal(t7.verdict, "KEEP", "体内 throw 上方的 keep 注释 → KEEP");
+  assert.equal(t7.keep, "第三方 SDK 边界：由上层基础设施错误收口。");
+  assert.equal(t8.verdict, "KEEP", "调用点（外层 if 形态）上方的 keep 注释 → KEEP");
+  assert.equal(t8.keep, "调用点豁免。");
+  assert.equal(t8.helper, "kept");
+});
+
+test("T-TA12 传递链：体只 return 调用已知 T7 的候选随名单扩展（到不动点）也报 T7，体内调用照收 T8；callee 未知的不报", () => {
+  const src = [
+    "function leaf(e: unknown): never { throw e; }",
+    "function mid(e: unknown): never { return leaf(e); }",
+    "function top(e: unknown): never { return mid(e); }",
+    "function isolated(e: unknown): never { return unknownThing(e); }",
+  ].join("\n");
+  const sites = throwSitesOfText("packages/core/src/ta12.ts", src);
+  const t7s = sites.filter((s) => s.form === "T7");
+  assert.deepEqual(t7s.map((s) => s.text), ["never-throw helper: leaf", "never-throw helper: mid", "never-throw helper: top"], "链上两层都随不动点入名单");
+  const t8s = sites.filter((s) => s.form === "T8");
+  assert.deepEqual(t8s.map((s) => [s.helper, s.text, s.fn]), [
+    ["leaf", "leaf(e)", "mid"],
+    ["mid", "mid(e)", "top"],
+  ], "传递链体内的调用按 T8 收（helper 名指向链下一环）");
+  assert.ok(!sites.some((s) => s.text.includes("isolated")), "callee 不在名单的候选不产生任何站点");
 });

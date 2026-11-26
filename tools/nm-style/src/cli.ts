@@ -31,7 +31,7 @@ const USAGE_LINES = [
     "  gate         dup | bare [--baseline <path>] [--include-tests]",
     "  list         bare --summary | --bucket <桶> | clusters --all  [--json] [--include-tests]",
     "  baseline     write dup | bare  --baseline <path>",
-    "  throw-audit  [--gate] [--write-baseline] [--baseline <path>] [--include-tests] [--json]   # 六形态 throw 盘点（默认全量表）",
+    "  throw-audit  [--gate] [--write-baseline] [--baseline <path>] [--include-tests] [--json]   # 八形态 throw 盘点（默认全量表）",
     "  closures     [--include-tests] [--json]   # 函数内命名闭包盘点 + 捕获集分类（hoist/method/parametrize），盘点不阻断",
     "  index        [--json]",
     "",
@@ -44,7 +44,7 @@ const KNOWN_COMMANDS = new Set(["check", "gate", "list", "baseline", "index", "t
 
 const DUP_BASELINE_NOTE = "签名重复基线 v2。新增重复组会让 gate 打红；存量允许保留（刻意重复：双端镜像对、测试 helper、接口实现）。judged 段=人工裁决的有意保留组，键消失时由下次 write 警告丢弃。";
 const BARE_BASELINE_NOTE = "nm-style 裸导出基线。gate bare 判据：新增文件条目或既有文件新增函数名 → exit 1；减少是改善，不阻断。重建：nm-style baseline write bare --baseline <path>。";
-const THROW_BASELINE_NOTE = "throw-audit 基线（p26 R3）。站点键 = 文件 + throw 语句空白归一原文；disposition：ALLOWED（白名单三类）/ BOUNDARY（合法边界转码，理由必填）/ KEEP（nm-throw: keep 存量）/ UNTRIAGED（定性不了的欠账——gate 不拦但报告显数）。gate 拦矩阵判 VIOLATION/VIOLATION-B/BOUNDARY 且未登记的站点；重建：nm-style throw-audit --write-baseline。";
+const THROW_BASELINE_NOTE = "throw-audit 基线（p26 R3）。站点键 = 文件 + 站点原文空白归一（语句六形态取 throw 语句、T8 取调用原文、T7 转抛 helper 定义站点取合成文本 `never-throw helper: <名>`）；disposition：ALLOWED（白名单三类）/ BOUNDARY（合法边界转码，理由必填）/ KEEP（nm-throw: keep 存量）/ UNTRIAGED（定性不了的欠账——gate 不拦但报告显数）。gate 拦矩阵判 VIOLATION/VIOLATION-B/BOUNDARY 且未登记的站点；重建：nm-style throw-audit --write-baseline。";
 
 function errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
@@ -219,7 +219,7 @@ function runCheck(argv: string[]): number {
     }
     console.log("\n== dup（gate 透传，不阻断；dup=同名+形态 组数，(+新增/-消除)）==");
     for (const line of dup.lines) console.log(line);
-    console.log("\n== throw-audit（gate 透传，不阻断；六形态 throw 盘点，详见 nm-style throw-audit --gate）==");
+    console.log("\n== throw-audit（gate 透传，不阻断；八形态 throw 盘点，详见 nm-style throw-audit --gate）==");
     for (const line of throwAudit.lines) console.log(line);
     const bareSegment = flags.changed ? String(bareBlocked.length) : `INFO(${bareFindings.length})`;
     const oopSegment = flags.strict ? String(countBlockingOf(reported, "oop")) : `INFO(${oopFindings.length})`;
@@ -489,7 +489,7 @@ function writeBareBaseline(baselinePath: string, includeTests: boolean): number 
 
 /**
  * `throw-audit [--gate] [--write-baseline] [--baseline <path>] [--include-tests] [--json]`（p26 R3）。
- * 默认打六形态全量表；--gate 与 baseline 比对（未登记 VIOLATION/VIOLATION-B/BOUNDARY → exit 1，
+ * 默认打八形态全量表；--gate 与 baseline 比对（未登记 VIOLATION/VIOLATION-B/BOUNDARY → exit 1，
  * UNTRIAGED 不拦但首行显数）；--write-baseline 落盘当前站点（旧 disposition 按 key salvage）。
  */
 /** closures 子命令：局部命名闭包盘点（不阻断），按建议桶分组输出。 */
@@ -588,7 +588,7 @@ function runThrowAudit(argv: string[]): number {
         }
     }
 
-    console.log(`== nm-style throw-audit ==（六形态 ${sites.length} 站点；T1=unwrap throw / T2=createAbortError / T3=new AppError / T4=new Error / T5=new 自定义错误类 / T6=再抛或其它表达式）`);
+    console.log(`== nm-style throw-audit ==（八形态 ${sites.length} 站点；T1=unwrap throw / T2=createAbortError / T3=new AppError / T4=new Error / T5=new 自定义错误类 / T6=再抛或其它表达式 / T7=never 转抛 helper 定义 / T8=转抛 helper 调用点）`);
     const byForm = new Map<string, number>();
     const byVerdict = new Map<string, number>();
     for (const site of sites) {
@@ -616,7 +616,7 @@ function runThrowAudit(argv: string[]): number {
     }
 
     for (const site of sites) console.log(`  ${throwSiteLine(site)}`);
-    console.log(`\n处置：VIOLATION=所在函数返回 Result/Outcome，改 return；BOUNDARY=合法边界转码，须 baseline 登记理由；VIOLATION-B=该层应改返 Result；KEEP/ALLOWED=已豁免。定性落盘：nm-style throw-audit --write-baseline。`);
+    console.log(`\n处置：VIOLATION=所在函数返回 Result/Outcome，改 return；BOUNDARY=合法边界转码，须 baseline 登记理由；VIOLATION-B=该层应改返 Result（T7 转抛 helper 的唯一修法是删 helper 改 Result 直返）；KEEP/ALLOWED=已豁免。定性落盘：nm-style throw-audit --write-baseline。`);
     return 0;
 }
 
