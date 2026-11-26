@@ -313,6 +313,7 @@ export const AgentTurnRunner: AgentTurnRunnerHelpers = {
      * （终态补发判定 / onRunFailed / AppError→Result.err 分流），不新增解包字面。
      */
     rethrowRunFailure(error: AppError): never {
+        // nm-throw: keep — 转抛 helper 契约：把已知失败送进调用方 catch 的统一收口（终态补发判定 / onRunFailed / AppError 分流），return 会跳过收尾丢终态。
         throw error;
     },
 
@@ -356,6 +357,7 @@ export const AgentTurnRunner: AgentTurnRunnerHelpers = {
         if (!effective.ok) {
             // 装配失败沿异常通道上抛（原行为）：技能清单读取失败不静默降级成「无技能工具」。
             const failure = effective.error;
+            // nm-throw: keep — 转抛进调用方主 catch 统一收尾（终态补发判定 / onRunFailed / AppError 分流），技能装配点无 Result 通道（plain 签名）。
             throw failure;
         }
         // referencedNames：seen 共享（方向 A）的可变集合，runner 每步 prepare 后回填
@@ -1124,6 +1126,7 @@ export const AgentTurnRunner: AgentTurnRunnerHelpers = {
                 if (error instanceof AppError) {
                     return Result.err(error);
                 }
+                // nm-throw: keep — 主 catch 最终出口的未知异常按转码矩阵保持 reject（Result 的 E 只装业务失败，不谎报），由 IPC 入口壳收口。
                 throw error;
             } finally {
                 // 反注册带所有权比对：若期间 sessionId 被新 run 覆盖，不误删新 run 的 controller / partial。

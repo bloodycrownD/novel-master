@@ -517,6 +517,7 @@ export class DefaultAgentRunner implements AgentRunnerPort {
                         await handleAbort("model_request_catch");
                         break;
                     }
+                    // nm-throw: keep — 非取消异常转抛进 run 主 catch 统一收尾（FAILED 事件 / 失败消息落库 / AppError 分流），直接 return 会跳过收尾丢终态。
                     throw e;
                 }
 
@@ -733,6 +734,7 @@ export class DefaultAgentRunner implements AgentRunnerPort {
                             messageId: assistantMessage.id,
                             error,
                         });
+                        // nm-throw: keep — 转抛进 run 主 catch 统一收尾（FAILED 事件 / 失败消息落库 / AppError 分流），直接 return 会跳过收尾丢终态。
                         throw error;
                     }
                 }
@@ -809,6 +811,7 @@ export class DefaultAgentRunner implements AgentRunnerPort {
                 if (e instanceof AppError) {
                     return Result.err(e);
                 }
+                // nm-throw: keep — 主 catch 最终出口的未知异常按转码矩阵保持 reject（Result 的 E 只装业务失败，不谎报），由 IPC 入口壳收口。
                 throw e;
             }
         }
@@ -925,6 +928,7 @@ export const AgentRunner: AgentRunnerHelpers = {
    * 解包一律经此进 catch——直接 `return Result.err` 会跳过收尾，终态事件丢失。
    */
     raiseRunError(error: unknown): never {
+        // nm-throw: keep — 转抛 helper 契约：把主 try 内的解包失败送进 run 主 catch 统一收尾（FAILED 事件 / 失败消息落库 / AppError 分流），return 会跳过收尾丢终态。
         throw error;
     },
 
