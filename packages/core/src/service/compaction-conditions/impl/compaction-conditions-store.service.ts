@@ -87,6 +87,7 @@ export class DefaultCompactionConditionsStore implements CompactionConditionsSto
     async setConditions(conditions: CompactionConditions): Promise<void> {
         const validated = SerializationDecode.decode(conditions, compactionConditionsSchema);
         // 端口无失败位、apps set 路径按异常收口：schema 违约在写入口仍走 throw（边界决定，见 port 注）。
+        // nm-throw: keep — 端口签名是 Promise<void>、没有失败位（port 注明由 apps 按异常收口）；要改 Result 须先改端口与两端调用方，不在这条调用链里单点改
         if (!validated.ok) throw invalidSchemaError(validated.error);
         await this.kkv.set(MODULE, KEY_POLICY, JSON.stringify(validated.value));
     }
@@ -99,6 +100,7 @@ export class DefaultCompactionConditionsStore implements CompactionConditionsSto
             if (AppErrorOps.is(error, "KKV_NOT_FOUND")) {
                 return;
             }
+            // nm-throw: keep — 端口签名是 Promise<void>、没有失败位（port 注明由 apps 按异常收口）；要改 Result 须先改端口与两端调用方，不在这条调用链里单点改
             throw error;
         }
     }

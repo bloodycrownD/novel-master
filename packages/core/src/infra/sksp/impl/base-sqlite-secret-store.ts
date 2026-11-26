@@ -37,6 +37,7 @@ export abstract class BaseSqliteSecretStore implements SecretStore {
         }
         const row = rows[0]!;
         if (String(row.algo) !== this.strategy.algo) {
+            // nm-throw: keep — SKSP 的 SkspCryptoStrategy / SecretStore 端口是 Promise reject 契约（sksp-strategy.port.ts、secret-store.port.ts 签名都不是 Result），兄弟实现同口径；最终由桌面 provider IPC handler 的 catch 收口
             throw new SkspError("DECRYPT_FAILED", `Unsupported algo for ${ref}. Re-run: nm provider edit --apiKey`, { ref });
         }
         return this.strategy.decrypt(ref, row);

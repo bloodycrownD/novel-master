@@ -213,9 +213,9 @@ export namespace Messages {
             if (!built.ok) return Result.err(built.error);
             const rt = built.value;
             const forked = await rt.messages.fork(req.sessionId, req.messageId);
-            // nm-throw: keep 平台强制（P4 IPC 取消协议）——handler 是 IpcResult 线格式出口，中断分支转 AbortError 由 formatIpcError 映射 IPC_ABORTED。
+            // nm-throw: keep — 平台强制（P4 IPC 取消协议）——handler 是 IpcResult 线格式出口，中断分支转 AbortError 由 formatIpcError 映射 IPC_ABORTED。
             if (forked.kind === "cancelled" || forked.kind === "replaced") throw AbortError.create();
-            // nm-throw: keep 合法边界转码——core Result 失败解包上抛，IpcResults.from 的 catch 统一收编转 IpcResult（五期 handler 既有形态）。
+            // nm-throw: keep — 合法边界转码——core Result 失败解包上抛，IpcResults.from 的 catch 统一收编转 IpcResult（五期 handler 既有形态）。
             if (forked.kind === "failed") throw forked.error;
             const session = forked.value;
             return Result.ok({

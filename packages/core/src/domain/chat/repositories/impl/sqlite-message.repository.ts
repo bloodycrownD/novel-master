@@ -333,7 +333,7 @@ export class SqliteMessageRepository extends BaseSqliteChatRepository<ChatMessag
                     const hit = hooks?.checkpoint?.();
                     if (hit != null) {
                         interrupt = hit;
-                        // nm-throw: keep 平台强制（P1 事务回滚）：batchInsert 中断以 throw 让驱动整体回滚，不留半写批；interrupt 台账在出口转回 Outcome。
+                        // nm-throw: keep — 平台强制（P1 事务回滚）：batchInsert 中断以 throw 让驱动整体回滚，不留半写批；interrupt 台账在出口转回 Outcome。
                         throw AbortError.create();
                     }
                     await this.yieldFn?.();

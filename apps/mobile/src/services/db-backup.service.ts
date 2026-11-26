@@ -219,7 +219,7 @@ export namespace DbBackupService {
                     mimeType: 'application/octet-stream',
                     copy: Platform.OS === 'ios',
                     write: destPath => exportToPath(runtime, destPath, () => abortScope.checkpoint()).then(outcome => {
-                        if (outcome.kind !== 'completed') throw AbortError.create(); // nm-throw: keep 平台强制——DocumentIo.write 契约无控制流通道，调用方 catch isAbortLikeError 收编
+                        if (outcome.kind !== 'completed') throw AbortError.create(); // nm-throw: keep — 平台强制——DocumentIo.write 契约无控制流通道，调用方 catch isAbortLikeError 收编
                     }),
                 };
                 const saved = await DocumentIo.exportBytes(exportOptions);

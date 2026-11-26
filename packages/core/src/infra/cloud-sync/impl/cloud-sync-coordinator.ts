@@ -232,7 +232,7 @@ export class CloudSyncCoordinator {
             return;
         }
         log.info("cloud sync interrupted", { phase, kind: hit.kind, ...(hit.kind === "cancelled" ? { reason: hit.reason } : {}) });
-        // nm-throw: keep 内部控制信号：私有 void 方法无返回值通道，取消事实由 service
+        // nm-throw: keep — 内部控制信号：私有 void 方法无返回值通道，取消事实由 service
         // 出口 catch isAbortLikeError 收编转 Result（mobile cloud-sync.service 两端点）。
         throw AbortError.create();
     }

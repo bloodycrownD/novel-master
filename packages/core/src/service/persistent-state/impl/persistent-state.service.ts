@@ -129,6 +129,7 @@ export class DefaultPersistentState implements PersistentState {
             if (AppErrorOps.is(error, "KKV_NOT_FOUND")) {
                 return;
             }
+            // nm-throw: keep — 端口签名是 Promise<void>、没有失败位（port 注明由 apps 按异常收口）；要改 Result 须先改端口与两端调用方，不在这条调用链里单点改
             throw error;
         }
     }

@@ -95,6 +95,7 @@ export const SkspNodeFactory = {
                     return testMasterKey;
                 }
                 if (process.platform !== platform) {
+                    // nm-throw: keep — SKSP 的 SkspCryptoStrategy / SecretStore 端口是 Promise reject 契约（sksp-strategy.port.ts、secret-store.port.ts 签名都不是 Result），兄弟实现同口径；最终由桌面 provider IPC handler 的 catch 收口
                     throw new SkspError(operation === "encrypt" ? "ENCRYPT_FAILED" : "DECRYPT_FAILED", operation === "encrypt" ? `${displayName} is only available on ${platform}` : `${displayName} decrypt failed for ${ref} (not on ${platform}). Re-run: nm provider edit --apiKey`, { ref });
                 }
                 const code: SkspErrorCode = operation === "encrypt" ? "ENCRYPT_FAILED" : "DECRYPT_FAILED";
@@ -104,6 +105,7 @@ export const SkspNodeFactory = {
                     if (existing != null) {
                         const buf = Buffer.from(existing, "base64");
                         if (buf.length !== MASTER_KEY_BYTES) {
+                            // nm-throw: keep — SKSP 的 SkspCryptoStrategy / SecretStore 端口是 Promise reject 契约（sksp-strategy.port.ts、secret-store.port.ts 签名都不是 Result），兄弟实现同口径；最终由桌面 provider IPC handler 的 catch 收口
                             throw new SkspError("DECRYPT_FAILED", `Invalid master key in ${label} for ${ref}. Re-run: nm provider edit --apiKey`, { ref });
                         }
                         return new Uint8Array(buf);
@@ -113,8 +115,10 @@ export const SkspNodeFactory = {
                     return new Uint8Array(key);
                 } catch (cause) {
                     if (cause instanceof SkspError) {
+                        // nm-throw: keep — SKSP 的 SkspCryptoStrategy / SecretStore 端口是 Promise reject 契约（sksp-strategy.port.ts、secret-store.port.ts 签名都不是 Result），兄弟实现同口径；最终由桌面 provider IPC handler 的 catch 收口
                         throw cause;
                     }
+                    // nm-throw: keep — SKSP 的 SkspCryptoStrategy / SecretStore 端口是 Promise reject 契约（sksp-strategy.port.ts、secret-store.port.ts 签名都不是 Result），兄弟实现同口径；最终由桌面 provider IPC handler 的 catch 收口
                     throw new SkspError(code, code === "ENCRYPT_FAILED" ? `${label} access failed for ${ref}` : `${label} access failed for ${ref}. Re-run: nm provider edit --apiKey`, { ref, cause });
                 }
             },

@@ -22,6 +22,7 @@ export const AesGcm = {
             const tag = cipher.getAuthTag();
             return { ciphertext: new Uint8Array(Buffer.concat([enc, tag])), iv: new Uint8Array(iv) };
         } catch (cause) {
+            // nm-throw: keep — SKSP 的 SkspCryptoStrategy / SecretStore 端口是 Promise reject 契约（sksp-strategy.port.ts、secret-store.port.ts 签名都不是 Result），兄弟实现同口径；最终由桌面 provider IPC handler 的 catch 收口
             throw new SkspError("ENCRYPT_FAILED", `AES encrypt failed for ${ref}`, { ref, cause });
         }
     },
@@ -40,6 +41,7 @@ export const AesGcm = {
             decipher.setAuthTag(tag);
             return Buffer.concat([decipher.update(enc), decipher.final()]).toString("utf8");
         } catch (cause) {
+            // nm-throw: keep — SKSP 的 SkspCryptoStrategy / SecretStore 端口是 Promise reject 契约（sksp-strategy.port.ts、secret-store.port.ts 签名都不是 Result），兄弟实现同口径；最终由桌面 provider IPC handler 的 catch 收口
             throw new SkspError("DECRYPT_FAILED", `AES decrypt failed for ${ref}. Re-run: nm provider edit --apiKey`, { ref, cause });
         }
     },
