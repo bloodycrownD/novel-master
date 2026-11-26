@@ -110,6 +110,7 @@ async function resolveLatest(fetchFn: FetchFn = fetch): Promise<LatestRelease> {
             throw new Error("检查更新超时，请稍后重试");
         }
         if (err instanceof Error) {
+            // nm-throw: keep — 原样再抛保留原始网络错误信息；resolveLatest 属 GitHub API 边界（infra 适配层），reject 由 IPC 边界 formatIpcError 收口。
             throw err;
         }
         // nm-throw: keep — 非 Error 抛出值来自注入的 fetchFn（网络边界），update-check 属 infra 适配层。

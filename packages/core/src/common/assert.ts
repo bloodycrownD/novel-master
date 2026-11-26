@@ -14,5 +14,6 @@ export class AssertionError extends Error {
 /** cond 为假说明代码写错（不变量破坏），不是用户可触发的失败。 */
 // nm-style: keep-bare: 断言原语(skill 5.3 例外)
 export function assert(cond: unknown, message: string): asserts cond {
+    // nm-throw: keep — 不变量破坏（代码写错才可达），按总纲走 assert/AssertionError，不占产品码。
     if (!cond) throw new AssertionError(message);
 }
