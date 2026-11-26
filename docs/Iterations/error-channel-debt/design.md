@@ -603,6 +603,6 @@ nm-style check --changed
 
 - §5.4 写的时序没有发生：实际是五组改造全部落地后才一次性重写基线（提交 c88fcc9e0），那 16 个键从未以 UNTRIAGED 入表，直接随 raiseRunError / rethrowRunFailure 的删除而消失。终态与 §5.4 第 3 步一致：gate 通过、UNTRIAGED 0。
 - §9-4 的耗时疑问已消解：实现是第一遍扫描缓存语法树、第二遍复用，同一文件只读取并解析一次（tools/nm-style/src/rules/throw-audit.ts 的 throwAuditFiles）。
-- 实现时确认的两处检测边界（现仓无实例，如需扩口径另行决定）：表达式体箭头  不产生 T7； 这种函数表达式绑定不在收的四类绑定形态内。
+- 实现时确认的两处检测边界（现仓无实例，如需扩口径另行决定）：表达式体箭头 `(): never => neverFn()` 不产生 T7；`const f = function (): never { … }` 这种函数表达式绑定不在收的四类绑定形态内。
 - 随动越出原清单的三个直接调用方（infra/tdbc/logic/template-helper.ts、domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.ts、packages/tdbc-conformance/src/suite.ts）已按 §4.3 / §4.4(b) 改完（提交 7dc46cf1a）；前两处是「tdbc 查询链只以 reject 报错」这一契约的转码边界，标了 nm-throw: keep。
 - 顺带修掉盘点工具的一个旧缺陷（提交 5e5c90fdb）：嵌套闭包规则收集解构声明的名字时递归走错了函数，标识符从未入集，导致主仓上 T-NC6 一直是红的；改走 collectBindingNames 后转绿。这是修工具缺陷，不是放宽检查。

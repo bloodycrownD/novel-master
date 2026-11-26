@@ -1,7 +1,7 @@
 import {  Result  } from "../../src/errors/either.js";
 import type { Outcome } from "../../src/errors/outcome.js";
 import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
-import {  AppErrorOps  } from "../../src/errors/app-error.js";
+import {  AppError, AppErrorOps  } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import {  describe, it  } from "node:test";
 
@@ -527,6 +527,19 @@ describe("assembleSkillsToolContext（主/子两装配点共用）", () => {
         const r = await AgentTurnRunner.assembleSkillsToolContext({}, "p1", registryWithSkillOpt(false));
         assert.ok(r.ok);
         assert.equal(r.value, undefined);
+    });
+
+    it("effectiveSkills 读取失败时沿 Result.err 原样交回，不抛也不吞", async () => {
+        const failure = new AppError("INFRA_UNEXPECTED_ERROR", { detail: "技能目录读取失败" });
+        const base = fakeSkillService();
+        const svc: SkillService = {
+            ...base,
+            effectiveSkills: async (): Promise<Result<EffectiveSkill[], AppError>> => Result.err(failure),
+        };
+        const runtime = { skills: () => svc };
+        const r = await AgentTurnRunner.assembleSkillsToolContext(runtime, "proj-9", registryWithSkillOpt(false));
+        assert.ok(!r.ok);
+        assert.equal(r.error, failure);
     });
 
     it("registry 含 skill 时预算 effective 清单并注入 projectId", async () => {
