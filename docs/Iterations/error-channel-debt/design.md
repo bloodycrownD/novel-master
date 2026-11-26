@@ -1,6 +1,6 @@
 # 错误通道技术债清理设计（error-channel-debt）
 
-本文档覆盖五项错误通道技术债的可执行设计。所有行号与现状代码均在本 worktree（分支 `feat/mcp-support`）逐文件核实过；文中「行号」指当前工作区代码行。**本版为第 3 轮修订**：历轮评审意见逐条回应见 §0.1（第 2 轮）与 §0.2（第 3 轮），各轮 P1 全部按保等价修订。设计原则遵循 `.agents/skills/nm-code-style/SKILL.md` §3（错误进 Either，不抛）与 §8 表（六形态 throw 盘点）：自己写的函数之间用 `Result` / `Outcome` 传失败与中断，取消不是错误（`Interrupt` 承载），只有平台契约逼着抛的地方才抛并标 `// nm-throw: keep — 理由`。
+本文档覆盖五项错误通道技术债的可执行设计。所有行号与现状代码均在本 worktree（分支 `feat/mcp-support`）逐文件核实过；文中「行号」指设计定稿时（提交 64820c7cf）的工作区代码行；实现落地后已整体漂移，以代码为准。**本版为第 3 轮修订**：历轮评审意见逐条回应见 §0.1（第 2 轮）与 §0.2（第 3 轮），各轮 P1 全部按保等价修订。设计原则遵循 `.agents/skills/nm-code-style/SKILL.md` §3（错误进 Either，不抛）与 §8 表（六形态 throw 盘点）：自己写的函数之间用 `Result` / `Outcome` 传失败与中断，取消不是错误（`Interrupt` 承载），只有平台契约逼着抛的地方才抛并标 `// nm-throw: keep — 理由`。
 
 ## 0. 背景事实核实出入（先读，影响后文口径）
 
@@ -37,7 +37,7 @@
 | 7 | §4.4(a)「bootstrap 五件」实列六个文件，行号有漂移 | **采纳。** 改「六件」，行号统一为逐文件 grep 实测的 TdbcTemplate.query/execute 调用行 | §4.4 |
 | 8 | §1.1「TOOL_PASSTHROUGH_KEYS（5 码 + TOOL_CANCELLED）」计数错——实为 4 个 ToolError 码 + TOOL_CANCELLED 共 5 元素（tool-runner.ts:34 实读） | **采纳。** 文字修正（:33 源码注释自身的「5 码」计法含糊，一并注明） | §1.1 |
 | 9 | §8 D-1 只写竞速取消，未涵盖「工具自己抛 AbortError」来源（同一 catch 分支的两种来源，改前都按失败展示） | **采纳。** D-1 与 §1.6 措辞覆盖两种来源 | §1.6、§8 |
-| 10 | §4.1 引用 connection.port.ts 行号偏 2 行（「Implementations must reject」在 :10-11、「Nested calls throw」在 :35） | **采纳。** 行号修正（实读确认） | §4.1 |
+| 10 | §4.1 引用 connection.port.ts 行号偏 2 行（「Implementations must reject」在 :10-11、「Nested calls throw」在 :37） | **采纳。** 行号修正（实读确认） | §4.1 |
 
 以下正文均已按上述结论修订（含第 2 轮）。
 
@@ -369,7 +369,7 @@ const finishTurnFailure = (error: unknown): Result<AgentRunResult, AppError> => 
 
 2. **:1084** `if (!runResult.ok) AgentTurnRunner.rethrowRunFailure(runResult.error);` → `if (!runResult.ok) return finishTurnFailure(runResult.error);`（内层 finally 的终态观测退订 :1086-1090 在 return 前照跑）。
 
-3. **runChildAgent 三处（:1370、:1422、:1546）→ 直接 `return Result.err(x.error)`。** 等价性论证（依赖 §0.4 的冒泡链核实）：改前 rethrow 的 AppError 经 subagent-tool run 透传 reject（subagent-tool.ts:237-238 上方无 try/catch），被 `ToolRunner.call` 的 catch 收 `normalizeToolFailure`（tool-runner.ts:151）→ 父 run 的工具失败 outcome；改后 err 沿 `subagent-tool.ts:238`（`if (!runOutcome.ok) return Result.err(runOutcome.error)`）→ `ToolRunner.call` :131 的**同一条** `normalizeToolFailure` 出口（TOOL_PASSTHROUGH_KEYS 直通判定相同）→ 最终 outcome 逐字相同。finally 反注册（:1548-1560）两形态都照跑。孙代理递归同理逐层透传。:1544-1545 的「转异常冒泡（本函数无 catch……）与旧 throw 通道逐字一致」注释改写为「沿 Result 交回 task 工具，经 ToolRunner 归一出口收编（与改前异常通道同口）」。
+3. **runChildAgent 三处（:1370、:1422、:1546）→ 直接 `return Result.err(x.error)`。** 等价性论证（依赖 §0 第 4 条 的冒泡链核实）：改前 rethrow 的 AppError 经 subagent-tool run 透传 reject（subagent-tool.ts:237-238 上方无 try/catch），被 `ToolRunner.call` 的 catch 收 `normalizeToolFailure`（tool-runner.ts:151）→ 父 run 的工具失败 outcome；改后 err 沿 `subagent-tool.ts:238`（`if (!runOutcome.ok) return Result.err(runOutcome.error)`）→ `ToolRunner.call` :131 的**同一条** `normalizeToolFailure` 出口（TOOL_PASSTHROUGH_KEYS 直通判定相同）→ 最终 outcome 逐字相同。finally 反注册（:1548-1560）两形态都照跑。孙代理递归同理逐层透传。:1544-1545 的「转异常冒泡（本函数无 catch……）与旧 throw 通道逐字一致」注释改写为「沿 Result 交回 task 工具，经 ToolRunner 归一出口收编（与改前异常通道同口）」。
 
 4. **assembleSkillsToolContext 的转抛一并收掉**（run-agent-turn.ts:352-365，:360-361 的欠账 throw）：签名前 `Promise<BuiltinToolSkillsContext | undefined>` → 后 `Promise<Result<BuiltinToolSkillsContext | undefined, AppError>>`（成功 → Result.ok(ctx)；技能工具未注册 → Result.ok(undefined)；读取失败 → Result.err(effective.error)，不再 throw）。两个调用点：
    - 主装配点 ：927：`const skills = await AgentTurnRunner.assembleSkillsToolContext(...); if (!skills.ok) return finishTurnFailure(skills.error);`（原 throw 进主 catch → FAILED('') 补发 + Result.err，finishTurnFailure 逐字覆盖）；
@@ -598,3 +598,11 @@ nm-style check --changed
 2. `assembleSkillsToolContext` 的转抛收掉（§3.6-4）超出任务 C 点名的「rethrowRunFailure 删除」字面范围，但它是同一欠账注释（:360）标记的转抛形态、且收口函数已经就位——若主代理认为越界，可从⑤中拆出，不影响其余设计。
 3. `sqlite-message-checkpoint.repository.ts`（§4.4(b)）严格说越出任务②的文件清单（它是 parse 签名变化的直接编译受害者，单文件单函数改动）——文档暂归②顺手改，归属（②或⑤）请主代理确认。
 4. §5.3 的 T8 两遍扫描会让 `throw-audit` 全量扫描耗时约翻倍（每文件解析两次）——若不可接受，可改为 pass1 缓存 SourceFile 复用；实现组自测后定。
+
+## 10. 落地后回填（2026-11-26）
+
+- §5.4 写的时序没有发生：实际是五组改造全部落地后才一次性重写基线（提交 c88fcc9e0），那 16 个键从未以 UNTRIAGED 入表，直接随 raiseRunError / rethrowRunFailure 的删除而消失。终态与 §5.4 第 3 步一致：gate 通过、UNTRIAGED 0。
+- §9-4 的耗时疑问已消解：实现是第一遍扫描缓存语法树、第二遍复用，同一文件只读取并解析一次（tools/nm-style/src/rules/throw-audit.ts 的 throwAuditFiles）。
+- 实现时确认的两处检测边界（现仓无实例，如需扩口径另行决定）：表达式体箭头  不产生 T7； 这种函数表达式绑定不在收的四类绑定形态内。
+- 随动越出原清单的三个直接调用方（infra/tdbc/logic/template-helper.ts、domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.ts、packages/tdbc-conformance/src/suite.ts）已按 §4.3 / §4.4(b) 改完（提交 7dc46cf1a）；前两处是「tdbc 查询链只以 reject 报错」这一契约的转码边界，标了 nm-throw: keep。
+- 顺带修掉盘点工具的一个旧缺陷（提交 5e5c90fdb）：嵌套闭包规则收集解构声明的名字时递归走错了函数，标识符从未入集，导致主仓上 T-NC6 一直是红的；改走 collectBindingNames 后转绿。这是修工具缺陷，不是放宽检查。

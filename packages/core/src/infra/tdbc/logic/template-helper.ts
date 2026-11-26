@@ -20,7 +20,7 @@ export const TdbcTemplate = {
         // nm-throw: keep — tdbc 驱动层 reject 契约（TdbcConnection 的失败通道就是 reject：
         // CONNECTION_CLOSED / NESTED_TRANSACTION，connection.port.ts:10-11/:37），模板解析
         // 失败沿同一 reject 通道上行，仓储调用点的错误语义不变；本文件在 throw-audit 白名单
-        // tdbc-driver 类内（throw-audit.ts:95）。
+        // tdbc-driver 类内（见 tools/nm-style/src/rules/throw-audit.ts 的目录白名单表）。
         if (!parsed.ok) throw parsed.error;
         return connection.execute(parsed.value.sql, parsed.value.parameters);
     },
@@ -33,7 +33,7 @@ export const TdbcTemplate = {
         // nm-throw: keep — tdbc 驱动层 reject 契约（TdbcConnection 的失败通道就是 reject：
         // CONNECTION_CLOSED / NESTED_TRANSACTION，connection.port.ts:10-11/:37），模板解析
         // 失败沿同一 reject 通道上行，仓储调用点的错误语义不变；本文件在 throw-audit 白名单
-        // tdbc-driver 类内（throw-audit.ts:95）。
+        // tdbc-driver 类内（见 tools/nm-style/src/rules/throw-audit.ts 的目录白名单表）。
         if (!parsed.ok) throw parsed.error;
         return connection.query<T>(parsed.value.sql, parsed.value.parameters);
     },
