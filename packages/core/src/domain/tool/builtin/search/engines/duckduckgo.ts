@@ -120,7 +120,8 @@ export const Duckduckgo = {
         // 父级取消 → TOOL_CANCELLED 控制流码；其余 aborted 是 30s 计时器触发，
         // SearchEngine.timeoutError 保留超时失败语义（与 template-engine 同口径）。
         if (parentAborted) return Result.err(new AppError("TOOL_CANCELLED", {toolName: "DuckDuckGo"}));
-        throw SearchEngine.timeoutError(e, controller.signal.aborted, "DuckDuckGo", DUCKDUCKGO_TIMEOUT_MS);
+        // 超时 / fetch 故障统一收 Result.err（timeoutError 产 TOOL_SEARCH_FAILED，message 原文保留）。
+        return Result.err(SearchEngine.timeoutError(e, controller.signal.aborted, "DuckDuckGo", DUCKDUCKGO_TIMEOUT_MS));
       }
 
       if (!response.ok) return Result.err(SearchEngine.failed(SearchEngine.apiErrorMessage("DuckDuckGo", response.status, await response.text())));

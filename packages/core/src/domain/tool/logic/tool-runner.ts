@@ -140,11 +140,15 @@ export class ToolRunner<Ctx = unknown> {
 
             return Result.ok(out.value as Output);
         } catch (e: unknown) {
-            // 在途竞速的取消是 AbortError（平台协议例外）：原样上抛给 runParallel 收编，
-            // 不能归一化成 TOOL_FAILED——否则 isAbortLikeError 认不出取消。形状判定只认
-            // `name`（跨 duplicate module / Hermes 无 DOMException，instanceof 会失灵）。
+            // 在途竞速的取消是 AbortError（平台协议例外）：Promise.race 的 reject 没有
+            // Result 通道，只能原样上抛给 runParallel 收编，不能归一化成 TOOL_FAILED——
+            // 否则 isAbortLikeError 认不出取消。形状判定只认 `name`（跨 duplicate
+            // module / Hermes 无 DOMException，instanceof 会失灵）。
+            // nm-throw: keep — 在途取消竞速的 reject 是平台协议例外（Promise 无 Result 通道），AbortError 载荷原样上行供 isAbortLikeError 识别。
             if (typeof e === "object" && e !== null && "name" in e && (e as { name: unknown }).name === "AbortError") throw e;
-            throw normalizeToolFailure(name, e);
+            // 其余未知异常沿 Err 回来（与工具闭包的 Err 同一条 normalizeToolFailure 出口），
+            // drainQueue 对 reject 与 Err 同口收编 failedOutcome，行为不变。
+            return Result.err(normalizeToolFailure(name, e));
         }
     }
 

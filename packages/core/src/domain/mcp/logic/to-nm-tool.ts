@@ -66,7 +66,9 @@ export const McpToolAdapter = {
                     // 取消是控制流不是失败：callTool 对 AbortError 原样 reject 透传（spec §五），这里转 TOOL_CANCELLED。
                     // 形状判定只认 name（跨 duplicate module / Hermes 无 DOMException，instanceof 会失灵，与 tool-runner 同口径）。
                     if (typeof error === "object" && error !== null && "name" in error && (error as {name: unknown}).name === "AbortError") return Result.err(new AppError("TOOL_CANCELLED", {toolName: name}));
-                    throw error;
+                    // 非取消的意外 reject（call 通道的未知异常）收进 Result：TOOL_FAILED 带 cause，
+                    // 与下方 called 失败分支同一出口，runner 的 normalizeToolFailure 直通不换壳。
+                    return Result.err(new AppError("TOOL_FAILED", {toolName: name, cause: error, detail: `Tool failed: ${name}`}));
                 }
                 if (!called.ok) return Result.err(new AppError("TOOL_FAILED", {toolName: name, cause: called.error, detail: `${prefix} ${called.error.detail}`}));
                 const payload = Guards.isRecord(called.value) ? called.value : {};

@@ -294,18 +294,16 @@ describe("模板执行器：错误通道与脱敏（T-E5）", () => {
             new Promise<Response>((_resolve, reject) => {
                 init?.signal?.addEventListener("abort", () => reject(new DOMException("This operation was aborted", "AbortError")));
             })) as unknown as typeof globalThis.fetch;
-        // 超时路径实现保留 throw（SearchEngine.timeoutError 未知异常通道），仍然 reject。
-        const pending = TemplateEngine.run({ template: tpl, resolved: resolved("bocha"), query: "q", options: {}, params: {}, fetch: hangingFetch }).then(
-            () => assert.fail("超时应抛错"),
-            (error: unknown) => error
-        );
+        // 超时路径沿 Result.err 回来（SearchEngine.timeoutError 统一收 TOOL_SEARCH_FAILED）。
+        const pending = TemplateEngine.run({ template: tpl, resolved: resolved("bocha"), query: "q", options: {}, params: {}, fetch: hangingFetch });
         await new Promise((resolve) => setImmediate(resolve));
         mock.timers.tick(30_000);
 
-        const error = await pending;
-        const message = error instanceof Error ? error.message : String(error);
-        assert.equal((error as { key?: string }).key, "TOOL_SEARCH_FAILED");
-        assert.match(message, /测试引擎 search timed out after 30000ms/);
+        const outcome = await pending;
+        assert.ok(!outcome.ok, "超时应返回 Err");
+        const error = outcome.error;
+        assert.equal(error.key, "TOOL_SEARCH_FAILED");
+        assert.match(error.message, /测试引擎 search timed out after 30000ms/);
     });
 });
 

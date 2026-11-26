@@ -103,9 +103,9 @@ export const TemplateEngine = {
    * 字段（GET 并入 query string、POST 浅合并覆盖 defaultBody 同名键）。成功返回
    * `results` 为提取结果的 JSON 文本（最长对象数组；50KB 预算内截断）。
    *
-   * 已知失败走返回值通道（四期门⑦）：引擎失败收 `Result.err`；未知异常
-   * （非 abort 的 fetch 错误经 timeoutError 透传）仍抛，search-tool 的
-   * 降级 catch 收口。
+   * 已知失败走返回值通道（四期门⑦）：引擎失败（含超时与 fetch 故障，
+   * timeoutError 统一收 TOOL_SEARCH_FAILED）沿 `Result.err` 回来，
+   * search-tool 逐引擎收编降级。
    */
     async run(p: TemplateEngineRunParams): Promise<Result<SearchResponse, AppError>> {
         const { template, resolved, query, options, params, fetch, signal } = p;
@@ -214,7 +214,8 @@ export const TemplateEngine = {
                 // timeoutError 保留超时失败语义（search-tool 的 catch 是降级边界，
                 // 取消靠 search-tool 重判 signal 终止链降级）。
                 if (parentAborted) return Result.err(new AppError("TOOL_CANCELLED", {toolName: template.name}));
-                throw SearchEngine.timeoutError(e, controller.signal.aborted, template.name, TEMPLATE_ENGINE_TIMEOUT_MS);
+                // 超时 / fetch 故障统一收 Result.err（timeoutError 产 TOOL_SEARCH_FAILED，message 原文保留）。
+                return Result.err(SearchEngine.timeoutError(e, controller.signal.aborted, template.name, TEMPLATE_ENGINE_TIMEOUT_MS));
             }
 
             if (!response.ok) return Result.err(SearchEngine.failed(SearchEngine.apiErrorMessage(template.name, response.status, await response.text(), resolved.apiKey)));

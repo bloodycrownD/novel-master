@@ -203,13 +203,14 @@ export const SearchEngine = {
 
   /**
    * 引擎执行超时错误的统一映射：signal 已 abort（计时器触发）给可读超时
-   * 文案，其余错误原样透传（照 curl-tool 的 curlPhaseError 模式）。
+   * 文案；其余 fetch 错误把原文收进统一 AppError（message 原样保留，
+   * search-tool 聚合降级行只读 message，文本与旧的异常透传口径一致）。
    */
-  timeoutError(e: unknown, aborted: boolean, engine: string, timeoutMs: number): unknown {
+  timeoutError(e: unknown, aborted: boolean, engine: string, timeoutMs: number): AppError<"TOOL_SEARCH_FAILED"> {
     if (aborted) {
       return SearchEngine.failed(`${engine} search timed out after ${timeoutMs}ms`);
     }
-    return e;
+    return SearchEngine.failed(e instanceof Error ? e.message : String(e));
   },
 
   /** 返回文本里第一个不在白名单内的占位符名字（无则 null）。 */

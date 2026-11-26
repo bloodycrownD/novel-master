@@ -100,9 +100,12 @@ describe("to-nm-tool", () => {
         assert.equal(error.key, "TOOL_CANCELLED");
     });
 
-    it("未知异常原样上抛（runner 统一收口）", async () => {
+    it("未知异常收进 Err 且 cause 保留原文（runner 统一收口）", async () => {
         const tool = McpToolAdapter.toNmTool(SNAPSHOT, {call: async () => { throw new Error("boom infra"); }});
-        await assert.rejects(() => tool.run({}, makeRecordingCtx().ctx), /boom infra/);
+        const result = await tool.run({}, makeRecordingCtx().ctx);
+        assert.ok(!result.ok, "未知异常应收进 Err");
+        assert.equal(result.error.key, "TOOL_FAILED");
+        assert.match((result.error.cause as Error).message, /boom infra/);
     });
 
     it("T-M10/T-M11: 超 50KB 经 OverflowSink 落盘返回 savedPath；落盘失败回落字节截断", async () => {

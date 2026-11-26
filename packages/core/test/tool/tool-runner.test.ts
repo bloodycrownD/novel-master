@@ -49,14 +49,15 @@ describe("ToolRunner", () => {
             },
         });
         const runner = new ToolRunner(registry);
-        // 工具闭包 throw（未知异常）走 runner 的归一化抛出通道；返回 Err 才走 Result。
-        await assert.rejects(
-            () => runner.call("test.fail", {}, {}),
-            (e) =>
-                AppErrorOps.is(e) && e.key.startsWith("TOOL_") &&
-                e.key === "TOOL_FAILED" &&
-                e.details?.toolName === "test.fail" &&
-                (e.cause as Error | undefined)?.message === "boom",
+        // 工具闭包 throw（未知异常）经 normalizeToolFailure 收进 Err（与工具闭包 Err 同一出口）。
+        const result = await runner.call("test.fail", {}, {});
+        assert.ok(!result.ok, "工具闭包 throw 应收进 Err");
+        const e = result.error;
+        assert.ok(
+            AppErrorOps.is(e) && e.key.startsWith("TOOL_") &&
+            e.key === "TOOL_FAILED" &&
+            e.details?.toolName === "test.fail" &&
+            (e.cause as Error | undefined)?.message === "boom",
         );
     });
 

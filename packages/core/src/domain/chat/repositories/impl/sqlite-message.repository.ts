@@ -71,6 +71,7 @@ function rowToMessage(row: Row): ChatMessage {
     // 正文只有明文一种形态：content_json 直接 parse；解析失败按 repository 边界抛。
     const content = MessageContentParse.parse(String(row.content_json));
     if (!content.ok) {
+        // nm-throw: keep — repository 读边界约定：存储行损坏转 CHAT_MESSAGE_CORRUPT 抛出，损坏数据没有可继续的业务语义，由调用侧 catch 收口展示。
         throw corruptMessageRow(row, "content_json", content.error);
     }
     const attachments = MessageAttachmentSchema.parseJson(Coerce.nullableText(row.attachments_json));
@@ -90,6 +91,7 @@ function rowToMessage(row: Row): ChatMessage {
         try {
             raw = JSON.parse(String(row.raw_json)) as Record<string, unknown>;
         } catch (error) {
+            // nm-throw: keep — repository 读边界约定：raw_json 解析失败转 CHAT_MESSAGE_CORRUPT 抛出，由调用侧 catch 收口展示（同 rowToMessage 口径）。
             throw corruptMessageRow(row, "raw_json", error);
         }
     }
@@ -341,7 +343,9 @@ export class SqliteMessageRepository extends BaseSqliteChatRepository<ChatMessag
         } catch (error) {
             // 取消不是错误：AbortError 只是事务回滚的载体，转回 Outcome 中断分支。
             if (interrupt != null) return interrupt;
-            throw error;
+            // 事务已结束，非中断异常收进 Outcome 失败分支：事务回调内的调用方按
+            // `kind === "failed"` 转抛触发外层回滚（错误通道总纲：Outcome 方法不 reject）。
+            return { kind: "failed", error: new AppError("INFRA_UNEXPECTED_ERROR", { detail: error instanceof Error ? error.message : String(error) }, { cause: error }) };
         }
     }
 
