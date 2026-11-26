@@ -107,7 +107,10 @@ describe("cloud-sync ipc handlers", () => {
             throw new Error("meta 读失败（注入）");
         };
         try {
-            await assert.rejects(service.pull(), /meta 读失败（注入）/);
+            // 拉取的兜底失败沿 Result 到达（不再 reject）：未知异常包成 INFRA_UNEXPECTED_ERROR，原始信息在 message 里。
+            const pulled = await service.pull();
+            assert.equal(pulled.ok, false);
+            assert.match(String(pulled.error.message), /meta 读失败（注入）/);
         } finally {
             configStore.getLocalMeta = originalGetLocalMeta;
         }

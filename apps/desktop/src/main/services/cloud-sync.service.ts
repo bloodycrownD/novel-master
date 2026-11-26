@@ -277,9 +277,10 @@ class DesktopCloudSyncService {
             if (!(error instanceof AppError && error.key === "DB_BACKUP_REPLACE_INCOMPLETE")) {
                 await this.configStore.recordPull(false, detail).catch(() => undefined);
             }
-            // coordinator 侧故障（core CloudSyncError 体系，三期保留 throw 协议）与
-            // 未知的运行期异常：沿未知通道抛给 handler catch（错误通道迁移四期不动）。
-            throw error;
+            // coordinator 侧故障（core CloudSyncError 体系，三期保留 throw 协议）与未知的运行期异常：
+            // 沿 Result 到达 handler（它已按 !ok 处理）。AppError 原样透传，其余包 INFRA_UNEXPECTED_ERROR
+            // （原始信息进 detail），与原先「抛给 handler catch」产出的 code / message 一致。
+            return Result.err(error instanceof AppError ? error : new AppError("INFRA_UNEXPECTED_ERROR", { detail }, { cause: error }));
         } finally {
             syncBusy.release();
             if (exportTempPath != null) {
