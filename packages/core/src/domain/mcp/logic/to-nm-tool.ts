@@ -1,7 +1,7 @@
 /**
  * MCP 工具适配（spec §六）：快照条目 → nm `Tool`。description 同步取快照
- * （装配期预算），inputSchema 用 `z.unknown()` 宽松接收（参数校验交给 MCP
- * server），run 委托连接管理器：
+ * （装配期预算），inputSchema 由 server 声明的 JSON Schema 转成 zod
+ * （`McpToolAdapter.inputSchemaOf`；转不了退回 `z.unknown()`），run 委托连接管理器：
  * - 成功 → renderMcpToolResult 全文 → `Result.ok`；
  * - 连接 / 协议失败（`Result.err(McpFailure)`）→ `Result.err(TOOL_FAILED)`，
  *   detail 带原文前缀、cause 带 McpFailure；
@@ -58,9 +58,7 @@ export const McpToolAdapter = {
         return {
             name,
             description: () => description,
-            inputSchema: z.unknown(),
-            // 参数定义原样透出给模型（它声明什么模型看到什么）；本地不校验，照旧交给 MCP server。
-            ...(snapshot.inputSchema === undefined ? {} : {inputJsonSchema: snapshot.inputSchema}),
+            inputSchema: McpToolAdapter.inputSchemaOf(snapshot),
             async run(input: unknown, ctx: BuiltinToolContext): Promise<Result<string, AppError>> {
                 const called = await deps.call(snapshot.toolName, input, ctx.signal ?? NEVER_ABORTED_SIGNAL);
                 // 取消是控制流不是失败：callTool 以 Interrupt 表达（spec §五随通道迁移更新）；
@@ -86,5 +84,19 @@ export const McpToolAdapter = {
                 return Result.ok(text);
             },
         };
+    },
+
+    /**
+     * server 声明的入参 JSON Schema → zod，填进 `Tool.inputSchema`：模型侧的参数定义与本地校验都由它来。
+     * server 没声明、或声明里有 zod 不认的写法（如 `not`、`if/then/else`）时退回 `z.unknown()`——
+     * 什么都不拦、交给 server 校验，此时模型看到的参数定义为空。
+     */
+    inputSchemaOf: (snapshot: McpToolSnapshot): z.ZodType<unknown> => {
+        if (snapshot.inputSchema === undefined) return z.unknown();
+        try {
+            return z.fromJSONSchema(snapshot.inputSchema);
+        } catch {
+            return z.unknown();
+        }
     },
 } as const;

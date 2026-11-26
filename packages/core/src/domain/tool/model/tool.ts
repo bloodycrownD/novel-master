@@ -31,15 +31,6 @@ export interface Tool<Input, Output, Ctx = unknown> {
     readonly inputSchema: z.ZodType<Input>;
 
     /**
-     * 给模型看的入参定义，已是 JSON Schema；给了就不从 {@link inputSchema} 转换。
-     *
-     * @remarks
-     * 给「校验宽松、但定义由外部声明」的工具用（如 MCP：入参交给远端 server 校验，
-     * 参数定义照它声明的原样透出）。本地校验仍走 {@link inputSchema}。
-     */
-    readonly inputJsonSchema?: Readonly<Record<string, unknown>>;
-
-    /**
      * Optional output validation schema.
    *
    * @remarks

@@ -65,19 +65,37 @@ describe("to-nm-tool", () => {
         assert.ok(tool.inputSchema.safeParse("裸字符串也放行").success);
     });
 
-    it("T-M11b: server 声明的入参 Schema 原样进模型侧定义；server 没声明时参数定义为空", () => {
-        const inputSchema = {type: "object", properties: {sql: {type: "string", description: "要执行的 SQL"}}, required: ["sql"]};
+    it("T-M11b: server 声明的入参 Schema 转成 zod——模型侧看到参数，本地按它校验；server 没声明时参数定义为空", () => {
+        const inputSchema = {type: "object", properties: {sql: {type: "string", description: "要执行的 SQL"}, limit: {type: "integer", minimum: 1}}, required: ["sql"]};
         const withSchema = new ToolRegistry<BuiltinToolContext>();
         withSchema.register(McpToolAdapter.toNmTool({...SNAPSHOT, inputSchema}, {call: async () => Result.ok({})}));
-        const defs = ToolDefinitions.fromRegistry(withSchema, makeRecordingCtx().ctx);
-        assert.equal(defs[0]?.inputSchema, inputSchema);
-        // 本地校验仍然宽松：不合 Schema 的入参放行，交给 MCP server 报错。
-        assert.ok(withSchema.get("mcp__db__query")?.inputSchema.safeParse({sql: 1}).success);
+        const def = ToolDefinitions.fromRegistry(withSchema, makeRecordingCtx().ctx)[0]?.inputSchema;
+        assert.equal(def?.type, "object");
+        assert.deepEqual(def?.required, ["sql"]);
+        const limit = (def?.properties as Record<string, {type?: string; minimum?: number}>).limit;
+        assert.equal(limit.type, "integer");
+        assert.equal(limit.minimum, 1);
+        // 本地按 server 的声明校验：缺必填、类型不对都拦下，不出网。
+        const parse = withSchema.get("mcp__db__query")?.inputSchema.safeParse.bind(withSchema.get("mcp__db__query")?.inputSchema);
+        assert.ok(parse != null);
+        assert.equal(parse({limit: 3}).success, false);
+        assert.equal(parse({sql: "SELECT 1", limit: "x"}).success, false);
+        assert.equal(parse({sql: "SELECT 1", limit: 3}).success, true);
 
         const withoutSchema = new ToolRegistry<BuiltinToolContext>();
         withoutSchema.register(McpToolAdapter.toNmTool(SNAPSHOT, {call: async () => Result.ok({})}));
         // 没声明就是空对象 Schema（只有 $schema 一个键），模型看不到任何参数。
         assert.deepEqual(ToolDefinitions.fromRegistry(withoutSchema, makeRecordingCtx().ctx)[0]?.inputSchema, {$schema: "https://json-schema.org/draft/2020-12/schema"});
+    });
+
+    it("T-M11c: 声明里有 zod 不认的写法（not / if-then-else）时退回什么都接受，不抛", () => {
+        for (const inputSchema of [{type: "object", properties: {a: {not: {type: "string"}}}}, {type: "object", properties: {a: {type: "string"}}, if: {properties: {a: {const: "x"}}}, then: {required: ["b"]}}]) {
+            const tool = McpToolAdapter.toNmTool({...SNAPSHOT, inputSchema}, {call: async () => Result.ok({})});
+            assert.ok(tool.inputSchema.safeParse({a: "anything", b: 1}).success);
+            const registry = new ToolRegistry<BuiltinToolContext>();
+            registry.register(tool);
+            assert.deepEqual(ToolDefinitions.fromRegistry(registry, makeRecordingCtx().ctx)[0]?.inputSchema, {$schema: "https://json-schema.org/draft/2020-12/schema"});
+        }
     });
 
     it("T-M11: 成功 → render 全文 Result.ok；ctx.signal 原样透传给 call", async () => {
