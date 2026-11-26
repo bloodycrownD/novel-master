@@ -30,27 +30,28 @@ export namespace PromptPreviewService {
    *
    * D4 联动：resolve 后 registry 不含 skill（policy 禁用）时返回 undefined，
    * 预览不出现技能索引段——工具与索引同进退。
+   * 失败沿 `Result.err` 接力：清单读取失败不静默降级成无索引。
    */
-    async function budget(runtime: MobileNovelMasterRuntime, projectId: string, definition: AgentDefinition): Promise<readonly PromptSkillIndexEntry[] | undefined> {
+    async function budget(runtime: MobileNovelMasterRuntime, projectId: string, definition: AgentDefinition): Promise<Result<readonly PromptSkillIndexEntry[] | undefined, AppError>> {
         const probe = new ToolRegistry();
         BuiltinTools.register(probe);
         const registry = AgentTools.resolveRegistry(probe, definition);
         if (!registry.list().includes(SKILL_TOOL_NAME)) {
-            return undefined;
+            return Result.ok(undefined);
         }
         const effective = await runtime.skills().effectiveSkills(projectId);
         if (!effective.ok) {
-            // 装配失败沿异常通道上抛（原行为）：清单读取失败不静默降级成无索引。
-            const failure = effective.error;
-            throw failure;
+            // 装配失败沿 Result.err 接力：清单读取失败不静默降级成无索引。
+            return Result.err(effective.error);
         }
-        return effective.value
+        const entries = effective.value
             .filter(s => s.effective)
             .map(s => ({
                 name: s.name,
                 description: s.description ?? '',
                 domain: s.domain,
             }));
+        return Result.ok(entries);
     }
 
     /**
@@ -67,10 +68,13 @@ export namespace PromptPreviewService {
         if (!built.ok) return Result.err(built.error);
         if (built.value == null) {
             // 预览不传 shouldBail，弃权不可达——编程错误（error-matrix-final R3）。
+            // nm-throw: keep — 不变量破坏（代码写错才可达），按总纲走 assert/AssertionError，不占产品码
             throw new AssertionError('prompt preview 未传 shouldBail，弃权不应出现');
         }
         const {layout, ctx} = built.value;
-        const skillsIndex = await budget(runtime, scope.projectId, definition);
+        const skillsIndexResult = await budget(runtime, scope.projectId, definition);
+        if (!skillsIndexResult.ok) return Result.err(skillsIndexResult.error);
+        const skillsIndex = skillsIndexResult.value;
         // 思考上下文偏好：预览与 wire 同口径（档位前置门 + 容量 1 保留单点在 core 纯函数）；
         // 判定链已下沉 core（PreviewThinkingContext.resolve），本地不再持有副本。
         const sessionConfig = await runtime.sessions.getSessionAgentConfig(scope.sessionId);
