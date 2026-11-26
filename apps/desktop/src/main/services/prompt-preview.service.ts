@@ -48,6 +48,7 @@ export namespace PromptPreviewService {
         if (bundle == null) {
             // 预览不传 shouldBail，弃权不可达——编程错误（error-matrix-final R3 后
             // buildAdapter 返回值含 null），按不变量破断言出。
+            // nm-throw: keep — 不变量破坏（预览固定不传 shouldBail，弃权分支代码写错才可达），按总纲走 AssertionError，不占产品码，由 IpcResults.from 的兜底转码收口
             throw new AssertionError("prompt preview 未传 shouldBail，弃权不应出现");
         }
         const { layout, ctx } = bundle;
@@ -61,9 +62,9 @@ export namespace PromptPreviewService {
         if (toolRegistry.list().includes(SKILL_TOOL_NAME)) {
             const effective = await runtime.skills().effectiveSkills(scope.projectId);
             if (!effective.ok) {
-                // 装配失败沿异常通道上抛（原行为）：清单读取失败不静默降级成无索引。
-                const failure = effective.error;
-                throw failure;
+                // 装配失败沿 Result 通道上抛：清单读取失败不静默降级成无索引
+                // （唯一调用方 Prompt.realPreview 按 `!preview.ok` 转 IPC err）。
+                return Result.err(effective.error);
             }
             skillsIndex = effective.value.filter((s) => s.effective).map((s) => ({ name: s.name, description: s.description ?? "", domain: s.domain }));
         }

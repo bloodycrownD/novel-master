@@ -194,12 +194,13 @@ async function defaultRenderMermaidSvg(id: string, source: string, theme: Mermai
   try {
     const { svg } = await mermaid.render(id, source);
     return svg;
-  } catch (err) {
+  } finally {
     // mermaid 失败时可能往 body 残留 d<id> 错误元素，清掉避免污染布局
+    // （成功路径该元素不存在或已废弃，remove 为 no-op）；渲染失败本身沿
+    // Promise reject 上行（平台契约），由 resolveMermaidSvg 的 .catch 接住。
     if (typeof document !== "undefined") {
       document.getElementById(`d${id}`)?.remove();
     }
-    throw err;
   }
 }
 
@@ -236,6 +237,7 @@ export async function resolveMermaidSvg(source: string, theme: MermaidTheme): Pr
       writeCacheKey(key, FAILED_PLACEHOLDER);
       failedAtCache.set(key, Date.now());
       failedErrorCache.set(key, extractMermaidErrorMessage(err));
+      // nm-throw: keep — renderer 不引 core 运行时（bundle 约束）无 Result 通道，导出 API 失败通道是 Promise reject：写失败缓存后 rethrow 让共享 inflight 的等待方同收错误，由 MermaidBlock effect 的 .catch 接住（mermaid-markdown.test 以 assert.rejects 同口径锁定）
       throw err;
     })
     .finally(() => {

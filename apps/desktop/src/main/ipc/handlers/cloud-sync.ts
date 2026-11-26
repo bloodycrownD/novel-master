@@ -172,7 +172,12 @@ export namespace CloudSync {
                 log.warn("库已换代但服务商配置表未完全恢复", { providerTablesRestored: err.details?.providerTablesRestored });
                 return { kind: "failed", error: err };
             }
-            throw err;
+            // 其余异常沿 Outcome.failed 上行（不再抛）：AppError 原样透传，未知异常包
+            // INFRA_UNEXPECTED_ERROR（原始信息进 detail；RunScope 边界对 failed 的
+            // throw → formatIpcError 与原 throw 通道产出一致的 code/message）。
+            if (err instanceof AppError) return { kind: "failed", error: err };
+            const message = err instanceof Error ? err.message : String(err);
+            return { kind: "failed", error: new AppError("INFRA_UNEXPECTED_ERROR", { detail: message }, { cause: err }) };
         }
     }
 

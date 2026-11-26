@@ -114,10 +114,10 @@ class DesktopCloudSyncService {
             try {
                 await client.send(new ListObjectsV2Command({ Bucket: s3Config.bucket, Prefix: pathPrefix, MaxKeys: 1 }));
             } catch (listError) {
-                // 存储侧故障（未知通道，core CloudSyncError 体系）原样抛给 handler catch；
-                // 错误映射内联自原 mapStorageError。
+                // 存储侧故障（未知通道，core CloudSyncError 体系）中的 CLOUD_SYNC 域
+                // AppError 原样沿 Result 上行（handler 按 `!r.ok` 转码）；错误映射内联自原 mapStorageError。
                 const error = listError ?? headError;
-                if (AppErrorOps.is(error) && ErrorGuards.domainOf(error.code) === "CLOUD_SYNC") throw error;
+                if (AppErrorOps.is(error) && ErrorGuards.domainOf(error.code) === "CLOUD_SYNC") return Result.err(error);
                 const message = error instanceof Error ? error.message : String(error);
                 const lower = message.toLowerCase();
                 if (lower.includes("access denied") || lower.includes("invalidaccesskeyid") || lower.includes("signaturedoesnotmatch") || lower.includes("403")) {
@@ -348,8 +348,11 @@ class DesktopCloudSyncService {
         } catch (error) {
             const detail = error instanceof Error ? error.message : String(error);
             await this.configStore.recordPush(false, detail).catch(() => undefined);
-            // coordinator 侧故障（core CloudSyncError 体系）与未知异常：未知通道原样抛。
-            throw error;
+            // coordinator 侧故障（core CloudSyncError 体系）与未知异常沿 Result 上行
+            // （不再抛）：AppError 原样透传，其余包 INFRA_UNEXPECTED_ERROR（原始信息进
+            // detail，handler/doPush 边界 formatIpcError 后与原 throw 通道文案一致）。
+            if (AppErrorOps.is(error)) return Result.err(error);
+            return Result.err(new AppError("INFRA_UNEXPECTED_ERROR", { detail }, { cause: error }));
         } finally {
             syncBusy.release();
             if (exportTempPath != null) {

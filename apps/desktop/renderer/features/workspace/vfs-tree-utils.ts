@@ -17,6 +17,7 @@ export function logicalPathSegments(path: string): string[] {
 /** 段 index 对应的绝对逻辑路径，如 index=0 → `/notes` */
 export function logicalPathForSegmentIndex( segments: readonly string[], index: number ): string {
     if (index < 0 || index >= segments.length) {
+        // nm-throw: keep — 不变量破坏（index 由 ancestorDirPaths 循环边界与渲染层段切分保证，代码写错才可达），不占产品码；renderer 不引 core 运行时无法用 AssertionError，vfs-tree-utils.test 以 assert.throws 锁定 RangeError 通道
         throw new RangeError(`segment index 越界: ${index}`);
     }
     return `/${segments.slice(0, index + 1).join("/")}`;

@@ -48,8 +48,14 @@ export namespace Skills {
             // `Result<T, never>` 当成唯一候选，failed 分支被误判为不可赋值。
             const listed = Outcome.match<SkillListItem[], Result<SkillListItem[], AppError>>(await rt.skills().listSkills(scope), {
                 completed: (items) => Result.ok(items),
-                cancelled: () => { throw new AssertionError("Skills.list 未注入 hooks，listSkills 不应产生 cancelled"); },
-                replaced: () => { throw new AssertionError("Skills.list 未注入 hooks，listSkills 不应产生 replaced"); },
+                cancelled: () => {
+                    // nm-throw: keep — 不变量破坏（本 handler 不注入 hooks，cancelled 不可达，代码写错才可达），按总纲走 AssertionError，不占产品码，由 IpcResults.from 的兜底转码收口
+                    throw new AssertionError("Skills.list 未注入 hooks，listSkills 不应产生 cancelled");
+                },
+                replaced: () => {
+                    // nm-throw: keep — 不变量破坏（同上，replaced 不可达），按总纲走 AssertionError，不占产品码，由 IpcResults.from 的兜底转码收口
+                    throw new AssertionError("Skills.list 未注入 hooks，listSkills 不应产生 replaced");
+                },
                 failed: (error) => Result.err(error),
             });
             return listed.map((items) => items.map((item) => ({

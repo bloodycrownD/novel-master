@@ -12,7 +12,7 @@
  */
 import { ABORT_KEY, type AbortScope } from "@novel-master/core/abort";
 import { RequestAbort } from "@novel-master/core/llm-protocol";
-import type { Outcome } from "@novel-master/core/errors";
+import { AppError, type Outcome } from "@novel-master/core/errors";
 import { BrowserWindow } from "electron";
 import type { BackupExportResult, BackupImportResult, IpcResult } from "../../../../shared/ipc-types.js";
 import { DesktopRuntimeSingleton } from "../../runtime/desktop-runtime-singleton.js";
@@ -53,7 +53,12 @@ export const Backup = {
         } catch (err) {
             // 兜底：未来 throw 源的 AbortError 转回控制流 Outcome。
             if (RequestAbort.isAbortLikeError(err)) return { kind: "cancelled", reason: scope.reason ?? "user-stop" };
-            throw err;
+            // 其余异常沿 Outcome.failed 上行（不再抛）：AppError 原样透传，未知异常包
+            // INFRA_UNEXPECTED_ERROR（原始信息进 detail；RunScope 边界对 failed 的
+            // throw → formatIpcError 与原 throw 通道产出一致的 code/message）。
+            if (err instanceof AppError) return { kind: "failed", error: err };
+            const message = err instanceof Error ? err.message : String(err);
+            return { kind: "failed", error: new AppError("INFRA_UNEXPECTED_ERROR", { detail: message }, { cause: err }) };
         }
     },
 

@@ -92,13 +92,14 @@ export const RunScope = {
                 completed: (value) => IpcResults.ok(value),
                 cancelled: (reason) => {
                     log.info("run aborted", { key, reason, phase: "handler" });
-                    throw AbortError.create(); // nm-throw: keep 平台强制（P4 IPC 取消协议）——可中止 handler 统一边界转码，formatIpcError 映射 IPC_ABORTED
+                    throw AbortError.create(); // nm-throw: keep — 平台强制（P4 IPC 取消协议）：可中止 handler 统一边界转码，formatIpcError 映射 IPC_ABORTED
                 },
                 replaced: () => {
                     log.info("run replaced", { key, phase: "handler" });
-                    throw AbortError.create(); // nm-throw: keep 平台强制（P4 IPC 取消协议）——同上，replaced 亦映射 IPC_ABORTED
+                    throw AbortError.create(); // nm-throw: keep — 平台强制（P4 IPC 取消协议）：同上，replaced 亦映射 IPC_ABORTED
                 },
                 failed: (error) => {
+                    // nm-throw: keep — IPC handler 边界统一错误出口（signal-abort-scope §五三分派）：failed 的业务失败在此转 throw，由同函数 catch 收进 formatIpcError 转码，与上方 cancelled/replaced 分支同款
                     throw error;
                 },
             });
