@@ -181,7 +181,8 @@ export const ChatPromptTokenLabel = {
         // resolve 段（含 ~5.8s 级原生整串计数）同样要能中途弃权（r3-chip-1，错误
         // 通道迁移二期改返回值）：core 在两处整串级重活之前检查 shouldBail，命中沿
         // Outcome.cancelled/replaced 返回，这里收成空串哨兵——不重试、不回落
-        // fallback（重算一遍恰是要避免的竞争）；其余异常仍走外层 catch。
+        // fallback（重算一遍恰是要避免的竞争）；其余异常由下方 catch 转收：
+        // 取消收空串哨兵，AppError 原样透传 Err，未知异常转 INFRA_UNEXPECTED_ERROR。
         let result;
         try {
             const resolveRequest: CountPromptLlmInputParams = {
@@ -229,7 +230,13 @@ export const ChatPromptTokenLabel = {
                 }
                 return Result.ok({label: '', upgradeWorthy: false});
             }
-            throw error;
+            // 已知失败原样透传；未知异常（非 AppError）转 INFRA_UNEXPECTED_ERROR
+            // （detail 带原文、cause 挂原错误）——调用方 resilient 按 !ok 回落 fallback
+            // （与旧异常通道同终端），run 的 !ok 分支留痕返回。
+            if (error instanceof AppError) {
+                return Result.err(error);
+            }
+            return Result.err(new AppError('INFRA_UNEXPECTED_ERROR', {detail: error instanceof Error ? error.message : String(error)}, {cause: error}));
         }
         const window = await runtime.providerModels.getContextWindow(savedModelId);
         // 已知失败沿 Result 接力（错误通道迁移四期）：同 counterMode 口径。

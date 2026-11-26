@@ -63,7 +63,8 @@ export namespace ChatAgentMeta {
    *
    * 失败通道（错误通道迁移四期）：会话配置的已知失败沿 `Result.err` 接力；
    * agent 解析失败（AGENT_RUN_RESOLVE_KEYS）归一为 source='none' 的待重选
-   * meta（Ok）；其余未知异常保持 reject，调用方「锁定 + 错误文案」报错态。
+   * meta（Ok）；其余失败同走 Err（已知 AppError 原样透传，未知异常转
+   * INFRA_UNEXPECTED_ERROR），调用方「锁定 + 错误文案」报错态。
    */
     export async function load(runtime: MobileNovelMasterRuntime, projectId: string, sessionId: string): Promise<Result<ChatAgentMeta, AppError>> {
         try {
@@ -72,7 +73,7 @@ export namespace ChatAgentMeta {
             // 依赖两者结果合成的 savedModelId，必须等两边都回来，保持串行。
             const sessionConfigPromise = runtime.sessions.getSessionAgentConfig(sessionId);
             // 兜底挂接：resolveAgentForProject 先失败提前退出（归一 none meta /
-            // rethrow）时，本路在途的拒绝不会变成 unhandled rejection；
+            // 转 Err）时，本路在途的拒绝不会变成 unhandled rejection；
             // 真正的错误仍在下方 await 按原语义抛出。
             sessionConfigPromise.catch(() => undefined);
             const resolved = await AgentProjectResolver.resolve(runtime, projectId, sessionId);
@@ -121,8 +122,9 @@ export namespace ChatAgentMeta {
         } catch (error) {
             // 归一口径与 desktop prompt handler 对齐（au/C-orch-2，方向 b）：仅
             // AGENT_RUN_RESOLVE_KEYS 内的 agent 解析失败（agentId 指向已删 agent 等）
-            // 归一为 source='none' 的待重选 meta；其它失败走 Err / 未知异常原样
-            // reject，由调用方走「锁定 + 错误文案」的报错态——错误成因绝不冒充
+            // 归一为 source='none' 的待重选 meta；其它失败走 Err——已知 AppError
+            // 原样透传，未知异常转 INFRA_UNEXPECTED_ERROR（detail 带原文、cause 挂
+            // 原错误），由调用方走「锁定 + 错误文案」的报错态——错误成因绝不冒充
             // 「已被删除」。
             if (AppErrorOps.is(error) && AGENT_RUN_RESOLVE_KEYS.has(error.key)) {
                 return Result.ok({
@@ -135,7 +137,10 @@ export namespace ChatAgentMeta {
                     modelSource: 'session',
                 });
             }
-            throw error;
+            if (AppErrorOps.is(error)) {
+                return Result.err(error);
+            }
+            return Result.err(new AppError('INFRA_UNEXPECTED_ERROR', {detail: error instanceof Error ? error.message : String(error)}, {cause: error}));
         }
     }
 

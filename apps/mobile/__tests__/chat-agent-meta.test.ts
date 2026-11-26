@@ -155,8 +155,8 @@ describe('loadChatAgentMeta', () => {
 
 // ── au/C-orch-2（cr-fix-spec 条目 9，方向 b）：错误归一口径 ─────────────────
 // 「已删待重选」（source='none'）仅覆盖 agent 解析失败成因；ChatError
-// 等其它异常原样上抛，由调用方走「锁定 + 错误文案」报错态——错误成因绝不
-// 冒充「已被删除」（与 desktop prompt handler 的内层 catch 口径一致）。
+// 等其它已知失败沿 Result.err 原样透传，由调用方走「锁定 + 错误文案」报错态——
+// 错误成因绝不冒充「已被删除」（与 desktop prompt handler 的内层 catch 口径一致）。
 describe('loadChatAgentMeta 错误归一口径（au/C-orch-2）', () => {
     it('agent 解析失败（AGENT_REFERENCED_NOT_FOUND）归一 source=none 待重选 meta（既有口径不回归）', async () => {
         const runtime: any = mockRuntime({});
@@ -177,15 +177,17 @@ describe('loadChatAgentMeta 错误归一口径（au/C-orch-2）', () => {
         expect(ChatAgentMeta.isLocked(meta)).toBe(false);
     });
 
-    it('CHAT_INVALID_ARGUMENT（如配置缺失/迁移未跑）原样上抛——调用方 meta 停 undefined，锁定且不可弹重选', async () => {
+    it('CHAT_INVALID_ARGUMENT（如配置缺失/迁移未跑）沿 Result.err 原样透传——调用方 meta 停 undefined，锁定且不可弹重选', async () => {
         const runtime: any = mockRuntime({});
         runtime.sessions.getSessionAgentConfig = jest.fn(async () => {
             throw new AppError('CHAT_INVALID_ARGUMENT', {detail: 'session 配置缺失'});
         });
-        await expect(
-            ChatAgentMeta.load(runtime, 'proj-1', 'sess-1'),
-        ).rejects.toBeInstanceOf(AppError);
-        // 调用方 catch 后 meta 保持 undefined：未加载锁定态，绝无「已删待重选」语义。
+        const loaded = await ChatAgentMeta.load(runtime, 'proj-1', 'sess-1');
+        expect(loaded.ok).toBe(false);
+        if (!loaded.ok) {
+            expect(loaded.error).toBeInstanceOf(AppError);
+        }
+        // 调用方按 !ok 收口后 meta 保持 undefined：未加载锁定态，绝无「已删待重选」语义。
         expect(ChatAgentMeta.isDeleted(undefined)).toBe(false);
         expect(ChatAgentMeta.isLocked(undefined)).toBe(true);
     });
