@@ -263,7 +263,7 @@ export const McpConnectionManagerFactory = {
         const failCall = (config: McpServerConfig, generation: number, signal: AbortSignal, reason: ConnectFailure): Result<unknown, McpFailure> => {
             const error = reason.kind === "error" ? reason.error : null;
             if (error != null && (RequestAbort.isAbortLikeError(error) || signal.aborted)) {
-                // nm-throw: keep — 平台协议例外（spec §五）：取消不进 Result，AbortError 透传给工具 run 转成 TOOL_CANCELLED
+                // nm-throw: keep — 不是平台契约，是工具系统当前的取消通道（技术债）：Tool.run 只返回 Result、tool-runner 用 Promise.race 竞速取消，取消只能以 AbortError 形态到达；这里原样透传给 to-nm-tool 转成 TOOL_CANCELLED。工具系统迁到 Interrupt / Outcome 后这里随之改成返回值
                 throw RequestAbort.isAbortLikeError(error) ? error : AbortError.create();
             }
             const failure = reason.kind === "failure" ? reason.failure : failureOf(config, reason.error);
