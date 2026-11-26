@@ -1,7 +1,7 @@
 {
-  "note": "throw-audit 基线（p26 R3）。站点键 = 文件 + throw 语句空白归一原文；disposition：ALLOWED（白名单三类）/ BOUNDARY（合法边界转码，理由必填）/ KEEP（nm-throw: keep 存量）/ UNTRIAGED（定性不了的欠账——gate 不拦但报告显数）。gate 拦矩阵判 VIOLATION/VIOLATION-B/BOUNDARY 且未登记的站点；重建：nm-style throw-audit --write-baseline。",
+  "note": "throw-audit 基线（p26 R3）。站点键 = 文件 + 站点原文空白归一（语句六形态取 throw 语句、T8 取调用原文、T7 转抛 helper 定义站点取合成文本 `never-throw helper: <名>`）；disposition：ALLOWED（白名单三类）/ BOUNDARY（合法边界转码，理由必填）/ KEEP（nm-throw: keep 存量）/ UNTRIAGED（定性不了的欠账——gate 不拦但报告显数）。gate 拦矩阵判 VIOLATION/VIOLATION-B/BOUNDARY 且未登记的站点；重建：nm-style throw-audit --write-baseline。",
   "toolVersion": "0.1.0",
-  "generatedAt": "2026-11-26T05:03:33.925Z",
+  "generatedAt": "2026-11-26T15:24:43.290Z",
   "includeTests": false,
   "sites": {
     "apps/desktop/renderer/components/MermaidMarkdown.tsx#throw err;": {
@@ -772,11 +772,11 @@
       "disposition": "ALLOWED",
       "reason": "白名单自动判定（transaction）"
     },
-    "packages/core/src/domain/tool/logic/tool-runner.ts#throw e;": {
-      "form": "T6",
-      "line": 148,
+    "packages/core/src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.ts#throw rendered.error;": {
+      "form": "T1",
+      "line": 73,
       "disposition": "KEEP",
-      "reason": "在途取消竞速的 reject 是平台协议例外（Promise 无 Result 通道），AbortError 载荷原样上行供 isAbortLikeError 识别。"
+      "reason": "仓储方法的失败契约就是 reject（本函数 doc 注释「块内失败时抛错，"
     },
     "packages/core/src/domain/vfs/content-store/impl/sqlite-vfs-content-store.ts#throw new AppError(\"VFS_CONTENT_BLOB_MISSING\", { detail: `vfs_content_blob 缺失且无可回退明文: ${contentHash}`, contentHash });": {
       "form": "T3",
@@ -934,12 +934,6 @@
       "disposition": "KEEP",
       "reason": "llm-protocol port 出口（总纲 §五例外 5）：port 契约无失败位，ProviderError 走 throw 通道供 retry 按 catch+code 分派。"
     },
-    "packages/core/src/infra/mcp/impl/create-mcp-connection-manager.ts#throw RequestAbort.isAbortLikeError(error) ? error : AbortError.create();": {
-      "form": "T6",
-      "line": 267,
-      "disposition": "KEEP",
-      "reason": "平台协议例外（spec §五）：取消不进 Result，AbortError 透传给工具 run 转成 TOOL_CANCELLED"
-    },
     "packages/core/src/infra/mcp/impl/http-mcp-transport.ts#throw cause;": {
       "form": "T6",
       "line": 72,
@@ -1060,137 +1054,17 @@
       "disposition": "KEEP",
       "reason": "SKSP 的 SkspCryptoStrategy / SecretStore 端口是 Promise reject 契约（sksp-strategy.port.ts、secret-store.port.ts 签名都不是 Result），兄弟实现同口径；最终由桌面 provider IPC handler 的 catch 收口"
     },
-    "packages/core/src/infra/sql-template/expression.ts#throw new SqlTemplateError(\"EXPRESSION_ERROR\", \"Empty test expression\", errorOptions);": {
-      "form": "T5",
-      "line": 104,
-      "disposition": "UNTRIAGED",
-      "reason": "定性欠账（2026-11-26）：SQL 模板解析器在递归下降内部用 throw 传递 SqlTemplateError，外层沿 TdbcTemplate 查询链以 reject 报错；改成 Result 要整体改造 parser / expression 的错误传递与全部调用面，不在本轮范围，另起一轮处理"
-    },
-    "packages/core/src/infra/sql-template/expression.ts#throw new SqlTemplateError(\"EXPRESSION_ERROR\", `Disallowed syntax in test expression: ${expr}`, errorOptions);": {
-      "form": "T5",
-      "line": 107,
-      "disposition": "UNTRIAGED",
-      "reason": "定性欠账（2026-11-26）：SQL 模板解析器在递归下降内部用 throw 传递 SqlTemplateError，外层沿 TdbcTemplate 查询链以 reject 报错；改成 Result 要整体改造 parser / expression 的错误传递与全部调用面，不在本轮范围，另起一轮处理"
-    },
-    "packages/core/src/infra/sql-template/expression.ts#throw new SqlTemplateError(\"EXPRESSION_ERROR\", `Failed to evaluate test expression: ${expr}`, { ...errorOptions, cause: err });": {
-      "form": "T5",
-      "line": 119,
-      "disposition": "UNTRIAGED",
-      "reason": "定性欠账（2026-11-26）：SQL 模板解析器在递归下降内部用 throw 传递 SqlTemplateError，外层沿 TdbcTemplate 查询链以 reject 报错；改成 Result 要整体改造 parser / expression 的错误传递与全部调用面，不在本轮范围，另起一轮处理"
-    },
-    "packages/core/src/infra/sql-template/parser.ts#throw new SqlTemplateError(\"UNCLOSED_TAG\", \"Unexpected trailing content\", { offset: pos.value, });": {
-      "form": "T5",
-      "line": 32,
-      "disposition": "UNTRIAGED",
-      "reason": "定性欠账（2026-11-26）：SQL 模板解析器在递归下降内部用 throw 传递 SqlTemplateError，外层沿 TdbcTemplate 查询链以 reject 报错；改成 Result 要整体改造 parser / expression 的错误传递与全部调用面，不在本轮范围，另起一轮处理"
-    },
-    "packages/core/src/infra/sql-template/parser.ts#throw new SqlTemplateError(\"UNCLOSED_TAG\", `Unclosed tag <${closeTag}>`, { offset: pos.value, tagName: closeTag, });": {
-      "form": "T5",
-      "line": 48,
-      "disposition": "UNTRIAGED",
-      "reason": "定性欠账（2026-11-26）：SQL 模板解析器在递归下降内部用 throw 传递 SqlTemplateError，外层沿 TdbcTemplate 查询链以 reject 报错；改成 Result 要整体改造 parser / expression 的错误传递与全部调用面，不在本轮范围，另起一轮处理"
-    },
-    "packages/core/src/infra/sql-template/parser.ts#throw new SqlTemplateError(\"MALFORMED_TAG\", \"Unclosed #{ binding\", { offset: start, });": {
-      "form": "T5",
-      "line": 89,
-      "disposition": "UNTRIAGED",
-      "reason": "定性欠账（2026-11-26）：SQL 模板解析器在递归下降内部用 throw 传递 SqlTemplateError，外层沿 TdbcTemplate 查询链以 reject 报错；改成 Result 要整体改造 parser / expression 的错误传递与全部调用面，不在本轮范围，另起一轮处理"
-    },
-    "packages/core/src/infra/sql-template/parser.ts#throw new SqlTemplateError(\"MALFORMED_TAG\", \"Unclosed ${ binding\", { offset: start, });": {
-      "form": "T5",
-      "line": 101,
-      "disposition": "UNTRIAGED",
-      "reason": "定性欠账（2026-11-26）：SQL 模板解析器在递归下降内部用 throw 传递 SqlTemplateError，外层沿 TdbcTemplate 查询链以 reject 报错；改成 Result 要整体改造 parser / expression 的错误传递与全部调用面，不在本轮范围，另起一轮处理"
-    },
-    "packages/core/src/infra/sql-template/parser.ts#throw new SqlTemplateError(\"MALFORMED_TAG\", `Unexpected closing tag </${close.name}>`, { offset: start, tagName: close.name });": {
-      "form": "T5",
-      "line": 120,
-      "disposition": "UNTRIAGED",
-      "reason": "定性欠账（2026-11-26）：SQL 模板解析器在递归下降内部用 throw 传递 SqlTemplateError，外层沿 TdbcTemplate 查询链以 reject 报错；改成 Result 要整体改造 parser / expression 的错误传递与全部调用面，不在本轮范围，另起一轮处理"
-    },
-    "packages/core/src/infra/sql-template/parser.ts#throw new SqlTemplateError(\"MALFORMED_TAG\", `Mismatched closing tag: expected </${closeTag}>, got </${close.name}>`, { offset: start, tagName: close.name });": {
-      "form": "T5",
-      "line": 123,
-      "disposition": "UNTRIAGED",
-      "reason": "定性欠账（2026-11-26）：SQL 模板解析器在递归下降内部用 throw 传递 SqlTemplateError，外层沿 TdbcTemplate 查询链以 reject 报错；改成 Result 要整体改造 parser / expression 的错误传递与全部调用面，不在本轮范围，另起一轮处理"
-    },
-    "packages/core/src/infra/sql-template/parser.ts#throw new SqlTemplateError(\"UNKNOWN_TAG\", `Unknown tag <${unknown[1]}>`, { offset: start, tagName: unknown[1], });": {
-      "form": "T5",
-      "line": 133,
-      "disposition": "UNTRIAGED",
-      "reason": "定性欠账（2026-11-26）：SQL 模板解析器在递归下降内部用 throw 传递 SqlTemplateError，外层沿 TdbcTemplate 查询链以 reject 报错；改成 Result 要整体改造 parser / expression 的错误传递与全部调用面，不在本轮范围，另起一轮处理"
-    },
-    "packages/core/src/infra/sql-template/parser.ts#throw new SqlTemplateError(\"MALFORMED_TAG\", `<${tagName}> must appear inside <choose>`, { offset: start, tagName });": {
-      "form": "T5",
-      "line": 146,
-      "disposition": "UNTRIAGED",
-      "reason": "定性欠账（2026-11-26）：SQL 模板解析器在递归下降内部用 throw 传递 SqlTemplateError，外层沿 TdbcTemplate 查询链以 reject 报错；改成 Result 要整体改造 parser / expression 的错误传递与全部调用面，不在本轮范围，另起一轮处理"
-    },
-    "packages/core/src/infra/sql-template/parser.ts#throw new SqlTemplateError(\"MALFORMED_TAG\", \"Only <when> and <otherwise> allowed inside <choose>\", { offset: tagStart });": {
-      "form": "T5",
-      "line": 203,
-      "disposition": "UNTRIAGED",
-      "reason": "定性欠账（2026-11-26）：SQL 模板解析器在递归下降内部用 throw 传递 SqlTemplateError，外层沿 TdbcTemplate 查询链以 reject 报错；改成 Result 要整体改造 parser / expression 的错误传递与全部调用面，不在本轮范围，另起一轮处理"
-    },
-    "packages/core/src/infra/sql-template/parser.ts#throw new SqlTemplateError(\"MALFORMED_TAG\", \"Duplicate <otherwise> in <choose>\", { offset: tagStart });": {
-      "form": "T5",
-      "line": 225,
-      "disposition": "UNTRIAGED",
-      "reason": "定性欠账（2026-11-26）：SQL 模板解析器在递归下降内部用 throw 传递 SqlTemplateError，外层沿 TdbcTemplate 查询链以 reject 报错；改成 Result 要整体改造 parser / expression 的错误传递与全部调用面，不在本轮范围，另起一轮处理"
-    },
-    "packages/core/src/infra/sql-template/parser.ts#throw new SqlTemplateError(\"MALFORMED_TAG\", `Invalid child <${unknownChild[1]}> inside <choose>`, { offset: tagStart, tagName: unknownChild[1] });": {
-      "form": "T5",
-      "line": 244,
-      "disposition": "UNTRIAGED",
-      "reason": "定性欠账（2026-11-26）：SQL 模板解析器在递归下降内部用 throw 传递 SqlTemplateError，外层沿 TdbcTemplate 查询链以 reject 报错；改成 Result 要整体改造 parser / expression 的错误传递与全部调用面，不在本轮范围，另起一轮处理"
-    },
-    "packages/core/src/infra/sql-template/parser.ts#throw new SqlTemplateError(\"UNKNOWN_TAG\", \"Unknown tag inside <choose>\", { offset: tagStart, });": {
-      "form": "T5",
-      "line": 247,
-      "disposition": "UNTRIAGED",
-      "reason": "定性欠账（2026-11-26）：SQL 模板解析器在递归下降内部用 throw 传递 SqlTemplateError，外层沿 TdbcTemplate 查询链以 reject 报错；改成 Result 要整体改造 parser / expression 的错误传递与全部调用面，不在本轮范围，另起一轮处理"
-    },
-    "packages/core/src/infra/sql-template/parser.ts#throw new SqlTemplateError(\"UNCLOSED_TAG\", \"Unclosed <choose>\", { offset: start, tagName: \"choose\", });": {
-      "form": "T5",
-      "line": 252,
-      "disposition": "UNTRIAGED",
-      "reason": "定性欠账（2026-11-26）：SQL 模板解析器在递归下降内部用 throw 传递 SqlTemplateError，外层沿 TdbcTemplate 查询链以 reject 报错；改成 Result 要整体改造 parser / expression 的错误传递与全部调用面，不在本轮范围，另起一轮处理"
-    },
-    "packages/core/src/infra/sql-template/parser.ts#throw new SqlTemplateError(\"UNKNOWN_TAG\", `Unknown tag <${tagName}>`, { offset: start, tagName, });": {
-      "form": "T5",
-      "line": 258,
-      "disposition": "UNTRIAGED",
-      "reason": "定性欠账（2026-11-26）：SQL 模板解析器在递归下降内部用 throw 传递 SqlTemplateError，外层沿 TdbcTemplate 查询链以 reject 报错；改成 Result 要整体改造 parser / expression 的错误传递与全部调用面，不在本轮范围，另起一轮处理"
-    },
-    "packages/core/src/infra/sql-template/parser.ts#throw new SqlTemplateError(\"MALFORMED_TAG\", \"Invalid closing tag\", { offset, });": {
-      "form": "T5",
-      "line": 268,
-      "disposition": "UNTRIAGED",
-      "reason": "定性欠账（2026-11-26）：SQL 模板解析器在递归下降内部用 throw 传递 SqlTemplateError，外层沿 TdbcTemplate 查询链以 reject 报错；改成 Result 要整体改造 parser / expression 的错误传递与全部调用面，不在本轮范围，另起一轮处理"
-    },
-    "packages/core/src/infra/sql-template/parser.ts#throw new SqlTemplateError(\"UNCLOSED_TAG\", `Unclosed <${tagName}>`, { offset, tagName, });": {
-      "form": "T5",
-      "line": 279,
-      "disposition": "UNTRIAGED",
-      "reason": "定性欠账（2026-11-26）：SQL 模板解析器在递归下降内部用 throw 传递 SqlTemplateError，外层沿 TdbcTemplate 查询链以 reject 报错；改成 Result 要整体改造 parser / expression 的错误传递与全部调用面，不在本轮范围，另起一轮处理"
-    },
-    "packages/core/src/infra/sql-template/parser.ts#throw new SqlTemplateError(\"MALFORMED_TAG\", `Malformed attributes on <${tagName}>`, { offset, tagName });": {
-      "form": "T5",
-      "line": 297,
-      "disposition": "UNTRIAGED",
-      "reason": "定性欠账（2026-11-26）：SQL 模板解析器在递归下降内部用 throw 传递 SqlTemplateError，外层沿 TdbcTemplate 查询链以 reject 报错；改成 Result 要整体改造 parser / expression 的错误传递与全部调用面，不在本轮范围，另起一轮处理"
-    },
-    "packages/core/src/infra/sql-template/parser.ts#throw new SqlTemplateError(\"MALFORMED_TAG\", `Missing required attribute \"${name}\" on <${tagName}>`, { offset, tagName });": {
-      "form": "T5",
-      "line": 305,
-      "disposition": "UNTRIAGED",
-      "reason": "定性欠账（2026-11-26）：SQL 模板解析器在递归下降内部用 throw 传递 SqlTemplateError，外层沿 TdbcTemplate 查询链以 reject 报错；改成 Result 要整体改造 parser / expression 的错误传递与全部调用面，不在本轮范围，另起一轮处理"
-    },
     "packages/core/src/infra/tdbc/logic/open.ts#throw parsed.error;": {
       "form": "T1",
       "line": 68,
       "disposition": "ALLOWED",
       "reason": "白名单自动判定（tdbc-driver）"
+    },
+    "packages/core/src/infra/tdbc/logic/template-helper.ts#throw parsed.error;": {
+      "form": "T1",
+      "line": 37,
+      "disposition": "KEEP",
+      "reason": "tdbc 驱动层 reject 契约（TdbcConnection 的失败通道就是 reject："
     },
     "packages/core/src/infra/tdbc/logic/transaction-helper.ts#throw error;": {
       "form": "T6",
@@ -1204,17 +1078,17 @@
       "disposition": "ALLOWED",
       "reason": "白名单自动判定（transaction）"
     },
+    "packages/core/src/service/agent/impl/agent-runner.ts#throw appended.error;": {
+      "form": "T1",
+      "line": 700,
+      "disposition": "KEEP",
+      "reason": "占位落库失败不把成功 run 翻成 FAILED：喂同函数本地"
+    },
     "packages/core/src/service/agent/impl/agent-runner.ts#throw e;": {
       "form": "T6",
-      "line": 815,
+      "line": 296,
       "disposition": "KEEP",
       "reason": "主 catch 最终出口的未知异常按转码矩阵保持 reject（Result 的 E 只装业务失败，不谎报），由 IPC 入口壳收口。"
-    },
-    "packages/core/src/service/agent/impl/agent-runner.ts#throw error;": {
-      "form": "T6",
-      "line": 932,
-      "disposition": "UNTRIAGED",
-      "reason": "定性欠账（2026-11-26，用户指出）：返回 Result 的函数内部用「转抛 helper + 内层 catch 再抛」把已知失败送进主 catch 做统一收尾——这是靠异常做控制流，不是平台契约；应提成具名的失败收尾函数并 return Result.err（Outcome / Result 能表达），连同 raiseRunError 的 13 处与 rethrowRunFailure 的调用点一起改，另起一轮"
     },
     "packages/core/src/service/agent/impl/chat-agent-session.ts#throw read.error;": {
       "form": "T1",
@@ -1228,33 +1102,27 @@
       "disposition": "KEEP",
       "reason": "AgentSession.list 同款契约（总纲 §五7c）：listVisibleSessionMessages dep 与 chat-agent-session 是同一契约两端。"
     },
-    "packages/core/src/service/agent/logic/run-agent-turn.ts#throw error;": {
-      "form": "T6",
-      "line": 1130,
-      "disposition": "UNTRIAGED",
-      "reason": "定性欠账（2026-11-26，用户指出）：返回 Result 的函数内部用「转抛 helper + 内层 catch 再抛」把已知失败送进主 catch 做统一收尾——这是靠异常做控制流，不是平台契约；应提成具名的失败收尾函数并 return Result.err（Outcome / Result 能表达），连同 raiseRunError 的 13 处与 rethrowRunFailure 的调用点一起改，另起一轮"
-    },
-    "packages/core/src/service/agent/logic/run-agent-turn.ts#throw failure;": {
-      "form": "T6",
-      "line": 361,
-      "disposition": "UNTRIAGED",
-      "reason": "定性欠账（2026-11-26，用户指出）：返回 Result 的函数内部用「转抛 helper + 内层 catch 再抛」把已知失败送进主 catch 做统一收尾——这是靠异常做控制流，不是平台契约；应提成具名的失败收尾函数并 return Result.err（Outcome / Result 能表达），连同 raiseRunError 的 13 处与 rethrowRunFailure 的调用点一起改，另起一轮"
-    },
     "packages/core/src/service/agent/logic/run-agent-turn.ts#throw result.error;": {
       "form": "T1",
-      "line": 466,
+      "line": 448,
       "disposition": "KEEP",
       "reason": "runner 收口漏斗（总纲 §五7a）：throw 喂同函数 catch 的统一收口——FAILED('') 补发 + onRunFailed 记账，直接 return 会跳过终态事件；mapResolveError 是 desktop rejection 契约的 OrThrow 边界。"
     },
+    "packages/core/src/service/agent/logic/run-agent-turn.ts#throw error;": {
+      "form": "T6",
+      "line": 603,
+      "disposition": "KEEP",
+      "reason": "定性欠账（2026-11-26，用户指出）：返回 Result 的函数内部用「转抛 helper + 内层 catch 再抛」把已知失败送进主 catch 做统一收尾——这是靠异常做控制流，不是平台契约；应提成具名的失败收尾函数并 return Result.err（Outcome / Result 能表达），连同 raiseRunError 的 13 处与 rethrowRunFailure 的调用点一起改，另起一轮"
+    },
     "packages/core/src/service/agent/logic/run-agent-turn.ts#throw new AppError(\"AGENT_MESSAGE_EMPTY\");": {
       "form": "T3",
-      "line": 674,
+      "line": 694,
       "disposition": "KEEP",
       "reason": "runner 收口漏斗（总纲 §五7a）：throw 喂同函数 catch 的统一收口——FAILED('') 补发 + onRunFailed 记账，直接 return 会跳过终态事件；mapResolveError 是 desktop rejection 契约的 OrThrow 边界。"
     },
     "packages/core/src/service/agent/logic/run-agent-turn.ts#throw tailRead.error;": {
       "form": "T1",
-      "line": 663,
+      "line": 683,
       "disposition": "KEEP",
       "reason": "runner 收口漏斗（总纲 §五7a）：throw 喂同函数 catch 的统一收口——FAILED('') 补发 + onRunFailed 记账，直接 return 会跳过终态事件；mapResolveError 是 desktop rejection 契约的 OrThrow 边界。"
     },
@@ -1527,6 +1395,12 @@
       "line": 179,
       "disposition": "KEEP",
       "reason": "conformance 测试夹具：故意抛错验证事务回滚，非业务错误。"
+    },
+    "packages/tdbc-conformance/src/suite.ts#throw parsed.error;": {
+      "form": "T1",
+      "line": 289,
+      "disposition": "ALLOWED",
+      "reason": "白名单自动判定（tdbc-driver）"
     },
     "packages/tdbc-driver-better-sqlite3/src/connection.ts#throw new TdbcError(\"NESTED_TRANSACTION\", \"Nested transactions are not supported\", { driver: \"better-sqlite3\" },);": {
       "form": "T5",
