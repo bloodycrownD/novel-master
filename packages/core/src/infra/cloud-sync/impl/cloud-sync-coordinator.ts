@@ -419,7 +419,8 @@ export class CloudSyncCoordinator {
                 const timeoutKey = operation === "pull" ? "error.cloud_sync.push_mutex_timeout.pull" : "error.cloud_sync.push_mutex_timeout.push";
                 return Result.err(new AppError("CLOUD_SYNC_PUSH_MUTEX_TIMEOUT", { descriptor: { key: timeoutKey } }, { cause: error }));
             }
-            throw error;
+            // 非 AGENT_BUSY 的 mutex 异常是意外故障，收进 Result（本函数承诺 Result，不再 reject）。
+            return Result.err(new AppError("INFRA_UNEXPECTED_ERROR", { detail: error instanceof Error ? error.message : String(error) }, { cause: error }));
         }
     }
 

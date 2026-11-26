@@ -76,6 +76,7 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
                 await LlmSseTransport.post({ url, init, onChunk: (chunk) => parser.feed(chunk), fetchFn: this.fetchFn, signal: req.scope?.signal });
             } catch (error) {
                 if (!RequestAbort.isAborted(error, req.scope?.signal)) {
+                    // nm-throw: keep — adapter 层契约：chat 以 reject 报错（Promise<LlmChatResult> 无失败分支），由 model-request.service 的 catch 收口成 Result。
                     throw error;
                 }
             }

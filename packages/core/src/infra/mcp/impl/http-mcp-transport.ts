@@ -59,7 +59,8 @@ export class HttpMcpTransport implements Transport {
         this.onclose?.();
     }
 
-    // nm-throw: keep — 平台协议例外（spec §三）：官方 SDK 的 Transport.send 只以 reject 报错、没有 Result 通道；本方法内的每一处 throw 都是这个契约，抛出的 McpTransportError 带着原始响应（status / contentType / body / www-authenticate）供上层归一
+    // 本方法每一处 throw 都是同一契约：官方 SDK 的 Transport.send 只以 reject 报错（无 Result 通道），
+    // 抛出的 McpTransportError 带原始响应（status / contentType / body / www-authenticate）供上层归一。
     async send(message: JSONRPCMessage, options?: TransportSendOptions): Promise<void> {
         const headers = McpRequestHeaders.build({ authToken: this.deps.authToken, sessionId: this.sessionIdValue, protocolVersion: this.protocolVersion, extraHeaders: options?.headers === undefined ? this.deps.extraHeaders : { ...this.deps.extraHeaders, ...options.headers } });
         const request: McpHttpRequest = { url: this.deps.url, method: "POST", headers, body: serializeMessage(message), signal: options?.requestSignal };
@@ -67,7 +68,9 @@ export class HttpMcpTransport implements Transport {
         try {
             response = await this.deps.requestFn(request);
         } catch (cause) {
+            // nm-throw: keep — 官方 SDK Transport.send 只以 reject 报错（无 Result 通道），abort-like / McpTransportError 原样透传。
             if (RequestAbort.isAbortLikeError(cause) || cause instanceof McpTransportError) throw cause;
+            // nm-throw: keep — 官方 SDK Transport.send 只以 reject 报错（无 Result 通道），未知故障包 McpTransportError 上行。
             throw new McpTransportError(`MCP request failed: ${cause instanceof Error ? cause.message : String(cause)}`);
         }
         const session = McpRequestHeaders.pick(response.headers, "Mcp-Session-Id");
@@ -76,6 +79,7 @@ export class HttpMcpTransport implements Transport {
         if (headerVersion !== null) this.protocolVersion = headerVersion;
         const raw: RawMcpResponse = { status: response.status, contentType: McpRequestHeaders.pick(response.headers, "content-type"), body: response.bodyText };
         if (response.status < 200 || response.status >= 300) {
+            // nm-throw: keep — 官方 SDK Transport.send 只以 reject 报错（无 Result 通道），非 2xx 转 McpTransportError 带 raw。
             throw new McpTransportError(`MCP server returned HTTP ${response.status}`, raw, McpRequestHeaders.pick(response.headers, "www-authenticate"));
         }
         const contentType = (raw.contentType ?? "").toLowerCase();
@@ -83,7 +87,10 @@ export class HttpMcpTransport implements Transport {
             const outcome = ParseSseFrames.parse(raw.body);
             for (const incoming of outcome.messages) this.onmessage?.(incoming);
             for (const badFrame of outcome.invalid) this.onerror?.(new Error(`MCP SSE frame is not a valid JSON-RPC message (${badFrame.error}); raw: ${badFrame.data}`));
-            if (outcome.messages.length === 0 && outcome.invalid.length > 0) throw new McpTransportError("MCP SSE response contained no valid JSON-RPC frame", raw);
+            if (outcome.messages.length === 0 && outcome.invalid.length > 0) {
+                // nm-throw: keep — 官方 SDK Transport.send 只以 reject 报错（无 Result 通道），SSE 全坏帧转 McpTransportError 带 raw。
+                throw new McpTransportError("MCP SSE response contained no valid JSON-RPC frame", raw);
+            }
             return;
         }
         if (contentType.startsWith("application/json") && raw.body.trim() !== "") {
@@ -91,6 +98,7 @@ export class HttpMcpTransport implements Transport {
             try {
                 parsed = JSON.parse(raw.body) as unknown;
             } catch {
+                // nm-throw: keep — 官方 SDK Transport.send 只以 reject 报错（无 Result 通道），body 非法 JSON 转 McpTransportError 带 raw。
                 throw new McpTransportError("MCP response body is not valid JSON", raw);
             }
             let delivered = 0;
@@ -104,11 +112,15 @@ export class HttpMcpTransport implements Transport {
                     this.onerror?.(parseError instanceof Error ? parseError : new Error(String(parseError)));
                 }
             }
-            if (delivered === 0 && invalid > 0) throw new McpTransportError("MCP JSON response contained no valid JSON-RPC message", raw);
+            if (delivered === 0 && invalid > 0) {
+                // nm-throw: keep — 官方 SDK Transport.send 只以 reject 报错（无 Result 通道），JSON 全坏帧转 McpTransportError 带 raw。
+                throw new McpTransportError("MCP JSON response contained no valid JSON-RPC message", raw);
+            }
             return;
         }
         // 202/204 的通知响应没有 content-type 也没有 body，正常结束。
         if (raw.contentType === null && raw.body.trim() === "") return;
+        // nm-throw: keep — 官方 SDK Transport.send 只以 reject 报错（无 Result 通道），不支持的 content-type 转 McpTransportError 带 raw。
         throw new McpTransportError(`Unsupported MCP response content-type: ${raw.contentType ?? "(missing)"}`, raw);
     }
 }
