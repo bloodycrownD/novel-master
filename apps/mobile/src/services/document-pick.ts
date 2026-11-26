@@ -26,6 +26,7 @@ export namespace DocumentPick {
                 AppToast.show(coreT({key: "ui.common.cancelled"}));
                 return null;
             }
+            // nm-throw: keep — @react-native-documents/picker 官方 SDK 只以 reject 报错：catch 只归一用户取消为 null，非取消错误原样透传给上层 document-io 编排层的 throw 通道（该层 keep 约定：非取消错误由业务域 catch 映射）
             throw error;
         }
         if (file == null) {

@@ -63,6 +63,7 @@ export const MobileDb = {
                     c = await TdbcOpen.open(MOBILE_TDBC_URL, {driver: 'op-sqlite'});
                 } catch (openErr: unknown) {
                     MobileDb.logCauseChain('open', openErr);
+                    // nm-throw: keep — TdbcOpen/op-sqlite 驱动的平台异常：catch 只补 cause 链日志后原样透传，失败通道由调用方（bootstrap catch / 备份回滚 catch）统一收口
                     throw openErr;
                 }
                 try {
@@ -75,6 +76,7 @@ export const MobileDb = {
                     // 重新 open 同一个库时，新旧连接可能互相锁死。close 本身失败不掩盖
                     // 原始的 bootstrap 错误，所以吞掉它的异常。
                     await c.close().catch(() => {});
+                    // nm-throw: keep — NovelMasterBootstrap 的平台异常：catch 只补 cause 链日志并清完连接后原样透传，失败通道由调用方（bootstrap catch / 备份回滚 catch）统一收口
                     throw bootErr;
                 }
                 await MobileDatabaseFilePath.probeAndCache();

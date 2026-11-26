@@ -62,12 +62,10 @@ describe('mermaid shared core (T-MV2 纯逻辑)', () => {
             okCalls += 1;
             return '<svg>ok</svg>';
         };
-        await expect(
-            cache.getOrCreate('default', 'graph TD\nA-->B', renderOk),
-        ).resolves.toBe('<svg>ok</svg>');
-        await expect(
-            cache.getOrCreate('default', 'graph TD\nA-->B', renderOk),
-        ).resolves.toBe('<svg>ok</svg>');
+        const okOutcome = await cache.getOrCreate('default', 'graph TD\nA-->B', renderOk);
+        expect(okOutcome).toEqual({ok: true, svg: '<svg>ok</svg>'});
+        const cachedOutcome = await cache.getOrCreate('default', 'graph TD\nA-->B', renderOk);
+        expect(cachedOutcome).toEqual({ok: true, svg: '<svg>ok</svg>'});
         expect(okCalls).toBe(1);
         expect(cache.lookup('default', 'graph TD\nA-->B')).toBe('<svg>ok</svg>');
 
@@ -76,29 +74,26 @@ describe('mermaid shared core (T-MV2 纯逻辑)', () => {
             failCalls += 1;
             throw new Error('parse error');
         };
-        await expect(
-            cache.getOrCreate('default', 'broken', renderFail),
-        ).rejects.toThrow('parse error');
-        await expect(
-            cache.getOrCreate('default', 'broken', renderFail),
-        ).rejects.toThrow('parse error');
+        const failedOutcome = await cache.getOrCreate('default', 'broken', renderFail);
+        expect(failedOutcome.ok).toBe(false);
+        if (!failedOutcome.ok) {
+            expect(MermaidCore.extractErrorMessage(failedOutcome.error)).toBe('parse error');
+            // 失败缓存命中：同错返回同一个 Err 载荷，不再重跑 render。
+            const failedAgain = await cache.getOrCreate('default', 'broken', renderFail);
+            expect(failedAgain).toEqual({ok: false, error: failedOutcome.error});
+        }
         expect(failCalls).toBe(1);
         expect(cache.isFailed('default', 'broken')).toBe(true);
 
-        // T-MV2: 失败后 reject 的原因可按统一口径提取错误消息
-        const reason = await cache
-            .getOrCreate('default', 'broken', renderFail)
-            .catch((e: unknown) => e);
-        expect(MermaidCore.extractErrorMessage(reason)).toBe('parse error');
+        // T-MV2: 失败后 Err.error 可按统一口径提取错误消息
         expect(MermaidCore.extractErrorMessage({str: 'Parse error on line 2'})).toBe(
             'Parse error on line 2',
         );
         expect(MermaidCore.extractErrorMessage('boom')).toBe('boom');
 
         // 主题不同 → key 不同，须重跑
-        await expect(
-            cache.getOrCreate('dark', 'graph TD\nA-->B', renderOk),
-        ).resolves.toBe('<svg>ok</svg>');
+        const darkOutcome = await cache.getOrCreate('dark', 'graph TD\nA-->B', renderOk);
+        expect(darkOutcome).toEqual({ok: true, svg: '<svg>ok</svg>'});
         expect(okCalls).toBe(2);
     });
 });

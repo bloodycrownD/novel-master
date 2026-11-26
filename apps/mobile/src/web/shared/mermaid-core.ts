@@ -12,6 +12,12 @@
 
 type MermaidTheme = 'dark' | 'default';
 
+/**
+ * getOrCreate 的单体渲染结果：web bundle 不引 core errors（build-webview 的
+ * WEBVIEW_CORE_ALLOWLIST 门禁），本地定义与 `Result<T, unknown>` 同构的判别联合。
+ */
+type MermaidRenderOutcome = {ok: true; svg: string} | {ok: false; error: unknown};
+
 // 颜色解析与亮度推断已抽至 theme-mode.ts（代码高亮 token 配色同样需要）。
 import {ThemeMode} from './theme-mode';
 
@@ -26,8 +32,8 @@ const mermaidModuleSlot = {
 interface MermaidSourceCache {
     lookup(theme: MermaidTheme, source: string): string | null;
     isFailed(theme: MermaidTheme, source: string): boolean;
-    /** 命中缓存直接返回；失败标记直接同错拒绝；并发同源请求合并；否则调 render。 */
-    getOrCreate(theme: MermaidTheme, source: string, render: (id: string) => Promise<string>): Promise<string>;
+    /** 命中缓存直接返回；失败标记直接同错返回 Err；并发同源请求合并；否则调 render。 */
+    getOrCreate(theme: MermaidTheme, source: string, render: (id: string) => Promise<string>): Promise<MermaidRenderOutcome>;
 }
 
 interface RenderMermaidCodeBlocksOptions {
@@ -67,6 +73,7 @@ export const MermaidCore = {
             if (leftover) {
                 leftover.remove();
             }
+            // nm-throw: keep — mermaid 第三方 SDK 的 render 只以 reject 报错：catch 只清理 d<id> 残留错误元素后原样透传，终端 renderCodeBlocks 的 catch 收口成 UI 失败标记
             throw err;
         }
     },
@@ -89,7 +96,7 @@ export const MermaidCore = {
     createSourceCache: (): MermaidSourceCache => {
         const svgCache = new Map<string, string>();
         const failedCache = new Map<string, unknown>();
-        const inflight = new Map<string, Promise<string>>();
+        const inflight = new Map<string, Promise<MermaidRenderOutcome>>();
         return {
             lookup(theme, source) {
                 return svgCache.get(MermaidCore.cacheKey(theme, source)) ?? null;
@@ -101,24 +108,26 @@ export const MermaidCore = {
                 const key = MermaidCore.cacheKey(theme, source);
                 const cached = svgCache.get(key);
                 if (cached != null) {
-                    return Promise.resolve(cached);
+                    return Promise.resolve({ok: true, svg: cached});
                 }
                 const failed = failedCache.get(key);
                 if (failed !== undefined) {
-                    return Promise.reject(failed);
+                    return Promise.resolve({ok: false, error: failed});
                 }
                 const pending = inflight.get(key);
                 if (pending) {
                     return pending;
                 }
+                // render（MermaidCore.renderSvg）按第三方契约以 reject 报错，这里
+                // 统一转收成 outcome：失败登记 failedCache 后沿 Err 返回，不再 rethrow。
                 const job = render(MermaidCore.nextId())
                     .then(svg => {
                         svgCache.set(key, svg);
-                        return svg;
+                        return {ok: true, svg} as const;
                     })
                     .catch(err => {
                         failedCache.set(key, err);
-                        throw err;
+                        return {ok: false, error: err} as const;
                     })
                     .finally(() => {
                         inflight.delete(key);
@@ -166,7 +175,15 @@ export const MermaidCore = {
             const source = code.textContent || '';
             handled += 1;
             try {
-                const svg = await cache.getOrCreate(theme, source, id => MermaidCore.renderSvg(id, source, theme));
+                const rendered = await cache.getOrCreate(theme, source, id => MermaidCore.renderSvg(id, source, theme));
+                if (!rendered.ok) {
+                    // 错误消息挂 code：CSS ::before 的 attr() 只能读伪元素宿主自身属性（pre 上的读不到）
+                    code.setAttribute('data-mermaid-error', MermaidCore.extractErrorMessage(rendered.error));
+                    pre.setAttribute('data-mermaid', 'failed');
+                    pre.classList.add('mermaid-failed');
+                    continue;
+                }
+                const svg = rendered.svg;
                 const block = document.createElement('div');
                 block.className = 'mermaid-block';
                 const chart = document.createElement('div');
@@ -179,7 +196,7 @@ export const MermaidCore = {
                 block.appendChild(pre);
                 pre.setAttribute('data-mermaid', 'done');
             } catch (err) {
-                // 错误消息挂 code：CSS ::before 的 attr() 只能读伪元素宿主自身属性（pre 上的读不到）
+                // 渲染失败已由上方 !ok 分支收口；catch 只兜 DOM 装配等意外，失败标记口径同款。
                 code.setAttribute('data-mermaid-error', MermaidCore.extractErrorMessage(err));
                 pre.setAttribute('data-mermaid', 'failed');
                 pre.classList.add('mermaid-failed');
