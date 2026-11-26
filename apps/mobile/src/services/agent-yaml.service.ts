@@ -14,15 +14,18 @@ import {YamlShared} from './yaml-shared';
 
 export namespace AgentYamlService {
     // nm-style: keep-public — agent-yaml.service.test.ts / agent-editor-form 两测试直接 import 与 mock 该模块接缝，测试锁名
-    export async function exportYaml(runtime: MobileNovelMasterRuntime, agentId: string): Promise<'saved' | 'cancelled'> {
-        const def = await runtime.agentRegistry.get(agentId);
-        if (!def.ok) {
-            // 导出调用方只有 throw 通道：registry 已知失败转 throw 交调用方 catch 收口。
-            const failure = def.error;
-            throw failure;
+    /** 失败沿 Result 接力（与 importYaml 同口径）：registry 已知失败与选择器 / 写文件的平台异常都归一成带「YAML」前缀的错误。 */
+    export async function exportYaml(runtime: MobileNovelMasterRuntime, agentId: string): Promise<Result<'saved' | 'cancelled', Error>> {
+        try {
+            const def = await runtime.agentRegistry.get(agentId);
+            if (!def.ok) {
+                return Result.err(Errors.normalizeYaml(def.error, 'Agent YAML 导出失败'));
+            }
+            const yaml = AgentYamlCodec.encode(def.value);
+            return Result.ok(await YamlShared.exportWithDialog(yaml, `${agentId}.agent.yaml`));
+        } catch (error) {
+            return Result.err(Errors.normalizeYaml(error, 'Agent YAML 导出失败'));
         }
-        const yaml = AgentYamlCodec.encode(def.value);
-        return YamlShared.exportWithDialog(yaml, `${agentId}.agent.yaml`);
     }
 
     /** 校验失败套「YAML 无效」前缀沿 Result 接力；decode/upsert 的平台异常归一后同走 Result.err。 */

@@ -117,7 +117,7 @@ describe('app-ui-pref-io writeBoolPref', () => {
         expect(set).toHaveBeenNthCalledWith(2, 'chatRichText', 'false');
     });
 
-    it('rejects (and warns) when appUi.set fails', async () => {
+    it('returns Err (and warns) when appUi.set fails', async () => {
         const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
         const set = jest.fn(async () => {
             throw new Error('disk full');
@@ -129,9 +129,9 @@ describe('app-ui-pref-io writeBoolPref', () => {
             listKeys: jest.fn(async () => []),
         } as unknown as AppUiPreferences;
 
-        await expect(AppUiPrefIo.writeBoolPref(appUi, 'chatRichText', true)).rejects.toThrow(
-            'disk full',
-        );
+        const saved = await AppUiPrefIo.writeBoolPref(appUi, 'chatRichText', true);
+        expect(saved.ok).toBe(false);
+        expect(String(saved.error.message)).toMatch(/disk full/);
         expect(warnSpy).toHaveBeenCalled();
         warnSpy.mockRestore();
     });

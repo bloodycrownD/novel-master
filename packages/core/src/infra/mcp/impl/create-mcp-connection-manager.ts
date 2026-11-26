@@ -108,7 +108,7 @@ export const McpConnectionManagerFactory = {
 
         /** 把可能失败的 Promise 收成 Result：抛出物原样进 Err，不在这里重抛（是不是取消、算哪类失败由调用方按场景判）。 */
         // nm-style: keep-local — 闭包内被 connectOnce / fetchSnapshot / callTool 三处共用（闭包内引用按名计数看不到）
-        const settlePromise = async <T>(promise: Promise<T>): Promise<Result<T, unknown>> => promise.then((value) => Result.ok<T>(value), (error: unknown) => Result.err<unknown>(error));
+        const settlePromise = async <T>(pending: Promise<T>): Promise<Result<T, unknown>> => pending.then((value) => Result.ok<T>(value), (error: unknown) => Result.err<unknown>(error));
         // nm-style: keep-local — 闭包内 connectOnce 的两处「底层抛出物 → 建连失败原因」共用
         const asConnectResult = (outcome: Result<OfficialMcpClient, unknown>): Result<OfficialMcpClient, ConnectFailure> => (outcome.ok ? Result.ok(outcome.value) : Result.err({ kind: "error", error: outcome.error }));
 

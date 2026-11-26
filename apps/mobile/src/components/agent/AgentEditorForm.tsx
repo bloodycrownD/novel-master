@@ -206,13 +206,13 @@ export function AgentEditorForm(props: Props) {
 
     // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
     const handleExportYaml = useCallback(async () => {
-        try {
-            const result = await AgentYamlService.exportYaml(runtime, agentId);
-            if (result === 'saved') {
-                showToast(coreT({key: "ui.agent.yaml_exported"}));
-            }
-        } catch (error) {
-            showToast(ToastMessage.toast(coreT({key: "ui.agent.export_yaml_failed"}), error));
+        const exported = await AgentYamlService.exportYaml(runtime, agentId);
+        if (!exported.ok) {
+            showToast(ToastMessage.toast(coreT({key: "ui.agent.export_yaml_failed"}), exported.error));
+            return;
+        }
+        if (exported.value === 'saved') {
+            showToast(coreT({key: "ui.agent.yaml_exported"}));
         }
     }, [runtime, agentId, showToast]);
 

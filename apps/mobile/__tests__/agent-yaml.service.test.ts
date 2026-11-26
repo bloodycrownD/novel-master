@@ -69,7 +69,7 @@ describe('agent-yaml.service', () => {
                 })),
             },
         } as any;
-        await expect(AgentYamlService.exportYaml(runtime, 'a1')).resolves.toBe('saved');
+        await expect(AgentYamlService.exportYaml(runtime, 'a1')).resolves.toEqual({ok: true, value: 'saved'});
         // 编解码单源在 core：写出的是真实 YAML（不再是 mock 的 'yaml' 字面量）。
         expect(mockWriteFile).toHaveBeenCalledWith(
             '/tmp/a1.agent.yaml',

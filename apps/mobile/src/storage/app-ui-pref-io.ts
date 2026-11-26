@@ -1,11 +1,12 @@
 /**
  * Shared read/write helpers for app-ui KKV string preferences.
  *
- * 统一读写口径：读失败（KKV 异常）与非法值一律回退默认值；写失败保留 reject
- * 语义（调用方靠 catch 回滚/toast），只补一条 warn 日志。
+ * 统一读写口径：读失败（KKV 异常）与非法值一律回退默认值；写失败沿 Result 回传
+ * （调用方按 !ok 做回滚 / toast），并补一条 warn 日志。
  *
  * @module storage/app-ui-pref-io
  */
+import {Result} from '@novel-master/core/errors';
 import type {AppUiPreferences} from './app-ui-prefs';
 
 export const AppUiPrefIo = {
@@ -37,18 +38,14 @@ export const AppUiPrefIo = {
         return fallback;
     },
 
-    /**
-   * Persists a bool pref as `'true' | 'false'`.
-   *
-   * 写失败仍然 reject：AboutScreen / ChatConfigScreen 等调用方依赖 reject 做
-   * 失败提示或回滚，吞掉会让持久化失败静默。
-   */
-    writeBoolPref: async (appUi: AppUiPreferences, key: string, value: boolean): Promise<void> => {
+    /** Persists a bool pref as `'true' | 'false'`；写失败沿 Result 回传（调用方按 !ok 做失败提示或回滚，吞掉会让持久化失败静默）。 */
+    writeBoolPref: async (appUi: AppUiPreferences, key: string, value: boolean): Promise<Result<void, Error>> => {
         try {
             await appUi.set(key, value ? 'true' : 'false');
+            return Result.ok(undefined);
         } catch (error) {
             console.warn(`[app-ui-pref] write ${key} failed:`, error);
-            throw error;
+            return Result.err(error instanceof Error ? error : new Error(String(error)));
         }
     },
 } as const;

@@ -137,7 +137,9 @@ export function AboutScreen() {
                 onValueChange={next => {
                     if (!appUi) return;
                     setAutoCheck(next);
-                    void AppUiPrefIo.writeBoolPref(appUi, APP_UI_KEY_UPDATES_AUTO_CHECK, next).catch(err => showToast(ToastMessage.toast(coreT({key: "ui.common.save_failed"}), err)));
+                    void AppUiPrefIo.writeBoolPref(appUi, APP_UI_KEY_UPDATES_AUTO_CHECK, next).then(saved => {
+                        if (!saved.ok) showToast(ToastMessage.toast(coreT({key: "ui.common.save_failed"}), saved.error));
+                    });
                 }}
             />
             <ProfileMenuItem

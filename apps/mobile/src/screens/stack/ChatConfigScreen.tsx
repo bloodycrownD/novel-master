@@ -20,6 +20,7 @@ import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../../components/chrome/ToastHost';
 import {ToastMessage} from '../../errors/toast-message';
 import {coreT} from '../../i18n/core';
+import {Result} from '@novel-master/core/errors';
 
 const DEFAULT_CONDITIONS: CompactionConditions = {
     schemaVersion: 4,
@@ -137,13 +138,18 @@ export function ChatConfigScreen() {
     // 持久化 reject 时回滚到原值并 toast（未选「成功才翻转」——那会让开关
     // 在异步写入期间显得无响应）。回调里依次传写入动作与回滚动作。
     const persistSwitchWithRollback = useCallback(
-        async (persist: () => Promise<void>, rollback: () => void) => {
+        // persist 要么 reject（runtime.preferences 的 setter），要么返回 Result（AppUiPrefIo.writeBoolPref）：两种失败都回滚并提示。
+        async (persist: () => Promise<void | Result<void, unknown>>, rollback: () => void) => {
+            let failure: unknown;
             try {
-                await persist();
+                const saved = await persist();
+                if (saved != null && saved.ok === false) failure = saved.error;
             } catch (cause) {
-                rollback();
-                showToast(ToastMessage.toast(coreT({key: "ui.common.save_failed"}), cause));
+                failure = cause;
             }
+            if (failure === undefined) return;
+            rollback();
+            showToast(ToastMessage.toast(coreT({key: "ui.common.save_failed"}), failure));
         },
         [showToast],
     );
@@ -275,7 +281,10 @@ export function ChatConfigScreen() {
                     if (appUi) {
                         void persistSwitchWithRollback(
                             async () => {
-                                await AppUiPrefIo.writeBoolPref(appUi, APP_UI_KEY_MESSAGE_NOTIFICATION, enabled);
+                                const saved = await AppUiPrefIo.writeBoolPref(appUi, APP_UI_KEY_MESSAGE_NOTIFICATION, enabled);
+                                if (!saved.ok) {
+                                    return saved;
+                                }
                                 // 存储已持久化，通知模块的进程级副作用失败只 toast 不回滚
                                 //（不易回滚，下次启动按存储态收敛）。
                                 AgentFinishedNotification.setResidentEnabled(enabled).catch(cause => {

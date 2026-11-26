@@ -299,7 +299,7 @@ describe('ChatConfigScreen 开关持久化失败回滚', () => {
         }});
         mockSetConditions.mockReset().mockResolvedValue(undefined);
         mockReadBoolPref.mockReset().mockResolvedValue(false);
-        mockWriteBoolPref.mockReset().mockResolvedValue(undefined);
+        mockWriteBoolPref.mockReset().mockResolvedValue({ok: true, value: undefined});
     });
 
     it('B-3: 父会话流式写入失败回滚并 toast', async () => {
@@ -326,7 +326,7 @@ describe('ChatConfigScreen 开关持久化失败回滚', () => {
     });
 
     it('B-3: 富文本消息写入失败回滚并 toast', async () => {
-        mockWriteBoolPref.mockRejectedValueOnce(new Error('盘炸了'));
+        mockWriteBoolPref.mockResolvedValueOnce({ok: false, error: new Error('盘炸了')});
         const {renderer} = await renderScreen();
 
         await toggleSwitchAsync(renderer.root, '富文本消息');
@@ -388,10 +388,10 @@ describe('ChatConfigScreen 消息通知开关与权限行（ui/G-1）', () => {
             hideStartDepth: 6,
         }});
         mockReadBoolPref.mockReset().mockResolvedValue(false);
-        mockWriteBoolPref.mockReset().mockResolvedValue(undefined);
+        mockWriteBoolPref.mockReset().mockResolvedValue({ok: true, value: undefined});
         mockSetConditions.mockReset().mockResolvedValue(undefined);
         mockReadBoolPref.mockReset().mockResolvedValue(false);
-        mockWriteBoolPref.mockReset().mockResolvedValue(undefined);
+        mockWriteBoolPref.mockReset().mockResolvedValue({ok: true, value: undefined});
         mockSetKeepAliveResidentEnabled.mockReset().mockResolvedValue(undefined);
         mockEnsureAgentNotificationPermission.mockReset().mockResolvedValue(true);
         mockGetAgentNotificationPermissionStatus
@@ -536,7 +536,7 @@ describe('ChatConfigScreen 压缩配置即时保存', () => {
         }});
         mockSetConditions.mockReset().mockResolvedValue(undefined);
         mockReadBoolPref.mockReset().mockResolvedValue(false);
-        mockWriteBoolPref.mockReset().mockResolvedValue(undefined);
+        mockWriteBoolPref.mockReset().mockResolvedValue({ok: true, value: undefined});
         mockSetKeepAliveResidentEnabled.mockReset().mockResolvedValue(undefined);
         mockEnsureAgentNotificationPermission.mockReset().mockResolvedValue(true);
         mockGetAgentNotificationPermissionStatus
