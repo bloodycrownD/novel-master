@@ -123,7 +123,10 @@ describe("McpConnectionManagerFactory.create", () => {
         await harness.gateReady("srv");
         harness.manager.invalidate("srv");
         harness.release("srv");
-        assert.ok(!(await call).ok);
+        const outcome = await call;
+        // 新契约 callTool 返回 Result | Interrupt：本用例的 signal 不会中止，钉住不是取消再走失败断言（assert.fail 返回 never，出 if 即收窄为 Result）。
+        if ("kind" in outcome) assert.fail(`不该返回取消中断：${JSON.stringify(outcome)}`);
+        assert.ok(!outcome.ok);
         assert.equal(statusOf(harness.manager, "srv")?.state, "pending");
     });
 
@@ -227,9 +230,11 @@ describe("McpConnectionManagerFactory.create", () => {
         await harness.manager.snapshotTools();
         const signal = new AbortController().signal;
         const called = await harness.manager.callTool("ok-server", "read", { path: "a.txt" }, signal);
+        if ("kind" in called) assert.fail(`不该返回取消中断：${JSON.stringify(called)}`);
         assert.equal(called.ok, true);
         assert.deepEqual((called as { ok: true; value: unknown }).value, { content: [{ type: "text", text: "done" }], isError: false });
         const missing = await harness.manager.callTool("no-such-server", "read", {}, signal);
+        if ("kind" in missing) assert.fail(`不该返回取消中断：${JSON.stringify(missing)}`);
         assert.equal(missing.ok, false);
         assert.equal((missing as { ok: false; error: { kind: string } }).error.kind, "protocol");
     });
@@ -238,10 +243,12 @@ describe("McpConnectionManagerFactory.create", () => {
         const harness = makeHarness([{ id: "stdio-server", type: "stdio" }, { id: "off-server", enabled: false, mode: "ok" }], { assemblyBudgetMs: 200 });
         const signal = new AbortController().signal;
         const unsupported = await harness.manager.callTool("stdio-server", "read", {}, signal);
+        if ("kind" in unsupported) assert.fail(`不该返回取消中断：${JSON.stringify(unsupported)}`);
         assert.equal(unsupported.ok, false);
         assert.equal((unsupported as { ok: false; error: { action: string; detail: string } }).error.action, "fix-config");
         assert.ok((unsupported as { ok: false; error: { detail: string } }).error.detail.includes("暂不支持 stdio"));
         const disabled = await harness.manager.callTool("off-server", "read", {}, signal);
+        if ("kind" in disabled) assert.fail(`不该返回取消中断：${JSON.stringify(disabled)}`);
         assert.equal(disabled.ok, false);
         assert.equal((disabled as { ok: false; error: { detail: string } }).error.detail.includes("已停用"), true);
         assert.equal(harness.callsOf("stdio-server").length, 0);
