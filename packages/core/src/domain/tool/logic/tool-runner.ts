@@ -22,7 +22,8 @@ export interface ToolCall {
 /** Outcome of one parallel tool invocation (errors are captured, not thrown). */
 // 取消是控制流信号不是失败：`TOOL_CANCELLED` 命中时落 `{ ok: false, error, kind: "cancelled", reason }`。
 // 保留 ok/error 让展示层（ToolResultBlock.build / ToolOutput.formatErrorForLlm）沿用既有 `AppErrorOps.is` 取消分类；
-// `kind`/`reason` 供上层按 `Outcome.cancelled` 识别控制流（七期：取消改返回值传播）。
+// `kind`/`reason` 供上层按 `Outcome.cancelled` 识别控制流（七期：取消改返回值传播）；
+// 竞速取消自八期 AbortError 形态并入本形态。
 export type ParallelToolOutcome =
     | { readonly ok: true; readonly output: unknown }
     | { readonly ok: false; readonly error: unknown }
@@ -47,7 +48,8 @@ function normalizeToolFailure(name: string, e: unknown): AppError {
 /**
  * 取消裁定（七期 §6.2）：`TOOL_CANCELLED` 命中即收成取消 outcome，沿返回值向上，
  * 不再往下抛。ctx 上仍是裸 signal（工具 API 不传染 scope），故 reason 按用户停止
- * 兜底；八期起在途竞速以 AbortError reject，走 catch 的失败 outcome 形态。
+ * 兜底；取消 outcome 只来自 `TOOL_CANCELLED` 码——进入时已中止、工具自返、在途
+ * 竞速（call 的 catch 收编）三种来源统一落同一条返回值通道。
  */
 function failedOutcome(error: unknown): ParallelToolOutcome {
     return AppErrorOps.is(error, "TOOL_CANCELLED") ? { ok: false, error, kind: "cancelled", reason: "user-stop" } : { ok: false, error };
@@ -85,9 +87,8 @@ export class ToolRunner<Ctx = unknown> {
    *   与工具闭包 Err 共用 {@link normalizeToolFailure} 归一化出口（TOOL_* 直通、
    *   其余包 TOOL_FAILED），模型可见错误不变（五期门⑦：返回值通道）。
    * - 取消：进入时 signal 已 abort 直接 `Result.err(TOOL_CANCELLED)`（七期，返回值
-   *   通道）；在途竞速以 `AbortError.create()` reject（平台协议例外，`isAbortLikeError`
-   *   统一识别），由 {@link runParallel} 的 catch 收编。`TOOL_CANCELLED` 码保留作
-   *   展示标签（UI 不弹错误文案）。
+   *   通道）；在途竞速的取消同样沿 `Result.err(TOOL_CANCELLED)` 返回（call 的 catch
+   *   收编），Promise 不 reject。`TOOL_CANCELLED` 码保留作展示标签（UI 不弹错误文案）。
    */
     async call<Output = unknown>(name: string, input: unknown, ctx: Ctx): Promise<Result<Output, AppError>> {
         const tool = this.registry.get(name);
@@ -111,23 +112,24 @@ export class ToolRunner<Ctx = unknown> {
             const signal = (ctx as { readonly signal?: AbortSignal } | null | undefined)?.signal;
             // 取消语义第一道（B-1）：进入时 signal 已 abort 就在**启动工具副作用之前**
             // 沿 Result.err 返回 TOOL_CANCELLED（七期：不再 throw）。竞速（下方）只让
-            // 调用方 reject，不会阻止已启动的 work——写类工具副作用照常落盘；runParallel
-            // 的 worker 在 abort 后仍会从队列取下一个 call，靠这一道保证 abort 后不再
-            // 发起新的 tool.run。
+            // call 尽快返回取消 Err，不会阻止已启动的 work——写类工具副作用照常落盘；
+            // runParallel 的 worker 在 abort 后仍会从队列取下一个 call，靠这一道保证
+            // abort 后不再发起新的 tool.run。
             if (signal?.aborted) return Result.err(new AppError("TOOL_CANCELLED", {toolName: name}));
             // 回合取消竞速（所有工具共用的兜底）：用户点停止 / 回合中断时 signal
-            // abort，这里立即 reject，**不依赖工具自身监听**——否则 waiting 中的
+            // abort，这里立即返回取消，**不依赖工具自身监听**——否则 waiting 中的
             // 回合会被慢工具（curl / search 等长请求）占住线程、停止按钮点不动。
             // 工具内部仍应把 ctx.signal 传给 fetch / 子进程，让底层资源尽早释放。
-            // 竞速交给 signalView（只读视图，不把 scope 传染进工具 API）；取消载荷用
-            // AbortError.create()——race 的 reject 是平台协议例外（Promise 没有 Result 通道）。
+            // 竞速交给 signalView（只读视图，不把 scope 传染进工具 API）；race 的
+            // reject 载荷用 AbortError.create()（race 接口只认异常载荷），取消在
+            // 下方 catch 收回 Result.err(TOOL_CANCELLED) 返回值通道。
             const work = tool.run(parsedIn.data, ctx);
             const out: Result<unknown, AppError> = signal == null ? await work : await AbortScopeFactory.signalView(signal).race(work, () => AbortError.create());
 
             // 工具闭包不再解包 throw（门⑦）：Err 交回 runner，与未知异常走同一条
             // 归一化出口（TOOL_* 直通、其余包 TOOL_FAILED），已知失败沿 Result.err
-            // 接力（五期门⑦）；工具返回的 TOOL_CANCELLED 同样沿 Result.err 回来
-            // （七期），在途竞速的取消是 AbortError，由下方 catch 原样放行。
+            // 接力（五期门⑦）；工具返回的 TOOL_CANCELLED 与在途竞速的取消同样沿
+            // Result.err 回来（七期：取消统一走返回值通道）。
             if (!out.ok) return Result.err(normalizeToolFailure(name, out.error));
 
             if (tool.outputSchema) {
@@ -140,14 +142,16 @@ export class ToolRunner<Ctx = unknown> {
 
             return Result.ok(out.value as Output);
         } catch (e: unknown) {
-            // 在途竞速的取消是 AbortError（平台协议例外）：Promise.race 的 reject 没有
-            // Result 通道，只能原样上抛给 runParallel 收编，不能归一化成 TOOL_FAILED——
-            // 否则 isAbortLikeError 认不出取消。形状判定只认 `name`（跨 duplicate
-            // module / Hermes 无 DOMException，instanceof 会失灵）。
-            // nm-throw: keep — 在途取消竞速的 reject 是平台协议例外（Promise 无 Result 通道），AbortError 载荷原样上行供 isAbortLikeError 识别。
-            if (typeof e === "object" && e !== null && "name" in e && (e as { name: unknown }).name === "AbortError") throw e;
-            // 其余未知异常沿 Err 回来（与工具闭包的 Err 同一条 normalizeToolFailure 出口），
-            // drainQueue 对 reject 与 Err 同口收编 failedOutcome，行为不变。
+            // 在途竞速的取消：race 的 reject 载荷是 AbortError，在这里收成与「进入时
+            // 已中止」（上方第一道）同一条 Result.err(TOOL_CANCELLED) 通道；形状判定
+            // 只认 `name`（跨 duplicate module / Hermes 无 DOMException，instanceof
+            // 会失灵）。工具自己抛的 AbortError 也归取消——取消语义本来就该落这条
+            // 通道，与内置工具自返 TOOL_CANCELLED 的既有口径一致。
+            if (typeof e === "object" && e !== null && "name" in e && (e as { name: unknown }).name === "AbortError") {
+                return Result.err(new AppError("TOOL_CANCELLED", {toolName: name}));
+            }
+            // 其余未知异常沿 Err 回来（与工具闭包的 Err 同一条 normalizeToolFailure 出口）；
+            // 执行段不再 reject——已知失败、取消、未知异常全部沿 Result.err 返回。
             return Result.err(normalizeToolFailure(name, e));
         }
     }
@@ -199,9 +203,10 @@ export class ToolRunner<Ctx = unknown> {
                     // （保留 error 供展示层沿用 AppErrorOps.is 分类），其余原样落失败。
                     outcomes[index] = result.ok ? { ok: true, output: result.value } : failedOutcome(result.error);
                 } catch (error: unknown) {
-                    // 在途竞速的 reject（八期载荷 AbortError.create，平台协议例外）与未知异常
-                    // 同口收编，不再向上抛；AbortError 载荷原样保留，供上层用 isAbortLikeError
-                    // 识别取消（取消 outcome 形态只留给 TOOL_CANCELLED 返回值通道）。
+                    // 防御性兜底：call 的执行段已全路径沿 Result.err 返回（取消也走返回值
+                    // 通道），此 catch 只兜契约违约与 call 之外的循环体异常。取消 outcome
+                    // 只来自 TOOL_CANCELLED 码（failedOutcome 判定），不再有 AbortError
+                    // reject 形态。
                     outcomes[index] = failedOutcome(error);
                 }
             } finally {

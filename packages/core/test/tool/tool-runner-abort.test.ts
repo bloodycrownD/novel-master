@@ -1,10 +1,10 @@
 /**
- * ToolRunner 取消竞速（通用兜底）：回合 signal abort 时 call 立即 reject，
- * 不依赖工具自身监听 signal——否则 waiting 中的回合会被慢工具（curl / search
- * 等长请求）占住线程、停止按钮点不动。
+ * ToolRunner 取消竞速（通用兜底）：回合 signal abort 时 call 立即沿
+ * Result.err(TOOL_CANCELLED) 返回（不再 reject AbortError），不依赖工具自身
+ * 监听 signal——否则 waiting 中的回合会被慢工具（curl / search 等长请求）
+ * 占住线程、停止按钮点不动。
  */
 import {  AppErrorOps  } from "../../src/errors/app-error.js";
-import {  RequestAbort  } from "../../src/infra/llm-protocol/logic/request-abort.js";
 import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import {  getEventListeners  } from "node:events";
@@ -16,7 +16,7 @@ import {  ToolRegistry  } from "../../src/domain/tool/logic/tool-registry.js";
 import {  Result  } from "../../src/errors/either.js";
 
 describe("ToolRunner：回合取消竞速（A-24）", () => {
-    it("工具永不返回时，abort 让 call 立即 reject（不等工具）", async () => {
+    it("工具永不返回时，在途取消不再抛 AbortError：call 沿 Result.err(TOOL_CANCELLED) 返回（不等工具）", async () => {
         const registry = new ToolRegistry<{ readonly signal?: AbortSignal }>();
         registry.register({
             name: "hang",
@@ -31,13 +31,9 @@ describe("ToolRunner：回合取消竞速（A-24）", () => {
         const controller = new AbortController();
         const pending = runner.call("hang", {}, { signal: controller.signal });
         controller.abort();
-        await assert.rejects(pending, (err: unknown) => {
-            // 八期：在途竞速的取消载荷换 AbortError.create()（race 是平台协议例外），
-            // 不再伪装成 TOOL_CANCELLED AppError。
-            assert.equal((err as { name?: unknown }).name, "AbortError");
-            assert.ok(RequestAbort.isAbortLikeError(err), "取消统一 AbortError（文案由 formatter 统一成「工具调用已取消」）");
-            return true;
-        });
+        const result = await pending;
+        assert.ok(!result.ok, "在途取消应沿 Err 返回，Promise 不 reject AbortError");
+        assert.ok(AppErrorOps.is(result.error, "TOOL_CANCELLED"), "取消统一 TOOL_CANCELLED（文案由 formatter 统一成「工具调用已取消」）");
     });
 
     it("signal 缺省时行为不变（旧装配点 / 测试 mock 兼容）", async () => {
@@ -68,8 +64,8 @@ describe("ToolRunner：回合取消竞速（A-24）", () => {
         const controller = new AbortController();
         controller.abort(); // 先 abort 再 call：工具副作用必须还没启动就被拒
         await rejectsErr(runner.call("side-effect", {}, { signal: controller.signal }), (err) => {
-            // 进入时已 abort 仍走 Result 返回值通道：TOOL_CANCELLED 保留作展示标签
-            //（七期语义不变；在途竞速才换 AbortError）。
+            // 进入时已 abort 走 Result 返回值通道：TOOL_CANCELLED 保留作展示标签
+            //（与在途竞速同一返回值通道，两条来源形态一致）。
             assert.ok(AppErrorOps.is(err));
             assert.ok(AppErrorOps.is(err, "TOOL_CANCELLED"), "取消统一 TOOL_CANCELLED（文案由 formatter 统一成「工具调用已取消」）");
         });
@@ -132,14 +128,45 @@ describe("ToolRunner：回合取消竞速（A-24）", () => {
             const outcome = outcomes[i]!;
             if (i === released) {
                 assert.deepEqual(outcome, { ok: true, output: released }, `outcomes[${i}] 应为已放行的成功结果`);
+            } else if (!outcome.ok && "kind" in outcome) {
+                // 两种取消来源统一落取消 outcome 形态：在途竞速由 call 的 catch 收成
+                // TOOL_CANCELLED（不再有 AbortError reject 形态），abort 后从队列取到的
+                // call 在入口直接 Result.err(TOOL_CANCELLED)，failedOutcome 判定命中同一形态。
+                assert.ok(AppErrorOps.is(outcome.error, "TOOL_CANCELLED"), "取消统一 TOOL_CANCELLED 码");
+                assert.equal(outcome.kind, "cancelled");
+                assert.equal(outcome.reason, "user-stop");
             } else {
-                assert.equal(outcome.ok, false, `outcomes[${i}] 应记失败`);
-                if (!outcome.ok) {
-                    // 两条取消通道都要能识别：在途竞速以 AbortError reject（race 平台协议例外），
-                    // abort 后从队列取到的 call 在入口直接 Result.err(TOOL_CANCELLED)。
-                    assert.ok(RequestAbort.isAbortLikeError(outcome.error) || AppErrorOps.is(outcome.error, "TOOL_CANCELLED"), "取消统一 AbortError / TOOL_CANCELLED");
-                }
+                assert.fail(`outcomes[${i}] 应判成取消 outcome（kind=cancelled）`);
             }
+        }
+    });
+
+    it("runParallel 在途取消：outcome 仍判成取消形态（kind=cancelled），不再落裸 AbortError 失败形态", async () => {
+        const registry = new ToolRegistry<{ readonly signal?: AbortSignal }>();
+        registry.register({
+            name: "hang",
+            description: () => "hang",
+            inputSchema: z.object({}),
+            run: async () => {
+                await new Promise<void>(() => undefined); // 永不 resolve
+                return "unreachable";
+            },
+        });
+        const runner = new ToolRunner(registry);
+        const controller = new AbortController();
+        const runAll = runner.runParallel([{ name: "hang", input: {} }], { signal: controller.signal });
+        // 让 run 先启动进竞速，再 abort：取消载荷走 call 的 catch 收编（返回值通道）。
+        await new Promise<void>((resolve) => setTimeout(resolve, 10));
+        controller.abort();
+        const outcomes = await runAll;
+        assert.equal(outcomes.length, 1);
+        const outcome = outcomes[0]!;
+        if (!outcome.ok && "kind" in outcome) {
+            assert.ok(AppErrorOps.is(outcome.error, "TOOL_CANCELLED"), "取消统一 TOOL_CANCELLED 码");
+            assert.equal(outcome.kind, "cancelled");
+            assert.equal(outcome.reason, "user-stop");
+        } else {
+            assert.fail("runParallel 的在途取消应判成取消 outcome（kind=cancelled），而非裸失败形态");
         }
     });
 
@@ -163,12 +190,10 @@ describe("ToolRunner：回合取消竞速（A-24）", () => {
         try {
             const pending = runner.call("late-reject", {}, { signal: controller.signal });
             controller.abort();
-            await assert.rejects(pending, (err: unknown) => {
-                // 八期：竞速以 AbortError.create() reject，isAbortLikeError 统一识别。
-                assert.equal((err as { name?: unknown }).name, "AbortError");
-                assert.ok(RequestAbort.isAbortLikeError(err), "取消统一 AbortError（文案由 formatter 统一成「工具调用已取消」）");
-                return true;
-            });
+            const result = await pending;
+            // 新契约：call 不 reject——竞速取消在 call 的 catch 收成 Result.err(TOOL_CANCELLED)。
+            assert.ok(!result.ok, "竞速取消应沿 Err 返回");
+            assert.ok(AppErrorOps.is(result.error, "TOOL_CANCELLED"), "取消统一 TOOL_CANCELLED 码");
             rejectWork(new Error("late failure")); // 竞速已结束才 reject：不得漏成 unhandled
             await new Promise<void>((resolve) => setTimeout(resolve, 20));
             assert.deepEqual(unhandled, []);
