@@ -1213,8 +1213,8 @@
     "packages/core/src/service/agent/impl/agent-runner.ts#throw error;": {
       "form": "T6",
       "line": 932,
-      "disposition": "KEEP",
-      "reason": "转抛 helper 契约：把主 try 内的解包失败送进 run 主 catch 统一收尾（FAILED 事件 / 失败消息落库 / AppError 分流），return 会跳过收尾丢终态。"
+      "disposition": "UNTRIAGED",
+      "reason": "定性欠账（2026-11-26，用户指出）：返回 Result 的函数内部用「转抛 helper + 内层 catch 再抛」把已知失败送进主 catch 做统一收尾——这是靠异常做控制流，不是平台契约；应提成具名的失败收尾函数并 return Result.err（Outcome / Result 能表达），连同 raiseRunError 的 13 处与 rethrowRunFailure 的调用点一起改，另起一轮"
     },
     "packages/core/src/service/agent/impl/chat-agent-session.ts#throw read.error;": {
       "form": "T1",
@@ -1231,14 +1231,14 @@
     "packages/core/src/service/agent/logic/run-agent-turn.ts#throw error;": {
       "form": "T6",
       "line": 1130,
-      "disposition": "KEEP",
-      "reason": "主 catch 最终出口的未知异常按转码矩阵保持 reject（Result 的 E 只装业务失败，不谎报），由 IPC 入口壳收口。"
+      "disposition": "UNTRIAGED",
+      "reason": "定性欠账（2026-11-26，用户指出）：返回 Result 的函数内部用「转抛 helper + 内层 catch 再抛」把已知失败送进主 catch 做统一收尾——这是靠异常做控制流，不是平台契约；应提成具名的失败收尾函数并 return Result.err（Outcome / Result 能表达），连同 raiseRunError 的 13 处与 rethrowRunFailure 的调用点一起改，另起一轮"
     },
     "packages/core/src/service/agent/logic/run-agent-turn.ts#throw failure;": {
       "form": "T6",
       "line": 361,
-      "disposition": "KEEP",
-      "reason": "转抛进调用方主 catch 统一收尾（终态补发判定 / onRunFailed / AppError 分流），技能装配点无 Result 通道（plain 签名）。"
+      "disposition": "UNTRIAGED",
+      "reason": "定性欠账（2026-11-26，用户指出）：返回 Result 的函数内部用「转抛 helper + 内层 catch 再抛」把已知失败送进主 catch 做统一收尾——这是靠异常做控制流，不是平台契约；应提成具名的失败收尾函数并 return Result.err（Outcome / Result 能表达），连同 raiseRunError 的 13 处与 rethrowRunFailure 的调用点一起改，另起一轮"
     },
     "packages/core/src/service/agent/logic/run-agent-turn.ts#throw result.error;": {
       "form": "T1",

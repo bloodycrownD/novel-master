@@ -313,7 +313,7 @@ export const AgentTurnRunner: AgentTurnRunnerHelpers = {
      * （终态补发判定 / onRunFailed / AppError→Result.err 分流），不新增解包字面。
      */
     rethrowRunFailure(error: AppError): never {
-        // nm-throw: keep — 转抛 helper 契约：把已知失败送进调用方 catch 的统一收口（终态补发判定 / onRunFailed / AppError 分流），return 会跳过收尾丢终态。
+        // 欠账（不是平台契约，不该靠抛异常做控制流；按规则应改成具名的失败收尾函数 + Result.err，待另起一轮）：转抛 helper 契约：把已知失败送进调用方 catch 的统一收口（终态补发判定 / onRunFailed / AppError 分流），return 会跳过收尾丢终态。
         throw error;
     },
 
@@ -357,7 +357,7 @@ export const AgentTurnRunner: AgentTurnRunnerHelpers = {
         if (!effective.ok) {
             // 装配失败沿异常通道上抛（原行为）：技能清单读取失败不静默降级成「无技能工具」。
             const failure = effective.error;
-            // nm-throw: keep — 转抛进调用方主 catch 统一收尾（终态补发判定 / onRunFailed / AppError 分流），技能装配点无 Result 通道（plain 签名）。
+            // 欠账（不是平台契约，不该靠抛异常做控制流；按规则应改成具名的失败收尾函数 + Result.err，待另起一轮）：转抛进调用方主 catch 统一收尾（终态补发判定 / onRunFailed / AppError 分流），技能装配点无 Result 通道（plain 签名）。
             throw failure;
         }
         // referencedNames：seen 共享（方向 A）的可变集合，runner 每步 prepare 后回填

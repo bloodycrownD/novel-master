@@ -517,7 +517,7 @@ export class DefaultAgentRunner implements AgentRunnerPort {
                         await handleAbort("model_request_catch");
                         break;
                     }
-                    // nm-throw: keep — 非取消异常转抛进 run 主 catch 统一收尾（FAILED 事件 / 失败消息落库 / AppError 分流），直接 return 会跳过收尾丢终态。
+                    // 欠账（不是平台契约，不该靠抛异常做控制流；按规则应改成具名的失败收尾函数 + Result.err，待另起一轮）：非取消异常转抛进 run 主 catch 统一收尾（FAILED 事件 / 失败消息落库 / AppError 分流），直接 return 会跳过收尾丢终态。
                     throw e;
                 }
 
@@ -734,7 +734,7 @@ export class DefaultAgentRunner implements AgentRunnerPort {
                             messageId: assistantMessage.id,
                             error,
                         });
-                        // nm-throw: keep — 转抛进 run 主 catch 统一收尾（FAILED 事件 / 失败消息落库 / AppError 分流），直接 return 会跳过收尾丢终态。
+                        // 欠账（不是平台契约，不该靠抛异常做控制流；按规则应改成具名的失败收尾函数 + Result.err，待另起一轮）：转抛进 run 主 catch 统一收尾（FAILED 事件 / 失败消息落库 / AppError 分流），直接 return 会跳过收尾丢终态。
                         throw error;
                     }
                 }
@@ -928,7 +928,7 @@ export const AgentRunner: AgentRunnerHelpers = {
    * 解包一律经此进 catch——直接 `return Result.err` 会跳过收尾，终态事件丢失。
    */
     raiseRunError(error: unknown): never {
-        // nm-throw: keep — 转抛 helper 契约：把主 try 内的解包失败送进 run 主 catch 统一收尾（FAILED 事件 / 失败消息落库 / AppError 分流），return 会跳过收尾丢终态。
+        // 欠账（不是平台契约，不该靠抛异常做控制流；按规则应改成具名的失败收尾函数 + Result.err，待另起一轮）：转抛 helper 契约：把主 try 内的解包失败送进 run 主 catch 统一收尾（FAILED 事件 / 失败消息落库 / AppError 分流），return 会跳过收尾丢终态。
         throw error;
     },
 
