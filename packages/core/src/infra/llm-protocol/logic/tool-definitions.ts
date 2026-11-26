@@ -21,7 +21,7 @@ export const ToolDefinitions = {
             return {
                 name: tool.name,
                 description: tool.description(ctx),
-                inputSchema: SerializationZodToJsonSchema.toJsonSchema(tool.inputSchema),
+                inputSchema: tool.inputJsonSchema ?? SerializationZodToJsonSchema.toJsonSchema(tool.inputSchema),
             };
         });
     },

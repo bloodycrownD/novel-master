@@ -40,6 +40,8 @@ date: 2026-11-13
 10. **错误归一补充（2026-11-26）**：`McpTransportError` 且没有响应（请求函数自身失败，如网络断开）直接归 `kind:"network"`、`action:"retry"`，不再走文本嗅探。§四的判定顺序不变，这一条排在最前。
 11. **callTool 取消走返回值（2026-11-26）**：`callTool` 不再对 `AbortError` 原样 reject 透传，改以 `Interrupt.cancelled`（reason 兜底 `user-stop`，MCP 拿不到 scope reason）返回，签名 `Promise<Result<unknown, McpFailure>>` → `Promise<Result<unknown, McpFailure> | Interrupt>`（replaced 对 MCP 无生产者，类型上穷尽即可）；Promise 不 reject，未知异常由 `settlePromise` 收编。连接管理器 `failCall` 的「取消透传」throw 与其 `nm-throw: keep` 注释随之删除——取消分支提前返回、不写连接状态，与改前一致；`to-nm-tool` 删掉「catch AbortError → TOOL_CANCELLED」的 try/catch，改按判别联合 `"kind" in called` 收 `TOOL_CANCELLED`（`TOOL_CANCELLED` / `TOOL_FAILED` 的码、params、文案不变）。transport / official-mcp-client 层的 `AbortError` reject 契约不变（取消在运输层的格式）。下文 §三、§五「取消」、§六 `run` 的旧表述已随本条改写。依据：`docs/Iterations/error-channel-debt/design.md` §2，与工具系统 `ToolRunner.call` 的 Result 化（同设计 §1，第一轮已落地）配套。
 
+12. **参数定义要给模型看（2026-11-27，真机发现）**：§六只写了「`inputSchema` 用 `z.unknown()` 宽松接收、校验交给 server」，结果模型侧的参数定义是从这个 zod schema 转出来的空对象——智能体能看到 MCP 工具，却不知道有哪些参数。修正：`tools/list` 返回的入参 JSON Schema 进快照（`McpToolSnapshot.inputSchema`，经 `McpRemoteTool` 窄投影带出），`Tool` 增加可选的 `inputJsonSchema`——给了它，`ToolDefinitions.fromRegistry` 就原样透出、不从 zod 转换。本地校验不变（仍宽松、交给 server），所以不需要 JSON Schema → zod 的转换。server 没声明 Schema 时模型看到的仍是空参数定义。T-M11 的「接受任意对象」保留，新增 T-M11b 断言 Schema 原样进模型侧定义。
+
 ## 代码评审（2026-11-25 ~ 26）
 
 评审与修复的完整记录见同目录 `cr-fix-spec.md`：首轮四路评审合并出 17 条（P0 1 / P1 9 / P2 7），三轮终态认证通过后全部修复落地，另按用户要求补了第 6 条的双端对齐并把第 2 条、第 6 条的公共逻辑收进 core。

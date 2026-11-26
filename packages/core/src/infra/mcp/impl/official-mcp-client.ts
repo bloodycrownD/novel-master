@@ -21,10 +21,12 @@ import { AbortError } from "@/domain/abort/logic/create-abort-error.js";
 import { HttpMcpTransport } from "@/infra/mcp/impl/http-mcp-transport.js";
 import type { McpRequestFn } from "@/infra/mcp/ports/mcp-transport.port.js";
 
-/** 服务器侧工具的窄投影：快照只需要 name / description，官方 Tool 类型不外泄。 */
+/** 服务器侧工具的窄投影：快照需要 name / description / 入参 Schema，官方 Tool 类型不外泄。 */
 export interface McpRemoteTool {
     readonly name: string;
     readonly description?: string;
+    /** 服务器声明的入参 JSON Schema；不是对象时省略（模型看到空参数定义）。 */
+    readonly inputSchema?: Readonly<Record<string, unknown>>;
 }
 
 /** 建连依赖：端点 + 注入请求函数 + bearer token + 单请求超时（握手 / listTools / callTool 各自适用）。 */
@@ -142,7 +144,7 @@ export class OfficialMcpClient {
     async listTools(signal: AbortSignal): Promise<readonly McpRemoteTool[]> {
         return this.withSignal(signal, async () => {
             const result = await this.client.listTools(undefined, { timeout: this.deps.timeoutMs, cacheMode: "refresh" });
-            return result.tools.map((tool) => ({ name: tool.name, ...(tool.description === undefined ? {} : {description: tool.description}) }));
+            return result.tools.map((tool) => ({ name: tool.name, ...(tool.description === undefined ? {} : {description: tool.description}), ...(Guards.isRecord(tool.inputSchema) ? {inputSchema: tool.inputSchema} : {}) }));
         });
     }
 

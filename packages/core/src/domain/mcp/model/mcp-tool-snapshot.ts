@@ -18,6 +18,8 @@ export interface McpToolSnapshot {
     readonly toolName: string;
     /** MCP 工具描述；缺省时 toNmTool 回落 toolName。 */
     readonly toolDescription?: string;
+    /** MCP server 在 tools/list 里声明的入参 JSON Schema；原样给模型看（校验仍交给 server）。缺省或不是对象时模型看到空参数定义。 */
+    readonly inputSchema?: Readonly<Record<string, unknown>>;
 }
 
 /** server 状态（UI 状态标签与「测试连接」口径）。 */

@@ -44,12 +44,13 @@ const makeHarness = (mode: StubMode): Harness => {
 };
 
 describe("OfficialMcpClient", () => {
-    it("connect 走官方 legacy 握手，listTools 返回 name / description 窄投影", async () => {
+    it("connect 走官方 legacy 握手，listTools 返回 name / description / 入参 Schema 窄投影", async () => {
         const harness = makeHarness("ok");
         const client = await OfficialMcpClient.connect({ url: MCP_URL, requestFn: harness.requestFn, timeoutMs: 5_000 }, NEVER_ABORTED);
         try {
             const tools = await client.listTools(NEVER_ABORTED);
-            assert.deepEqual(tools, [{ name: "read", description: "读一下" }, { name: "write" }]);
+            const emptyObjectSchema = { type: "object", properties: {} };
+            assert.deepEqual(tools, [{ name: "read", description: "读一下", inputSchema: emptyObjectSchema }, { name: "write", inputSchema: emptyObjectSchema }]);
             assert.equal(harness.requests[0]?.method, "initialize", "connect 先发 initialize 握手");
             assert.equal(harness.requests.some((request) => request.method === "notifications/initialized"), true);
         } finally {

@@ -59,6 +59,8 @@ export const McpToolAdapter = {
             name,
             description: () => description,
             inputSchema: z.unknown(),
+            // 参数定义原样透出给模型（它声明什么模型看到什么）；本地不校验，照旧交给 MCP server。
+            ...(snapshot.inputSchema === undefined ? {} : {inputJsonSchema: snapshot.inputSchema}),
             async run(input: unknown, ctx: BuiltinToolContext): Promise<Result<string, AppError>> {
                 const called = await deps.call(snapshot.toolName, input, ctx.signal ?? NEVER_ABORTED_SIGNAL);
                 // 取消是控制流不是失败：callTool 以 Interrupt 表达（spec §五随通道迁移更新）；

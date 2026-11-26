@@ -20,6 +20,7 @@
  */
 
 import { SdkError, SdkErrorCode } from "@modelcontextprotocol/client";
+import { Guards } from "@/common/guards.js";
 import { McpFailureClassifier } from "@/domain/mcp/logic/classify-mcp-failure.js";
 import { McpToolSlug } from "@/domain/mcp/logic/slugify-mcp-tool-name.js";
 import { McpFailureOps, type McpFailure } from "@/domain/mcp/model/mcp-failure.js";
@@ -191,7 +192,7 @@ export const McpConnectionManagerFactory = {
                     await closeClient(client);
                     return [];
                 }
-                const snapshots = listed.value.map((tool) => ({ serverId: config.id, toolName: tool.name, ...(tool.description === undefined ? {} : {toolDescription: tool.description}) }));
+                const snapshots = listed.value.map((tool) => ({ serverId: config.id, toolName: tool.name, ...(tool.description === undefined ? {} : {toolDescription: tool.description}), ...(Guards.isRecord(tool.inputSchema) ? {inputSchema: tool.inputSchema} : {}) }));
                 const snapshotAt = now();
                 connections.set(config.id, { client, snapshots, snapshotAt, status: { serverId: config.id, state: "ready", toolCount: snapshots.length, lastConnectedAt: snapshotAt }, inflight: holder.inflight });
                 return snapshots;

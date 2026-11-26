@@ -5,6 +5,8 @@ import { McpToolResultRenderer } from "../../src/domain/mcp/logic/render-mcp-too
 import { McpToolAdapter } from "../../src/domain/mcp/logic/to-nm-tool.js";
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
 import { TOOL_OUTPUT_MAX_BYTES } from "../../src/domain/tool/logic/tool-output-limits.js";
+import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
+import { ToolDefinitions } from "../../src/infra/llm-protocol/logic/tool-definitions.js";
 import { Result } from "../../src/errors/either.js";
 import type { McpFailure } from "../../src/domain/mcp/model/mcp-failure.js";
 import type { McpToolSnapshot } from "../../src/domain/mcp/model/mcp-tool-snapshot.js";
@@ -61,6 +63,21 @@ describe("to-nm-tool", () => {
         assert.equal(tool.description(ctx), "[MCP:db] 执行 SQL 查询");
         assert.ok(tool.inputSchema.safeParse({sql: "SELECT 1", weird: [1, {x: null}]}).success);
         assert.ok(tool.inputSchema.safeParse("裸字符串也放行").success);
+    });
+
+    it("T-M11b: server 声明的入参 Schema 原样进模型侧定义；server 没声明时参数定义为空", () => {
+        const inputSchema = {type: "object", properties: {sql: {type: "string", description: "要执行的 SQL"}}, required: ["sql"]};
+        const withSchema = new ToolRegistry<BuiltinToolContext>();
+        withSchema.register(McpToolAdapter.toNmTool({...SNAPSHOT, inputSchema}, {call: async () => Result.ok({})}));
+        const defs = ToolDefinitions.fromRegistry(withSchema, makeRecordingCtx().ctx);
+        assert.equal(defs[0]?.inputSchema, inputSchema);
+        // 本地校验仍然宽松：不合 Schema 的入参放行，交给 MCP server 报错。
+        assert.ok(withSchema.get("mcp__db__query")?.inputSchema.safeParse({sql: 1}).success);
+
+        const withoutSchema = new ToolRegistry<BuiltinToolContext>();
+        withoutSchema.register(McpToolAdapter.toNmTool(SNAPSHOT, {call: async () => Result.ok({})}));
+        // 没声明就是空对象 Schema（只有 $schema 一个键），模型看不到任何参数。
+        assert.deepEqual(ToolDefinitions.fromRegistry(withoutSchema, makeRecordingCtx().ctx)[0]?.inputSchema, {$schema: "https://json-schema.org/draft/2020-12/schema"});
     });
 
     it("T-M11: 成功 → render 全文 Result.ok；ctx.signal 原样透传给 call", async () => {
