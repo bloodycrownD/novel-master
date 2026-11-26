@@ -6,7 +6,7 @@
  * - 连接 / 协议失败（`Result.err(McpFailure)`）→ `Result.err(TOOL_FAILED)`，
  *   detail 带原文前缀、cause 带 McpFailure；
  * - CallToolResult `isError: true` → 不抛异常，`Result.err(TOOL_FAILED)` + 原文；
- * - AbortError（取消不进 Result，callTool 原样 reject 透传）→ `Result.err(TOOL_CANCELLED)`，
+ * - 取消（callTool 以 `Interrupt.cancelled` 返回，spec §五随通道迁移更新）→ `Result.err(TOOL_CANCELLED)`，
  *   不得包成 TOOL_FAILED；
  * - 结果超 50KB 照 curl / search 先例经 `OverflowSink.sink` 落盘（sink 会 throw，
  *   落盘失败回落字节截断，不让异常冒出 run）。
@@ -23,6 +23,7 @@ import { Json } from "@/common/json.js";
 import { Text } from "@/common/text.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
+import type { Interrupt } from "@/errors/outcome.js";
 import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-context.js";
 import { OverflowSink } from "@/domain/tool/builtin/overflow-sink.js";
 import { TOOL_OUTPUT_MAX_BYTES } from "@/domain/tool/logic/tool-output-limits.js";
@@ -37,8 +38,8 @@ import { McpToolSlug } from "./slugify-mcp-tool-name.js";
 const TOOL_RESULT_LINE_WIDTH = 300;
 
 export interface McpToolCallDeps {
-    /** MCP 侧原始工具名 + 入参 + 取消信号；取消以 AbortError reject，已知失败沿 Result.err。 */
-    readonly call: (toolName: string, args: unknown, signal: AbortSignal) => Promise<Result<unknown, McpFailure>>;
+    /** MCP 侧原始工具名 + 入参 + 取消信号；取消以 Interrupt.cancelled 返回，已知失败沿 Result.err。 */
+    readonly call: (toolName: string, args: unknown, signal: AbortSignal) => Promise<Result<unknown, McpFailure> | Interrupt>;
 }
 
 /** ctx 未注入 signal 时（旧测试 mock）给 callTool 的永不中止信号。 */
@@ -59,17 +60,10 @@ export const McpToolAdapter = {
             description: () => description,
             inputSchema: z.unknown(),
             async run(input: unknown, ctx: BuiltinToolContext): Promise<Result<string, AppError>> {
-                let called: Result<unknown, McpFailure>;
-                try {
-                    called = await deps.call(snapshot.toolName, input, ctx.signal ?? NEVER_ABORTED_SIGNAL);
-                } catch (error: unknown) {
-                    // 取消是控制流不是失败：callTool 对 AbortError 原样 reject 透传（spec §五），这里转 TOOL_CANCELLED。
-                    // 形状判定只认 name（跨 duplicate module / Hermes 无 DOMException，instanceof 会失灵，与 tool-runner 同口径）。
-                    if (typeof error === "object" && error !== null && "name" in error && (error as {name: unknown}).name === "AbortError") return Result.err(new AppError("TOOL_CANCELLED", {toolName: name}));
-                    // 非取消的意外 reject（call 通道的未知异常）收进 Result：TOOL_FAILED 带 cause，
-                    // 与下方 called 失败分支同一出口，runner 的 normalizeToolFailure 直通不换壳。
-                    return Result.err(new AppError("TOOL_FAILED", {toolName: name, cause: error, detail: `Tool failed: ${name}`}));
-                }
+                const called = await deps.call(snapshot.toolName, input, ctx.signal ?? NEVER_ABORTED_SIGNAL);
+                // 取消是控制流不是失败：callTool 以 Interrupt 表达（spec §五随通道迁移更新）；
+                // MCP 无 replaced 生产者，与 cancelled 同收 TOOL_CANCELLED（穷尽处理）。
+                if ("kind" in called) return Result.err(new AppError("TOOL_CANCELLED", {toolName: name}));
                 if (!called.ok) return Result.err(new AppError("TOOL_FAILED", {toolName: name, cause: called.error, detail: `${prefix} ${called.error.detail}`}));
                 const payload = Guards.isRecord(called.value) ? called.value : {};
                 const rendered = McpToolResultRenderer.render(Array.isArray(payload.content) ? payload.content : []);

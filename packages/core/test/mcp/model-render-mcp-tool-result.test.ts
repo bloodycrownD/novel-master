@@ -3,7 +3,6 @@ import { describe, it } from "node:test";
 
 import { McpToolResultRenderer } from "../../src/domain/mcp/logic/render-mcp-tool-result.js";
 import { McpToolAdapter } from "../../src/domain/mcp/logic/to-nm-tool.js";
-import { AbortError } from "../../src/domain/abort/logic/create-abort-error.js";
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
 import { TOOL_OUTPUT_MAX_BYTES } from "../../src/domain/tool/logic/tool-output-limits.js";
 import { Result } from "../../src/errors/either.js";
@@ -94,18 +93,15 @@ describe("to-nm-tool", () => {
         assert.equal(error.details?.cause, failure);
     });
 
-    it("T-M11: 取消（AbortError reject）→ TOOL_CANCELLED，不包成 TOOL_FAILED", async () => {
-        const tool = McpToolAdapter.toNmTool(SNAPSHOT, {call: async () => { throw AbortError.create(); }});
+    it("T-M11: 取消（callTool 以 Interrupt.cancelled 返回）→ TOOL_CANCELLED，不包成 TOOL_FAILED", async () => {
+        const tool = McpToolAdapter.toNmTool(SNAPSHOT, {call: async () => ({kind: "cancelled", reason: "user-stop"})});
         const error = unwrapErr(await tool.run({}, makeRecordingCtx().ctx));
         assert.equal(error.key, "TOOL_CANCELLED");
     });
 
-    it("未知异常收进 Err 且 cause 保留原文（runner 统一收口）", async () => {
+    it("call 通道的未知 reject 不再收编：契约违约沿 run reject 上行（由 ToolRunner.call 的 normalizeToolFailure 兜底）", async () => {
         const tool = McpToolAdapter.toNmTool(SNAPSHOT, {call: async () => { throw new Error("boom infra"); }});
-        const result = await tool.run({}, makeRecordingCtx().ctx);
-        assert.ok(!result.ok, "未知异常应收进 Err");
-        assert.equal(result.error.key, "TOOL_FAILED");
-        assert.match((result.error.cause as Error).message, /boom infra/);
+        await assert.rejects(tool.run({}, makeRecordingCtx().ctx), /boom infra/);
     });
 
     it("T-M10/T-M11: 超 50KB 经 OverflowSink 落盘返回 savedPath；落盘失败回落字节截断", async () => {

@@ -14,13 +14,12 @@
  * 单请求超时走官方 `RequestOptions.timeout`（= `timeoutMs`）；装配期预算
  * min(timeoutMs, 8000) 到点 abort 预算 signal，AbortRelayTransport 把它并进
  * requestSignal、请求函数适配层据此调 requestAbort 真断连（core 不直接持有
- * requestAbort）。callTool 对 AbortError 原样 reject 透传（取消不进 Result）。
+ * requestAbort）。callTool 的取消沿 Interrupt.cancelled 返回。
  *
  * @module infra/mcp/impl/create-mcp-connection-manager
  */
 
 import { SdkError, SdkErrorCode } from "@modelcontextprotocol/client";
-import { AbortError } from "@/domain/abort/logic/create-abort-error.js";
 import { McpFailureClassifier } from "@/domain/mcp/logic/classify-mcp-failure.js";
 import { McpToolSlug } from "@/domain/mcp/logic/slugify-mcp-tool-name.js";
 import { McpFailureOps, type McpFailure } from "@/domain/mcp/model/mcp-failure.js";
@@ -28,6 +27,7 @@ import { McpServerConfigOps, type McpServerConfig } from "@/domain/mcp/model/mcp
 import type { McpServerStatus, McpToolSnapshot } from "@/domain/mcp/model/mcp-tool-snapshot.js";
 import type { McpConnectionManager } from "@/domain/mcp/ports/mcp-connection.port.js";
 import { Result } from "@/errors/either.js";
+import type { Interrupt } from "@/errors/outcome.js";
 import { RequestAbort } from "@/infra/llm-protocol/logic/request-abort.js";
 import { OfficialMcpClient } from "@/infra/mcp/impl/official-mcp-client.js";
 import { McpTransportError, type McpRequestFn } from "@/infra/mcp/ports/mcp-transport.port.js";
@@ -258,13 +258,12 @@ export const McpConnectionManagerFactory = {
             return connections.get(config.id)?.status ?? { serverId: config.id, state: "pending" };
         });
 
-        /** callTool 的失败收口。取消是控制流不是失败：AbortError 原样往上抛（signal 已中止时官方可能包成 SdkError，兜底转回 AbortError）。 */
+        /** callTool 的失败收口。取消是控制流不是失败：signal 已中止（或底层抛的是 abort 形态）沿 Interrupt.cancelled 返回，不写连接状态（与旧 throw 分支不写回一致）；ctx 上是裸 signal，reason 按用户停止兜底（tool-runner 同口径）。 */
         // nm-style: keep-local — 闭包内 callTool 的两条失败路径（握手、tools/call）共用的状态收口，直接读写 connections。
-        const failCall = (config: McpServerConfig, generation: number, signal: AbortSignal, reason: ConnectFailure): Result<unknown, McpFailure> => {
+        const failCall = (config: McpServerConfig, generation: number, signal: AbortSignal, reason: ConnectFailure): Result<unknown, McpFailure> | Interrupt => {
             const error = reason.kind === "error" ? reason.error : null;
             if (error != null && (RequestAbort.isAbortLikeError(error) || signal.aborted)) {
-                // nm-throw: keep — 不是平台契约，是工具系统当前的取消通道（技术债）：Tool.run 只返回 Result、tool-runner 用 Promise.race 竞速取消，取消只能以 AbortError 形态到达；这里原样透传给 to-nm-tool 转成 TOOL_CANCELLED。工具系统迁到 Interrupt / Outcome 后这里随之改成返回值
-                throw RequestAbort.isAbortLikeError(error) ? error : AbortError.create();
+                return { kind: "cancelled", reason: "user-stop" };
             }
             const failure = reason.kind === "failure" ? reason.failure : failureOf(config, reason.error);
             // 期间 invalidate / closeAll 过：这次失败属于旧配置，不写回状态。
@@ -274,7 +273,7 @@ export const McpConnectionManagerFactory = {
             return Result.err(failure);
         };
 
-        const callTool = async (serverId: string, toolName: string, args: unknown, signal: AbortSignal): Promise<Result<unknown, McpFailure>> => {
+        const callTool = async (serverId: string, toolName: string, args: unknown, signal: AbortSignal): Promise<Result<unknown, McpFailure> | Interrupt> => {
             const config = deps.listServers().find((server) => server.id === serverId);
             if (config === undefined) return Result.err({ kind: "protocol", action: "report", detail: `MCP 服务器 ${serverId} 不在当前配置中` });
             if (!config.enabled) return Result.err({ kind: "server", action: "fix-config", detail: `MCP 服务器 ${config.id} 已停用` });

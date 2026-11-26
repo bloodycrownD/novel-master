@@ -38,6 +38,7 @@ date: 2026-11-13
 8. **自动连接与状态**：`McpServerState` 增加 `connecting`；`pending` 只表示「启用但从未尝试连接」。启用且处于 `pending` 的服务器在「开关打开」「进入列表」「保存」时自动尝试一次；一次尝试结束即为 `ready` 或 `failed`，**界面不自动重试**，重试入口是详情页「测试连接」（装配期每次 run 仍会自行重拉快照）。在途尝试在连接管理器里同步登记，连点开关、反复进列表共享同一次连接；连接进行中列表行开关禁用并显示「连接中」。装配预算内未完成由原来的 `pending` 改记 `failed`（T-M18a 断言随之调整）。进入详情页不再对已失败的服务器自动重试。
 9. **连接失效与在途结果（2026-11-26）**：连接管理器按 server 记代际，`invalidate` / `closeAll` 递增；在途的建连、`tools/list`、`tools/call` 回来后先核对代际，代际已变即丢弃并关闭本次新建的连接——旧配置的连接与快照不会被写回。`invalidate` 的语义相应变为「失效快照并作废在途结果」。
 10. **错误归一补充（2026-11-26）**：`McpTransportError` 且没有响应（请求函数自身失败，如网络断开）直接归 `kind:"network"`、`action:"retry"`，不再走文本嗅探。§四的判定顺序不变，这一条排在最前。
+11. **callTool 取消走返回值（2026-11-26）**：`callTool` 不再对 `AbortError` 原样 reject 透传，改以 `Interrupt.cancelled`（reason 兜底 `user-stop`，MCP 拿不到 scope reason）返回，签名 `Promise<Result<unknown, McpFailure>>` → `Promise<Result<unknown, McpFailure> | Interrupt>`（replaced 对 MCP 无生产者，类型上穷尽即可）；Promise 不 reject，未知异常由 `settlePromise` 收编。连接管理器 `failCall` 的「取消透传」throw 与其 `nm-throw: keep` 注释随之删除——取消分支提前返回、不写连接状态，与改前一致；`to-nm-tool` 删掉「catch AbortError → TOOL_CANCELLED」的 try/catch，改按判别联合 `"kind" in called` 收 `TOOL_CANCELLED`（`TOOL_CANCELLED` / `TOOL_FAILED` 的码、params、文案不变）。transport / official-mcp-client 层的 `AbortError` reject 契约不变（取消在运输层的格式）。下文 §三、§五「取消」、§六 `run` 的旧表述已随本条改写。依据：`docs/Iterations/error-channel-debt/design.md` §2，与工具系统 `ToolRunner.call` 的 Result 化（同设计 §1，第一轮已落地）配套。
 
 ## 代码评审（2026-11-25 ~ 26）
 
@@ -144,7 +145,7 @@ export interface McpTransport {
 - 先把响应体完整读成文本，再按 `content-type` 分支：`text/event-stream` → 逐帧解析（整包文本里的多帧一次拆出）；`application/json` → 整包解析；其他 → 抛带 `raw` 的 `McpTransportError`。
 - **不经过 `assertOk`、不复用 `SseTransport`**：transport 自己读请求函数返回的 `status` / `headers` / `bodyText`，非 2xx 的响应体原文不丢。
 - **注入的是一个极小的请求函数**，不是 `Response` 对象：`McpRequestFn = (req: { url, method, headers, body, signal }) => Promise<{ status, headers: Record<string, string>, bodyText }>`。桌面用 Node 22 的 `fetch` 适配；移动端用原生 `request` 适配（`timeoutMs` 即 callTimeout，`signal` 中止走 `requestAbort`），原生未注册时回落同一个 `fetch` 适配。对 `llm-sse-native` 的改动只有「非流式 `request` 回传全部响应头」一处（Step 6），流式路径不动。移动端因此收不到服务器推送，首版不需要（见「五、连接管理」）。
-- 每个请求受 `AbortSignal` 约束（`BuiltinToolContext.signal` 或装配期超时），中止时以 `AbortError` reject，一路透传到 `callTool`（Promise 没有 `Result` 通道，属平台协议例外），最终由工具 `run` 转成取消的 `Result`。
+- 每个请求受 `AbortSignal` 约束（`BuiltinToolContext.signal` 或装配期超时），中止时 transport 以 `AbortError` reject（取消在运输层的格式），由连接管理器 `settlePromise` 收进 `Result` 后经 `failCall` 判定，`callTool` 以 `Interrupt.cancelled` 返回（开发期变更 11），最终由工具 `run` 转成取消的 `Result`。
 - `JsonRpcMessage` 类型直接取 `@modelcontextprotocol/client` 的导出类型，不自定义。
 - **逐帧判定**：合法 JSON-RPC 帧照常投递；非法帧只标记并记原文，不作废整条流。
 - 吸收 `Mcp-Session-Id`（响应头）与 `MCP-Protocol-Version`；后续请求带回。
@@ -191,7 +192,7 @@ McpFailureClassifier.classify({ status, contentType, body, wwwAuthenticate }): M
 export interface McpConnectionManager {
   snapshotTools(): Promise<readonly McpToolSnapshot[]>;      // 装配期调用，带缓存
   serverStatuses(): readonly McpServerStatus[];                   // 同步读；UI 状态标签与测试连接用
-  callTool(serverId: string, toolName: string, args: unknown, signal: AbortSignal): Promise<Result<unknown, McpFailure>>;   // 取消不进 Result，见下方「取消」
+  callTool(serverId: string, toolName: string, args: unknown, signal: AbortSignal): Promise<Result<unknown, McpFailure> | Interrupt>;   // 取消沿 Interrupt 返回，见下方「取消」
   invalidate(serverId: string): void;
   closeAll(): Promise<void>;
 }
@@ -202,7 +203,7 @@ export interface McpConnectionManager {
 - 快照失效只有两条路径：TTL 60s 到期、配置保存或手动刷新时调 `invalidate(serverId)`。**不做 `tools/list_changed` 通知**，请求-响应式 transport 收不到服务器推送。
 - `McpServerStatus`（定义在 `model/mcp-tool-snapshot.ts`）：`{ serverId, state: "ready" | "failed" | "unsupported" | "disabled" | "pending", toolCount?, failure?: McpFailure, lastConnectedAt?: number }`。**server 级失败只能从这里读出**：`snapshotTools()` 对失败的 server 只是跳过，`McpToolSnapshot` 里没有它的位置。双端的状态标签与「测试连接」都读它。
 - `timeoutMs` 是**单个 HTTP 请求**的上限（握手、`tools/list`、`tools/call` 各自适用），默认 120000（有些 MCP 工具本身要跑几十秒，太短会误杀；每个服务器可单独调）。装配期 `snapshotTools()` 对各 server 并行执行，单个 server 最多等 `min(timeoutMs, 8000)`；超时的 server 记为 `pending` 并在本轮跳过，不拖慢首字。预算到点时对该 server 在途的请求调 `requestAbort` 收割，不让它在后台跑满 `timeoutMs`。
-- 取消：`callTool` 的 `signal` 直接取 `BuiltinToolContext.signal`，一路传到请求函数与官方 `Client.callTool`。**取消不进 `Result`**：`callTool` 对 `AbortError` 原样 reject 透传（红线的 7 个内部码里没有「取消」，硬塞进 `McpFailure` 会让模型把用户停止当成一次可重试的失败）。工具 `run` 捕获后返回 `Result.err(new AppError("TOOL_CANCELLED", { toolName }))`——这个码在 runner 的直通名单里（`tool-runner.ts:34`），才会被收成「已取消」而不是错误卡片。
+- 取消：`callTool` 的 `signal` 直接取 `BuiltinToolContext.signal`，一路传到请求函数与官方 `Client.callTool`。**取消沿 `Interrupt` 返回**（开发期变更 11）：`callTool` 以 `Interrupt.cancelled`（reason 兜底 `user-stop`，MCP 拿不到 scope reason）返回，不塞进 `McpFailure`（红线的 7 个内部码里没有「取消」，硬塞会让模型把用户停止当成一次可重试的失败）；Promise 不 reject，未知异常由 `settlePromise` 收编。工具 `run` 判别到 `Interrupt` 后返回 `Result.err(new AppError("TOOL_CANCELLED", { toolName }))`——这个码在 runner 的直通名单里（`tool-runner.ts:34`），才会被收成「已取消」而不是错误卡片。
 - 实现形态：`McpConnectionManagerFactory.create(deps)` 返回持有连接 Map 与快照缓存的对象（有共享可变状态，用闭包对象），不写顶层 Map 加一组自由函数。
 - 子 agent：子 run 复用同一份快照（不重复 `tools/list`），经同一个 connection manager 调用。
 - `snapshotTools()` 在 `runAgentTurn` 装配期 await 一次（在 `new ToolRegistry` 之后、`BuiltinTools.register` 之后）。
@@ -216,7 +217,7 @@ toNmTool(snapshot, { call: (name, args, signal) => ... }): Tool
 - `name`：`mcp__${slug(serverId)}__${slug(tool.name)}`；`slug` 把字符集归一到 `[a-zA-Z0-9_-]`，其余替换为 `_`。总长上限 **64 字符**（OpenAI/Anthropic 工具名限制），超出时保留前缀 + `_` + 8 位十六进制短哈希（哈希输入是完整的未截断名）。`registerMcpTools` 在注册前检查同一快照内有无重名，有则重名的都不注册，并把该 server 标为 `failed{kind:"protocol", action:"report"}`，不让整轮装配失败。
 - `description`：`[MCP:${serverName}] ${tool.description ?? tool.name}`，同步取快照。
 - `inputSchema`：**用 `z.unknown()` 宽松接收**，参数校验交给 MCP server（避免 JSON Schema → zod 转换的保真问题）。
-- `run`：`connectionManager.callTool(serverId, toolName, input, ctx.signal)`；成功 → `renderMcpToolResult`（TextContent 拼接；Image/ResourceLink/EmbeddedResource 降级为占位文本）→ `Result.ok`；连接或协议失败 → `Result.err(new AppError("TOOL_FAILED", { toolName, detail: prefixedText, cause: failure }))`；中止（`AbortError`）→ `Result.err(new AppError("TOOL_CANCELLED", { toolName }))`，不得包成 `TOOL_FAILED` 或 `McpFailure{kind:"network"}`。落盘失败（`OverflowSink.sink` 会 throw）照 curl 先例回落到字节截断，不让异常冒出 `run`。
+- `run`：`connectionManager.callTool(serverId, toolName, input, ctx.signal)`；成功 → `renderMcpToolResult`（TextContent 拼接；Image/ResourceLink/EmbeddedResource 降级为占位文本）→ `Result.ok`；连接或协议失败 → `Result.err(new AppError("TOOL_FAILED", { toolName, detail: prefixedText, cause: failure }))`；取消（`Interrupt` 返回）→ `Result.err(new AppError("TOOL_CANCELLED", { toolName }))`，不得包成 `TOOL_FAILED` 或 `McpFailure{kind:"network"}`。落盘失败（`OverflowSink.sink` 会 throw）照 curl 先例回落到字节截断，不让异常冒出 `run`。
 - `isError: true`：不抛异常，返回 `Result.err(new AppError("TOOL_FAILED", { toolName, detail: prefixedText }))`，`content` 保留原文。**全仓没有 `toolFailed` 这个函数，也不要新造**；`run` 里不出现 throw。
 - 结果超过 50KB：照 curl / search 先例经 `OverflowSink.sink` 落盘，返回 `{ savedPath, message }`。
 

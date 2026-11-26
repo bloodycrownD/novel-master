@@ -9,6 +9,7 @@
 
 import type { Result } from "@/errors/either.js";
 import type { AppError } from "@/errors/app-error.js";
+import type { Interrupt } from "@/errors/outcome.js";
 import type { McpFailure } from "../model/mcp-failure.js";
 import type { McpServerStatus, McpToolSnapshot } from "../model/mcp-tool-snapshot.js";
 
@@ -19,10 +20,11 @@ export interface McpConnectionManager {
     /** 同步读的 server 状态（UI 状态标签与「测试连接」唯一读取面）。 */
     serverStatuses(): readonly McpServerStatus[];
     /**
-     * 调用 MCP 工具；取消不进 Result——`signal` 中止时原样以 AbortError reject
-     * 透传（工具 run 负责转 TOOL_CANCELLED），已知失败沿 `Result.err` 带原文。
+     * 调用 MCP 工具；取消沿 `Interrupt.cancelled` 返回（reason 按用户停止兜底，
+     * 与 tool-runner 同口径），replaced 对 MCP 无生产者、类型上穷尽即可；已知失败
+     * 沿 `Result.err` 带原文。Promise 不 reject：未知异常由 settlePromise 收编。
      */
-    callTool(serverId: string, toolName: string, args: unknown, signal: AbortSignal): Promise<Result<unknown, McpFailure>>;
+    callTool(serverId: string, toolName: string, args: unknown, signal: AbortSignal): Promise<Result<unknown, McpFailure> | Interrupt>;
     /** 失效某 server 的工具快照与在途连接（配置保存、手动刷新、换 ID 时调）：之后再回来的在途结果会被丢弃，下次 snapshotTools 重拉。 */
     invalidate(serverId: string): void;
     /** 关闭全部常驻连接并作废在途结果。回合之间连接常驻复用，不在这里关；桌面在应用退出时调（before-quit，最多等 1.5 秒），移动端在 runtime 重建前调（没有应用退出钩子，进程被回收时连接随进程结束）。 */

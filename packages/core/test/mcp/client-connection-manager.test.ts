@@ -248,16 +248,18 @@ describe("McpConnectionManagerFactory.create", () => {
         assert.equal(harness.callsOf("off-server").length, 0);
     });
 
-    it("callTool: signal 中止时原样以 AbortError reject（取消不进 Result），在途请求被收割", async () => {
+    it("callTool: signal 中止时以 Interrupt.cancelled 返回（取消不进失败通道），在途请求被收割", async () => {
         const harness = makeHarness([{ id: "hung-server", mode: "hang" }], { assemblyBudgetMs: 5_000 });
         const controller = new AbortController();
         const pending = harness.manager.callTool("hung-server", "slow", {}, controller.signal);
         const timer = setTimeout(() => controller.abort(), 100);
+        let outcome: unknown;
         try {
-            await assert.rejects(pending, (error: unknown) => (error as Error).name === "AbortError");
+            outcome = await pending;
         } finally {
             clearTimeout(timer);
         }
+        assert.deepEqual(outcome, { kind: "cancelled", reason: "user-stop" });
         const calls = harness.callsOf("hung-server");
         assert.ok(calls.length >= 1);
         assert.equal(calls.some((call) => call.signal?.aborted === true), true);
