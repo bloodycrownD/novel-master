@@ -66,7 +66,12 @@ async function insertMultiValues(conn: TdbcConnection, parser: SqlTemplateParser
             params.push(...row);
         }
         const rendered = parser.parse(template, { rows: chunk });
-        await conn.execute(rendered.sql, params);
+        // nm-throw: keep — 仓储方法的失败契约就是 reject（本函数 doc 注释「块内失败时抛错，
+        // 由外层事务整体回滚（调用方均在事务内）」；seedCheckpoints 经端口被 ForkCopySeeder
+        // 的 seed 事务调用，fork-copy-seeder.ts:119）：解析失败沿同一 reject 通道触发整体
+        // 回滚，与 TdbcTemplate 桥同口。
+        if (!rendered.ok) throw rendered.error;
+        await conn.execute(rendered.value.sql, params);
     }
 }
 

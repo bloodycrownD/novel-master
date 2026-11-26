@@ -284,9 +284,11 @@ export namespace ConformanceSuite {
                 });
 
                 it("executes parser INSERT output", async () => {
-                    const { sql, parameters } = parser.parse("INSERT INTO conformance_parser (id, label) VALUES (#{id}, #{label})", { id: 5, label: "from-parser" },);
-                    assert.match(sql, /\?/);
-                    await conn.execute(sql, parameters);
+                    const parsed = parser.parse("INSERT INTO conformance_parser (id, label) VALUES (#{id}, #{label})", { id: 5, label: "from-parser" },);
+                    // 模板坏 → 套件红（C10 的验收意图）；本文件在 throw-audit 白名单 packages/tdbc-* 前缀内。
+                    if (!parsed.ok) throw parsed.error;
+                    assert.match(parsed.value.sql, /\?/);
+                    await conn.execute(parsed.value.sql, parsed.value.parameters);
                     const rows = await conn.query<ParserRow>(SELECT_PARSER_SQL, [5]);
                     assert.equal(rows[0]!.label, "from-parser");
                 });
