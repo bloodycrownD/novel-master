@@ -56,7 +56,7 @@ function addBindingName(out: Set<string> | Map<string, ts.Node>, name: string, s
 /** 绑定模式遍历：BindingElement 只递归绑定名（propertyName 键位不入集），其余节点逐层下探。 */
 function visitBindingPattern(node: ts.Node, out: Set<string> | Map<string, ts.Node>, source: ts.Node | undefined): void {
     if (ts.isBindingElement(node)) {
-        if (node.propertyName == null || node.name !== node.propertyName) visitBindingPattern(node.name, out, source);
+        if (node.propertyName == null || node.name !== node.propertyName) collectBindingNames(node.name, out, source);
         return;
     }
     if (ts.isOmittedExpression(node)) return;
