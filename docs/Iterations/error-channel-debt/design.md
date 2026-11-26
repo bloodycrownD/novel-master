@@ -1,6 +1,6 @@
 # 错误通道技术债清理设计（error-channel-debt）
 
-本文档覆盖五项错误通道技术债的可执行设计。所有行号与现状代码均在本 worktree（分支 `feat/mcp-support`）逐文件核实过；文中「行号」指当前工作区代码行。**本版为第 2 轮修订**：第 1 轮评审的六条意见逐条回应见 §0.1，三条 P1 全部按保等价修订。设计原则遵循 `.agents/skills/nm-code-style/SKILL.md` §3（错误进 Either，不抛）与 §8 表（六形态 throw 盘点）：自己写的函数之间用 `Result` / `Outcome` 传失败与中断，取消不是错误（`Interrupt` 承载），只有平台契约逼着抛的地方才抛并标 `// nm-throw: keep — 理由`。
+本文档覆盖五项错误通道技术债的可执行设计。所有行号与现状代码均在本 worktree（分支 `feat/mcp-support`）逐文件核实过；文中「行号」指当前工作区代码行。**本版为第 3 轮修订**：历轮评审意见逐条回应见 §0.1（第 2 轮）与 §0.2（第 3 轮），各轮 P1 全部按保等价修订。设计原则遵循 `.agents/skills/nm-code-style/SKILL.md` §3（错误进 Either，不抛）与 §8 表（六形态 throw 盘点）：自己写的函数之间用 `Result` / `Outcome` 传失败与中断，取消不是错误（`Interrupt` 承载），只有平台契约逼着抛的地方才抛并标 `// nm-throw: keep — 理由`。
 
 ## 0. 背景事实核实出入（先读，影响后文口径）
 
@@ -24,6 +24,23 @@
 
 以下正文均已按上述结论修订。
 
+## 0.2 第 3 轮评审回应（逐条）
+
+| # | 评审点 | 结论 | 落点 |
+|---|---|---|---|
+| 1 | §3.6-4 改 `assembleSkillsToolContext` 签名后，漏了 `packages/core/test/tool/skill-tool.test.ts:527/:534/:552` 三处直接调用（grep 实读确认：:528/:553 `assert.equal(ctx, undefined)` 会因 `Result.ok(undefined) !== undefined` 断言红，:539-541 `ctx.projectId`/`ctx.effective` 在 Result 上不存在编译错） | **采纳。** §3.6-4 补三个用例的断言改法（意图不变：未注入→undefined、注入→ctx 字段、deny→undefined）；§6 ⑤ 组清单与 §7 验证补该测试文件 | §3.6-4、§6、§7 |
+| 2 | §3.1/§9-2「`this.deps` 在箭头闭包里不可用」理由错误：`run()` 是实例方法（agent-runner.ts:110），箭头闭包词法捕获 `this`，`this.deps` 直用即可（handleAbort :230-232 同机制先例） | **采纳。** 注意段理由更正，两写法等价；§9-2 的 open question 撤销（实际不是问题） | §3.1、§9 |
+| 3 | §4.2「解包点全清单」漏 parser.ts:30（`parseToAst` 内的 `parseChildren` 递归调用） | **采纳。** 清单补 :30（实读确认 :30 存在该调用） | §4.2 |
+| 4 | §5.4 表格的 T8 键文本写成整条 if 语句原文，与 §5.1/§5.3 定义的「CallExpression getText() 归一」口径不一致（两种口径下「16 键」结论恰好都成立，但表格误导 baseline 键内容预期） | **采纳。** 表格统一为 CallExpression 口径 | §5.4 |
+| 5 | T8 检测边界漏两种调用形态逃逸：间接引用调用（局部名）与元素访问 `AgentRunner["x"](e)` | **采纳（声明不扩口径）。** §5.1 检测边界段补全；两种形态需刻意改写才出现，现实代码未出现 | §5.1 |
+| 6 | §5.5 自测用例缺 MethodDeclaration 形态——恰是唯一有真实实例的 T7 形态（全仓两处实例都是对象字面量 MethodDeclaration） | **采纳。** 用例清单补 MethodDeclaration | §5.5 |
+| 7 | §4.4(a)「bootstrap 五件」实列六个文件，行号有漂移 | **采纳。** 改「六件」，行号统一为逐文件 grep 实测的 TdbcTemplate.query/execute 调用行 | §4.4 |
+| 8 | §1.1「TOOL_PASSTHROUGH_KEYS（5 码 + TOOL_CANCELLED）」计数错——实为 4 个 ToolError 码 + TOOL_CANCELLED 共 5 元素（tool-runner.ts:34 实读） | **采纳。** 文字修正（:33 源码注释自身的「5 码」计法含糊，一并注明） | §1.1 |
+| 9 | §8 D-1 只写竞速取消，未涵盖「工具自己抛 AbortError」来源（同一 catch 分支的两种来源，改前都按失败展示） | **采纳。** D-1 与 §1.6 措辞覆盖两种来源 | §1.6、§8 |
+| 10 | §4.1 引用 connection.port.ts 行号偏 2 行（「Implementations must reject」在 :10-11、「Nested calls throw」在 :35） | **采纳。** 行号修正（实读确认） | §4.1 |
+
+以下正文均已按上述结论修订（含第 2 轮）。
+
 ## 1. A 工具系统：取消统一走返回值（①组）
 
 ### 1.1 现状（已核实）
@@ -34,7 +51,7 @@
   - 在途取消竞速：`AbortScopeFactory.signalView(signal).race(work, () => AbortError.create())`（tool-runner.ts:125），竞速胜出的 `AbortError` 在 catch 里按形状判定（`name === "AbortError"`）**原样 throw**（tool-runner.ts:148，`nm-throw: keep` 注释 ：147）；
   - 其余未知异常 → `normalizeToolFailure`（tool-runner.ts:151）。
 - `runParallel`（tool-runner.ts:160）→ `drainQueue`（:175-211）→ `await this.call(...)`（:197）；call 的 reject 在 catch（:201-206）里经 `failedOutcome` 收编（见 §0.1 的形态修正）；call 的 `Err` 返回值走 `failedOutcome(result.error)`（:200）。
-- `normalizeToolFailure`（tool-runner.ts:40-45）：`AppError.name`（= key，见 `app-error.ts:188` `this.name = key`）在 `TOOL_PASSTHROUGH_KEYS`（5 码 + TOOL_CANCELLED，tool-runner.ts:34）内直通，否则包 `TOOL_FAILED`。
+- `normalizeToolFailure`（tool-runner.ts:40-45）：`AppError.name`（= key，见 `app-error.ts:188` `this.name = key`）在 `TOOL_PASSTHROUGH_KEYS`（4 个 ToolError 码 + TOOL_CANCELLED，共 5 元素，tool-runner.ts:34——:33 源码注释「原 ToolError 5 码」的计法含糊，实数 5 元素）内直通，否则包 `TOOL_FAILED`。
 
 取消在工具系统内部因此有两种形态：返回值通道（TOOL_CANCELLED）与异常通道（AbortError）。本节把异常通道收掉。
 
@@ -93,7 +110,7 @@ if (typeof e === "object" && e !== null && "name" in e && (e as { name: unknown 
 
 ### 1.6 行为差异声明（A 唯一一处，属「通道」变更豁免范围）
 
-**D-1：agent run 内竞速取消的 tool_result 文案变化。** 改前：用户点停止时在途工具的 outcome error 是 AbortError，`AppErrorOps.is(error, "TOOL_CANCELLED")` 不命中（build-tool-result-block.ts:271、format-tool-output.ts:308），按普通失败展示（错误文案）；改后命中取消分类，展示「工具调用已取消」、块仍 `ok=false`（LLM 知道调用未完成——build-tool-result-block.ts:268 注释语义保持）。这正是通道统一的目的：取消不应伪装成失败。测试影响：`packages/core/test/tool/` 下钉过竞速取消 reject AbortError 的用例（如 tool-runner 相关测试）改为断言 `TOOL_CANCELLED` 的 Err / 取消 outcome；断言跟着新契约改，测试意图（取消路径存在且可识别）不变。
+**D-1：agent run 内取消形态的 tool_result 文案变化（覆盖同一 catch 分支的两种来源）。** 改前：在途竞速取消的 AbortError、以及工具自己抛的 AbortError，都会落到 outcome `{ ok: false, error }`（无 kind——竞速取消经 ：125→:201-206，工具自抛经 ：148 放行同口），`AppErrorOps.is(error, "TOOL_CANCELLED")` 不命中（build-tool-result-block.ts:271、format-tool-output.ts:308），按普通失败展示（错误文案）；改后两种来源统一收成 `TOOL_CANCELLED`，命中取消分类，展示「工具调用已取消」、块仍 `ok=false`（LLM 知道调用未完成——build-tool-result-block.ts:268 注释语义保持）。这正是通道统一的目的：取消不应伪装成失败。测试影响：`packages/core/test/tool/` 下钉过竞速取消 reject AbortError 的用例（如 tool-runner 相关测试）改为断言 `TOOL_CANCELLED` 的 Err / 取消 outcome；断言跟着新契约改，测试意图（取消路径存在且可识别）不变。
 
 ## 2. B MCP：callTool 取消走返回值（④组，第二轮）
 
@@ -265,7 +282,7 @@ const finishRunFailure = async (e: unknown): Promise<Result<AgentRunResult, AppE
 
 取消分支的等价性逐项核对（对照 break 后的正常收尾段 :819-855）：`stopReason` 已被 `handleAbort` 置 `"cancelled"`，FINISHED payload 的 `stopReason` / `vfsMutated`（读闭包 `vfsMutatedInRun`）与正常段同源；`finished` 在失败点必为 false（只由完成路径 :652 置真）；KKV 走 invalidate（正常段 cancelled 落 :846 else 分支，同款 fire-and-forget）；返回 `Result.ok({stepsExecuted, finished, stopReason, rounds})` 的字段值与 break 落出时一致。两路径发出的终态事件恰好一条（取消分支 return 后不再触达 :819 正常段）。
 
-注意：原 `let runError`（:134）删除（只服务失败路径，收进闭包局部）；`this.deps` 在箭头闭包里不可用，须先 `const deps = this.deps;`（上面取消分支示意已按 `deps` 写）——实现组按一种写法定稿，语义不变。主 catch（§3.4）的取消分支保持 `handleAbort("catch_abort")` 后**不 return**、自然落出走正常段——与 finishRunFailure 的取消分支互斥（主 catch 走 finishRunFailure 时已内含同样判定，两条入口不会双发 FINISHED）。
+注意：原 `let runError`（:134）删除（只服务失败路径，收进闭包局部）。`run()` 是实例方法（agent-runner.ts:110），箭头闭包**词法捕获 `this`**——`this.deps` 在 finishRunFailure 里直用即可，无需别名（同在 run() 内的 handleAbort 箭头闭包 ：230-232 即同机制先例）；`const deps = this.deps;` 只是可选的局部别名，两写法语义相同（上方示意按 `deps` 别名写）。主 catch（§3.4）的取消分支保持 `handleAbort("catch_abort")` 后**不 return**、自然落出走正常段——与 finishRunFailure 的取消分支互斥（主 catch 走 finishRunFailure 时已内含同样判定，两条入口不会双发 FINISHED）。
 
 ### 3.2 raiseRunError 的 12 处调用点改造（10 处机械 + 2 处例外）
 
@@ -358,6 +375,11 @@ const finishTurnFailure = (error: unknown): Result<AgentRunResult, AppError> => 
    - 主装配点 ：927：`const skills = await AgentTurnRunner.assembleSkillsToolContext(...); if (!skills.ok) return finishTurnFailure(skills.error);`（原 throw 进主 catch → FAILED('') 补发 + Result.err，finishTurnFailure 逐字覆盖）；
    - 子装配点 runChildAgent :1382：`if (!skills.ok) return Result.err(skills.error);`（原 throw 经工具链被 ToolRunner.call 收编，与 §3.6-3 同口等价）。
 
+   **测试适配（grep 全仓引用核实：生产调用恰为上述两处，测试侧有 3 处直接调用）**：`packages/core/test/tool/skill-tool.test.ts:509-553` 的 describe「assembleSkillsToolContext（主/子两装配点共用）」——:527、:534、:552 直接 `await AgentTurnRunner.assembleSkillsToolContext(...)`。断言随新契约改（意图逐字保留）：
+   - :526-529 与 :547-553 的 undefined 用例：`const r = await AgentTurnRunner.assembleSkillsToolContext(...); assert.ok(r.ok); assert.equal(r.value, undefined);`
+   - :531-545 的字段用例：`const r = await ...; assert.ok(r.ok); const ctx = r.value; assert.ok(ctx != null); assert.equal(ctx.projectId, "proj-9"); assert.equal(ctx.effective.length, 2);`（:542-544 的 effectiveSkills 调用记录断言不动）。
+   该文件挂 ⑤ 组改造（§6），回归在 test/tool 目录跑（§7）。
+
 5. **删除 rethrowRunFailure**：接口成员（:262）、实现（:315-318）、:256-259 的 never 收窄注释同步更新（`return finishTurnFailure(...)` 同样参与收窄）。
 
 ## 4. D SQL 模板解析器改用 Result（②组）
@@ -367,7 +389,7 @@ const finishTurnFailure = (error: unknown): Result<AgentRunResult, AppError> => 
 **解析器内核全 Result 化；tdbc 桥（TdbcTemplate）是唯一的 Result→reject 转码边界。** 理由：
 
 - 全仓 30+ 个仓储/服务持有 `SqlTemplateParser`，查询全部经 `TdbcTemplate.query/execute`（grep 核实：`packages/core/src/domain/**/impl/sqlite-*.repository.ts` 等，清单见 §4.5）；这些模板全是代码内常量，解析失败 = 编程错误。把 `Result` 推给几百个仓储调用点，等于为不可达分支付全仓改造成本（SKILL §3「这个 Result 真的有失败分支吗」）。
-- `TdbcConnection.execute/query` 的平台契约本来就是 reject（`packages/core/src/infra/tdbc/ports/connection.port.ts:12`「Implementations must reject with TdbcError」、:37「Nested calls throw NESTED_TRANSACTION」）——模板解析失败沿同一 reject 通道上行，bootstrap 事务回滚语义不变（现状就是 reject，背景事实 5）。
+- `TdbcConnection.execute/query` 的平台契约本来就是 reject（`packages/core/src/infra/tdbc/ports/connection.port.ts:10-11`「Implementations must reject with {@link TdbcError} `CONNECTION_CLOSED` after {@link close}」、:35「Nested calls throw `NESTED_TRANSACTION`」）——模板解析失败沿同一 reject 通道上行，bootstrap 事务回滚语义不变（现状就是 reject，背景事实 5）。
 - `template-helper.ts` 位于 throw-audit 白名单 `tdbc-driver` 类内（throw-audit.ts:95：`packages/core/src/infra/tdbc/` 前缀 → ALLOWED），边界 throw 的盘点成本为零。
 
 ### 4.2 签名前后对照（全部列全）
@@ -396,7 +418,7 @@ if (!opened.ok) return Result.err(opened.error);
 const { attrs, bodyStart } = opened.value;
 ```
 
-子递归同理，解包点全清单：:155/:160/:175/:186/:214/:229 的 `parseChildren` 调用、:117（parseNodesUntilClose 内）与 :234（choose 分支内）的 `readCloseTag`、:149/:211/:227 的 `readOpenTagHeader`（:211 是 `<when>` 头、:227 是 `<otherwise>` 头）、:154/:165-166/:212 的 `requireAttr`——形态统一为 `const x = SqlTemplateParse.fn(...); if (!x.ok) return Result.err(x.error);`。`parseChildren` 对 `parseNodesUntilClose` 的调用（:43）同款。choose 分支 while 循环内的失败（:203、:225、:244、:247）直接 `return Result.err(...)`（原 throw 位置即 return 位置，控制流不变）。
+子递归同理，解包点全清单：:30（`parseToAst` 内）与 ：155/:160/:175/:186/:214/:229 的 `parseChildren` 调用、:117（parseNodesUntilClose 内）与 ：234（choose 分支内）的 `readCloseTag`、:149/:211/:227 的 `readOpenTagHeader`（:211 是 `<when>` 头、:227 是 `<otherwise>` 头）、:154/:165-166/:212 的 `requireAttr`——形态统一为 `const x = SqlTemplateParse.fn(...); if (!x.ok) return Result.err(x.error);`。`parseChildren` 对 `parseNodesUntilClose` 的调用（:43）同款。choose 分支 while 循环内的失败（:203、:225、:244、:247）直接 `return Result.err(...)`（原 throw 位置即 return 位置，控制流不变）。
 
 **expression.ts（`SqlTemplateExpression`）**：
 
@@ -430,7 +452,7 @@ const { attrs, bodyStart } = opened.value;
 async execute(connection: TdbcConnection, parser: SqlTemplateParser, template: string, params: Record<string, unknown>): Promise<ExecuteResult> {
     const parsed = parser.parse(template, params);
     // nm-throw: keep — tdbc 驱动层 reject 契约（TdbcConnection.execute/query 契约即
-    // reject：CONNECTION_CLOSED / NESTED_TRANSACTION，connection.port.ts:12/:37），
+    // reject：CONNECTION_CLOSED / NESTED_TRANSACTION，connection.port.ts:10-11/:35），
     // 模板解析失败沿同一 reject 通道上行，仓储调用点的错误语义不变；本文件在
     // throw-audit 白名单 tdbc-driver 类内（throw-audit.ts:95）。
     if (!parsed.ok) throw parsed.error;
@@ -442,7 +464,7 @@ async execute(connection: TdbcConnection, parser: SqlTemplateParser, template: s
 
 直接消费 `parser.parse` 的生产点全清单（grep -rn "\.parse(" 过滤 safeParse/JSON.parse/parseInt 与其它 Parser 类型后实测，与 `SqlTemplateParser` 实例相关的共四处）：template-helper.ts:19/:27（§4.3 桥）、sql-template/index.ts:51（入口自身）、tdbc-conformance/src/suite.ts:287、sqlite-message-checkpoint.repository.ts:68。据此调用方分三类：
 
-- **(a) 走 TdbcTemplate 的（零改动）**：`packages/core/src/domain/**/impl/sqlite-*.repository.ts`（agent-definition、base-sqlite-chat、kkv、provider、saved-model、session-kkv、session-run-state、skill-disabled-rule、smart-sort-rule、usage-record、vfs-content-store、vfs-entry、vfs-revision、workplace）+ `packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts`、`sqlite-project.repository.ts` + `packages/core/src/domain/provider/logic/find-saved-model-references.ts`、`packages/core/src/domain/session-kkv/logic/deferred-file-cache-gc.ts`、`packages/core/src/service/chat/impl/usage-stats.service.ts`、`packages/core/src/service/smart-sort-rule/impl/smart-sort-rule.service.ts`、`packages/core/src/infra/sksp/impl/base-sqlite-secret-store.ts`、bootstrap 五件（novel-master-bootstrap.ts:267/:338、provider/seed-builtin-providers.ts:24、schema-align/schema-column-alignments.ts:116、schema-migrations/schema-migrations-table.ts:13、skills/seed-builtin-skills.ts:172、smart-sort-rule/builtin-smart-sort-rules.ts:127）。这些文件只 new parser 并传给 TdbcTemplate，parse 返回类型变化被桥吸收，**零代码改动**。
+- **(a) 走 TdbcTemplate 的（零改动）**：`packages/core/src/domain/**/impl/sqlite-*.repository.ts`（agent-definition、base-sqlite-chat、kkv、provider、saved-model、session-kkv、session-run-state、skill-disabled-rule、smart-sort-rule、usage-record、vfs-content-store、vfs-entry、vfs-revision、workplace）+ `packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts`、`sqlite-project.repository.ts` + `packages/core/src/domain/provider/logic/find-saved-model-references.ts`、`packages/core/src/domain/session-kkv/logic/deferred-file-cache-gc.ts`、`packages/core/src/service/chat/impl/usage-stats.service.ts`、`packages/core/src/service/smart-sort-rule/impl/smart-sort-rule.service.ts`、`packages/core/src/infra/sksp/impl/base-sqlite-secret-store.ts`、bootstrap 六件（行号均指逐文件 grep 实测的 TdbcTemplate.query/execute 调用行：novel-master-bootstrap.ts:268/:340、provider/seed-builtin-providers.ts:28、schema-align/schema-column-alignments.ts:116、schema-migrations/schema-migrations-table.ts:29/:39、skills/seed-builtin-skills.ts:173/:195、smart-sort-rule/builtin-smart-sort-rules.ts:130）。这些文件只 new parser 并传给 TdbcTemplate，parse 返回类型变化被桥吸收，**零代码改动**。
 - **(b) 直接调 parser.parse 的（解包，共两处生产点）**：
   1. `packages/core/src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.ts:68`——模块级私有 `insertMultiValues`（:56-70，`seedCheckpoints` 端口方法的分块播种）内 `const rendered = parser.parse(template, { rows: chunk });` + `await conn.execute(rendered.sql, params);`。改为：
 
@@ -478,7 +500,14 @@ async execute(connection: TdbcConnection, parser: SqlTemplateParser, template: s
 
 **站点键文本（baseline 键的身份成分）**：T8 取 CallExpression 原文空白归一（含实参，与 T1-T6 的「语句原文」惯例同构）；T7 定义站点取**合成文本** `never-throw helper: <名>`。合成文本的理由：T7 若取函数体内 throw 语句原文（如 `throw error;`），会与 baseline 既有的 T6 键碰撞——`raiseRunError` 体内的 `throw error;` 本就是 `scripts/throw-audit-baseline.json` 已登记条目（实测存在键 `packages/core/src/service/agent/impl/agent-runner.ts#throw error;`），而 `throwGateCompare`（throw-audit.ts:321-337）只查键存在不查 form，撞键会让 T7 站点被误判「已登记」。合成文本后 T6 与 T7 并存各占一键：baseline 重写时 T7 入 UNTRIAGED（T6 沿用既有登记），⑤ 删除 helper 后两键一起 dropped。
 
-**检测边界（如实声明）**：T7 按「返回类型**标注**为 never」判定（`retBucketOf` 只读显式 typeNode，:163-175，typeNode 缺失即 none 桶）——这是任务 E 的字面定义口径。两类形态不在 T7/T8 范围内：①未标注但恒抛的函数（TS 推断 never）——判定需要 type checker 的推断类型，AST-only 做不到，本轮不扩（若后续要扩，需在 `throwSitesOfText` 之外引入 `ts.createProgram` 做类型检查，成本另评）；②多语句体的 helper（如「清理后 throw」形态）——不属于「转抛 helper」定义（那是 catch-清完再抛，由 T1-T6 的 catch 判定覆盖）。因此 T7/T8 的盘点覆盖面 = 显式标注 never 的转抛 helper 及其全部调用点，设计按此口径验收，不宣称覆盖推断型。
+**检测边界（如实声明）**：T7 按「返回类型**标注**为 never」判定（`retBucketOf` 只读显式 typeNode，:163-175，typeNode 缺失即 none 桶）——这是任务 E 的字面定义口径。四类形态不在 T7/T8 范围内，逐一声明：
+
+- ①未标注但恒抛的函数（TS 推断 never）——判定需要 type checker 的推断类型，AST-only 做不到，本轮不扩（若后续要扩，需在 `throwSitesOfText` 之外引入 `ts.createProgram` 做类型检查，成本另评）；
+- ②多语句体的 helper（如「清理后 throw」形态）——不属于「转抛 helper」定义（那是 catch-清完再抛，由 T1-T6 的 catch 判定覆盖）；
+- ③间接引用调用（`const r = AgentRunner.raiseRunError; r(e);`）——callee 是不在名单里的局部名，不产生 T8 站点；
+- ④元素访问调用（`AgentRunner["raiseRunError"](e)`）——callee 非 Identifier / PropertyAccessExpression，不产生 T8 站点。
+
+③④需刻意改写才能绕过，现实代码未出现（grep 核实无此形态），按「边界如实声明、不扩口径」处理。因此 T7/T8 的盘点覆盖面 = 显式标注 never 的转抛 helper、其直呼调用（裸标识符与属性访问链），设计按此口径验收。
 
 ### 5.2 断言类豁免（不算转抛 helper）
 
@@ -497,7 +526,7 @@ async execute(connection: TdbcConnection, parser: SqlTemplateParser, template: s
 - verdict 沿用现有矩阵（KEEP > ALLOWED > VIOLATION > BOUNDARY > VIOLATION-B）：
   - T7 定义站点：ret 桶 = never → 落 VIOLATION-B（无 catch）——这类 helper 的唯一修法就是删除，判定正确；
   - T8 调用站点：按所在函数返回形态判——`agent-runner.run`（async-result）里的 12 处 → VIOLATION、`run-agent-turn` 侧 4 处按所在函数形态各判；普通函数有 catch → BOUNDARY；无 catch → VIOLATION-B。
-- 站点键同构：`${file}#${text}`（text = 站点原文空白归一；T8 取 CallExpression 的 `getText()` 归一，含实参）。同文件同文本的多个调用点共享一个 baseline 条目（与 T1-T6 对同文本 throw 的既有处理一致——agent-runner.ts:594 与 :633 的 `if (!appended.ok) AgentRunner.raiseRunError(appended.error)` 文本相同，共享键）。
+- 站点键同构：`${file}#${text}`（text = 站点原文空白归一；T8 取 CallExpression 的 `getText()` 归一，含实参）。同文件同文本的多个调用点共享一个 baseline 条目（与 T1-T6 对同文本 throw 的既有处理一致——agent-runner.ts:594 与 :633 的 CallExpression 原文同为 `AgentRunner.raiseRunError(appended.error)`，共享键）。
 - 白名单（`ALLOWED_FILE_RULES` :93-97）与事务回调判定对 T7/T8 照常适用（`allowCategoryOf` 以站点节点入参，T7 传函数节点所在位置、T8 传调用点位置，`isTransactionCallbackArgument` 需兼容「祖先函数」语义不变）。
 
 ### 5.4 与 baseline / gate 的关系（时序）
@@ -506,7 +535,7 @@ async execute(connection: TdbcConnection, parser: SqlTemplateParser, template: s
 
    | helper | 定义键 | 调用键 | 合计 |
    |---|---|---|---|
-   | raiseRunError | 1（`never-throw helper: raiseRunError`） | 10（12 处调用中 :594/:633/:786 同文本 `if (!appended.ok) AgentRunner.raiseRunError(appended.error);` 共 1 键，其余 9 处文本互异） | 11 |
+   | raiseRunError | 1（`never-throw helper: raiseRunError`） | 10（12 处调用中 :594/:633/:786 的 CallExpression 原文相同——`AgentRunner.raiseRunError(appended.error)`，按 §5.1/§5.3 的 T8 键口径归一空白后共 1 键，其余 9 处文本互异） | 11 |
    | rethrowRunFailure | 1（`never-throw helper: rethrowRunFailure`） | 4（:1084/:1370/:1422/:1546 文本互异） | 5 |
 
    **合计 16 个站点键**。与既有 baseline 键的关系：raiseRunError 体内的 `throw error;` 与 run-agent-turn 内层的 `throw e;` 等 T6 站点已被现行 baseline 登记（实测键 `packages/core/src/service/agent/impl/agent-runner.ts#throw error;` 等存在）——T7 用合成文本（§5.1）不与之碰撞，两键并存。
@@ -516,7 +545,7 @@ async execute(connection: TdbcConnection, parser: SqlTemplateParser, template: s
 
 ### 5.5 工具自测
 
-`tools/nm-style/test/` 新增 T7/T8 用例（走 `throwSitesOfText` 内存构造）：never+throw 定义被报（T7）、对象属性箭头定义被报（T7，模拟 raiseRunError 形态）、裸调用与属性链调用各报一条 T8（带 helper 名）、`assertXxx` 与 `throw new AssertionError` 豁免、keep 注释判 KEEP、传递链（body 只 return 调用另一 T7）被报。运行命令见 §7。
+`tools/nm-style/test/` 新增 T7/T8 用例（走 `throwSitesOfText` 内存构造）：never+throw 定义被报（T7，**两种形态都钉**——对象字面量 MethodDeclaration（`raiseRunError(error: unknown): never {` 即真实形态，全仓两处实例皆是）与 PropertyAssignment 箭头）、裸调用与属性链调用各报一条 T8（带 helper 名）、`assertXxx` 与 `throw new AssertionError` 豁免、keep 注释判 KEEP、传递链（body 只 return 调用另一 T7）被报。运行命令见 §7。
 
 ## 6. 分工与波次（五组互不等待）
 
@@ -526,7 +555,7 @@ async execute(connection: TdbcConnection, parser: SqlTemplateParser, template: s
 | ② SQL 模板 | 第一轮 | `packages/core/src/infra/sql-template/parser.ts`、`expression.ts`、`evaluator.ts`、`index.ts`；`packages/core/src/infra/tdbc/logic/template-helper.ts`；`packages/tdbc-conformance/src/suite.ts:287`；`packages/core/src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.ts`（:68 解包，见 §4.4(b)——严格说越出②的任务清单、属⑤的「其余消费方」，单文件单函数改动，归②顺手改，归属请主代理确认）；`packages/core/test/infra/sql-template/`。其余 bootstrap 与仓储调用方零改动 | 无（与①③完全无关） |
 | ③ 盘点工具 | 第一轮 | `tools/nm-style/src/rules/throw-audit.ts`、`tools/nm-style/src/cli.ts`（文字）、`.agents/skills/nm-code-style/SKILL.md`（:54）、`tools/nm-style/test/`。baseline 由流程统一重写 | 无（与①②完全无关） |
 | ④ MCP | 第二轮 | `packages/core/src/domain/mcp/ports/mcp-connection.port.ts`、`packages/core/src/infra/mcp/impl/create-mcp-connection-manager.ts`、`packages/core/src/domain/mcp/logic/to-nm-tool.ts`；`packages/core/test/mcp/`；`docs/Iterations/mcp-support/spec.md`。register-builtin-tools.ts 类型自动跟随无改动 | 逻辑上独立（callTool 契约变化不依赖①代码）；按任务要求排第二轮，回归跑在①之后 |
-| ⑤ 智能体收尾 | 第二轮 | `packages/core/src/service/agent/impl/agent-runner.ts`、`packages/core/src/service/agent/logic/run-agent-turn.ts`；`packages/core/test/agent/` 回归。A 的消费方适配经 §1.5 核实为零代码改动（agent-runner 与 user-vfs-turn 链均无需改） | ①的新契约（test/tool 回归口径）；C 本身不依赖④ |
+| ⑤ 智能体收尾 | 第二轮 | `packages/core/src/service/agent/impl/agent-runner.ts`、`packages/core/src/service/agent/logic/run-agent-turn.ts`、`packages/core/test/tool/skill-tool.test.ts`（assembleSkillsToolContext 三用例断言随新契约改，§3.6-4）；`packages/core/test/agent/` 回归。A 的消费方适配经 §1.5 核实为零代码改动（agent-runner 与 user-vfs-turn 链均无需改） | ①的新契约（test/tool 回归口径）；C 本身不依赖④ |
 
 ## 7. 验证命令（各组改完必跑）
 
@@ -540,6 +569,7 @@ cd D:/worktree/mcp-support/packages/core && node scripts/run-tests.mjs --dir tes
 cd D:/worktree/mcp-support/packages/core && node scripts/run-tests.mjs --dir test/infra/tdbc           # ②回归
 cd D:/worktree/mcp-support/packages/core && node scripts/run-tests.mjs --dir test/mcp       # ④
 cd D:/worktree/mcp-support/packages/core && node scripts/run-tests.mjs --dir test/agent     # ⑤
+cd D:/worktree/mcp-support/packages/core && node scripts/run-tests.mjs --dir test/tool      # ⑤（skill-tool.test.ts 的 assembleSkillsToolContext 断言随 §3.6-4 新契约改，与 ① 的 test/tool 回归同目录）
 
 # ③ 盘点工具自测（SKILL §8：glob 带引号、并发钉死）
 cd D:/worktree/mcp-support/tools/nm-style && node --test --test-concurrency=1 "test/*.test.mjs"
@@ -565,7 +595,6 @@ nm-style check --changed
 ## 9. Open questions / blockers
 
 1. **§0 的四处背景事实出入**需要主代理知悉（尤其第 1、4 条——它们直接改变了 A 的形态变化判定与 C 的等价性论证基础；本设计以代码实况为准）。
-2. §3.1 的 `finishRunFailure` 在箭头闭包内无法直用 `this.deps`，实现组需定稿一种 `this` 捕获写法（`const deps = this.deps` 或改普通 function）——语义无差异，不算阻塞。
-3. `assembleSkillsToolContext` 的转抛收掉（§3.6-4）超出任务 C 点名的「rethrowRunFailure 删除」字面范围，但它是同一欠账注释（:360）标记的转抛形态、且收口函数已经就位——若主代理认为越界，可从⑤中拆出，不影响其余设计。
-4. `sqlite-message-checkpoint.repository.ts`（§4.4(b)）严格说越出任务②的文件清单（它是 parse 签名变化的直接编译受害者，单文件单函数改动）——文档暂归②顺手改，归属（②或⑤）请主代理确认。
-5. §5.3 的 T8 两遍扫描会让 `throw-audit` 全量扫描耗时约翻倍（每文件解析两次）——若不可接受，可改为 pass1 缓存 SourceFile 复用；实现组自测后定。
+2. `assembleSkillsToolContext` 的转抛收掉（§3.6-4）超出任务 C 点名的「rethrowRunFailure 删除」字面范围，但它是同一欠账注释（:360）标记的转抛形态、且收口函数已经就位——若主代理认为越界，可从⑤中拆出，不影响其余设计。
+3. `sqlite-message-checkpoint.repository.ts`（§4.4(b)）严格说越出任务②的文件清单（它是 parse 签名变化的直接编译受害者，单文件单函数改动）——文档暂归②顺手改，归属（②或⑤）请主代理确认。
+4. §5.3 的 T8 两遍扫描会让 `throw-audit` 全量扫描耗时约翻倍（每文件解析两次）——若不可接受，可改为 pass1 缓存 SourceFile 复用；实现组自测后定。
