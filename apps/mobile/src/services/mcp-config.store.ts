@@ -22,7 +22,7 @@
 import {Result, type AppError} from '@novel-master/core/errors';
 import type {KkvService} from '@novel-master/core/kkv';
 import {LogFactory} from '@novel-master/core/log';
-import {McpConfigStoreFactory, McpConnectionManagerFactory, McpOAuthFactory, McpServerRename, MCP_DEFAULT_TIMEOUT_MS, type McpConnectionManager, type McpHttpRequest, type McpHttpResponse, type McpOAuth, type McpRequestFn, type McpServerConfig} from '@novel-master/core/mcp';
+import {McpConfigStoreFactory, McpConnectionManagerFactory, McpOAuthFactory, McpServerRename, MCP_DEFAULT_TIMEOUT_MS, type McpConnectionManager, type McpHttpRequest, type McpHttpResponse, type McpOAuth, type McpRequestFn, type McpServerConfig, type McpServerStatus} from '@novel-master/core/mcp';
 import type {SecretStore} from '@novel-master/core/sksp';
 
 const log = LogFactory.create('mcp.config');
@@ -42,7 +42,7 @@ export interface McpRuntimeSlice {
     /** 行开关：按 id 改 enabled 落库（列表页乐观更新的写通道）。 */
     readonly setEnabled: (serverId: string, enabled: boolean) => Promise<void>;
     /** 显式连接某台服务器（开关打开 / 保存 / 测试连接 / 授权成功）：作废缓存与在途尝试后连接并等结果。进页面触发的连接不经本切片，界面直接调连接管理器的 connectUnconnected。 */
-    readonly connect: (serverId: string) => Promise<void>;
+    readonly connect: (serverId: string) => Promise<McpServerStatus>;
     /** 删除 server（core 口径连带清 SKSP bearer/headers/oauth refs 与工具禁用清单）+ 镜像与连接缓存同步失效。 */
     readonly remove: (serverId: string) => Promise<void>;
     /** 读某 server 的禁用工具名清单（镜像同步读）。 */
@@ -155,9 +155,7 @@ export const McpRuntimeFactory = {
                 }
                 await persistThrough(() => store.save({...config, enabled}), serverId);
             },
-            connect: async (serverId: string) => {
-                await connectionManager.connect(serverId);
-            },
+            connect: (serverId: string) => connectionManager.connect(serverId),
             remove: async (serverId: string) => {
                 await persistThrough(() => store.remove(serverId), serverId);
             },

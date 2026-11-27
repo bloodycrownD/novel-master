@@ -8,7 +8,7 @@
  */
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import type { IpcResult, McpServerConfig, McpServerStatus } from "@shared/ipc-types";
-import { ipcMcpConnectUnconnected, ipcMcpDeleteServer, ipcMcpListServers, ipcMcpSaveServer, ipcMcpServerStatuses, ipcMcpTestConnection } from "@/ipc/client";
+import { ipcMcpConnectUnconnected, ipcMcpDeleteServer, ipcMcpListServers, ipcMcpSaveServer, ipcMcpServerStatuses, ipcMcpConnect } from "@/ipc/client";
 import { Button } from "@/components/ui/Button";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { ContextMenu } from "@/components/ui/ContextMenu";
@@ -65,6 +65,12 @@ export function McpServersView({ nav }: { nav: SettingsNavHandle }) {
     useEffect(() => {
         void reload().then(connectRound);
     }, [reload, connectRound]);
+
+    /** 行开关：先存（bearerToken 不传 = 保留已存值），存成功后连一次并回读状态。关掉时连接管理器不联网，直接返回。 */
+    const toggleServer = async (server: McpServerConfig, enabled: boolean): Promise<void> => {
+        const saved = await runWrite(() => ipcMcpSaveServer({ id: server.id, description: server.description, transportType: server.transport.type, url: server.transport.type === "stdio" ? undefined : server.transport.url, timeoutMs: server.timeoutMs, authType: server.auth.type, enabled }));
+        if (saved) void ipcMcpConnect({ serverId: server.id }).then(() => void reload());
+    };
 
     /** busy 互斥的写模板：失败置页内错误返回 false；成功回读后 toast，busy 复位交 finally。 */
     const runWrite = async (action: () => Promise<IpcResult<unknown>>, success?: string): Promise<boolean> => {
@@ -182,7 +188,7 @@ export function McpServersView({ nav }: { nav: SettingsNavHandle }) {
                                 <Switch
                                     checked={server.enabled}
                                     disabled={busy || connecting}
-                                    onChange={(next) => void runWrite(() => ipcMcpSaveServer({ id: server.id, description: server.description, transportType: server.transport.type, url: server.transport.type === "stdio" ? undefined : server.transport.url, timeoutMs: server.timeoutMs, authType: server.auth.type, enabled: next }))}
+                                    onChange={(next) => void toggleServer(server, next)}
                                     aria-label={server.id}
                                 />
                             </span>
@@ -220,7 +226,7 @@ export function McpServersView({ nav }: { nav: SettingsNavHandle }) {
                 onSelect={(action) => {
                     const server = servers?.find((item) => item.id === menu?.serverId);
                     if (server == null) return;
-                    if (action === "test") void runWrite(() => ipcMcpTestConnection({ serverId: server.id }));
+                    if (action === "test") void runWrite(() => ipcMcpConnect({ serverId: server.id }));
                     if (action === "delete") setDeleteTarget(server);
                 }}
                 onClose={() => setMenu(null)}

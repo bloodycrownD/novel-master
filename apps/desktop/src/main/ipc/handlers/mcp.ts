@@ -28,7 +28,7 @@ import type {
     McpOAuthStatusesDto,
     McpSaveServerRequest,
     McpSetToolDisabledRequest,
-    McpTestConnectionRequest,
+    McpConnectRequest,
     McpToolListRequest,
     McpToolRowDto,
 } from "../../../../shared/ipc-types.js";
@@ -162,10 +162,9 @@ export namespace Mcp {
                 const saved = await rt.mcpConfig.save(config);
                 if (!saved.ok) return { ok: false, error: FormatIpcError.format(saved.error) };
             }
+            // 配置变了，旧连接与缓存作废；作废是保存的一致性动作。连接是另一个原子操作（Mcp.connect），
+            // 存完要不要连由界面按场景决定——这里不连。
             rt.mcp.connectionManager.invalidate(id);
-            // 启用保存后自动连接（列表开关与详情保存同一条路，显式动作先作废再连并等结果）：
-            // 失败原因经 serverStatuses 的 failure.detail 带出，不影响保存结果；停用只作废不连接。
-            if (config.enabled) await rt.mcp.connectionManager.connect(id).catch(() => undefined);
             return IpcResults.ok({ serverId: id, ...(oauthMigrated === undefined ? {} : { oauthMigrated }) });
         } catch (err) {
             return { ok: false, error: FormatIpcError.format(err) };
@@ -185,8 +184,8 @@ export namespace Mcp {
         }
     }
 
-    /** 测试连接：作废缓存后连接并等结果（失败原因在 `failure.detail` 原文透出）。 */
-    export async function testConnection(req: McpTestConnectionRequest): Promise<IpcResult<McpServerStatus>> {
+    /** 连接一次并等结果（作废旧缓存；失败原因在 `failure.detail` 原文透出）。停用的服务器不联网，直接返回当前状态。保存后连、测试连接、列表菜单都调它。 */
+    export async function connect(req: McpConnectRequest): Promise<IpcResult<McpServerStatus>> {
         try {
             const built = await DesktopRuntimeSingleton.get();
             if (!built.ok) return { ok: false, error: FormatIpcError.format(built.error) };

@@ -186,46 +186,48 @@ export function McpServerDetailScreen() {
 
     // nm-style: keep-local — 保存分流 create / save / rename 三分支，共享 writeOp 互斥态、密钥写入与失败回读；内联进 footer 按钮会拆散互斥与回读状态机
     // nm-style: keep-local — 写操作互斥模板：保存与清除密钥共用 writeOp 互斥态、失败 toast 映射与失败后重读。
-    const runWrite = async (op: WriteOp, go: () => Promise<void>): Promise<void> => {
+    const runWrite = async (op: WriteOp, go: () => Promise<void>): Promise<boolean> => {
         if (writeOp != null) {
-            return;
+            return false;
         }
         setWriteOp(op);
         try {
             await go();
+            return true;
         } catch (cause) {
             const failKeys: Record<WriteOp, SettingsMessageKey> = {save: 'settings.mcp.toast.save_failed.mobile', clear_key: 'settings.mcp.toast.clear_key_failed.mobile'};
             showToast(ToastMessage.toast(settingsTranslator({key: failKeys[op]}), cause));
             await load({silent: true});
+            return false;
         } finally {
             setWriteOp(null);
         }
     };
 
-    // nm-style: keep-local — 保存按钮的事件处理函数，唯一调用点是 onPress 绑定（事件处理函数不内联进 JSX）
-    const handleSave = async () => {
+    // nm-style: keep-local — 保存按钮与「测试连接」共用的落库步骤（校验 + create / save / rename 三分支），共享 writeOp 互斥态；只存不连。
+    const persist = async (): Promise<string | null> => {
         if (writeOp != null) {
-            return;
+            return null;
         }
         const id = draft.id.trim();
         const description = draft.description.trim();
         const url = draft.url.trim();
         if (id === '') {
             showToast(settingsTranslator({key: 'settings.mcp.validation.id_required'}));
-            return;
+            return null;
         }
         if (!McpServerConfigOps.isValidId(id)) {
             showToast(settingsTranslator({key: 'settings.mcp.validation.id_invalid'}));
-            return;
+            return null;
         }
         // 换 ID / 新建撞已有 ID 拦在 UI（镜像同步读）；镜像层的 create / rename 再兜底
         if (id !== serverId && mcp.servers().some(candidate => candidate.id === id)) {
             showToast(settingsTranslator({key: 'settings.mcp.validation.id_exists'}));
-            return;
+            return null;
         }
         if (url === '') {
             showToast(settingsTranslator({key: 'settings.mcp.validation.url_required'}));
-            return;
+            return null;
         }
         const timeoutSeconds = Number.parseInt(draft.timeoutSeconds.trim(), 10);
         const timeoutMs = Number.isFinite(timeoutSeconds) && timeoutSeconds > 0 ? Math.max(MCP_MIN_TIMEOUT_MS, timeoutSeconds * 1000) : MCP_DEFAULT_TIMEOUT_MS;
@@ -245,7 +247,7 @@ export function McpServerDetailScreen() {
             timeoutMs,
             auth,
         };
-        await runWrite('save', async () => {
+        const saved = await runWrite('save', async () => {
             const renamed = serverId != null && serverId !== id;
             const keyDraft = apiKeyDraft.trim();
             // bearer 明文写 SKSP（ref 按目标 id）：三支路各自择时，见各分支注释。
@@ -267,16 +269,28 @@ export function McpServerDetailScreen() {
                 await writeBearerKey();
                 await mcp.save(config);
             }
-            // 保存后自动连接：启用中的服务器不必再点「测试连接」。
-            if (config.enabled) await mcp.connect(config.id).catch(() => undefined);
-            showToast(settingsTranslator({key: 'settings.mcp.toast.saved'}));
-            if (isCreate || renamed) {
-                // 新建 / 换 ID 后 route 参数已失效（新 id 不在 route 上），回列表看新条目
-                navigation.goBack();
-                return;
-            }
-            await load({silent: true});
         });
+        return saved ? id : null;
+    };
+
+    /** 连接某台服务器并回读页面（保存后自动连 / 测试连接共用）。业务失败不走 reject，原因由状态行直显。 */
+    const connectSaved = async (id: string): Promise<void> => {
+        await mcp.connect(id);
+        await load({silent: true});
+    };
+
+    // nm-style: keep-local — 保存按钮的事件处理函数：存 → 提示 → 后台连一次；新建 / 换 ID 回列表（列表页进入时会对从未尝试的服务器发起连接）。
+    const handleSave = async (): Promise<void> => {
+        const id = await persist();
+        if (id == null) {
+            return;
+        }
+        showToast(settingsTranslator({key: 'settings.mcp.toast.saved'}));
+        if (isCreate || id !== serverId) {
+            navigation.goBack();
+            return;
+        }
+        await connectSaved(id);
     };
 
 
@@ -329,7 +343,10 @@ export function McpServerDetailScreen() {
                     tokens={tokens}
                     label={isCreate ? settingsTranslator({key: 'settings.mcp.detail.create_action'}) : settingsTranslator({key: 'settings.mcp.detail.save_action'})}
                     onPress={() => {
-                        handleSave().catch(() => undefined);
+                        handleSave().catch((error: unknown) => {
+                            // 这里只会接到「服务器不在配置里」这类编程错误，留一条日志，不静默吞掉。
+                            log.warn(`MCP 保存后连接意外中止: ${String(error)}`);
+                        });
                     }}
                     loading={writeOp === 'save'}
                     disabled={writeOp != null}
@@ -431,20 +448,28 @@ export function McpServerDetailScreen() {
                     rightAction={
                         <Pressable
                             onPress={() => {
-                                // 测试连接（显式动作）：作废缓存与在途尝试后连接并等结果，结束后同步工具与状态；失败由状态行直显。
-                                if (serverId == null || testing) {
+                                // 测试连接 = 先保存表单，再连一次并显示结果（失败由状态行直显）。
+                                if (serverId == null || writeOp != null || testing) {
                                     return;
                                 }
                                 setTesting(true);
-                                // 业务失败不走 reject（由状态行直显）；这里只会接到「服务器不在配置里」这类编程错误，留一条日志，不静默吞掉。
-                                mcp.connect(serverId)
-                                    .catch((error: unknown) => {
-                                        log.warn(`MCP 测试连接意外中止: ${serverId} ${String(error)}`);
-                                    })
-                                    .finally(() => {
-                                        refreshTools();
-                                        setTesting(false);
-                                    });
+                                void (async () => {
+                                    const id = await persist();
+                                    if (id == null) {
+                                        return;
+                                    }
+                                    if (id !== serverId) {
+                                        // 测试途中改了 ID：页面上的 serverId 已失效，按保存处理回列表。
+                                        showToast(settingsTranslator({key: 'settings.mcp.toast.saved'}));
+                                        navigation.goBack();
+                                        return;
+                                    }
+                                    await connectSaved(id);
+                                    refreshTools();
+                                })().catch((error: unknown) => {
+                                    // 业务失败不走 reject（由状态行直显）；这里只会接到「服务器不在配置里」这类编程错误，留一条日志，不静默吞掉。
+                                    log.warn(`MCP 测试连接意外中止: ${serverId} ${String(error)}`);
+                                }).finally(() => setTesting(false));
                             }}
                             hitSlop={8}
                             disabled={testing}

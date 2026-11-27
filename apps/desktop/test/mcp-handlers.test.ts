@@ -71,14 +71,28 @@ describe("MCP saveServer 编排（T-MH1 / T-D2 / T-D6 / 换 ID 回滚）", () =>
         assert.equal(secretStore.peek("mcp/new/bearer"), undefined, "新 ref 不留半提交密钥");
     });
 
-    it("T-D2：saveServer 启用时调 connect，停用时不调（替换 T-MH5）", async () => {
+    it("T-D2：saveServer 只保存：启用、停用都不发起连接，只作废缓存（存完要不要连由界面决定）", async () => {
         const runtime = makeRuntime({ servers: [bearerServer("a")] });
         runtimeHolder.current = runtime;
         const connectionManager = runtime.mcp.connectionManager;
         await Mcp.saveServer({ id: "a", description: "", transportType: "http", url: "http://a.example.com/mcp", authType: "none", enabled: true });
-        assert.deepEqual(connectionManager.calls.connect, ["a"], "启用保存触发显式连接");
         await Mcp.saveServer({ id: "a", description: "", transportType: "http", url: "http://a.example.com/mcp", authType: "none", enabled: false });
-        assert.deepEqual(connectionManager.calls.connect, ["a"], "停用保存不再触发连接");
+        assert.deepEqual(connectionManager.calls.connect, [], "保存处理器不发起连接");
+        assert.deepEqual(connectionManager.calls.invalidated, ["a", "a"], "每次保存都作废该服务器缓存");
+    });
+
+    it("T-D2b：connect 处理器对指定 server 连接一次并原样返回管理器的状态", async () => {
+        const manager = makeConnectionManager();
+        const failed: McpServerStatus = { serverId: "a", state: "failed", failure: { kind: "network", action: "retry", detail: "ECONNREFUSED" } };
+        manager.connect = async (serverId) => {
+            manager.calls.connect.push(serverId);
+            return failed;
+        };
+        runtimeHolder.current = makeRuntime({ connectionManager: manager, servers: [bearerServer("a")] });
+        const res = await Mcp.connect({ serverId: "a" });
+        assert.equal(res.ok, true);
+        if (res.ok) assert.deepEqual(res.data, failed);
+        assert.deepEqual(manager.calls.connect, ["a"], "只连一次");
     });
 
     it("T-D6：saveServer 以停用状态保存 → 仍调 invalidate，不调 connect（缓存清空由 invalidate 保证）", async () => {

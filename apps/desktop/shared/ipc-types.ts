@@ -212,7 +212,7 @@ export const IPC_CHANNELS = {
     MCP_LIST_SERVERS: "nm:mcp/listServers",
     MCP_SAVE_SERVER: "nm:mcp/saveServer",
     MCP_DELETE_SERVER: "nm:mcp/deleteServer",
-    MCP_TEST_CONNECTION: "nm:mcp/testConnection",
+    MCP_CONNECT: "nm:mcp/connect",
     MCP_SERVER_STATUSES: "nm:mcp/serverStatuses",
     MCP_CONNECT_UNCONNECTED: "nm:mcp/connectUnconnected",
     MCP_TOOL_LIST: "nm:mcp/toolList",
@@ -1868,7 +1868,7 @@ export type McpDeleteServerRequest = {
     readonly serverId: string;
 };
 
-export type McpTestConnectionRequest = {
+export type McpConnectRequest = {
     readonly serverId: string;
 };
 

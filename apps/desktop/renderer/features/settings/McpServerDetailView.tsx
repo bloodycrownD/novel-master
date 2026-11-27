@@ -17,7 +17,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { McpId } from "@shared/logic/mcp-id";
 import type { McpAuthType, McpServerStatus, McpToolRowDto, McpTransportType } from "@shared/ipc-types";
-import { ipcMcpListServers, ipcMcpOAuthStart, ipcMcpOAuthStatuses, ipcMcpSaveServer, ipcMcpSetToolDisabled, ipcMcpTestConnection, ipcMcpToolList } from "@/ipc/client";
+import { ipcMcpListServers, ipcMcpOAuthStart, ipcMcpOAuthStatuses, ipcMcpSaveServer, ipcMcpSetToolDisabled, ipcMcpConnect, ipcMcpToolList } from "@/ipc/client";
 import { Button } from "@/components/ui/Button";
 import { Switch } from "@/components/ui/Switch";
 import { toastSettingsSuccess } from "@/utils/settings-feedback";
@@ -191,12 +191,17 @@ export function McpServerDetailView({ nav }: { nav: SettingsNavHandle }) {
         }
     };
 
+    /** 保存成功后后台连一次，连完回读状态行（停用的服务器连接管理器不联网，直接返回）。 */
+    const connectSaved = (id: string): void => {
+        void ipcMcpConnect({ serverId: id }).then(() => void reload());
+    };
+
     return (
         <SettingsPanel>
             <SettingsFormSection
                 title={isCreate ? settingsTranslator({ key: "settings.mcp.detail.create_action" }) : form.id}
                 footer={
-                    <Button variant="primary" disabled={busy} onClick={() => void save().then((id) => id != null && toastSettingsSuccess(settingsTranslator({ key: "settings.mcp.toast.saved" })))}>
+                    <Button variant="primary" disabled={busy} onClick={() => void save().then((id) => (id == null ? undefined : (toastSettingsSuccess(settingsTranslator({ key: "settings.mcp.toast.saved" })), connectSaved(id))))}>
                         {saveButtonLabel}
                     </Button>
                 }
@@ -322,7 +327,7 @@ export function McpServerDetailView({ nav }: { nav: SettingsNavHandle }) {
                 </SettingsSection>
             ) : null}
             <SettingsSection title={settingsTranslator({ key: "settings.mcp.detail.test_connection" })}>
-                {/* 测试连接：先静默保存（main 按已存配置测），失败态展示 failure.detail 原文（busy 互斥态就地维护）。 */}
+                {/* 测试连接 = 先保存表单，再连一次并显示结果；失败态展示 failure.detail 原文（busy 互斥态就地维护）。 */}
                 <Button
                     variant="secondary"
                     disabled={busy}
@@ -332,7 +337,7 @@ export function McpServerDetailView({ nav }: { nav: SettingsNavHandle }) {
                         try {
                             const id = await save();
                             if (id == null) return;
-                            const res = await ipcMcpTestConnection({ serverId: id });
+                            const res = await ipcMcpConnect({ serverId: id });
                             if (!res.ok) {
                                 setError(res.error.message);
                                 return;

@@ -143,7 +143,7 @@ import {
     type McpServerConfig,
     type McpServerStatus,
     type McpSetToolDisabledRequest,
-    type McpTestConnectionRequest,
+    type McpConnectRequest,
     type McpToolListRequest,
     type McpToolRowDto,
 } from "@shared/ipc-types";
@@ -328,7 +328,7 @@ export function createInvokeClient(invoke: InvokeFn) {
         ipcMcpListServers: noArg<IpcResult<readonly McpServerConfig[]>>(invoke, IPC_CHANNELS.MCP_LIST_SERVERS),
         ipcMcpSaveServer: withReq<McpSaveServerRequest, IpcResult<{ readonly serverId: string; readonly oauthMigrated?: boolean }>>(invoke, IPC_CHANNELS.MCP_SAVE_SERVER),
         ipcMcpDeleteServer: withReq<McpDeleteServerRequest, IpcResult<void>>(invoke, IPC_CHANNELS.MCP_DELETE_SERVER),
-        ipcMcpTestConnection: withReq<McpTestConnectionRequest, IpcResult<McpServerStatus>>(invoke, IPC_CHANNELS.MCP_TEST_CONNECTION),
+        ipcMcpConnect: withReq<McpConnectRequest, IpcResult<McpServerStatus>>(invoke, IPC_CHANNELS.MCP_CONNECT),
         ipcMcpServerStatuses: noArg<IpcResult<readonly McpServerStatus[]>>(invoke, IPC_CHANNELS.MCP_SERVER_STATUSES),
         ipcMcpConnectUnconnected: noArg<IpcResult<void>>(invoke, IPC_CHANNELS.MCP_CONNECT_UNCONNECTED),
         ipcMcpToolList: withReq<McpToolListRequest, IpcResult<readonly McpToolRowDto[]>>(invoke, IPC_CHANNELS.MCP_TOOL_LIST),
