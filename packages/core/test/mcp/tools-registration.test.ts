@@ -36,7 +36,7 @@ const mockToolCtx: BuiltinToolContext = {
 };
 
 /** 注册测试不触达调用通道的 stub 管理器（callTool 恒失败，防误用静默通过）。 */
-const stubManager = (): McpConnectionManager => ({cachedTools: () => [], connectUnconnected: async () => {}, connect: async () => ({serverId: "stub", state: "pending"}), serverStatuses: () => [], callTool: async () => Result.err({kind: "protocol", action: "report", detail: "stub: 注册测试不应触达 callTool"}), invalidate: () => {}, closeAll: async () => {}});
+const stubManager = (): McpConnectionManager => ({cachedTools: () => [], serverTools: () => [], connectUnconnected: async () => {}, connect: async () => ({serverId: "stub", state: "pending"}), serverStatuses: () => [], callTool: async () => Result.err({kind: "protocol", action: "report", detail: "stub: 注册测试不应触达 callTool"}), invalidate: () => {}, closeAll: async () => {}});
 
 /** 缓存条目工厂：本组用例只关心 serverId 与工具名。 */
 const mcpSnapshot = (serverId: string, toolNames: readonly string[], toolDescription?: string): readonly McpToolSnapshot[] => toolNames.map((toolName) => ({ serverId, toolName, ...(toolDescription === undefined ? {} : {toolDescription}) }));

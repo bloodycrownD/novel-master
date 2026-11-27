@@ -243,23 +243,24 @@ export const McpConnectionManagerFactory = {
         };
 
         /**
-         * nm-style: keep-public — McpConnectionManager port 契约的实现方法（装配与
-         * 双端目录读取面）：同步读缓存，读取前先跑撞名检测。
+         * nm-style: keep-public — McpConnectionManager port 契约的实现方法（详情页工具
+         * 卡的读取面）：原样返回一台服务器缓存里的全部工具。不过滤开关、不看连接
+         * 状态、自己不跑撞名检测（撞名由另外两个读取口顺带检测）——卡上的开关要看得到被关掉的工具才打得回来。
          */
-        const cachedTools = (options: {readonly includeDisabled?: boolean} = {}): readonly McpToolSnapshot[] => {
+        const serverTools = (serverId: string): readonly McpToolSnapshot[] => connections.get(serverId)?.snapshots ?? [];
+
+        /**
+         * nm-style: keep-public — McpConnectionManager port 契约的实现方法（装配读取
+         * 面）：同步读缓存，读取前先跑撞名检测。
+         */
+        const cachedTools = (): readonly McpToolSnapshot[] => {
             detectSlugConflicts();
             const tools: McpToolSnapshot[] = [];
-            const includeDisabled = options.includeDisabled === true;
             for (const config of deps.listServers()) {
                 if (!config.enabled || !McpServerConfigOps.isTransportSupported(config)) continue;
                 const entry = connections.get(config.id);
                 // 装配面只返回「未撞名、未处于 failed」服务器的、未被关掉的工具；connecting 期间保留旧缓存继续可用。
-                // includeDisabled 是详情页工具卡的读取面：被关掉的工具与撞名标记后的快照都要看得见，否则关掉后就没法再打开。
-                if (entry === undefined || entry.snapshots.length === 0 || (!includeDisabled && entry.status.state === "failed")) continue;
-                if (includeDisabled) {
-                    tools.push(...entry.snapshots);
-                    continue;
-                }
+                if (entry === undefined || entry.snapshots.length === 0 || entry.status.state === "failed") continue;
                 const disabled = deps.disabledTools(config.id);
                 tools.push(...entry.snapshots.filter((tool) => !disabled.includes(tool.toolName)));
             }
@@ -406,6 +407,6 @@ export const McpConnectionManagerFactory = {
             await Promise.allSettled(clients.map((client) => client.close()));
         };
 
-        return {cachedTools, connectUnconnected, connect, serverStatuses, callTool, invalidate, closeAll};
+        return {cachedTools, serverTools, connectUnconnected, connect, serverStatuses, callTool, invalidate, closeAll};
     },
 } as const;

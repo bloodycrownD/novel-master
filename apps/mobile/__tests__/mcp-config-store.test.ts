@@ -81,6 +81,7 @@ function createSecretStore(initial: Record<string, string> = {}) {
 function createFakeManager() {
     return {
         cachedTools: jest.fn(() => []),
+        serverTools: jest.fn(() => []),
         connectUnconnected: jest.fn(async () => undefined),
         connect: jest.fn(async (serverId: string) => ({serverId, state: 'ready' as const})),
         serverStatuses: jest.fn(() => []),

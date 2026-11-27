@@ -78,6 +78,7 @@ function textDoneResponse(text: string): LlmChatResult {
 /** 注册测试不触达调用通道的 stub 管理器（cachedTools 返回一条固定快照）。 */
 function stubMcpManager(): McpConnectionManager {
     return {
+        serverTools: () => [],
         cachedTools: () => [{ serverId: "fs", toolName: "query", toolDescription: "查询" }],
         connectUnconnected: async () => {},
         connect: async () => ({ serverId: "fs", state: "pending" }),

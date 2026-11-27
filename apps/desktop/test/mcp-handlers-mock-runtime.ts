@@ -149,12 +149,16 @@ export interface MockAgentRegistry {
 
 /** 内存连接管理器：记录缓存读取 / 进页连接 / 显式连接 / invalidate 的调用痕迹（对齐 core 端口成员）。 */
 export function makeConnectionManager(cached: readonly McpToolSnapshot[] = []): MockConnectionManager {
-    const calls = { cached: 0, connectUnconnected: 0, connect: [] as string[], invalidated: [] as string[] };
+    const calls = { cached: 0, serverTools: 0, connectUnconnected: 0, connect: [] as string[], invalidated: [] as string[] };
     return {
         calls,
         cachedTools: () => {
             calls.cached += 1;
             return cached;
+        },
+        serverTools: (serverId) => {
+            calls.serverTools += 1;
+            return cached.filter((tool) => tool.serverId === serverId);
         },
         connectUnconnected: async () => {
             calls.connectUnconnected += 1;
@@ -173,8 +177,9 @@ export function makeConnectionManager(cached: readonly McpToolSnapshot[] = []): 
 }
 
 export interface MockConnectionManager {
-    readonly calls: { cached: number; connectUnconnected: number; connect: string[]; invalidated: string[] };
+    readonly calls: { cached: number; serverTools: number; connectUnconnected: number; connect: string[]; invalidated: string[] };
     cachedTools(): readonly McpToolSnapshot[];
+    serverTools(serverId: string): readonly McpToolSnapshot[];
     connectUnconnected(): Promise<void>;
     connect(serverId: string): Promise<McpServerStatus>;
     serverStatuses(): readonly McpServerStatus[];

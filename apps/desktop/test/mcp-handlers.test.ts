@@ -125,6 +125,7 @@ describe("MCP 进页连接 / 工具清单 / OAuth（T-D1 / T-D3 / T-D5）", () =
         const res = await Mcp.toolList({ serverId: "a" });
         assert.equal(res.ok, true);
         if (res.ok) assert.deepEqual(res.data.map((row) => row.toolName), ["toolA"], "只含目标 server 的缓存工具");
+        assert.deepEqual([manager.calls.serverTools, manager.calls.cached], [1, 0], "行清单走详情页读取面 serverTools，不走带过滤的装配读取面 cachedTools");
         assert.deepEqual(manager.calls.connect, [], "不发起显式连接");
         assert.equal(manager.calls.connectUnconnected, 0, "不发起进页连接轮");
     });
