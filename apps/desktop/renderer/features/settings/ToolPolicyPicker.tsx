@@ -1,13 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { AgentToolCatalog, type AgentToolCatalogMcpTool } from "@shared/config-forms/agent";
+import { BUILTIN_TOOL_CATALOG } from "@shared/config-forms/agent";
 import { coreT } from "@shared/logic/core-i18n";
 import { BatchCheckbox } from "@/components/batch/BatchCheckbox";
 
 type Props = {
     selected: readonly string[];
     onChange: (selected: string[]) => void;
-    /** 页面打开时刻的 MCP 工具快照；缺省 = 未配置，mcp 分组只显示提示占位（不参与勾选与计数）。 */
-    mcpTools?: readonly AgentToolCatalogMcpTool[];
 };
 
 /**
@@ -18,7 +16,7 @@ type Props = {
  * `.picker-modal` 样式的弹层（复用 desktop 现有模态外壳），内含搜索 + 多选 + 确定/取消。
  * 多选草稿存在组件内 Set，点确定才提交回 onChange 并关闭。
  */
-export function ToolPolicyPicker({ selected, onChange, mcpTools }: Props) {
+export function ToolPolicyPicker({ selected, onChange }: Props) {
     const [open, setOpen] = useState(false);
     const [draft, setDraft] = useState<readonly string[]>(selected);
     const [query, setQuery] = useState("");
@@ -36,18 +34,16 @@ export function ToolPolicyPicker({ selected, onChange, mcpTools }: Props) {
 
     const draftSet = useMemo(() => new Set(draft), [draft]);
 
-    // 页面打开时刻的 catalog 快照：mcp 分组由注入的 prop 同步组装（spec §九，不接 Promise）
-    const entries = useMemo(() => AgentToolCatalog.get({ mcpTools: () => mcpTools ?? [] }).flatMap((group) => group.entries), [mcpTools]);
-    const total = entries.filter((entry) => !entry.placeholder).length;
+    const total = BUILTIN_TOOL_CATALOG.length;
 
     // nm-style: keep-local — useMemo 的回调带 deps 时必须多行；单行化需改运行语义
     const filtered = useMemo(() => {
         const q = query.trim().toLowerCase();
         if (q === "") {
-            return entries;
+            return BUILTIN_TOOL_CATALOG;
         }
-        return entries.filter((item) => item.name.toLowerCase().includes(q) || item.description.toLowerCase().includes(q));
-    }, [entries, query]);
+        return BUILTIN_TOOL_CATALOG.filter((item) => item.name.toLowerCase().includes(q) || item.description.toLowerCase().includes(q));
+    }, [query]);
 
     const toggle = (name: string) => {
         if (draftSet.has(name)) {
@@ -97,17 +93,6 @@ export function ToolPolicyPicker({ selected, onChange, mcpTools }: Props) {
                             />
                             <ul className="picker-modal__list tool-policy-picker__modal-list">
                                 {filtered.map((item) => {
-                                    if (item.placeholder) {
-                                        return (
-                                            <li key={item.name}>
-                                                <div className="picker-modal__item tool-policy-picker__modal-row tool-policy-picker__placeholder">
-                                                    <span className="tool-policy-picker__desc">
-                                                        {item.description}
-                                                    </span>
-                                                </div>
-                                            </li>
-                                        );
-                                    }
                                     const checked = draftSet.has(item.name);
                                     return (
                                         <li key={item.name}>

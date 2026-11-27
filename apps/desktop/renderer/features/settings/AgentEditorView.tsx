@@ -35,6 +35,7 @@ import {
     mapPersistTextBlocks,
     movePersistTextBlock,
     AgentToolCatalog,
+    BUILTIN_TOOL_CATALOG,
     withWorkplaceToggle,
     type AgentMode,
     type ToolsMode,
@@ -42,7 +43,6 @@ import {
 import { AgentWorkplaceBlockCard } from "./AgentWorkplaceBlockCard";
 import { PromptCollapsibleField } from "./PromptCollapsibleField";
 import { ToolPolicyPicker } from "./ToolPolicyPicker";
-import type { AgentToolCatalogMcpTool } from "@shared/config-forms/agent";
 import { Button } from "@/components/ui/Button";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { showToast } from "@/components/ui/show-toast";
@@ -54,7 +54,6 @@ import {
     ipcAgentRegistryUpdate,
     ipcAgentYamlExport,
     ipcAgentYamlImport,
-    ipcMcpToolsSnapshot,
     ipcProviderModelsSavedList,
     ipcProvidersList,
 } from "@/ipc/client";
@@ -157,8 +156,6 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     const [toolsMode, setToolsMode] = useState<ToolsMode>("default");
     const [mode, setMode] = useState<AgentMode>("all");
     const [toolsSelected, setToolsSelected] = useState<string[]>([]);
-    /** MCP 工具快照（页面打开时刻拉一次；spec §九：catalog 同步组装，不接 Promise）。 */
-    const [mcpTools, setMcpTools] = useState<readonly AgentToolCatalogMcpTool[]>([]);
     const [providers, setProviders] = useState<ProviderOption[]>([]);
     const [savedModels, setSavedModels] = useState<SavedModelOption[]>([]);
     const [savedBaseline, setSavedBaseline] = useState<string | null>(null);
@@ -396,14 +393,6 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     const loadAgent = useCallback(loadAgentImpl, loadAgentDeps);
 
     useEffect(() => void loadAgent(), [loadAgent]);
-
-    // MCP 工具快照：页面打开时刻拉一次，失败静默（mcp 分组回落「未配置」占位，不阻断 agent 编辑）。
-    // nm-style: keep-local — effect 回调带 deps 时必须多行；单行化需改运行语义
-    useEffect(() => {
-        void ipcMcpToolsSnapshot().then((res) => {
-            if (res.ok) setMcpTools(res.data);
-        });
-    }, []);
 
     const displayName = name.trim() || coreT({key: "ui.agent.unnamed"});
 
@@ -883,12 +872,11 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                             <ToolPolicyPicker
                                 selected={toolsSelected}
                                 onChange={setToolsSelected}
-                                mcpTools={mcpTools}
                             />
                         </SettingsField>
                     ) : (
                         <p className="settings-hint">
-                            {coreT({key: "ui.agent.builtin_tools_hint", params: {count: 11}})}
+                            {coreT({key: "ui.agent.builtin_tools_hint", params: {count: BUILTIN_TOOL_CATALOG.length}})}
                         </p>
                     )}
                 </SettingsSection>

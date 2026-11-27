@@ -1,17 +1,19 @@
 /**
  * MCP 配置 IPC 处理器：绑定 main runtime 的 mcpConfig / mcp.connections / mcpOAuth。
  *
- * 口径（mcp-support Step 13/14）：配置 CRUD 是 core `McpConfigStore` 的薄转发（归一、
- * SKSP 密钥拆分、容错迁移全在 store），写成功后失效对应 server 的连接与快照缓存；
- * create 是新建专用（ID 撞名拒绝），bearer 明文在 create 成功后才写（撞名不碰已有
- * server 的密钥）；换 ID（previousId ≠ id）走 core 的 `McpToolRefs.renameWithRewrite`
- * 统一编排（改写 agent 工具引用 `mcp__<旧ID>__` → rename → 写用户新填 bearer，
- * 任一步失败反向回滚）；
- * 「测试连接」= invalidate + snapshotTools 重拉后读 serverStatuses（状态与错误原文
- * 的唯一读取面，detail 原文透出）；OAuth 桌面侧只经 `McpOAuth.start` / `handleCallback`
- * 两个入口——本文件负责 loopback 回调 server（127.0.0.1 随机端口，先起 server 拿到
- * redirectUrl 再调 start）与打开系统浏览器（拿到 authorizeUrl 后 shell.openExternal），
- * 不自己拼 token 请求。
+ * 口径（mcp-connect-model）：配置 CRUD 是 core `McpConfigStore` 的薄转发（归一、
+ * SKSP 密钥拆分、容错迁移全在 store），写成功后 invalidate 对应 server 的缓存与在途
+ * 尝试（停用、换 ID 靠它清缓存）；create 是新建专用（ID 撞名拒绝），bearer 明文在
+ * create 成功后才写（撞名不碰已有 server 的密钥）；换 ID（previousId ≠ id）走 core
+ * 的 `McpServerRename.withAfterStep` 统一编排（rename → 写用户新填 bearer，任一步
+ * 失败反向回滚）；
+ * 「测试连接」与启用保存的自动连接 = `connect(id)`（作废缓存后连接并等结果，状态与
+ * 错误原文的唯一读取面，detail 原文透出）；进页面的一轮自动连接 = `connectUnconnected`；
+ * `toolList` 只读连接管理器的工具缓存，不触发任何请求；OAuth 桌面侧只经 `McpOAuth.start` /
+ * `handleCallback` 两个入口——本文件负责 loopback 回调 server（127.0.0.1 随机端口，先起
+ * server 拿到 redirectUrl 再调 start）与打开系统浏览器（拿到 authorizeUrl 后
+ * shell.openExternal），授权成功即返回成功，随后的 invalidate + connect 后台进行、
+ * 失败经状态查询的 `failure.detail` 呈现，不自己拼 token 请求。
  *
  * store 方法 throw 的失败（SKSP / KKV infra）在编排边界经 FormatIpcError 收进
  * IpcResult；store 方法自身的已知失败沿 Result 上行、就地短路（与 search handler 同构）。
@@ -29,9 +31,8 @@ import type {
     McpTestConnectionRequest,
     McpToolListRequest,
     McpToolRowDto,
-    McpToolSnapshotDto,
 } from "../../../../shared/ipc-types.js";
-import { MCP_DEFAULT_TIMEOUT_MS, MCP_MIN_TIMEOUT_MS, McpSecretRefs, McpToolRefs, McpToolSlug, McpServerConfigOps, type McpAuthConfig, type McpServerConfig, type McpServerStatus, type McpTransportConfig } from "@novel-master/core/mcp";
+import { MCP_DEFAULT_TIMEOUT_MS, MCP_MIN_TIMEOUT_MS, McpSecretRefs, McpServerRename, McpServerConfigOps, type McpAuthConfig, type McpServerConfig, type McpServerStatus, type McpTransportConfig } from "@novel-master/core/mcp";
 import { AppError } from "@novel-master/core/errors";
 import { DesktopRuntimeSingleton } from "../../runtime/desktop-runtime-singleton.js";
 import { FormatIpcError } from "../ipc-error.js";
@@ -136,7 +137,7 @@ export namespace Mcp {
             const previousId = req.previousId?.trim();
             // bearer 明文：undefined=保留、空串=清除、非空=覆盖（SKSP 直写，SecretStore 无 Result 通道、失败以 throw 收进 catch）。
             // 写入时机：新建在 create 成功之后（撞名被拒时不覆盖已有同名 server 的密钥）；
-            // 换 ID 在 renameWithRewrite 的 afterRename 里（落在回滚链内，密钥写入失败整体回滚）；
+            // 换 ID 在 withAfterStep 的 afterRename 里（落在回滚链内，密钥写入失败整体回滚）；
             // 原地编辑保持先写后 save。
             const writeBearer = async (): Promise<void> => {
                 if (req.authType !== "bearer" || req.bearerToken == null) return;
@@ -149,10 +150,10 @@ export namespace Mcp {
                 if (!created.ok) return { ok: false, error: FormatIpcError.format(created.error) };
                 await writeBearer();
             } else if (previousId != null && previousId !== "" && previousId !== id) {
-                // 换 ID：core 统一编排（改写 agent 工具引用 mcp__<旧ID>__ → mcp__<新ID>__ → rename
-                // （SKSP 密钥迁新 ref、配置原位替换、清旧 ref）→ afterRename 写用户新填的 bearer），
-                // 任一步失败反向改写 + 已改名的按旧配置迁回，不留「引用已改、配置或密钥改了一半」的状态。
-                const renamed = await McpToolRefs.renameWithRewrite({ configStore: rt.mcpConfig, agentRegistry: rt.agentRegistry }, previousId, config, writeBearer);
+                // 换 ID：core 统一编排（rename（SKSP 密钥迁新 ref、配置原位替换、清旧 ref）
+                // → afterRename 写用户新填的 bearer），任一步失败按旧配置改回旧 ID，
+                // 不留「密钥改了一半」的状态。
+                const renamed = await McpServerRename.withAfterStep({ configStore: rt.mcpConfig }, previousId, config, writeBearer);
                 if (!renamed.ok) return { ok: false, error: FormatIpcError.format(renamed.error) };
                 oauthMigrated = renamed.value.oauthMigrated;
                 rt.mcp.connectionManager.invalidate(previousId);
@@ -162,8 +163,9 @@ export namespace Mcp {
                 if (!saved.ok) return { ok: false, error: FormatIpcError.format(saved.error) };
             }
             rt.mcp.connectionManager.invalidate(id);
-            // 保存后自动连接（列表开关与详情保存同一条路）：失败原因经 serverStatuses 的 failure.detail 带出，不影响保存结果。
-            if (config.enabled) await rt.mcp.connectionManager.snapshotTools().catch(() => undefined);
+            // 启用保存后自动连接（列表开关与详情保存同一条路，显式动作先作废再连并等结果）：
+            // 失败原因经 serverStatuses 的 failure.detail 带出，不影响保存结果；停用只作废不连接。
+            if (config.enabled) await rt.mcp.connectionManager.connect(id).catch(() => undefined);
             return IpcResults.ok({ serverId: id, ...(oauthMigrated === undefined ? {} : { oauthMigrated }) });
         } catch (err) {
             return { ok: false, error: FormatIpcError.format(err) };
@@ -183,16 +185,24 @@ export namespace Mcp {
         }
     }
 
-    /** 测试连接：失效缓存重拉快照后读该 server 的状态（失败原因在 `failure.detail` 原文透出）。 */
+    /** 测试连接：作废缓存后连接并等结果（失败原因在 `failure.detail` 原文透出）。 */
     export async function testConnection(req: McpTestConnectionRequest): Promise<IpcResult<McpServerStatus>> {
         try {
             const built = await DesktopRuntimeSingleton.get();
             if (!built.ok) return { ok: false, error: FormatIpcError.format(built.error) };
-            const rt = built.value;
-            rt.mcp.connectionManager.invalidate(req.serverId);
-            await rt.mcp.connectionManager.snapshotTools();
-            const status = rt.mcp.connectionManager.serverStatuses().find((entry) => entry.serverId === req.serverId);
-            return status != null ? IpcResults.ok(status) : { ok: false, error: FormatIpcError.format(new AppError("INFRA_VALIDATION_FAILED", { detail: `MCP 服务器不在当前配置中: ${req.serverId}` })) };
+            return IpcResults.ok(await built.value.mcp.connectionManager.connect(req.serverId));
+        } catch (err) {
+            return { ok: false, error: FormatIpcError.format(err) };
+        }
+    }
+
+    /** 进页面触发：对从未尝试 / 已断开的服务器后台发起一轮连接；等本轮尝试结束后返回（管理器永不 reject）。 */
+    export async function connectUnconnected(): Promise<IpcResult<void>> {
+        try {
+            const built = await DesktopRuntimeSingleton.get();
+            if (!built.ok) return { ok: false, error: FormatIpcError.format(built.error) };
+            await built.value.mcp.connectionManager.connectUnconnected();
+            return IpcResults.ok(undefined);
         } catch (err) {
             return { ok: false, error: FormatIpcError.format(err) };
         }
@@ -208,38 +218,27 @@ export namespace Mcp {
         }
     }
 
-    export async function toolsSnapshot(): Promise<IpcResult<readonly McpToolSnapshotDto[]>> {
-        try {
-            const built = await DesktopRuntimeSingleton.get();
-            if (!built.ok) return { ok: false, error: FormatIpcError.format(built.error) };
-            const snapshots = await built.value.mcp.connectionManager.snapshotTools();
-            return IpcResults.ok(snapshots.map((entry) => ({ ...entry, registeredName: McpToolSlug.toolName(entry.serverId, entry.toolName) })));
-        } catch (err) {
-            return { ok: false, error: FormatIpcError.format(err) };
-        }
-    }
-
     /**
-     * 详情页「工具」卡的行清单：快照按 server 过滤 + 禁用位。禁用位只读
-     * `mcpConfig.listDisabledTools()`——snapshotTools 的出口已滤掉被关的工具，
-     * 拿它判断 disabled 会漏。快照读取会顺带把 pending 的 server 连上（同移动端进页行为）。
+     * 详情页「工具」卡的行清单：工具缓存按 server 过滤 + 禁用位，只读缓存不触发请求。
+     * 禁用位只读 `mcpConfig.listDisabledTools()`——cachedTools 的出口已滤掉被关的工具，
+     * 拿它判断 disabled 会漏。
      */
     export async function toolList(req: McpToolListRequest): Promise<IpcResult<readonly McpToolRowDto[]>> {
         try {
             const built = await DesktopRuntimeSingleton.get();
             if (!built.ok) return { ok: false, error: FormatIpcError.format(built.error) };
             const rt = built.value;
-            const snapshots = await rt.mcp.connectionManager.snapshotTools();
+            const cached = rt.mcp.connectionManager.cachedTools();
             const disabled = await rt.mcpConfig.listDisabledTools();
             if (!disabled.ok) return { ok: false, error: FormatIpcError.format(disabled.error) };
             const disabledNames = disabled.value[req.serverId] ?? [];
-            return IpcResults.ok(snapshots.filter((entry) => entry.serverId === req.serverId).map((entry) => ({ toolName: entry.toolName, toolDescription: entry.toolDescription, disabled: disabledNames.includes(entry.toolName) })));
+            return IpcResults.ok(cached.filter((entry) => entry.serverId === req.serverId).map((entry) => ({ toolName: entry.toolName, toolDescription: entry.toolDescription, disabled: disabledNames.includes(entry.toolName) })));
         } catch (err) {
             return { ok: false, error: FormatIpcError.format(err) };
         }
     }
 
-    /** 每工具启停：KKV 直写；过滤发生在 snapshotTools 出口，被关的工具下一次装配自然不注册进 agent，无需重连。 */
+    /** 每工具启停：KKV 直写；过滤发生在 cachedTools 出口，被关的工具下一次装配自然不注册进 agent，无需重连。 */
     export async function setToolDisabled(req: McpSetToolDisabledRequest): Promise<IpcResult<void>> {
         try {
             const built = await DesktopRuntimeSingleton.get();
@@ -277,6 +276,10 @@ export namespace Mcp {
                 const callback = await Promise.race([loopback.waitCallback(), timeoutPromise]);
                 const handled = await rt.mcpOAuth.handleCallback(req.serverId, callback);
                 if (!handled.ok) return { ok: false, error: FormatIpcError.format(handled.error) };
+                // 授权成功即视为动作完成（显式动作口径）：作废旧缓存并后台重连，不等结果、
+                // 连接失败不改变本返回值——失败经状态查询的 failure.detail 呈现。
+                rt.mcp.connectionManager.invalidate(req.serverId);
+                void rt.mcp.connectionManager.connect(req.serverId).catch(() => undefined);
                 return IpcResults.ok({ authorizeUrl: started.value.authorizeUrl });
             } finally {
                 clearTimeout(waitTimer);

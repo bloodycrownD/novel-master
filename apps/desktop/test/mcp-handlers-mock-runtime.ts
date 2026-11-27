@@ -4,13 +4,13 @@
  * 连接管理器，各用例经 `runtimeHolder.current` 装配后调 handler。
  *
  * 内存配置 store 的 rename 语义对齐 core 实现（新 id 撞名拒绝、SKSP 三 ref 先写新后清旧、
- * 返回 oauthMigrated=true），否则换 ID 编排（core `McpToolRefs.renameWithRewrite`）的
+ * 返回 oauthMigrated=true），否则换 ID 编排（core `McpServerRename.withAfterStep`）的
  * 回滚链测不到真实顺序。
  *
  * @module test/mcp-handlers-mock-runtime
  */
 import { AppError, Result } from "@novel-master/core/errors";
-import type { McpServerConfig, McpToolSnapshot } from "@novel-master/core/mcp";
+import type { McpServerConfig, McpServerStatus, McpToolSnapshot } from "@novel-master/core/mcp";
 
 /** 内存 SecretStore：记录 set / delete 调用；`failSet` 置错时下一次 set 抛出（bearer 写入失败回滚用例）。 */
 export function makeSecretStore(initial: Readonly<Record<string, string>> = {}): MockSecretStore {
@@ -147,14 +147,21 @@ export interface MockAgentRegistry {
     upsert(agentId: string, def: AgentLike): Promise<Result<void, AppError>>;
 }
 
-/** 内存连接管理器：记录 snapshot 调用次数与 invalidate 目标。 */
-export function makeConnectionManager(snapshot: readonly McpToolSnapshot[] = []): MockConnectionManager {
-    const calls = { snapshot: 0, invalidated: [] as string[] };
+/** 内存连接管理器：记录缓存读取 / 进页连接 / 显式连接 / invalidate 的调用痕迹（对齐 core 端口成员）。 */
+export function makeConnectionManager(cached: readonly McpToolSnapshot[] = []): MockConnectionManager {
+    const calls = { cached: 0, connectUnconnected: 0, connect: [] as string[], invalidated: [] as string[] };
     return {
         calls,
-        snapshotTools: async () => {
-            calls.snapshot += 1;
-            return snapshot;
+        cachedTools: () => {
+            calls.cached += 1;
+            return cached;
+        },
+        connectUnconnected: async () => {
+            calls.connectUnconnected += 1;
+        },
+        connect: async (serverId) => {
+            calls.connect.push(serverId);
+            return { serverId, state: "ready" };
         },
         serverStatuses: () => [],
         callTool: async () => Result.err(new AppError("INFRA_UNEXPECTED_ERROR", { detail: "mock 未实现 callTool" })),
@@ -166,12 +173,27 @@ export function makeConnectionManager(snapshot: readonly McpToolSnapshot[] = [])
 }
 
 export interface MockConnectionManager {
-    readonly calls: { snapshot: number; invalidated: string[] };
-    snapshotTools(): Promise<readonly McpToolSnapshot[]>;
-    serverStatuses(): readonly never[];
+    readonly calls: { cached: number; connectUnconnected: number; connect: string[]; invalidated: string[] };
+    cachedTools(): readonly McpToolSnapshot[];
+    connectUnconnected(): Promise<void>;
+    connect(serverId: string): Promise<McpServerStatus>;
+    serverStatuses(): readonly McpServerStatus[];
     callTool(serverId: string, toolName: string, args: unknown, signal: AbortSignal): Promise<Result<unknown, AppError>>;
     invalidate(serverId: string): void;
     closeAll(): Promise<void>;
+}
+
+/** 内存 OAuth 双入口：start 回显 redirectUrl、handleCallback 直接成功（授权成功路径默认打通）。 */
+export function makeMcpOAuth(): MockMcpOAuth {
+    return {
+        start: async (_serverId, redirectUrl) => Result.ok({ authorizeUrl: redirectUrl }),
+        handleCallback: async () => Result.ok(undefined),
+    };
+}
+
+export interface MockMcpOAuth {
+    start(serverId: string, redirectUrl: string): Promise<Result<{ readonly authorizeUrl: string }, AppError>>;
+    handleCallback(serverId: string, callback: { readonly code?: string; readonly state?: string; readonly error?: string }): Promise<Result<void, AppError>>;
 }
 
 /** fake runtime 形状（handler 只消费这四个成员 + mcpOAuth）。 */
@@ -180,11 +202,11 @@ export interface MockRuntime {
     readonly mcpConfig: MockConfigStore;
     readonly agentRegistry: MockAgentRegistry;
     readonly mcp: { readonly connectionManager: MockConnectionManager };
-    readonly mcpOAuth: Record<string, never>;
+    readonly mcpOAuth: MockMcpOAuth;
 }
 
 /** 装配 fake runtime（servers 直接铺进内存 store）。 */
-export function makeRuntime(options: { readonly secretStore?: MockSecretStore; readonly servers?: readonly McpServerConfig[]; readonly agentRegistry?: MockAgentRegistry; readonly connectionManager?: MockConnectionManager } = {}): MockRuntime {
+export function makeRuntime(options: { readonly secretStore?: MockSecretStore; readonly servers?: readonly McpServerConfig[]; readonly agentRegistry?: MockAgentRegistry; readonly connectionManager?: MockConnectionManager; readonly mcpOAuth?: MockMcpOAuth } = {}): MockRuntime {
     const secretStore = options.secretStore ?? makeSecretStore();
     const mcpConfig = makeConfigStore(secretStore);
     mcpConfig.servers.push(...(options.servers ?? []));
@@ -193,7 +215,7 @@ export function makeRuntime(options: { readonly secretStore?: MockSecretStore; r
         mcpConfig,
         agentRegistry: options.agentRegistry ?? makeAgentRegistry(),
         mcp: { connectionManager: options.connectionManager ?? makeConnectionManager() },
-        mcpOAuth: {},
+        mcpOAuth: options.mcpOAuth ?? makeMcpOAuth(),
     };
 }
 

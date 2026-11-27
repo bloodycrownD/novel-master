@@ -260,13 +260,13 @@ export const HandlerRegistry = {
         HandlerRegistry.bindReq(IPC_CHANNELS.SEARCH_UPDATE_PRESET_OVERRIDE, Search.updatePresetOverride);
         HandlerRegistry.bindReq(IPC_CHANNELS.SEARCH_RESET_PRESET_OVERRIDE, Search.resetPresetOverride);
 
-        // MCP 配置（mcp-support Step 13/14）：CRUD / 测试连接 / OAuth 发起与回调 / 快照与状态读取
+        // MCP 配置（mcp-connect-model）：CRUD / 测试连接与进页连接 / OAuth 发起与回调 / 状态读取
         HandlerRegistry.bindNoArg(IPC_CHANNELS.MCP_LIST_SERVERS, Mcp.listServers);
         HandlerRegistry.bindReq(IPC_CHANNELS.MCP_SAVE_SERVER, Mcp.saveServer);
         HandlerRegistry.bindReq(IPC_CHANNELS.MCP_DELETE_SERVER, Mcp.deleteServer);
         HandlerRegistry.bindReq(IPC_CHANNELS.MCP_TEST_CONNECTION, Mcp.testConnection);
         HandlerRegistry.bindNoArg(IPC_CHANNELS.MCP_SERVER_STATUSES, Mcp.listServerStatuses);
-        HandlerRegistry.bindNoArg(IPC_CHANNELS.MCP_TOOLS_SNAPSHOT, Mcp.toolsSnapshot);
+        HandlerRegistry.bindNoArg(IPC_CHANNELS.MCP_CONNECT_UNCONNECTED, Mcp.connectUnconnected);
         HandlerRegistry.bindReq(IPC_CHANNELS.MCP_TOOL_LIST, Mcp.toolList);
         HandlerRegistry.bindReq(IPC_CHANNELS.MCP_SET_TOOL_DISABLED, Mcp.setToolDisabled);
         HandlerRegistry.bindReq(IPC_CHANNELS.MCP_OAUTH_START, Mcp.oauthStart);

@@ -146,7 +146,6 @@ import {
     type McpTestConnectionRequest,
     type McpToolListRequest,
     type McpToolRowDto,
-    type McpToolSnapshotDto,
 } from "@shared/ipc-types";
 
 type InvokeFn = <T>(channel: string, arg?: unknown) => Promise<T>;
@@ -331,7 +330,7 @@ export function createInvokeClient(invoke: InvokeFn) {
         ipcMcpDeleteServer: withReq<McpDeleteServerRequest, IpcResult<void>>(invoke, IPC_CHANNELS.MCP_DELETE_SERVER),
         ipcMcpTestConnection: withReq<McpTestConnectionRequest, IpcResult<McpServerStatus>>(invoke, IPC_CHANNELS.MCP_TEST_CONNECTION),
         ipcMcpServerStatuses: noArg<IpcResult<readonly McpServerStatus[]>>(invoke, IPC_CHANNELS.MCP_SERVER_STATUSES),
-        ipcMcpToolsSnapshot: noArg<IpcResult<readonly McpToolSnapshotDto[]>>(invoke, IPC_CHANNELS.MCP_TOOLS_SNAPSHOT),
+        ipcMcpConnectUnconnected: noArg<IpcResult<void>>(invoke, IPC_CHANNELS.MCP_CONNECT_UNCONNECTED),
         ipcMcpToolList: withReq<McpToolListRequest, IpcResult<readonly McpToolRowDto[]>>(invoke, IPC_CHANNELS.MCP_TOOL_LIST),
         ipcMcpSetToolDisabled: withReq<McpSetToolDisabledRequest, IpcResult<void>>(invoke, IPC_CHANNELS.MCP_SET_TOOL_DISABLED),
         ipcMcpOAuthStart: withReq<McpOAuthStartRequest, IpcResult<{ readonly authorizeUrl: string }>>(invoke, IPC_CHANNELS.MCP_OAUTH_START),

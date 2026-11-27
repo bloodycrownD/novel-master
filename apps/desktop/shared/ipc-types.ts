@@ -7,9 +7,9 @@
  * 不另抄一份以免与 core 校验口径漂移。
  */
 import type { CustomEngineDef, SearchEngineTemplate } from "@novel-master/core";
-import type { McpAuthType, McpToolSnapshot, McpTransportType } from "@novel-master/core/mcp";
+import type { McpAuthType, McpTransportType } from "@novel-master/core/mcp";
 // MCP 响应 DTO 直接引用 core 形状（照 SearchConfigDto 引用 core 模板族的口径）；re-export 供 renderer 侧 import（不直连 core）。
-export type { McpAuthType, McpServerConfig, McpServerStatus, McpToolSnapshot, McpTransportType } from "@novel-master/core/mcp";
+export type { McpAuthType, McpServerConfig, McpServerStatus, McpTransportType } from "@novel-master/core/mcp";
 import type { ErrorKey } from "@novel-master/core/errors";
 
 export const IPC_CHANNELS = {
@@ -214,7 +214,7 @@ export const IPC_CHANNELS = {
     MCP_DELETE_SERVER: "nm:mcp/deleteServer",
     MCP_TEST_CONNECTION: "nm:mcp/testConnection",
     MCP_SERVER_STATUSES: "nm:mcp/serverStatuses",
-    MCP_TOOLS_SNAPSHOT: "nm:mcp/toolsSnapshot",
+    MCP_CONNECT_UNCONNECTED: "nm:mcp/connectUnconnected",
     MCP_TOOL_LIST: "nm:mcp/toolList",
     MCP_SET_TOOL_DISABLED: "nm:mcp/setToolDisabled",
     MCP_OAUTH_START: "nm:mcp/oauthStart",
@@ -1848,8 +1848,8 @@ export type SearchResetPresetOverrideRequest = {
 
 /**
  * MCP 配置保存。create=true 走新建（id 撞名拒绝）；编辑带 previousId，previousId
- * 与 id 不同即换 ID（main 侧改写 agent 工具引用 `mcp__<旧ID>__` 并迁 SKSP 密钥到
- * 新 ref）。bearerToken undefined=保留、空串=清除、非空=覆盖，与 search 密钥语义同口径。
+ * 与 id 不同即换 ID（main 侧 core `McpServerRename` 编排：rename 并迁 SKSP 密钥到新 ref）。
+ * bearerToken undefined=保留、空串=清除、非空=覆盖，与 search 密钥语义同口径。
  */
 export type McpSaveServerRequest = {
     readonly id: string;
@@ -1876,16 +1876,7 @@ export type McpOAuthStartRequest = {
     readonly serverId: string;
 };
 
-/**
- * toolsSnapshot 快照条目：core `McpToolSnapshot` + main 侧算好的注册名。
- * `registeredName` 即 `McpToolSlug.toolName`（`mcp__<server>__<tool>`，含截断短哈希），
- * 形状是 shared catalog `AgentToolCatalogMcpTool` 的超集，renderer 直接喂 AgentToolCatalog。
- */
-export type McpToolSnapshotDto = McpToolSnapshot & {
-    readonly registeredName: string;
-};
-
-/** 详情页「工具」卡的单行：快照条目 + 禁用位（disabled 只读配置禁用表，快照出口已滤掉被关工具）。 */
+/** 详情页「工具」卡的单行：缓存条目 + 禁用位（disabled 只读配置禁用表，缓存出口已滤掉被关工具）。 */
 export type McpToolRowDto = {
     readonly toolName: string;
     readonly toolDescription?: string;

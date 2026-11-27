@@ -12,8 +12,8 @@ test("T-P4: 折叠态渲染 trigger 文案且不常驻弹层", () => {
     const html = renderToStaticMarkup(
         <ToolPolicyPicker selected={["read"]} onChange={() => {}} />,
     );
-    // trigger 文案反映选择数量（内置工具目录含 curl/search 共 11 个）
-    assert.match(html, /已选工具（1\/11）/);
+    // trigger 文案反映选择数量（内置工具目录含 mcp 共 12 个）
+    assert.match(html, /已选工具（1\/12）/);
     assert.match(html, /▼/);
     // 折叠态下不渲染弹层（picker-modal 由 open=true 才挂）
     assert.doesNotMatch(html, /picker-modal/);
@@ -23,7 +23,7 @@ test("T-P4: trigger 文案边界——未选择与全选", () => {
     const none = renderToStaticMarkup(
         <ToolPolicyPicker selected={[]} onChange={() => {}} />,
     );
-    assert.match(none, /未选择工具（0\/11）/);
+    assert.match(none, /未选择工具（0\/12）/);
 
     const all = [
         "task",
@@ -37,28 +37,10 @@ test("T-P4: trigger 文案边界——未选择与全选", () => {
         "agent",
         "curl",
         "search",
+        "mcp",
     ];
     const full = renderToStaticMarkup(
         <ToolPolicyPicker selected={all} onChange={() => {}} />,
     );
-    assert.match(full, /全部工具（11\/11）/);
-});
-
-test("T-P4: mcpTools 快照并入可选计数（MCP 工具 + 内置 11）；缺省仍为 11", () => {
-    const withMcp = renderToStaticMarkup(
-        <ToolPolicyPicker
-            selected={["mcp__fs__read"]}
-            onChange={() => {}}
-            mcpTools={[
-                { registeredName: "mcp__fs__read", serverId: "fs", toolDescription: "Read files" },
-                { registeredName: "mcp__fs__write", serverId: "fs" },
-            ]}
-        />,
-    );
-    assert.match(withMcp, /已选工具（1\/13）/);
-
-    const unconfigured = renderToStaticMarkup(
-        <ToolPolicyPicker selected={[]} onChange={() => {}} mcpTools={[]} />,
-    );
-    assert.match(unconfigured, /未选择工具（0\/11）/);
+    assert.match(full, /全部工具（12\/12）/);
 });

@@ -44,6 +44,8 @@ import {
 
     ipcAppOpenExternal,
 
+    ipcMcpConnectUnconnected,
+
     ipcProjectsList,
 
     ipcSessionsListByProject,
@@ -783,6 +785,21 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
         };
 
     }, []);
+
+
+
+    // 切会话触发 MCP 进页连接（桌面没有等价钩子，以会话切换为准）：对从未尝试 /
+    // 已断开的服务器后台发起一轮连接，不引入 state、不等结果（聊天页不等连接）。
+
+    useEffect(() => {
+
+        if (sessionId != null) {
+
+            void ipcMcpConnectUnconnected();
+
+        }
+
+    }, [sessionId]);
 
 
 

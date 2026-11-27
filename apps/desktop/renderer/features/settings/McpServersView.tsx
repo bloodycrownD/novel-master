@@ -8,7 +8,7 @@
  */
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import type { IpcResult, McpServerConfig, McpServerStatus } from "@shared/ipc-types";
-import { ipcMcpDeleteServer, ipcMcpListServers, ipcMcpSaveServer, ipcMcpServerStatuses, ipcMcpTestConnection } from "@/ipc/client";
+import { ipcMcpConnectUnconnected, ipcMcpDeleteServer, ipcMcpListServers, ipcMcpSaveServer, ipcMcpServerStatuses, ipcMcpTestConnection } from "@/ipc/client";
 import { Button } from "@/components/ui/Button";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { ContextMenu } from "@/components/ui/ContextMenu";
@@ -19,8 +19,8 @@ import { settingsTranslator } from "../../i18n/settings";
 import type { SettingsNavHandle } from "./settings-nav";
 import { mcpStatusLabel, NEW_MCP_SERVER_SENTINEL } from "./mcp-server-meta";
 
-/** 状态标签的色调变体（settings-tag）；pending / connecting / disabled 中性、ready 绿、failed / unsupported 暖。 */
-const MCP_STATUS_TAG_VARIANT: Readonly<Partial<Record<McpServerStatus["state"], string>>> = { ready: "settings-tag--ok", failed: "settings-tag--warn", unsupported: "settings-tag--warn" };
+/** 状态标签的色调变体（settings-tag）；pending / connecting / disconnected / disabled 中性、ready 绿、failed / unsupported 暖。 */
+const MCP_STATUS_TAG_VARIANT: Readonly<Partial<Record<McpServerStatus["state"], string>>> = { ready: "settings-tag--ok", disconnected: "settings-tag--muted", failed: "settings-tag--warn", unsupported: "settings-tag--warn" };
 import { SettingsListSection, SettingsPanel, SettingsStatus } from "./settings-ui";
 
 export function McpServersView({ nav }: { nav: SettingsNavHandle }) {
@@ -39,15 +39,20 @@ export function McpServersView({ nav }: { nav: SettingsNavHandle }) {
         if (serversRes.ok) setServers(serversRes.data);
         else setError(serversRes.error.message);
         if (statusesRes.ok) setStatuses(statusesRes.data);
-        // 启用但从未尝试连接的服务器，进列表时自动试一次；失败不自动重试（重试入口是「测试连接」）。
+        // 启用但从未尝试 / 已断开的服务器：进列表时发起一轮后台连接（connectUnconnected 只动这两态，
+        // 已连接的不重拉、不作废缓存）；发起后不等（不放进 reload，免得连接预算把整页的可操作状态拖住），
+        // 失败不自动重试（重试入口是「测试连接」）。
         if (serversRes.ok && statusesRes.ok) {
-            const idle = serversRes.data.filter((server) => server.enabled && (statusesRes.data.find((status) => status.serverId === server.id)?.state ?? "pending") === "pending");
+            const idle = serversRes.data.filter((server) => {
+                const state = statusesRes.data.find((status) => status.serverId === server.id)?.state ?? "pending";
+                return server.enabled && (state === "pending" || state === "disconnected");
+            });
             if (idle.length > 0) {
-                void Promise.all(idle.map((server) => ipcMcpTestConnection({ serverId: server.id }))).then(async () => {
+                void ipcMcpConnectUnconnected().then(async () => {
                     const refreshed = await ipcMcpServerStatuses();
                     if (refreshed.ok) setStatuses(refreshed.data);
                 });
-                // 发起后立即重读一次：让「连接中」先上屏（全部完成后的重读在上面 then 里）。
+                // 发起后立即重读一次：让「连接中」先上屏（本轮结束后的重读在上面 then 里）。
                 const kicking = await ipcMcpServerStatuses();
                 if (kicking.ok) setStatuses(kicking.data);
             }

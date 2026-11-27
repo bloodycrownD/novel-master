@@ -6,6 +6,7 @@ export const dialog = {
 
 export const shell = {
   openPath: async () => "",
+  openExternal: async () => "",
 };
 
 export const Menu = {

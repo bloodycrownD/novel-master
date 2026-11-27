@@ -124,7 +124,7 @@ export namespace DesktopRuntimeFactory {
             });
             return { status: response.status, headers, bodyText: await response.text() };
         };
-        // disabledTools 读禁用表缓存：每工具开关写在配置页，过滤发生在 snapshotTools 出口，
+        // disabledTools 读禁用表缓存：每工具开关写在配置页，过滤发生在 cachedTools 出口，
         // 下一次装配自然生效（装配与 run 共享本闭包读同一份缓存）。
         const mcpConnections = McpConnectionManagerFactory.create({ listServers: () => mcpServersCache.current, requestFn: mcpRequestFn, bearerToken: secretStore.get.bind(secretStore), disabledTools: (serverId) => mcpDisabledCache.current[serverId] ?? [] });
         const mcpOAuth = McpOAuthFactory.create({ listServers: () => mcpServersCache.current, secretStore });

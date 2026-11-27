@@ -171,6 +171,9 @@ app.whenReady().then(async () => {
             forwarderSlots.eventBus = EventBusForwarder.attach(runtime.eventBus);
             forwarderSlots.agentRunLifecycle = Agent.attachRunLifecycleListeners(runtime.eventBus);
             forwarderSlots.agentActivity = AgentActivityForwarder.attach();
+            // 启动后触发一轮 MCP 进页连接（桌面没有「进聊天页」钩子，用启动兜底）：
+            // 对从未尝试 / 已断开的服务器后台连接，不等结果、不阻塞窗口就绪。
+            void runtime.mcp.connectionManager.connectUnconnected();
         }
     } catch (error) {
         log.error("bootstrap failed", { error });

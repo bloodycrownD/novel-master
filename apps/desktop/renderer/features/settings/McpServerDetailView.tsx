@@ -2,13 +2,15 @@
  * 设置 · MCP 服务器详情页（两级结构第二级，照搜索引擎详情页同构）：
  * `navState.editingMcpServerId` 定位单 server，编辑 + create 模式（哨兵复用本 viewId）。
  * 表单：ID（`mcp__<ID>__<tool>` 的服务器段，只允许英文字母、数字和下划线，编辑时可改——
- * 换 ID 由 main 侧 rename 改写 agent 工具引用并迁移密钥）/ 描述（选填）/ 传输类型（HTTP /
+ * 换 ID 由 main 侧 rename 并迁移密钥）/ 描述（选填）/ 传输类型（HTTP /
  * SSE——与移动端同选项集；存量 stdio 配置做归一但不可连，不可用原因由 server 状态位置的
  * `failure.detail` 事实提示承担）/ 地址 / 超时时间 / 认证三态（无 / Bearer / OAuth）。
  * Bearer 明文只在输入框停留，保存经 IPC 写 SKSP（留空保留、清除按钮传空串）；OAuth 区
  * 显示授权状态并在「发起授权」时走 main 侧 loopback 回调（invoke 挂起至浏览器授权完成）。
+ * 状态行进页读一次（不加订阅；连接在途时显示「连接中」，返回重进或点测试连接可刷新）。
  * 工具分组（编辑态、有工具时才出现）：该 server 每个工具的启停开关，描述默认两行截断、
- * 点描述展开/收起；被关的工具不注册进 agent（过滤在连接管理器快照出口，无需重连）。
+ * 点描述展开/收起；被关的工具不注册进 agent（过滤在连接管理器缓存出口，无需重连）；
+ * 工具清单只读连接管理器缓存，不触发连接。
  * 测试连接先静默保存（main 按已存配置测），结果读 `McpServerStatus`——失败时 `failure.detail`
  * 原文展示。
  */
@@ -48,8 +50,8 @@ export function McpServerDetailView({ nav }: { nav: SettingsNavHandle }) {
     const [testing, setTesting] = useState(false);
     const [authorizing, setAuthorizing] = useState(false);
     const [error, setError] = useState<string | undefined>();
-    /** 最近一次测试连接的结果（tag + 原文展示）；null = 本会话未测过。 */
-    const [testStatus, setTestStatus] = useState<McpServerStatus | null>(null);
+    /** 该 server 的连接状态（进页读一次 + 测试连接后刷新；不加订阅，null = 还没读到）。 */
+    const [status, setStatus] = useState<McpServerStatus | null>(null);
     const [oauthAuthorized, setOauthAuthorized] = useState(false);
     /** 该 server 的工具行（快照条目 + 禁用位；空 = 未连接或无工具，分组不显示）。 */
     const [tools, setTools] = useState<readonly McpToolRowDto[]>([]);
@@ -78,13 +80,16 @@ export function McpServerDetailView({ nav }: { nav: SettingsNavHandle }) {
             setForm({ id: entry.id, description: entry.description, transportType: entry.transport.type, url: entry.transport.type === "stdio" ? "" : entry.transport.url, timeoutText: String(entry.timeoutMs), authType: entry.auth.type });
             if (entry.auth.type === "oauth") void reloadOAuth(entry.id);
         }
-        // 工具行渐次填充（快照读取会顺带连上 pending 的 server）；拉取失败不阻断表单，
-        // 保持旧列表（连接失败在「测试连接」区可见）。
+        // 工具行渐次填充（只读连接管理器缓存，不触发连接）；拉取失败不阻断表单，
+        // 保持旧列表（连接失败在状态行与「测试连接」区可见）。
         const toolsRes = await ipcMcpToolList({ serverId });
         if (toolsRes.ok) {
             setTools(toolsRes.data);
             setExpandedTools(new Set());
         }
+        // 状态行：进页只读一次，不加订阅（连接在途时显示「连接中」，返回重进或点测试连接可刷新）。
+        const statusesRes = await ipcMcpServerStatuses();
+        if (statusesRes.ok) setStatus(statusesRes.data.find((entry) => entry.serverId === serverId) ?? null);
         setLoaded(true);
     }, [serverId, reloadOAuth]);
 
@@ -268,7 +273,7 @@ export function McpServerDetailView({ nav }: { nav: SettingsNavHandle }) {
                         </Button>
                     </SettingsSection>
                 ) : null}
-                <SettingsStatus message={testStatus?.state === "ready" ? mcpStatusLabel(testStatus) : undefined} error={error} />
+                <SettingsStatus message={status != null ? mcpStatusLabel(status) : undefined} error={error} />
             </SettingsFormSection>
             {!isCreate && tools.length > 0 ? (
                 <SettingsSection title={settingsTranslator({ key: "settings.mcp.detail.tools_section" })}>
@@ -332,7 +337,7 @@ export function McpServerDetailView({ nav }: { nav: SettingsNavHandle }) {
                                 setError(res.error.message);
                                 return;
                             }
-                            setTestStatus(res.data);
+                            setStatus(res.data);
                             setError(undefined);
                             if (res.data.state !== "ready") setError(res.data.failure?.detail ?? mcpStatusLabel(res.data));
                         } catch (e) {

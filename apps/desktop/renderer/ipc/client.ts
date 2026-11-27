@@ -177,7 +177,7 @@ export const {
     ipcMcpDeleteServer,
     ipcMcpTestConnection,
     ipcMcpServerStatuses,
-    ipcMcpToolsSnapshot,
+    ipcMcpConnectUnconnected,
     ipcMcpToolList,
     ipcMcpSetToolDisabled,
     ipcMcpOAuthStart,
