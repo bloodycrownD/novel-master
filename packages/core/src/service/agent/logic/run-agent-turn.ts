@@ -165,11 +165,11 @@ export interface AgentTurnRuntimePort extends AgentRunRuntimePort {
     readonly searchConfig?: SearchConfigStore;
     /**
      * MCP 运行时切片（spec §五 / Step 9）：装配期经 `connectionManager.
-     * snapshotTools()` 取工具快照注册 `mcp__` 复合名工具（子 run 复用同一
-     * 份快照——snapshotTools 带缓存，命中不重复 tools/list），工具 run 经
-     * `callTool` 调用。可选照 searchConfig / preferences 先例——不强制旧
-     * 测试 mock 补字段；未注入 = 无 MCP 能力（回滚口径：移除装配即回到
-     * 「无 MCP」状态，core 其余功能零影响）。
+     * cachedTools()` 读工具缓存注册 `mcp__` 复合名工具（子 run 复用同一份
+     * 缓存，天然不重复 tools/list），工具 run 经 `callTool` 调用。可选照
+     * searchConfig / preferences 先例——不强制旧测试 mock 补字段；未注入
+     * = 无 MCP 能力（回滚口径：移除装配即回到「无 MCP」状态，core 其余
+     * 功能零影响）。
      */
     readonly mcp?: { readonly connectionManager: McpConnectionManager };
 }
@@ -423,16 +423,17 @@ export const AgentTurnRunner: AgentTurnRunnerHelpers = {
     },
 
     /**
-     * MCP 工具装配（spec §五/§六 / Step 9）：装配期 `await snapshotTools()`
-     * 取快照并把 `mcp__` 复合名工具注册进 registry（BuiltinTools.register
-     * 之后、AgentDefinitionValidator.validate 之前——policy 校验名单必须
-     * 含 mcp 名）。主 / 子两个装配点共用；子 run 复用同一份快照（snapshotTools
-     * 带 TTL 缓存，主 run 刚拉过即命中，不重复 tools/list）。mcp 切片未注入
-     * 时空转（CLI / 旧 mock 兼容，同 skills / searchConfig 口径）。
+     * MCP 工具装配（spec §五/§六 / Step 9）：装配期读连接管理器缓存
+     * `cachedTools()`（同步、不联网）并把 `mcp__` 复合名工具注册进 registry
+     * （BuiltinTools.register 之后、AgentDefinitionValidator.validate 之前——
+     * policy 校验名单必须含 mcp 名）。主 / 子两个装配点共用；工具定义只在
+     * 「连接」成功时整体替换，主 / 子 run 读到的是同一份缓存，天然不重复
+     * tools/list。mcp 切片未注入时空转（CLI / 旧 mock 兼容，同 skills /
+     * searchConfig 口径）。
      */
     async assembleMcpTools(runtime: Pick<AgentTurnRuntimePort, "mcp">, registry: AgentToolRegistry): Promise<void> {
         if (runtime.mcp == null) return;
-        BuiltinTools.registerMcpTools(registry, await runtime.mcp.connectionManager.snapshotTools(), runtime.mcp.connectionManager);
+        BuiltinTools.registerMcpTools(registry, runtime.mcp.connectionManager.cachedTools(), runtime.mcp.connectionManager);
     },
 
     /**
@@ -1350,7 +1351,7 @@ export const AgentTurnRunner: AgentTurnRunnerHelpers = {
             // 装配子 agent 用的 registry：vfs 6 件 + 静态 task（孙 agent 被 resolve deny）。
             const baseRegistry = new ToolRegistry<BuiltinToolContext>();
             BuiltinTools.register(baseRegistry);
-            // 子 run 复用同一份 MCP 快照（snapshotTools 带缓存命中，不重复 tools/list）。
+            // 子 run 复用同一份 MCP 缓存（cachedTools 同步读，不重复 tools/list）。
             await AgentTurnRunner.assembleMcpTools(runtime, baseRegistry);
             // 预算候选子代理名单：mode !== "primary"、排除子 agent 自身。
             // task 是否对 LLM 可见由下方 AgentTools.resolveRegistry 的 depth 判断控制（depth>=2 deny）。
