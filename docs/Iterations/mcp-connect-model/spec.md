@@ -110,7 +110,7 @@ type RegisteredTool<Ctx = unknown> = Tool<any, any, Ctx> | ExternalTool<Ctx>;
 | 显式动作（开关 / 保存 / 测试连接 / 授权成功） | 任意 | `ready`，替换缓存 | `failed`，清缓存 |
 | 显式动作 | `disabled` / `unsupported` | 不连接，原样返回当前状态 | 同左 |
 
-每次连接成功都重新采样 `heldSession`。
+
 
 调用：
 
@@ -156,7 +156,7 @@ export interface McpConnectionManager {
 - 「重复触发共享一次尝试」只约束不作废的入口（`connectUnconnected` 的重复调用、调用时重连撞上进行中的后台连接）；`connect` 一律先作废，作废前先关掉该服务器的旧连接（不等待关闭完成）。沿用现状：后来者共用首次握手时，首个调用者的 signal 约束这次握手；没有调用方 signal 的入口只受连接预算约束，有调用方 signal 的入口把两者合起来用（任一触发即中止）。
 - 调用时重连**不递增代际**，只关掉旧 client、清 `client` 字段，保留 `snapshots`。
 - **重连判据在 `callTool` 处读原始错误**，不读分类结果：① `McpTransportError` 且没有 HTTP 响应（`raw` 为空）；② HTTP 404 且该服务器 `heldSession`。SDK 的单次请求超时（`SdkError` / `RequestTimeout`）不满足①②，所以不重连——它在分类结果里和「没有拿到响应」同为 `network`，从分类结果上分不出来。命中判据②的那次失败在「是否重连」上视同连接级失败；重连后的重试若仍 404，按普通失败分类原样返回（此时是新会话，不再满足②）。不改 `McpFailureClassifier`，7 个内部码不增。
-- 会话失效的读取：`OfficialMcpClient` 新增只读访问器 `sessionId`（转发到底层传输）；连接条目记录 `heldSession`（最近一次读到的会话编号非空），在关旧 client **之前**采样（`close()` 会清掉会话编号），每次连接成功后重新采样。
+- 会话失效的读取：`OfficialMcpClient` 新增只读访问器 `sessionId`（转发到底层传输）；判据直接读当前 client 的 `sessionId`（在关旧 client 之前读，`close()` 会清掉会话编号）；连接条目不另存会话标记。
 - **取消落在重连握手期间**（旧连接已关、握手未完成时用户点停止）：条目写回 `disconnected`，缓存保留，返回 `Interrupt.cancelled`。不这样做的话条目会停在「连接中」，而进页面对「连接中」不动，永远卡住。「取消不写连接状态」的例外只有这一处。握手期间如果是**连接预算到点**（不是用户取消）而中止，按失败返回（`Result.err`），状态同样是 `disconnected`；只有调用方 signal 确实已中止才算取消。如果撞上的握手不是本调用发起的（与后台入口共享的那次），它不受本调用 signal 约束，会按自己的结果写回状态；本调用只按「用户取消」返回，不改状态——这种握手会自行结束，不存在卡住的问题。
 - 所有状态写回（已断开、撞名标记、清除标记恢复）都保留条目原有的 `lastConnectedAt`（现状撞名标记会丢掉它，顺手改掉）。
 
@@ -301,7 +301,7 @@ apps/desktop/renderer/features/settings/mcp-server-meta.ts
 
 - Step 6 — phase-connect-model — blocking: yes — qa: auto：`McpServerState` 加 `disconnected`；端口重写（`cachedTools` 同步、`connectUnconnected`、`connect`）
 - Step 7 — phase-connect-model — blocking: yes — qa: auto：管理器重构：删 TTL；统一「连接」内部步骤（「连接中」在首个 `await` 之前同步落表）；`failWith` 按入口与起点选 `failed` / 保持 `disconnected`；撞名检测在两个读取口执行，补上「冲突消失清标记、按连接是否还在恢复」
-- Step 8 — phase-connect-model — blocking: yes — qa: auto：`callTool` 按原始错误判定是否重连（连接条目加 `heldSession`，关旧 client 前采样），重连一次重试一次（复用调用方 signal）；`failCall` 只对走到「已断开」的失败写状态，取消落在重连握手期间写回 `disconnected`；`OfficialMcpClient` 新增 `sessionId` 访问器；重连不递增代际；`invalidate` 前先关旧 client
+- Step 8 — phase-connect-model — blocking: yes — qa: auto：`callTool` 按原始错误判定是否重连（关旧 client 前读 `sessionId`），重连一次重试一次（复用调用方 signal）；`failCall` 只对走到「已断开」的失败写状态，取消落在重连握手期间写回 `disconnected`；`OfficialMcpClient` 新增 `sessionId` 访问器；重连不递增代际；`invalidate` 前先关旧 client
 - Step 9 — phase-connect-model — blocking: yes — qa: auto：**先建占位**（下一步装配要用到它）：`McpToolAdapter.groupTool()`；`BuiltinTools.register` 多注册 `mcp` 占位；`registerMcpTools` 改为无条件注销占位再注册实际工具，函数内撞名处理改为「同名只注册第一个」
 - Step 10 — phase-connect-model — blocking: yes — qa: auto：`run-agent-turn.ts` 装配顺序改为「注册（含占位）→ 校验 → 筛选 → 替换或注销占位」，读 `cachedTools()`，更新注释
 - Step 11 — phase-connect-model — blocking: yes — qa: auto：改写 `client-connection-manager.test.ts`（删 T-M19 过期用例，经 `snapshotTools` 驱动网络的用例改走新入口）与 `tools-registration.test.ts` 的 `stubManager` 与 `:44` 处「内置 11 件」注释，删除该文件 `:72`、`:79` 两条断言旧撞名过滤的用例（由 T-C25b / T-C25c 接替）；改写 `tools-registration.test.ts:156` 的 T-M20（旧「读时标记 + 条目剔除 + 复用 TTL 缓存」→ 删除，状态断言由 T-C17 接替、注册断言由 T-C25c 接替）；新增 T-C 组用例；新增 T-P1 ~ T-P9（策略用例落 `test/mcp/tools-registration.test.ts`，主 run / 子 run 的装配用例落 `test/service/agent/`）

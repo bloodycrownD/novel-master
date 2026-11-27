@@ -46,12 +46,11 @@ import { McpTransportError, type McpRequestFn } from "@/infra/mcp/ports/mcp-tran
 /** 单 server 连接预算上限（总体方案 C：只约束「连接」这一步，生产 8000；测试注入小值）。 */
 const MCP_CONNECT_BUDGET_MS = 8_000;
 
-/** 单 server 的连接与缓存条目（client 为 null 表示无可用连接；heldSession = 最近一次采样到服务器下发的会话编号非空）。 */
+/** 单 server 的连接与缓存条目（client 为 null 表示无可用连接）。 */
 interface McpConnectionEntry {
     client: OfficialMcpClient | null;
     snapshots: readonly McpToolSnapshot[];
     status: McpServerStatus;
-    heldSession: boolean;
     inflight: Promise<Result<OfficialMcpClient, ConnectFailure>> | null;
 }
 
@@ -132,7 +131,7 @@ export const McpConnectionManagerFactory = {
          * 直接读写 connections / generations 闭包状态。「连接中」在本函数体内首个
          * await 之前同步落表（调用方拿到 promise 时就能读到 connecting，且并发触发
          * 共享同一次尝试）；失败按入口与起点写回 failed（清缓存）或 disconnected
-         * （保留缓存与 lastConnectedAt）；成功整体替换缓存并重新采样 heldSession。
+         * （保留缓存与 lastConnectedAt）；成功整体替换缓存。
          * 写回前校验代际：invalidate / closeAll / 更新的 connect 之后在途结果一律
          * 丢弃，丢弃时顺手关掉刚建好的 client，不泄漏连接。
          */
@@ -159,7 +158,7 @@ export const McpConnectionManagerFactory = {
                     const failure: McpFailure = error != null && RequestAbort.isAbortLikeError(error) ? {kind: "network", action: "retry", detail: signal.aborted ? "连接在完成前被中止" : `连接 ${budgetMs}ms 预算内未完成握手与 tools/list，已中止在途请求`} : failureFrom(config, reason);
                     if (isStale(config.id, generation)) return Result.err(reason);
                     const current = connections.get(config.id);
-                    connections.set(config.id, {client: null, snapshots: keepCache ? current?.snapshots ?? [] : [], status: {serverId: config.id, state: keepCache ? "disconnected" : "failed", failure, ...(keepCache && current?.status.lastConnectedAt !== undefined ? {lastConnectedAt: current.status.lastConnectedAt} : {})}, heldSession: keepCache ? current?.heldSession ?? false : false, inflight: null});
+                    connections.set(config.id, {client: null, snapshots: keepCache ? current?.snapshots ?? [] : [], status: {serverId: config.id, state: keepCache ? "disconnected" : "failed", failure, ...(keepCache && current?.status.lastConnectedAt !== undefined ? {lastConnectedAt: current.status.lastConnectedAt} : {})}, inflight: null});
                     return Result.err(reason);
                 };
                 // bearer 密钥读失败按无 token 处理（SKSP 故障不断连，服务器 401 会归 auth）。
@@ -185,12 +184,12 @@ export const McpConnectionManagerFactory = {
                 }
                 const snapshots = listed.value.map((tool) => ({serverId: config.id, toolName: tool.name, ...(tool.description === undefined ? {} : {toolDescription: tool.description}), ...(Guards.isRecord(tool.inputSchema) ? {inputSchema: tool.inputSchema} : {})}));
                 const connectedAt = now();
-                connections.set(config.id, {client: handshake.value, snapshots, status: {serverId: config.id, state: "ready", toolCount: snapshots.length, lastConnectedAt: connectedAt}, heldSession: handshake.value.sessionId() !== null, inflight: null});
+                connections.set(config.id, {client: handshake.value, snapshots, status: {serverId: config.id, state: "ready", toolCount: snapshots.length, lastConnectedAt: connectedAt}, inflight: null});
                 return Result.ok(handshake.value);
             })();
-            // 「连接中」与在途 promise 同步落表（保留断开前的缓存、heldSession 与 lastConnectedAt）：连点开关、反复进列表、并发调用都共享同一次尝试。
+            // 「连接中」与在途 promise 同步落表（保留断开前的缓存与 lastConnectedAt）：连点开关、反复进列表、并发调用都共享同一次尝试。
             const previous = connections.get(config.id);
-            connections.set(config.id, {client: null, snapshots: keepCache && previous != null ? previous.snapshots : [], status: {serverId: config.id, state: "connecting", ...(keepCache && previous?.status.lastConnectedAt !== undefined ? {lastConnectedAt: previous.status.lastConnectedAt} : {})}, heldSession: keepCache && previous != null ? previous.heldSession : false, inflight: attempt});
+            connections.set(config.id, {client: null, snapshots: keepCache && previous != null ? previous.snapshots : [], status: {serverId: config.id, state: "connecting", ...(keepCache && previous?.status.lastConnectedAt !== undefined ? {lastConnectedAt: previous.status.lastConnectedAt} : {})}, inflight: attempt});
             return attempt.finally(() => {
                 clearTimeout(timer);
                 signal.removeEventListener("abort", onCallerAbort);
@@ -374,9 +373,7 @@ export const McpConnectionManagerFactory = {
             const connectionLost = transportError !== null && transportError.raw == null;
             const sessionExpired = transportError?.raw?.status === 404 && client.sessionId() !== null;
             if (!connectionLost && !sessionExpired) return Result.err(failureOf(config, called.error));
-            // 关掉旧连接（先采样 heldSession——close 会清掉会话编号）、保留缓存，重连一次并重试一次。
-            const dying = connections.get(config.id);
-            if (dying != null) connections.set(config.id, {...dying, heldSession: client.sessionId() !== null});
+            // 关掉旧连接、保留缓存，重连一次并重试一次。
             void client.close().catch(() => undefined);
             const reconnected = await connectServer(config, {kind: "reconnect"}, signal);
             if (!reconnected.ok) return reconnectOutcome(config, signal, reconnected.error);

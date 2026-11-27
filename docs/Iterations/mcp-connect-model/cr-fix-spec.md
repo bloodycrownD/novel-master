@@ -76,7 +76,7 @@ P0 无。
 3. **桌面端「测试连接」仍是先静默保存再连接，一次动作连两次**（`McpServerDetailView.tsx:333-335`）。spec 只说「改调 connect(id)」，没说保留也没说删除。属既有行为。需你定：保留（回填 spec）还是改成只连一次。
 
 ## Open questions / 待拍板
-- **`heldSession` 字段只写不读**：连接条目上的这个字段在三处被保留和采集，但重连判据实际读的是 `client.sessionId()`（`create-mcp-connection-manager.ts:374`）。与 spec §C「连接条目记录 heldSession」字面相符。我的建议是删掉这个字段、以 `client.sessionId()` 为准并回填 spec；它不影响行为，所以没列为必修，等你定。
+- 无。`heldSession` 字段已删（用户 2026-11-29：「留着干什么」），重连判据直接读 `client.sessionId()`，spec 三处同步改。
 - **两端「已断开」标签没有文案断言**：spec 测试矩阵没列，靠人工验收。补一条渲染断言成本很低，要不要补你定。
 
 ## 已豁免（用户确认不修）
