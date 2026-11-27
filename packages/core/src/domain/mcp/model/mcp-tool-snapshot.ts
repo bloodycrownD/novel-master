@@ -2,7 +2,7 @@
  * MCP 工具缓存条目模型（总体方案 B）：工具定义是内存缓存，只在「连接」（握手 +
  * tools/list）成功时整体替换，没有过期时间；读配置 / 状态 / 缓存都不联网。
  * server 级失败只从 {@link McpServerStatus} 读出：`cachedTools()` 对失败、撞名
- * 与从未连上的 server 只是跳过，缓存条目里没有它们的工具。
+ * 与从未连上的 server 只是跳过（撞名与断开的服务器条目和快照都还在，只是读取时跳过）。
  *
  * @module domain/mcp/model/mcp-tool-snapshot
  */

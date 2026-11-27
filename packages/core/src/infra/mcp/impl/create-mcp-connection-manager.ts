@@ -310,11 +310,11 @@ export const McpConnectionManagerFactory = {
             return deps.listServers().map(statusOfConfig);
         };
 
-        // nm-style: keep-local — callTool 两处重连失败（起点重连、调用失败后的重连）共用的收尾：重连握手被调用方 signal 中止算取消（状态已由连接步骤写回 disconnected），其余按失败返回。
+        // nm-style: keep-local — callTool 两处重连失败（起点重连、调用失败后的重连）共用的收尾：重连握手期间只有调用方 signal 确实中止才算取消（状态已由连接步骤写回 disconnected）；连接预算到点不是取消，按失败返回。
         const reconnectOutcome = (config: McpServerConfig, signal: AbortSignal, reason: ConnectFailure): Result<unknown, McpFailure> | Interrupt => {
-            const error = reason.kind === "error" ? reason.error : null;
-            if (error != null && (RequestAbort.isAbortLikeError(error) || signal.aborted)) return {kind: "cancelled", reason: "user-stop"};
-            return Result.err(failureFrom(config, reason));
+            if (signal.aborted) return {kind: "cancelled", reason: "user-stop"};
+            // 失败原因取连接步骤已落表的那份（预算到点在那里归一成 network），返回值与状态页显示的是同一个失败。
+            return Result.err(connections.get(config.id)?.status.failure ?? failureFrom(config, reason));
         };
 
         /**
@@ -351,7 +351,7 @@ export const McpConnectionManagerFactory = {
                 for (const dispose of disposers) dispose();
                 // inflight 是 connectServer 的 promise、从不 reject，映射到 cancelled 的一支不可达，只为让 await 不引入异常通道。
                 if (outcome.kind === "cancelled") return {kind: "cancelled", reason: "user-stop"};
-                if (!outcome.value.ok) return Result.err(failureFrom(config, outcome.value.error));
+                if (!outcome.value.ok) return Result.err(connections.get(config.id)?.status.failure ?? failureFrom(config, outcome.value.error));
                 client = outcome.value.value;
             } else {
                 const reconnected = await connectServer(config, {kind: "reconnect"}, signal);

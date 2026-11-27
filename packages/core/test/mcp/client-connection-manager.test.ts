@@ -372,6 +372,21 @@ describe("McpConnectionManagerFactory.create", () => {
         assert.equal(statusOf(harness.manager, "srv")?.state, "ready", "不会卡在连接中");
     });
 
+    it("T-C32: 调用时发起的重连握手因连接预算到点而中止（调用方没取消）→ 按失败返回 network，状态 disconnected，缓存保留", async () => {
+        const harness = makeHarness([{id: "srv", toolCalls: ["refused"], gateInitializeAt: [1]}], {connectBudgetMs: 100});
+        await harness.manager.connectUnconnected();
+        const pending = harness.manager.callTool("srv", "read", {}, new AbortController().signal);
+        await harness.gateReady("srv");
+        const outcome = asResult(await pending, "T-C32");
+        assert.equal(outcome.ok, false, "预算到点不是用户取消，不走 Interrupt");
+        if (outcome.ok) return;
+        assert.equal(outcome.error.kind, "network");
+        const status = statusOf(harness.manager, "srv");
+        assert.equal(status?.state, "disconnected");
+        assert.equal(status?.failure?.kind, "network", "返回给模型的失败与状态页显示的是同一个");
+        assert.deepEqual(harness.manager.cachedTools().map((tool) => tool.toolName), ["read"]);
+    });
+
     it("T-C13c: 调用时撞上后台入口的在途握手，期间用户取消 → Interrupt.cancelled，状态由那次握手的结果决定", async () => {
         const harness = makeHarness([{id: "srv", gateInitializeAt: [0]}], {connectBudgetMs: 5_000});
         const background = harness.manager.connectUnconnected();
