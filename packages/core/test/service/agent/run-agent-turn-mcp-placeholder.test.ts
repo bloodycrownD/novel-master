@@ -92,40 +92,26 @@ function stubMcpManager(): McpConnectionManager {
  * 按调用序回放的 mock modelRequests：记录每次 request 收到的模型侧工具名
  * （options.tools 的 name 列表），作为占位替换的断言缝。
  */
-function scriptedModel(
-    responses: readonly LlmChatResult[],
-): ModelRequestService & { readonly toolNames: readonly (readonly string[])[] } {
+function scriptedModel(responses: readonly LlmChatResult[]): ModelRequestService & { readonly toolNames: readonly (readonly string[])[] } {
     const toolNames: string[][] = [];
     let calls = 0;
     return {
         toolNames,
-        request: async (
-            _savedModelId: string,
-            _userContent: string,
-            options?: ModelRequestOptions,
-        ): Promise<Result<LlmChatResult, AppError>> => {
+        request: async (_savedModelId: string, _userContent: string, options?: ModelRequestOptions): Promise<Result<LlmChatResult, AppError>> => {
             const idx = calls;
             calls += 1;
             toolNames.push((options?.tools ?? []).map((tool) => tool.name));
             const r = responses[idx];
             if (r == null) {
-                throw new Error(
-                    `scriptedModel: 第 ${idx} 次调用无预设响应（responses.length=${responses.length}）`,
-                );
+                throw new Error(`scriptedModel: 第 ${idx} 次调用无预设响应（responses.length=${responses.length}）`);
             }
             return Result.ok(r);
         },
     };
 }
 
-function makeRuntime(
-    ctx: ReturnType<typeof getNovelMasterTestContext>,
-    args: {
-        readonly modelRequests: ModelRequestService;
-        /** 传 stubMcpManager() 注入 MCP 切片；不注入 = T-P9 的「无 MCP 运行环境」。 */
-        readonly mcp?: McpConnectionManager;
-    },
-): AgentTurnRuntimePort {
+/** 装配一轮 run 的 runtime；`args.mcp` 传 stubMcpManager() 注入 MCP 切片，不注入 = T-P9 的「无 MCP 运行环境」。 */
+function makeRuntime(ctx: ReturnType<typeof getNovelMasterTestContext>, args: { readonly modelRequests: ModelRequestService; readonly mcp?: McpConnectionManager }): AgentTurnRuntimePort {
     const registry = AgentServiceFactory.createRegistry(ctx.conn, ctx.state);
     return {
         state: {
@@ -215,10 +201,7 @@ function realEventBus(): AgentTurnRuntimePort["eventBus"] {
 }
 
 /** 注册主 agent def（test-default-agent，model 必填；tools 策略按用例传）。 */
-async function seedDefaultAgent(
-    ctx: ReturnType<typeof getNovelMasterTestContext>,
-    def: Omit<AgentDefinition, "name" | "prompts" | "model">,
-): Promise<void> {
+async function seedDefaultAgent(ctx: ReturnType<typeof getNovelMasterTestContext>, def: Omit<AgentDefinition, "name" | "prompts" | "model">): Promise<void> {
     const registry = AgentServiceFactory.createRegistry(ctx.conn, ctx.state);
     await registry.upsert("test-default-agent", {
         name: "测试默认 Agent",
@@ -229,19 +212,13 @@ async function seedDefaultAgent(
 }
 
 /** 注册子代理 def 到 registry（mode=subagent，确保可被 task 工具调用）。 */
-async function seedChildAgent(
-    ctx: ReturnType<typeof getNovelMasterTestContext>,
-    def: Omit<AgentDefinition, "name" | "prompts" | "model" | "mode"> = {},
-): Promise<void> {
+async function seedChildAgent(ctx: ReturnType<typeof getNovelMasterTestContext>, def: Omit<AgentDefinition, "name" | "prompts" | "model" | "mode"> = {}): Promise<void> {
     const registry = AgentServiceFactory.createRegistry(ctx.conn, ctx.state);
     await registry.upsert("child-worker", { ...childAgentDef, ...def });
 }
 
 /** 跑一轮纯文本主 run（1 次模型请求），返回每次请求的模型侧工具名。 */
-async function runSingleTurn(
-    ctx: ReturnType<typeof getNovelMasterTestContext>,
-    args: { readonly mcp?: McpConnectionManager; readonly def?: Omit<AgentDefinition, "name" | "prompts" | "model"> },
-): Promise<readonly (readonly string[])[]> {
+async function runSingleTurn(ctx: ReturnType<typeof getNovelMasterTestContext>, args: { readonly mcp?: McpConnectionManager; readonly def?: Omit<AgentDefinition, "name" | "prompts" | "model"> }): Promise<readonly (readonly string[])[]> {
     await seedDefaultAgent(ctx, args.def ?? {});
     const modelRequests = scriptedModel([textDoneResponse("完成")]);
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
@@ -258,17 +235,10 @@ async function runSingleTurn(
  * 跑一轮「主 agent 发 task → 子 agent 完成 → 主 agent 收尾」的完整 turn，
  * 返回每次请求的模型侧工具名（[主, 子, 主] 三次）。
  */
-async function runTaskTurn(
-    ctx: ReturnType<typeof getNovelMasterTestContext>,
-    args: { readonly mcp?: McpConnectionManager; readonly parentDef?: Omit<AgentDefinition, "name" | "prompts" | "model">; readonly childDef?: Omit<AgentDefinition, "name" | "prompts" | "model" | "mode"> },
-): Promise<readonly (readonly string[])[]> {
+async function runTaskTurn(ctx: ReturnType<typeof getNovelMasterTestContext>, args: { readonly mcp?: McpConnectionManager; readonly parentDef?: Omit<AgentDefinition, "name" | "prompts" | "model">; readonly childDef?: Omit<AgentDefinition, "name" | "prompts" | "model" | "mode"> }): Promise<readonly (readonly string[])[]> {
     await seedDefaultAgent(ctx, args.parentDef ?? {});
     await seedChildAgent(ctx, args.childDef ?? {});
-    const modelRequests = scriptedModel([
-        taskToolUseResponse("tu-mcp"),
-        textDoneResponse("子代理已完成"),
-        textDoneResponse("主代理收到结果"),
-    ]);
+    const modelRequests = scriptedModel([taskToolUseResponse("tu-mcp"), textDoneResponse("子代理已完成"), textDoneResponse("主代理收到结果")]);
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id, "S-MCP-PLACEHOLDER-TASK"));
     const runtime = makeRuntime(ctx, { modelRequests, mcp: args.mcp });

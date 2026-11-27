@@ -152,14 +152,7 @@ describe("McpConnectionManagerFactory.create", () => {
     });
 
     it("T-C2: connectUnconnected() 只对 pending 发起连接；ready / connecting / failed / disabled / unsupported 不动", async () => {
-        const harness = makeHarness([
-            {id: "fresh"},
-            {id: "ready-srv"},
-            {id: "connecting-srv", gateInitializeAt: [0]},
-            {id: "failed-srv", failInitializeAt: [0]},
-            {id: "off-srv", enabled: false},
-            {id: "stdio-srv", type: "stdio"},
-        ], {connectBudgetMs: 2_000});
+        const harness = makeHarness([{id: "fresh"}, {id: "ready-srv"}, {id: "connecting-srv", gateInitializeAt: [0]}, {id: "failed-srv", failInitializeAt: [0]}, {id: "off-srv", enabled: false}, {id: "stdio-srv", type: "stdio"}], {connectBudgetMs: 2_000});
         await harness.manager.connect("ready-srv");
         const connectingRound = harness.manager.connect("connecting-srv");
         await harness.gateReady("connecting-srv");
@@ -309,13 +302,7 @@ describe("McpConnectionManagerFactory.create", () => {
     });
 
     it("T-C12: 服务器报的错（401/403/429/5xx/isError）不重连，状态与缓存不变", async () => {
-        const harness = makeHarness([
-            {id: "auth-srv", toolCalls: ["http401"]},
-            {id: "permission-srv", toolCalls: ["http403"]},
-            {id: "rate-srv", toolCalls: ["http429"]},
-            {id: "server-srv", toolCalls: ["http500"]},
-            {id: "is-error-srv", toolCalls: ["is-error"]},
-        ], {connectBudgetMs: 2_000});
+        const harness = makeHarness([{id: "auth-srv", toolCalls: ["http401"]}, {id: "permission-srv", toolCalls: ["http403"]}, {id: "rate-srv", toolCalls: ["http429"]}, {id: "server-srv", toolCalls: ["http500"]}, {id: "is-error-srv", toolCalls: ["is-error"]}], {connectBudgetMs: 2_000});
         await harness.manager.connectUnconnected();
         const cacheBefore = harness.manager.cachedTools();
         const signal = new AbortController().signal;
