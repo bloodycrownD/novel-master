@@ -9,7 +9,7 @@
  * 服务层 `resolveSkillRelPath` 对 path 另行兜底。
  *
  * description 是 lambda（照 `subagent-tool` 先例）：从装配期预算好的
- * `ctx.skills.effective` 清单拼「可用技能」文案。求值时机 `toolsFromRegistry`
+ * `ctx.skills.effective` 清单拼「可用技能」文案。求值时机 `ToolDefinitions.fromRegistry`
  * 每 run 一次——回合内技能启停不即时反映，与 task 工具一致，有意行为。
  *
  * load 与 read 是两个语义层：load 是「使用」技能（读生效副本 SKILL.md

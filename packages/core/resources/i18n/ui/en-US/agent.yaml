@@ -66,7 +66,7 @@
     select_tools: Select tools
     allowlist_label: Allowlist tools
     denylist_label: Denylist tools
-    builtin_tools_hint: "When unset, all {count} built-in tools are used: task, read, write, edit, fs, glob, grep, skill, agent, curl, search."
+    builtin_tools_hint: "When unset, all {count} built-in tools are used: task, read, write, edit, fs, glob, grep, skill, agent, curl, search, mcp."
     selected_tools_aria: "Selected tools ({selected}/{total})"
     no_tools_selected: "No tools selected (0/{total})"
     all_tools_selected: "All tools ({total}/{total})"
@@ -122,7 +122,7 @@
     tool_desc_agent: Manage agent definitions (list/get/create/update; primary agent only)
     tool_desc_curl: "Send http/https requests to fetch or submit web/API content, with custom methods, headers and bodies; responses over 50KB are saved to the session workspace /tmp/ (readable via read)"
     tool_desc_search: "Web search: query pages serially through the enabled search engines and return raw engine results (JSON text); engines are managed under Settings → Search (only the built-in DuckDuckGo free search is enabled by default, no configuration needed)"
-    mcp_not_configured: No MCP servers configured
+    tool_desc_mcp: Tools provided by MCP servers
     # p27 R6 wave 3-2a: editor validations and failure titles (agent-editor-state shared validations + mobile editor toasts)
     name_required: Agent name is required
     assistant_text_required: Workplace assistant confirmation text is required

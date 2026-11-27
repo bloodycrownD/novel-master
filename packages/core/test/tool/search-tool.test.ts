@@ -128,11 +128,11 @@ async function enableWithKey(store: SearchConfigStore, engineId: string, key: st
 }
 
 describe("search 工具：注册与策略", () => {
-    it("registry 含 search（共 11 个内置工具），不在任何摘除分支内", () => {
+    it("registry 含 search（共 12 个内置工具，含 mcp 占位），不在任何摘除分支内", () => {
         const registry = new ToolRegistry<BuiltinToolContext>();
         BuiltinTools.register(registry);
         assert.ok(registry.list().includes(SEARCH_TOOL_NAME));
-        assert.equal(registry.list().length, 11);
+        assert.equal(registry.list().length, 12);
     });
 });
 

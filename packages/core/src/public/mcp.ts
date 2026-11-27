@@ -4,7 +4,7 @@ export type {McpFailure, McpFailureKind, McpFailureAction} from "../domain/mcp/m
 export type {McpServerConfig, McpTransportType, McpAuthType, McpAuthConfig, McpTransportConfig} from "../domain/mcp/model/mcp-server-config.js";
 export {McpServerConfigOps, MCP_DEFAULT_TIMEOUT_MS, MCP_MIN_TIMEOUT_MS} from "../domain/mcp/model/mcp-server-config.js";
 export {McpConfigParser} from "../domain/mcp/logic/parse-mcp-server-config.js";
-export {McpToolRefs, type AgentToolRefRegistry, type McpToolRefDeps} from "../domain/mcp/logic/rewrite-mcp-tool-references.js";
+export {McpServerRename} from "../domain/mcp/logic/rename-mcp-server.js";
 export {McpConnectionManagerFactory, type McpConnectionManagerDeps} from "../infra/mcp/impl/create-mcp-connection-manager.js";
 export type {McpHttpRequest, McpHttpResponse, McpRequestFn} from "../infra/mcp/ports/mcp-transport.port.js";
 export {McpConfigStoreFactory} from "../infra/mcp/impl/mcp-config-store.js";

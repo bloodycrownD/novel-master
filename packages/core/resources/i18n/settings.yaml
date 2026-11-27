@@ -41,6 +41,7 @@ zh-CN:
   mcp.detail.status_pending: 未连接
   mcp.detail.status_connecting: 连接中
   mcp.detail.status_ready: 连接正常
+  mcp.detail.status_disconnected: 已断开
   mcp.detail.test_connection: 测试连接
   mcp.detail.testing: 测试中…
   mcp.detail.timeout_hint.desktop: 单位：毫秒
@@ -280,6 +281,7 @@ en-US:
   mcp.detail.status_pending: Not connected
   mcp.detail.status_connecting: Connecting
   mcp.detail.status_ready: Connected
+  mcp.detail.status_disconnected: Disconnected
   mcp.detail.test_connection: Test connection
   mcp.detail.testing: Testing…
   mcp.detail.timeout_hint.desktop: In milliseconds

@@ -200,6 +200,7 @@ const SETTINGS_MESSAGE_KEYS = [
     "settings.mcp.detail.status_pending",
     "settings.mcp.detail.status_connecting",
     "settings.mcp.detail.status_ready",
+    "settings.mcp.detail.status_disconnected",
     "settings.mcp.detail.test_connection",
     "settings.mcp.detail.testing",
     "settings.mcp.detail.timeout_hint.desktop",

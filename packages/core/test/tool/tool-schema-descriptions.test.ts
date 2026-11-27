@@ -3,7 +3,7 @@ import {  describe, it  } from "node:test";
 import {  BuiltinTools, ToolRegistry  } from "@novel-master/core";
 import {  ToolDefinitions  } from "@novel-master/core/llm-protocol";
 
-describe("toolsFromRegistry parameter descriptions", () => {
+describe("ToolDefinitions.fromRegistry parameter descriptions", () => {
     it("edit tool schema includes property descriptions for LLM", () => {
         const registry = new ToolRegistry();
         BuiltinTools.register(registry);
@@ -20,10 +20,10 @@ describe("toolsFromRegistry parameter descriptions", () => {
         assert.match(schema.properties!.oldString!.description!, /唯一/);
     });
 
-    it("registers 11 builtin tools without chat_grep", () => {
+    it("registers 12 builtin tools (incl. mcp placeholder) without chat_grep", () => {
         const registry = new ToolRegistry();
         BuiltinTools.register(registry);
-        assert.equal(registry.list().length, 11);
+        assert.equal(registry.list().length, 12);
         assert.ok(!registry.list().includes("chat_grep"));
     });
 });

@@ -18,7 +18,7 @@
  *   7. 返回 `{ text, subagentSessionId: childSessionId }`（P0-1 方案 B）
  *
  * 静态内置工具：`description` 是 `(ctx) => string` 的 lambda，运行时由
- * `toolsFromRegistry` 求值。装配期 `runAgentTurn`/`runChildAgent` 预算好候选
+ * `ToolDefinitions.fromRegistry` 求值。装配期 `runAgentTurn`/`runChildAgent` 预算好候选
  * subagent 名单塞进 `ctx.subagent.callableAgents`，description 从这里拼文案。
  *
  * @module domain/tool/builtin/subagent-tool

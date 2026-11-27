@@ -909,7 +909,7 @@ const UI_MESSAGE_KEYS = [
     "ui.agent.tool_desc_agent",
     "ui.agent.tool_desc_curl",
     "ui.agent.tool_desc_search",
-    "ui.agent.mcp_not_configured",
+    "ui.agent.tool_desc_mcp",
 
     // agent：编辑器校验与失败标题（波 3-2a 补键：agent-editor-state 两端共用校验 4 条 + mobile 编辑器 toast）
     "ui.agent.name_required",

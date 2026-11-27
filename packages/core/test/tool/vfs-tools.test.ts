@@ -38,10 +38,10 @@ describe("Builtin file tools V2 (unit)", () => {
         );
     });
 
-    it("registers exactly 11 builtin tools via BuiltinTools.register", () => {
+    it("registers exactly 12 builtin tools (incl. mcp placeholder) via BuiltinTools.register", () => {
         const registry = new ToolRegistry<BuiltinToolContext>();
         BuiltinTools.register(registry);
-        assert.equal(registry.list().length, 11);
+        assert.equal(registry.list().length, 12);
         assert.ok(registry.list().includes("task"));
         assert.ok(registry.list().includes("skill"));
         assert.ok(registry.list().includes("agent"));

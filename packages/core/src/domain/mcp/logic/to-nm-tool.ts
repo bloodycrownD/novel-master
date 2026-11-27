@@ -1,7 +1,7 @@
 /**
- * MCP 工具适配（spec §六）：快照条目 → nm `ExternalTool`。description 同步取快照
- * （装配期预算），inputJsonSchema 原样取 server 声明的 JSON Schema（模型侧参数定义
- * 与声明逐字段一致，本地不校验；未声明时给 `{type:"object", properties:{}}`），
+ * MCP 工具适配（spec §六 / §D）：快照条目 → nm `ExternalTool`。description 同步取
+ * 快照（装配期预算），inputJsonSchema 原样取 server 声明的 JSON Schema（模型侧参数
+ * 定义与声明逐字段一致，本地不校验；未声明时给 `{type:"object", properties:{}}`），
  * run 委托连接管理器：
  * - 成功 → renderMcpToolResult 全文 → `Result.ok`；
  * - 连接 / 协议失败（`Result.err(McpFailure)`）→ `Result.err(TOOL_FAILED)`，
@@ -11,6 +11,14 @@
  *   不得包成 TOOL_FAILED；
  * - 结果超 50KB 照 curl / search 先例经 `OverflowSink.sink` 落盘（sink 会 throw，
  *   落盘失败回落字节截断，不让异常冒出 run）。
+ *
+ * 另有 `groupTool()`：智能体策略层的占位工具（spec §D）。MCP 是一个工具集合，
+ * 在策略层面当作一个普通工具处理——智能体名单里只存 `mcp` 一个词，不存任何
+ * 具体 MCP 工具名。占位在 `BuiltinTools.register` 时随自带工具进册（名单筛选、
+ * 保存校验照旧按名字处理），装配期的唯一出口是被 `registerMcpTools` 注销并
+ * 换成实际注册的 `mcp__` 工具，因此占位的 run 不可达，返回 `TOOL_FAILED` 兜底。
+ * description 写死中文：core 运行时不持 locale，且该描述到不了模型（占位被
+ * 注销）；两端工具目录的展示走 `ui.agent.tool_desc_mcp` i18n 键。
  *
  * 命名按内容主体（文件名带动词前缀 to-*，nm-style §9.7）：`McpToolAdapter`。
  *
@@ -88,4 +96,20 @@ export const McpToolAdapter = {
             },
         };
     },
+    /**
+     * 智能体策略层的占位工具（spec §D）：名为 `mcp` 的 `ExternalTool`，与其他
+     * 无参数工具同一参数定义形状。`BuiltinTools.register` 注册它，让名单筛选
+     * 与保存校验把 `mcp` 当已知名；装配期由 `registerMcpTools` 无条件注销。
+     */
+    // nm-style: keep-public — spec §D 点名 McpToolAdapter.groupTool()（register-builtin-tools 按名消费）；run 不可达的兜底实现就是占位的完整语义。
+    groupTool: (): ExternalTool<BuiltinToolContext> => ({
+        name: "mcp",
+        description: () => "MCP 服务器提供的工具",
+        inputJsonSchema: NO_INPUT_JSON_SCHEMA,
+        // run 不可达：占位的唯一出口是装配期的注销与替换，到不了模型；兜底走
+        // TOOL_FAILED（照 toNmTool 的失败通道），不走异常。
+        async run(): Promise<Result<unknown, AppError>> {
+            return Result.err(new AppError("TOOL_FAILED", {toolName: "mcp", detail: "占位工具不可调用：装配期应已被替换或注销"}));
+        },
+    }),
 } as const;

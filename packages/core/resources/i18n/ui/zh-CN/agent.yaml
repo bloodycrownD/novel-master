@@ -66,7 +66,7 @@
     select_tools: 选择工具
     allowlist_label: 白名单工具
     denylist_label: 黑名单工具
-    builtin_tools_hint: "未配置时使用全部内置工具（{count} 个）：task、read、write、edit、fs、glob、grep、skill、agent、curl、search。"
+    builtin_tools_hint: "未配置时使用全部内置工具（{count} 个）：task、read、write、edit、fs、glob、grep、skill、agent、curl、search、mcp。"
     selected_tools_aria: "已选工具（{selected}/{total}）"
     no_tools_selected: "未选择工具（0/{total}）"
     all_tools_selected: "全部工具（{total}/{total}）"
@@ -122,7 +122,7 @@
     tool_desc_agent: 管理 agent 定义（list/get/create/update，仅主智能体可用）
     tool_desc_curl: 发起 http/https 请求获取或提交网页/API 内容，支持自定义方法、请求头与请求体；响应超过 50KB 时自动保存到会话工作区 /tmp/（可用 read 读取）
     tool_desc_search: 联网搜索：按当前启用的搜索引擎串行检索网页，返回引擎原始结果数据（JSON 文本）；引擎的启用与配置在「设置 → 搜索配置」管理（缺省仅启用内置的 DuckDuckGo 免费搜索，无需配置）
-    mcp_not_configured: 未配置 MCP 服务器
+    tool_desc_mcp: MCP 服务器提供的工具
     # —— 波 3-2a 补键：编辑器校验与失败标题（agent-editor-state 两端共用校验 4 条 + mobile 编辑器 toast） ——
     name_required: 请填写 Agent 名称
     assistant_text_required: 请填写常驻工作区助手确认语

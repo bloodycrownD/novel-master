@@ -164,11 +164,12 @@ export interface AgentTurnRuntimePort extends AgentRunRuntimePort {
      */
     readonly searchConfig?: SearchConfigStore;
     /**
-     * MCP 运行时切片（spec §五 / Step 9）：装配期经 `connectionManager.
-     * cachedTools()` 读工具缓存注册 `mcp__` 复合名工具（子 run 复用同一份
-     * 缓存，天然不重复 tools/list），工具 run 经 `callTool` 调用。可选照
-     * searchConfig / preferences 先例——不强制旧测试 mock 补字段；未注入
-     * = 无 MCP 能力（回滚口径：移除装配即回到「无 MCP」状态，core 其余
+     * MCP 运行时切片（spec §D / Step 10）：装配期经 `connectionManager.
+     * cachedTools()` 读工具缓存（同步、不联网），在名单筛选后把 `mcp` 占位
+     * 替换成实际注册的 `mcp__` 复合名工具（子 run 复用同一份缓存，天然不重复
+     * tools/list），工具 run 经 `callTool` 调用。可选照 searchConfig /
+     * preferences 先例——不强制旧测试 mock 补字段；未注入 = 无 MCP 能力，
+     * 筛选后只注销占位（回滚口径：移除装配即回到「无 MCP」状态，core 其余
      * 功能零影响）。
      */
     readonly mcp?: { readonly connectionManager: McpConnectionManager };
@@ -263,7 +264,7 @@ interface AgentTurnRunnerHelpers {
 
     assembleAgentsToolContext(agentRegistry: AgentRegistryService, allDefs: readonly AgentDefinition[], probeNames: readonly string[], registry: AgentToolRegistry): AgentsToolContext;
 
-    assembleMcpTools(runtime: Pick<AgentTurnRuntimePort, "mcp">, registry: AgentToolRegistry): Promise<void>;
+    assembleMcpTools(runtime: Pick<AgentTurnRuntimePort, "mcp">, registry: AgentToolRegistry): void;
 
     mapResolveError<T>(fn: () => Promise<Result<T, AppError>>): Promise<T>;
 
@@ -423,16 +424,20 @@ export const AgentTurnRunner: AgentTurnRunnerHelpers = {
     },
 
     /**
-     * MCP 工具装配（spec §五/§六 / Step 9）：装配期读连接管理器缓存
-     * `cachedTools()`（同步、不联网）并把 `mcp__` 复合名工具注册进 registry
-     * （BuiltinTools.register 之后、AgentDefinitionValidator.validate 之前——
-     * policy 校验名单必须含 mcp 名）。主 / 子两个装配点共用；工具定义只在
-     * 「连接」成功时整体替换，主 / 子 run 读到的是同一份缓存，天然不重复
-     * tools/list。mcp 切片未注入时空转（CLI / 旧 mock 兼容，同 skills /
-     * searchConfig 口径）。
+     * MCP 占位替换（spec §D / Step 10）：在名单筛选**之后**调用。筛选结果含
+     * 占位 `mcp` 时交给 `BuiltinTools.registerMcpTools` 注销并换上 `mcp__`
+     * 复合名工具（读 `cachedTools()` 同步缓存，不联网；工具定义只在「连接」
+     * 成功时整体替换，主 / 子 run 读到的是同一份缓存）。mcp 切片未注入（CLI /
+     * 旧 mock 兼容，同 skills / searchConfig 口径）时只注销占位——占位不能
+     * 因为没有东西可替换就留在注册表里。筛选结果不含占位（deny 含 mcp 或
+     * allow 未列）时什么都不做。
      */
-    async assembleMcpTools(runtime: Pick<AgentTurnRuntimePort, "mcp">, registry: AgentToolRegistry): Promise<void> {
-        if (runtime.mcp == null) return;
+    assembleMcpTools(runtime: Pick<AgentTurnRuntimePort, "mcp">, registry: AgentToolRegistry): void {
+        if (registry.get("mcp") == null) return;
+        if (runtime.mcp == null) {
+            registry.unregister("mcp");
+            return;
+        }
         BuiltinTools.registerMcpTools(registry, runtime.mcp.connectionManager.cachedTools(), runtime.mcp.connectionManager);
     },
 
@@ -889,10 +894,10 @@ export const AgentTurnRunner: AgentTurnRunnerHelpers = {
 
                 stage = "validate-agent-definition";
                 const toolProbe = new ToolRegistry<BuiltinToolContext>();
+                // 占位 mcp 随 BuiltinTools.register 进册（共 12 个）：policy 校验
+                // 名单必须含 mcp，勾了 MCP 的智能体才保存得下来；实际的占位替换
+                // 在下方名单筛选之后做（assembleMcpTools）。
                 BuiltinTools.register(toolProbe);
-                // MCP 工具在 validate 之前注册：policy 校验名单必须含 mcp__ 复合名
-                //（装配期最多等 min(timeoutMs, 8000)，失败 server 已在连接管理器内隔离跳过）。
-                await AgentTurnRunner.assembleMcpTools(runtime, toolProbe);
                 const validation = await AgentDefinitionValidator.validate(definition, {registeredToolNames: toolProbe.list()});
                 if (!validation.ok) {
                     // 前奏期校验已知失败（四期门⑦沿 Result 到达）：终态记账与下方 catch 同款。
@@ -943,6 +948,9 @@ export const AgentTurnRunner: AgentTurnRunnerHelpers = {
                 const registry = AgentTools.resolveRegistry(toolProbe, definition, {
                     depth: 0,
                 });
+                // 占位替换在筛选之后：筛选结果含 mcp → 换上 mcp__ 工具（读同步缓存）；
+                // runtime.mcp 未注入 → 只注销占位；筛选掉 mcp → 什么都不做（§D）。
+                AgentTurnRunner.assembleMcpTools(runtime, registry);
                 // skill 工具读取：装配期预算生效技能清单（description lambda 用）。
                 // deny 后 registry 不含 skill → 不注入闭包且不产生预算 IO（D4 注册表侧联动）。
                 // 装配失败（effectiveSkills Err）交统一失败收尾：原 throw 进主 catch 的
@@ -1348,11 +1356,10 @@ export const AgentTurnRunner: AgentTurnRunnerHelpers = {
             // 同主 run：register 拿句柄，finally 反注册时回传做所有权比对。
             streamHandle = runtime.streamRegistry?.register(childSessionId);
 
-            // 装配子 agent 用的 registry：vfs 6 件 + 静态 task（孙 agent 被 resolve deny）。
+            // 装配子 agent 用的 registry：内置 12 件（含 mcp 占位，孙 agent 的
+            // task / agent 由 resolve deny）。
             const baseRegistry = new ToolRegistry<BuiltinToolContext>();
             BuiltinTools.register(baseRegistry);
-            // 子 run 复用同一份 MCP 缓存（cachedTools 同步读，不重复 tools/list）。
-            await AgentTurnRunner.assembleMcpTools(runtime, baseRegistry);
             // 预算候选子代理名单：mode !== "primary"、排除子 agent 自身。
             // task 是否对 LLM 可见由下方 AgentTools.resolveRegistry 的 depth 判断控制（depth>=2 deny）。
             const childAllDefsResult = await runtime.agentRegistry.list();
@@ -1369,6 +1376,9 @@ export const AgentTurnRunner: AgentTurnRunnerHelpers = {
             const registry = AgentTools.resolveRegistry(baseRegistry, def, {
                 depth: childDepth,
             });
+            // 占位替换在筛选之后，与主 run 同口径（子 run 复用同一份 MCP 缓存，
+            // cachedTools 同步读，不重复 tools/list）。
+            AgentTurnRunner.assembleMcpTools(runtime, registry);
 
             // skill（D2）：子代理同样注入，清单按父会话 projectId 解析——
             // 与「子代理共享父工作区」语义一致。子 agent 自己的 policy 同样生效（deny 时不注入）。

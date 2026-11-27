@@ -20,14 +20,18 @@ const FIXTURE_URL = new URL("./builtin-tools-from-registry.fixture.json", import
 const CTX = { subagent: { callableAgents: [{ name: "general" }] } } as never;
 
 describe("T-T8: 自带工具 fromRegistry 输出与拆分前夹具逐字节一致", () => {
-    it("11 个自带工具的 name / description / inputSchema 与基线夹具完全一致", () => {
+    it("11 个自带工具与基线夹具完全一致；外加 1 条 mcp 占位（共 12）", () => {
         const fixture = JSON.parse(fs.readFileSync(FIXTURE_URL, "utf8")) as { readonly tools: unknown };
         const registry = new ToolRegistry<BuiltinToolContext>();
         BuiltinTools.register(registry);
         const defs = ToolDefinitions.fromRegistry(registry, CTX);
-        assert.equal(defs.length, 11);
-        assert.deepEqual(defs, fixture.tools);
+        // mcp 占位（spec §D）不在拆分前的夹具内：锁总数 12，自带 11 条单独对夹具。
+        assert.equal(defs.length, 12);
+        const builtins = defs.filter((def) => def.name !== "mcp");
+        assert.deepEqual(builtins, fixture.tools);
         // 逐字节：序列化串也一致（键序与内容不漂移）。
-        assert.equal(JSON.stringify(defs), JSON.stringify(fixture.tools));
+        assert.equal(JSON.stringify(builtins), JSON.stringify(fixture.tools));
+        // 占位排在插入序末尾：无参数 JSON Schema、description 写死中文（到不了模型）。
+        assert.deepEqual(defs.at(-1), {name: "mcp", description: "MCP 服务器提供的工具", inputSchema: {type: "object", properties: {}}});
     });
 });

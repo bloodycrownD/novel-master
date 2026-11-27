@@ -125,7 +125,7 @@ export interface BuiltinToolSkillsContext {
  * `agent` 管理工具读取的闭包；装配点（runAgentTurn / runChildAgent）注入。
  *
  * `agents` 是装配期同步预算好的名单快照：工具的 description lambda 由
- * `toolsFromRegistry` 同步求值（`(ctx) => string`），而
+ * `ToolDefinitions.fromRegistry` 同步求值（`(ctx) => string`），而
  * `agentRegistry.list()` 返回 Promise，lambda 内不能现查——照 skills
  * (`effective`) / task (`callableAgents`) 的装配期预算模式，每 run 一次。
  */

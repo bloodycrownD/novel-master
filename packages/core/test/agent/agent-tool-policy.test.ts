@@ -176,7 +176,7 @@ describe("agent tool policy", () => {
         assert.ok(filtered.list().includes("read"));
         assert.ok(filtered.list().includes("task"));
         assert.equal(filtered.list().length, vfsRegistryNames().length - 1);
-        // LLM 侧定义也不暴露（toolsFromRegistry 只遍历 resolve 后的 registry）
+        // LLM 侧定义也不暴露（ToolDefinitions.fromRegistry 只遍历 resolve 后的 registry）
         assert.ok(!ToolDefinitions.fromRegistry(filtered, mockToolCtx).some((t) => t.name === "skill"));
         // TODO(Step 10)：deny 后 skillsIndex 置空的 D4 联动在提示词预算侧验证；
         // `$` 引用不受影响（注入全文不依赖工具），属后续步骤验收。
@@ -228,7 +228,7 @@ describe("agent tool policy", () => {
         assert.ok(!sub.list().includes("agent"));
         assert.ok(!sub.list().includes("task"));
         assert.ok(sub.list().includes("read"));
-        // LLM 侧定义也不暴露（toolsFromRegistry 只遍历 resolve 后的 registry）
+        // LLM 侧定义也不暴露（ToolDefinitions.fromRegistry 只遍历 resolve 后的 registry）
         assert.ok(!ToolDefinitions.fromRegistry(sub, mockToolCtx).some((t) => t.name === "agent"));
 
         // 孙 agent（depth >= 2，递归上限双保险）：即使 allow 显式含 agent 也移除
