@@ -1,17 +1,15 @@
 /**
- * MCP 工具快照模型：装配期 `tools/list` 的缓存条目与 server 状态标签（spec §五）。
- *
- * 快照是工具 description 的唯一来源——`Tool.description` 是同步 lambda
- * （infra/llm-protocol 的 tool-definitions 同步求值），MCP 工具清单必须装配期
- * 快照、不能异步现查。server 级失败只从 {@link McpServerStatus} 读出：
- * `snapshotTools()` 对失败的 server 只是跳过，快照条目里没有它的位置。
+ * MCP 工具缓存条目模型（总体方案 B）：工具定义是内存缓存，只在「连接」（握手 +
+ * tools/list）成功时整体替换，没有过期时间；读配置 / 状态 / 缓存都不联网。
+ * server 级失败只从 {@link McpServerStatus} 读出：`cachedTools()` 对失败、撞名
+ * 与从未连上的 server 只是跳过，缓存条目里没有它们的工具。
  *
  * @module domain/mcp/model/mcp-tool-snapshot
  */
 
 import type { McpFailure } from "./mcp-failure.js";
 
-/** 单个 MCP 工具的快照条目（`McpToolAdapter.toNmTool` 的装配期输入）。 */
+/** 单个 MCP 工具的缓存条目（`McpToolAdapter.toNmTool` 的装配期输入）。 */
 export interface McpToolSnapshot {
     readonly serverId: string;
     /** MCP 侧原始工具名（未 slug；callTool 用它）。 */
@@ -23,8 +21,8 @@ export interface McpToolSnapshot {
 }
 
 /** server 状态（UI 状态标签与「测试连接」口径）。 */
-/** pending = 启用但从未尝试连接；connecting = 一次尝试进行中；failed 之后界面不自动重试。 */
-export type McpServerState = "ready" | "failed" | "unsupported" | "disabled" | "pending" | "connecting";
+/** pending = 启用但从未尝试连接；connecting = 一次尝试进行中；failed = 从未连上过（或撞名标记），界面不自动重试；disconnected = 曾连上、调用时重连失败，工具缓存保留，进页面会再试。 */
+export type McpServerState = "ready" | "failed" | "disconnected" | "unsupported" | "disabled" | "pending" | "connecting";
 
 /** server 级状态：连接管理器同步读；双端的状态标签与错误原文展示都消费它。 */
 export interface McpServerStatus {

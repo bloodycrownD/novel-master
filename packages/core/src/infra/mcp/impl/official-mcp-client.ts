@@ -148,6 +148,11 @@ export class OfficialMcpClient {
         });
     }
 
+    /** 最近一次响应里服务器下发的会话编号（会话失效判据用：404 且此前持有会话才算会话失效；`close()` 会清掉）。 */
+    sessionId(): string | null {
+        return this.relay.sessionId ?? null;
+    }
+
     /** tools/call：CallToolResult 原样返回（content / isError 的消费在 toNmTool）；非对象入参收空对象。 */
     async callTool(toolName: string, args: unknown, signal: AbortSignal): Promise<CallToolResult> {
         return this.withSignal(signal, () => this.client.callTool({ name: toolName, arguments: Guards.isRecord(args) ? args : {} }, { timeout: this.deps.timeoutMs }));

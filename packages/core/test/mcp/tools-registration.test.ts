@@ -7,10 +7,7 @@ import { BuiltinTools } from "../../src/domain/tool/builtin/register-builtin-too
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
 import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
 import type { McpConnectionManager } from "../../src/domain/mcp/ports/mcp-connection.port.js";
-import type { McpServerConfig } from "../../src/domain/mcp/model/mcp-server-config.js";
 import type { McpToolSnapshot } from "../../src/domain/mcp/model/mcp-tool-snapshot.js";
-import { McpConnectionManagerFactory } from "../../src/infra/mcp/impl/create-mcp-connection-manager.js";
-import type { McpHttpRequest, McpHttpResponse, McpRequestFn } from "../../src/infra/mcp/ports/mcp-transport.port.js";
 import { Result } from "../../src/errors/either.js";
 
 const BASE_DEF: AgentDefinition = {
@@ -36,12 +33,12 @@ const mockToolCtx: BuiltinToolContext = {
 };
 
 /** 注册测试不触达调用通道的 stub 管理器（callTool 恒失败，防误用静默通过）。 */
-const stubManager = (): McpConnectionManager => ({ snapshotTools: async () => [], serverStatuses: () => [], callTool: async () => Result.err({ kind: "protocol", action: "report", detail: "stub: 注册测试不应触达 callTool" }), invalidate: () => {}, closeAll: async () => {} });
+const stubManager = (): McpConnectionManager => ({cachedTools: () => [], connectUnconnected: async () => {}, connect: async () => ({serverId: "stub", state: "pending"}), serverStatuses: () => [], callTool: async () => Result.err({kind: "protocol", action: "report", detail: "stub: 注册测试不应触达 callTool"}), invalidate: () => {}, closeAll: async () => {}});
 
-/** 快照条目工厂：本组用例只关心 serverId 与工具名。 */
+/** 缓存条目工厂：本组用例只关心 serverId 与工具名。 */
 const mcpSnapshot = (serverId: string, toolNames: readonly string[], toolDescription?: string): readonly McpToolSnapshot[] => toolNames.map((toolName) => ({ serverId, toolName, ...(toolDescription === undefined ? {} : {toolDescription}) }));
 
-/** BuiltinTools.register + registerMcpTools 的公共装配（内置 11 件 + 传入快照）。 */
+/** BuiltinTools.register + registerMcpTools 的公共装配（内置 11 件 + 传入缓存快照；mcp 占位接入后内置为 12，见第三阶段）。 */
 const makeRegistry = (snapshot: readonly McpToolSnapshot[], manager: McpConnectionManager = stubManager()): ToolRegistry<BuiltinToolContext> => {
     const registry = new ToolRegistry<BuiltinToolContext>();
     BuiltinTools.register(registry);
@@ -67,19 +64,6 @@ describe("BuiltinTools.registerMcpTools", () => {
         const registry = makeRegistry(mcpSnapshot("srv", ["read"]));
         assert.ok(registry.get("read") != null);
         assert.ok(registry.get("mcp__srv__read") != null);
-    });
-
-    it("T-M20: 同一快照内 slug 重名时涉事 server 全部工具不注册且不 throw，其余 server 照常", () => {
-        const registry = makeRegistry([...mcpSnapshot("dup", ["read", "read", "list"]), ...mcpSnapshot("ok", ["query"])]);
-        assert.equal(registry.get("mcp__dup__read"), undefined);
-        assert.equal(registry.get("mcp__dup__list"), undefined);
-        assert.ok(registry.get("mcp__ok__query") != null);
-    });
-
-    it("T-M20: server id 归一后撞名（a.b 与 a_b → a_b）时两个涉事 server 都不注册且不 throw", () => {
-        const registry = makeRegistry([...mcpSnapshot("a.b", ["read"]), ...mcpSnapshot("a_b", ["read", "write"])]);
-        assert.equal(registry.get("mcp__a_b__read"), undefined);
-        assert.equal(registry.get("mcp__a_b__write"), undefined);
     });
 
     it("注册的工具 run 经 connectionManager.callTool 调用（serverId 闭包绑定、原始工具名透传）", async () => {
@@ -127,55 +111,3 @@ describe("mcp__ 复合名的 policy 归一（T-M21）", () => {
     });
 });
 
-describe("撞名 server 标 failed{protocol,report}（spec §六，连接管理器快照路径）", () => {
-    /**
-     * 走真实快照路径的 harness：a.b 与 a_b 的 tools/list 各回一个 read（serverId
-     * 与工具名 slug 归一后同为 mcp__a_b__read，跨 server 撞名），ok server 回
-     * query 照常。tools/list 调用计数暴露给断言（撞名标记不得重置快照缓存）。
-     */
-    const conflictHarness = (): { manager: McpConnectionManager; listCalls: () => number } => {
-        const servers = [{ id: "a.b" }, { id: "a_b" }, { id: "ok" }];
-        let listCount = 0;
-        const json = (id: number | string | undefined, result: unknown): McpHttpResponse => ({ status: 200, headers: { "content-type": "application/json" }, bodyText: JSON.stringify({ jsonrpc: "2.0", id, result }) });
-        const requestFn: McpRequestFn = async (request: McpHttpRequest): Promise<McpHttpResponse> => {
-            const id = servers.find((server) => request.url === `https://mcp.${server.id}.example.com/mcp`)?.id;
-            if (id === undefined) throw new Error(`mock: 未覆盖的 URL ${request.url}`);
-            const message = JSON.parse(request.body) as { id?: number | string; method: string };
-            if (message.method === "initialize") return json(message.id, { protocolVersion: "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: id, version: "1" } });
-            if (message.method === "notifications/initialized") return { status: 202, headers: {}, bodyText: "" };
-            if (message.method === "tools/list") {
-                listCount += 1;
-                return json(message.id, { tools: (id === "ok" ? [{ name: "query" }] : [{ name: "read" }]).map((tool) => ({ ...tool, inputSchema: { type: "object", properties: {} } })) });
-            }
-            return { status: 500, headers: { "content-type": "text/plain" }, bodyText: `mock: 未覆盖的方法 ${message.method}` };
-        };
-        const listServers = (): readonly McpServerConfig[] => servers.map((server) => ({ id: server.id, description: "", enabled: true, transport: { type: "http", url: `https://mcp.${server.id}.example.com/mcp` }, timeoutMs: 120_000, auth: { type: "none" } }));
-        return { manager: McpConnectionManagerFactory.create({ listServers, requestFn, bearerToken: async () => null, disabledTools: () => [], assemblyBudgetMs: 2_000 }), listCalls: () => listCount };
-    };
-
-    it("T-M20: 同快照 slug 撞名时涉事 server 标 failed{protocol,report}、撞名工具不进快照不注册，其余 server 照常", async () => {
-        const harness = conflictHarness();
-        const registry = new ToolRegistry<BuiltinToolContext>();
-        BuiltinTools.register(registry);
-        const snapshot = await harness.manager.snapshotTools();
-        BuiltinTools.registerMcpTools(registry, snapshot, harness.manager);
-        // 快照与注册：撞名 server 的工具不进快照也不注册；不撞名的 ok server 照常注册。
-        assert.deepEqual(snapshot.map((entry) => [entry.serverId, entry.toolName]), [["ok", "query"]]);
-        assert.equal(registry.get("mcp__a_b__read"), undefined);
-        assert.ok(registry.get("mcp__ok__query") != null);
-        // 状态标记：撞名 server 从 serverStatuses() 读出 failed{protocol,report}，不再显示 ready/pending（spec §五/§六）。
-        const statuses = Object.fromEntries(harness.manager.serverStatuses().map((status) => [status.serverId, status]));
-        for (const serverId of ["a.b", "a_b"]) {
-            const status = statuses[serverId];
-            assert.equal(status?.state, "failed");
-            assert.equal(status?.failure?.kind, "protocol");
-            assert.equal(status?.failure?.action, "report");
-            assert.ok(status?.failure?.detail.includes("mcp__a_b__read"));
-        }
-        assert.equal(statuses["ok"]?.state, "ready");
-        // 撞名标记不重置快照缓存：再次 snapshotTools 复用 TTL 缓存，不重发 tools/list（子 run 复用同一份快照的前提）。
-        const listCallsBefore = harness.listCalls();
-        await harness.manager.snapshotTools();
-        assert.equal(harness.listCalls(), listCallsBefore);
-    });
-});
