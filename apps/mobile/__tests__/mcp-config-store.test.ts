@@ -7,7 +7,7 @@
  * - rename 成功（密钥迁移 + afterRename 落点）与失败回滚（不留半截状态）
  * - create 撞名被拒转 throw 且不写任何密钥（CR-02 的 store 级断言）
  * - connect 直连 connectionManager.connect（作废由 core 负责）；停用与删除只
- *   invalidate 不连接（T-MO2）；connectUnconnected 透传
+ *   invalidate 不连接（T-MO2）
  * - setToolDisabled 落库并刷新镜像；remove 连带清镜像、禁用表与 SKSP refs
  */
 import {AppError, Result} from '@novel-master/core/errors';
@@ -184,14 +184,6 @@ describe('mcp-config.store 薄镜像（CR-09 / CR-02 / 连接模型第四阶段�
 
         expect(h.fakeManager.connect).toHaveBeenCalledWith('a');
         expect(h.fakeManager.invalidate).not.toHaveBeenCalled();
-    });
-
-    it('connectUnconnected 透传 connectionManager.connectUnconnected（进页面触发）', async () => {
-        const h = await makeHarness({servers: [serverConfig('a')]});
-
-        await h.mcp.connectUnconnected();
-
-        expect(h.fakeManager.connectUnconnected).toHaveBeenCalledTimes(1);
     });
 
     it('setToolDisabled 落库并刷新镜像，连接管理器注入的 disabledTools 闭包即时反映', async () => {

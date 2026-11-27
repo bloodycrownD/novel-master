@@ -32,6 +32,7 @@ import {useToast} from '@/components/chrome/ToastHost';
 import {ToastMessage} from '@/errors/toast-message';
 import {coreT} from '@/i18n/core';
 import {settingsTranslator} from '@/i18n/settings';
+import {LogFactory} from '@novel-master/core/log';
 import type {SettingsMessageKey} from '@novel-master/core/settings';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -43,6 +44,7 @@ interface McpServerRow {
 }
 
 const EMPTY_ROWS: readonly McpServerRow[] = [];
+const log = LogFactory.create('mcp.servers');
 
 /** 列表状态标签：已连接 / 连接中 / 已断开 / 未连接（从未尝试与已失败同标「未连接」；失败原因另由副标题直显 failure.detail）。 */
 const statusLabelKey = (status: McpServerStatus): SettingsMessageKey => {
@@ -146,7 +148,10 @@ export function McpServersScreen() {
             const status = mcp.connectionManager.serverStatuses().find(candidate => candidate.serverId === serverId);
             if (status != null) setRows(current => current.map(row => (row.config.id === serverId ? {config: row.config, status} : row)));
         };
-        const done = mcp.connect(serverId).catch(() => undefined);
+        // 业务失败不走 reject（由状态标签与副标题直显）；这里只会接到「服务器不在配置里」这类编程错误，留一条日志，不静默吞掉。
+        const done = mcp.connect(serverId).catch((error: unknown) => {
+            log.warn(`MCP 行开关连接意外中止: ${serverId} ${String(error)}`);
+        });
         syncRow();
         void done.finally(syncRow);
     };

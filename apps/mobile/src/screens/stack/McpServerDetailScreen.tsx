@@ -39,6 +39,7 @@ import {useTheme} from '@/theme/ThemeProvider';
 import {useToast} from '@/components/chrome/ToastHost';
 import {ToastMessage} from '@/errors/toast-message';
 import {settingsTranslator} from '@/i18n/settings';
+import {LogFactory} from '@novel-master/core/log';
 import {McpOauthService} from '@/services/mcp-oauth.service';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -65,6 +66,7 @@ const TRANSPORT_OPTIONS: ReadonlyArray<ChipOption<'http' | 'sse'>> = [
 ];
 
 const EMPTY_DRAFT: McpServerDraft = {id: '', description: '', transport: 'http', url: '', timeoutSeconds: '120', authType: 'none'};
+const log = LogFactory.create('mcp.serverDetail');
 
 /** 在途写操作（互斥：同刻只允许一个；null = 空闲）。 */
 type WriteOp = 'save' | 'clear_key';
@@ -434,8 +436,11 @@ export function McpServerDetailScreen() {
                                     return;
                                 }
                                 setTesting(true);
+                                // 业务失败不走 reject（由状态行直显）；这里只会接到「服务器不在配置里」这类编程错误，留一条日志，不静默吞掉。
                                 mcp.connect(serverId)
-                                    .catch(() => undefined)
+                                    .catch((error: unknown) => {
+                                        log.warn(`MCP 测试连接意外中止: ${serverId} ${String(error)}`);
+                                    })
                                     .finally(() => {
                                         refreshTools();
                                         setTesting(false);

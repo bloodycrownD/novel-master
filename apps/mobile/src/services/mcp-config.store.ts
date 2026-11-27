@@ -41,9 +41,7 @@ export interface McpRuntimeSlice {
     readonly rename: (serverId: string, config: McpServerConfig, afterRename?: () => Promise<void>) => Promise<void>;
     /** 行开关：按 id 改 enabled 落库（列表页乐观更新的写通道）。 */
     readonly setEnabled: (serverId: string, enabled: boolean) => Promise<void>;
-    /** 进页面触发（聊天页 / 列表页）：对 pending / disconnected 的启用服务器并发发起后台连接，其余不动；永不 reject。 */
-    readonly connectUnconnected: () => Promise<void>;
-    /** 显式连接某台服务器（开关打开 / 保存 / 测试连接 / 授权成功）：作废缓存与在途尝试后连接并等结果。 */
+    /** 显式连接某台服务器（开关打开 / 保存 / 测试连接 / 授权成功）：作废缓存与在途尝试后连接并等结果。进页面触发的连接不经本切片，界面直接调连接管理器的 connectUnconnected。 */
     readonly connect: (serverId: string) => Promise<void>;
     /** 删除 server（core 口径连带清 SKSP bearer/headers/oauth refs 与工具禁用清单）+ 镜像与连接缓存同步失效。 */
     readonly remove: (serverId: string) => Promise<void>;
@@ -157,7 +155,6 @@ export const McpRuntimeFactory = {
                 }
                 await persistThrough(() => store.save({...config, enabled}), serverId);
             },
-            connectUnconnected: () => connectionManager.connectUnconnected(),
             connect: async (serverId: string) => {
                 await connectionManager.connect(serverId);
             },

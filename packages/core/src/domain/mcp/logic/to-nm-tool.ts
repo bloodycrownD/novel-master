@@ -41,10 +41,10 @@ import type { McpToolSnapshot } from "../model/mcp-tool-snapshot.js";
 import { McpToolResultRenderer } from "./render-mcp-tool-result.js";
 import { McpToolSlug } from "./slugify-mcp-tool-name.js";
 
-/** `toNmTool` 依赖：serverId 已绑定的调用通道（serverId 由装配点闭包进 call）。 */
 /** 工具结果整理成多行时的行宽（字符）。 */
 const TOOL_RESULT_LINE_WIDTH = 300;
 
+/** `toNmTool` 依赖：serverId 已绑定的调用通道（serverId 由装配点闭包进 call）。 */
 export interface McpToolCallDeps {
     /** MCP 侧原始工具名 + 入参 + 取消信号；取消以 Interrupt.cancelled 返回，已知失败沿 Result.err。 */
     readonly call: (toolName: string, args: unknown, signal: AbortSignal) => Promise<Result<unknown, McpFailure> | Interrupt>;

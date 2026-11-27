@@ -34,34 +34,37 @@ export function McpServersView({ nav }: { nav: SettingsNavHandle }) {
     /** 待确认删除的 server（null = 无）。 */
     const [deleteTarget, setDeleteTarget] = useState<McpServerConfig | null>(null);
 
+    /** 只重读列表与状态。写操作之后也走这里——不再顺带发起连接，否则页面上任何一次开关 / 保存 / 测试 / 删除都会替别的已断开服务器再连一轮。 */
     const reload = useCallback(async (): Promise<void> => {
         const [serversRes, statusesRes] = await Promise.all([ipcMcpListServers(), ipcMcpServerStatuses()]);
         if (serversRes.ok) setServers(serversRes.data);
         else setError(serversRes.error.message);
         if (statusesRes.ok) setStatuses(statusesRes.data);
-        // 启用但从未尝试 / 已断开的服务器：进列表时发起一轮后台连接（connectUnconnected 只动这两态，
-        // 已连接的不重拉、不作废缓存）；发起后不等（不放进 reload，免得连接预算把整页的可操作状态拖住），
+    }, []);
+
+    /** 进列表时发起一轮后台连接，每次进入只这一轮。 */
+    const connectRound = useCallback(async (): Promise<void> => {
+        const [serversRes, statusesRes] = await Promise.all([ipcMcpListServers(), ipcMcpServerStatuses()]);
+        if (!serversRes.ok || !statusesRes.ok) return;
+        const idle = serversRes.data.some((server) => {
+            const state = statusesRes.data.find((status) => status.serverId === server.id)?.state ?? "pending";
+            return server.enabled && (state === "pending" || state === "disconnected");
+        });
+        // connectUnconnected 只动「从未尝试 / 已断开」两态，已连接的不重拉、不作废缓存；发起后不等（免得连接预算把整页的可操作状态拖住），
         // 失败不自动重试（重试入口是「测试连接」）。
-        if (serversRes.ok && statusesRes.ok) {
-            const idle = serversRes.data.filter((server) => {
-                const state = statusesRes.data.find((status) => status.serverId === server.id)?.state ?? "pending";
-                return server.enabled && (state === "pending" || state === "disconnected");
-            });
-            if (idle.length > 0) {
-                void ipcMcpConnectUnconnected().then(async () => {
-                    const refreshed = await ipcMcpServerStatuses();
-                    if (refreshed.ok) setStatuses(refreshed.data);
-                });
-                // 发起后立即重读一次：让「连接中」先上屏（本轮结束后的重读在上面 then 里）。
-                const kicking = await ipcMcpServerStatuses();
-                if (kicking.ok) setStatuses(kicking.data);
-            }
-        }
+        if (!idle) return;
+        void ipcMcpConnectUnconnected().then(async () => {
+            const refreshed = await ipcMcpServerStatuses();
+            if (refreshed.ok) setStatuses(refreshed.data);
+        });
+        // 发起后立即重读一次：让「连接中」先上屏（本轮结束后的重读在上面 then 里）。
+        const kicking = await ipcMcpServerStatuses();
+        if (kicking.ok) setStatuses(kicking.data);
     }, []);
 
     useEffect(() => {
-        void reload();
-    }, [reload]);
+        void reload().then(connectRound);
+    }, [reload, connectRound]);
 
     /** busy 互斥的写模板：失败置页内错误返回 false；成功回读后 toast，busy 复位交 finally。 */
     const runWrite = async (action: () => Promise<IpcResult<unknown>>, success?: string): Promise<boolean> => {

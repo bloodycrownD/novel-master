@@ -35,8 +35,6 @@ const mockRuntime = {
         getSavedById: jest.fn().mockResolvedValue(null),
     },
     state: {getCurrentModelId: jest.fn().mockResolvedValue(null)},
-    // mcp 切片：AgentEditorForm 页面打开时刻读一次快照接线（本文件不关心 MCP，回空快照）。
-    mcp: {connectionManager: {snapshotTools: jest.fn().mockResolvedValue([])}},
 };
 
 jest.mock('@novel-master/core', () => ({
