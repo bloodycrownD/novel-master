@@ -331,4 +331,25 @@ describe("ToolRunner path policy (T-SC9)", () => {
         );
         assert.equal(ran.ok, false);
     });
+
+    it("T-T4: 外部工具的路径白名单检查仍生效（path 越界 → TOOL_FORBIDDEN，run 未执行）", async () => {
+        const ran = { ok: false };
+        const registry = new ToolRegistry();
+        registry.register({
+            name: "ext.write",
+            description: () => "external writer",
+            inputJsonSchema: { type: "object", properties: { path: { type: "string" } } },
+            async run() {
+                ran.ok = true;
+                return Result.ok("done");
+            },
+        });
+        const runner = new ToolRunner(registry);
+
+        await rejectsErr(
+            () => runner.call("ext.write", { path: "secrets/key.txt" }, { allowedPaths: ["src"] }),
+            (e) => AppErrorOps.is(e, "TOOL_FORBIDDEN"),
+        );
+        assert.equal(ran.ok, false, "被拒时 run() 绝不执行");
+    });
 });

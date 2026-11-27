@@ -1,4 +1,5 @@
 import {  AppErrorOps  } from "../../src/errors/app-error.js";
+import {  Result  } from "../../src/errors/either.js";
 import {  unwrap, rejectsErr  } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import {  describe, it  } from "node:test";
@@ -16,14 +17,14 @@ describe("ToolRunner", () => {
         );
     });
 
-    it("validates input and throws INVALID_ARGUMENT", async () => {
+    it("T-T1: 自带工具入参不合法 → TOOL_INVALID_ARGUMENT，带 issues（原有行为，防回归）", async () => {
         const registry = new ToolRegistry();
         registry.register({
             name: "test.sum",
             description: () => "sum",
             inputSchema: z.object({ a: z.number(), b: z.number() }),
             outputSchema: z.object({ sum: z.number() }),
-            async run(input) {
+            async run(input: { a: number; b: number }) {
                 return { sum: input.a + input.b };
             },
         });
@@ -34,8 +35,23 @@ describe("ToolRunner", () => {
                 AppErrorOps.is(e) && e.key.startsWith("TOOL_") &&
                 e.key === "TOOL_INVALID_ARGUMENT" &&
                 e.details?.toolName === "test.sum" &&
-                typeof e.details === "object",
+                Array.isArray(e.details?.issues) && (e.details.issues as unknown[]).length > 0,
         );
+    });
+
+    it("T-T3: 外部工具没有 outputSchema → run 的成功值原样返回（不做 schema 校验）", async () => {
+        const registry = new ToolRegistry();
+        registry.register({
+            name: "ext.weird",
+            description: () => "external tool",
+            inputJsonSchema: { type: "object", properties: {} },
+            async run() {
+                return Result.ok({ anything: [1, "two", { three: null }] });
+            },
+        });
+        const runner = new ToolRunner(registry);
+        const out = unwrap(await runner.call("ext.weird", { q: 1 }, {}));
+        assert.deepEqual(out, { anything: [1, "two", { three: null }] });
     });
 
     it("wraps thrown errors as FAILED and preserves cause", async () => {

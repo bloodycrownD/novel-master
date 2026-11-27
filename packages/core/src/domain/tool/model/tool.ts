@@ -9,7 +9,7 @@ import type { AppError } from "@/errors/app-error.js";
 import type { Result } from "@/errors/either.js";
 
 /**
- * A single executable tool definition.
+ * A single executable tool definition（自带工具：入参出参都由 zod schema 校验）.
  *
  * @remarks
  * Tools are intentionally protocol-agnostic: they don't assume any particular LLM
@@ -23,7 +23,7 @@ export interface Tool<Input, Output, Ctx = unknown> {
     /**
    * 人类可读描述；按运行时上下文动态生成（如 task 工具拼候选 subagent 名单）。
    *
-   * 由 {@link toolsFromRegistry} 在装配期调 `description(ctx)` 求值成 string。
+   * 由 `ToolDefinitions.fromRegistry` 在装配期调 `description(ctx)` 求值成 string。
    */
     readonly description: (ctx: Ctx) => string;
 
@@ -47,3 +47,29 @@ export interface Tool<Input, Output, Ctx = unknown> {
    */
     run(input: Input, ctx: Ctx): Promise<Result<Output, AppError>>;
 }
+
+/**
+ * 外部工具（如 MCP server 提供的工具）：参数定义是提供方现成的 JSON Schema，
+ * 原样透给模型、不本地校验（校验权威是提供方，错因随调用往返带回）。
+ *
+ * @remarks
+ * 与 {@link Tool} 的判别方式是 `"inputSchema" in tool`：自带工具带 zod
+ * `inputSchema`，外部工具带 `inputJsonSchema`；执行器对外部工具跳过入参出参
+ * 校验，原始参数直接给 `run`，路径白名单检查照旧。
+ */
+export interface ExternalTool<Ctx = unknown> {
+    /** Globally unique tool name（如 `mcp__db__query`）。 */
+    readonly name: string;
+
+    /** 人类可读描述；与 {@link Tool.description} 同一装配期求值约定。 */
+    readonly description: (ctx: Ctx) => string;
+
+    /** 提供方声明的入参 JSON Schema，模型侧参数定义原样取自它。 */
+    readonly inputJsonSchema: Readonly<Record<string, unknown>>;
+
+    /** 原始入参不经校验直达；成功值也不经 schema 校验原样返回。 */
+    run(input: unknown, ctx: Ctx): Promise<Result<unknown, AppError>>;
+}
+
+/** 注册表统一存储形态：自带工具（zod 校验）或外部工具（现成 JSON Schema）。 */
+export type RegisteredTool<Ctx = unknown> = Tool<any, any, Ctx> | ExternalTool<Ctx>;

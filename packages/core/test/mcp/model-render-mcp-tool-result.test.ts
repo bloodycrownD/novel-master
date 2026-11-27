@@ -6,6 +6,7 @@ import { McpToolAdapter } from "../../src/domain/mcp/logic/to-nm-tool.js";
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
 import { TOOL_OUTPUT_MAX_BYTES } from "../../src/domain/tool/logic/tool-output-limits.js";
 import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
+import { ToolRunner } from "../../src/domain/tool/logic/tool-runner.js";
 import { ToolDefinitions } from "../../src/infra/llm-protocol/logic/tool-definitions.js";
 import { Result } from "../../src/errors/either.js";
 import type { McpFailure } from "../../src/domain/mcp/model/mcp-failure.js";
@@ -56,45 +57,52 @@ describe("render-mcp-tool-result", () => {
 });
 
 describe("to-nm-tool", () => {
-    it("T-M11: name 走 slug、description 同步可得、inputSchema 接受任意对象", () => {
-        const tool = McpToolAdapter.toNmTool(SNAPSHOT, {call: async () => Result.ok({})});
+    it("T-T2: name 走 slug、description 同步可得；外部工具入参不本地校验——任意对象甚至裸字符串原样传到 run", async () => {
+        let received: { toolName?: string; args?: unknown } = {};
+        const tool = McpToolAdapter.toNmTool(SNAPSHOT, {call: async (toolName, args) => {
+            received = {toolName, args};
+            return Result.ok({});
+        }});
         assert.equal(tool.name, "mcp__db__query");
         const ctx = makeRecordingCtx().ctx;
         assert.equal(tool.description(ctx), "[MCP:db] 执行 SQL 查询");
-        assert.ok(tool.inputSchema.safeParse({sql: "SELECT 1", weird: [1, {x: null}]}).success);
-        assert.ok(tool.inputSchema.safeParse("裸字符串也放行").success);
+        // 经 ToolRunner 走完整调用链：入参不做 zod 校验，原始值（含裸字符串）直达 run。
+        const registry = new ToolRegistry<BuiltinToolContext>();
+        registry.register(tool);
+        const runner = new ToolRunner(registry);
+        const weird = {sql: "SELECT 1", weird: [1, {x: null}]};
+        unwrap(await runner.call("mcp__db__query", weird, ctx));
+        assert.equal(received.args, weird);
+        unwrap(await runner.call("mcp__db__query", "裸字符串也放行", ctx));
+        assert.equal(received.args, "裸字符串也放行");
+        assert.equal(received.toolName, "query");
     });
 
-    it("T-M11b: server 声明的入参 Schema 转成 zod——模型侧看到参数，本地按它校验；server 没声明时参数定义为空", () => {
+    it("T-T5: fromRegistry 对外部工具直接取 inputJsonSchema——模型侧与声明逐字段相等，不经 zod", () => {
         const inputSchema = {type: "object", properties: {sql: {type: "string", description: "要执行的 SQL"}, limit: {type: "integer", minimum: 1}}, required: ["sql"]};
-        const withSchema = new ToolRegistry<BuiltinToolContext>();
-        withSchema.register(McpToolAdapter.toNmTool({...SNAPSHOT, inputSchema}, {call: async () => Result.ok({})}));
-        const def = ToolDefinitions.fromRegistry(withSchema, makeRecordingCtx().ctx)[0]?.inputSchema;
+        const registry = new ToolRegistry<BuiltinToolContext>();
+        registry.register(McpToolAdapter.toNmTool({...SNAPSHOT, inputSchema}, {call: async () => Result.ok({})}));
+        const def = ToolDefinitions.fromRegistry(registry, makeRecordingCtx().ctx)[0]?.inputSchema;
         assert.equal(def?.type, "object");
         assert.deepEqual(def?.required, ["sql"]);
         const limit = (def?.properties as Record<string, {type?: string; minimum?: number}>).limit;
         assert.equal(limit.type, "integer");
         assert.equal(limit.minimum, 1);
-        // 本地按 server 的声明校验：缺必填、类型不对都拦下，不出网。
-        const parse = withSchema.get("mcp__db__query")?.inputSchema.safeParse.bind(withSchema.get("mcp__db__query")?.inputSchema);
-        assert.ok(parse != null);
-        assert.equal(parse({limit: 3}).success, false);
-        assert.equal(parse({sql: "SELECT 1", limit: "x"}).success, false);
-        assert.equal(parse({sql: "SELECT 1", limit: 3}).success, true);
-
-        const withoutSchema = new ToolRegistry<BuiltinToolContext>();
-        withoutSchema.register(McpToolAdapter.toNmTool(SNAPSHOT, {call: async () => Result.ok({})}));
-        // 没声明就是空对象 Schema（只有 $schema 一个键），模型看不到任何参数。
-        assert.deepEqual(ToolDefinitions.fromRegistry(withoutSchema, makeRecordingCtx().ctx)[0]?.inputSchema, {$schema: "https://json-schema.org/draft/2020-12/schema"});
+        // 与声明整对象深相等：不经 zod（转一遍会添 $schema、动键序），任何转换层都不许夹带私货。
+        assert.deepEqual(def, inputSchema);
     });
 
-    it("T-M11c: 声明里有 zod 不认的写法（not / if-then-else）时退回什么都接受，不抛", () => {
+    it("T-T6: server 未声明参数定义 → 模型侧为 {type:\"object\", properties:{}}", () => {
+        const registry = new ToolRegistry<BuiltinToolContext>();
+        registry.register(McpToolAdapter.toNmTool(SNAPSHOT, {call: async () => Result.ok({})}));
+        assert.deepEqual(ToolDefinitions.fromRegistry(registry, makeRecordingCtx().ctx)[0]?.inputSchema, {type: "object", properties: {}});
+    });
+
+    it("T-T7: 声明含 not / if-then-else → 模型侧原样可见，不再回退为空", () => {
         for (const inputSchema of [{type: "object", properties: {a: {not: {type: "string"}}}}, {type: "object", properties: {a: {type: "string"}}, if: {properties: {a: {const: "x"}}}, then: {required: ["b"]}}]) {
-            const tool = McpToolAdapter.toNmTool({...SNAPSHOT, inputSchema}, {call: async () => Result.ok({})});
-            assert.ok(tool.inputSchema.safeParse({a: "anything", b: 1}).success);
             const registry = new ToolRegistry<BuiltinToolContext>();
-            registry.register(tool);
-            assert.deepEqual(ToolDefinitions.fromRegistry(registry, makeRecordingCtx().ctx)[0]?.inputSchema, {$schema: "https://json-schema.org/draft/2020-12/schema"});
+            registry.register(McpToolAdapter.toNmTool({...SNAPSHOT, inputSchema}, {call: async () => Result.ok({})}));
+            assert.deepEqual(ToolDefinitions.fromRegistry(registry, makeRecordingCtx().ctx)[0]?.inputSchema, inputSchema);
         }
     });
 
@@ -143,7 +151,8 @@ describe("to-nm-tool", () => {
         const big = "x".repeat(TOOL_OUTPUT_MAX_BYTES + 100);
         const tool = McpToolAdapter.toNmTool(SNAPSHOT, {call: async () => Result.ok({content: [{type: "text", text: big}]})});
         const recording = makeRecordingCtx();
-        const output = unwrap(await tool.run({}, recording.ctx));
+        // ExternalTool.run 的成功值契约是 unknown；适配器实际产出渲染文本（本用例即断言其内容）。
+        const output = unwrap(await tool.run({}, recording.ctx)) as string;
         assert.ok(output.includes("保存路径：/tmp/mcp__db__query-"), output);
         assert.equal(recording.files.size, 1);
         const [savedPath, savedContent] = [...recording.files.entries()][0]!;
@@ -154,7 +163,7 @@ describe("to-nm-tool", () => {
         // 落盘失败（vfs.write throw）→ 字节截断降级，异常不冒出 run
         const failing = makeRecordingCtx();
         failing.setFail(true);
-        const truncated = unwrap(await tool.run({}, failing.ctx));
+        const truncated = unwrap(await tool.run({}, failing.ctx)) as string;
         assert.ok(truncated.includes(`Output truncated (original ${TOOL_OUTPUT_MAX_BYTES + 100} bytes).`));
         assert.ok(truncated.length < big.length);
     });

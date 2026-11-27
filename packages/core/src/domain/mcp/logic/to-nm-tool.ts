@@ -1,7 +1,8 @@
 /**
- * MCP 工具适配（spec §六）：快照条目 → nm `Tool`。description 同步取快照
- * （装配期预算），inputSchema 由 server 声明的 JSON Schema 转成 zod
- * （`McpToolAdapter.inputSchemaOf`；转不了退回 `z.unknown()`），run 委托连接管理器：
+ * MCP 工具适配（spec §六）：快照条目 → nm `ExternalTool`。description 同步取快照
+ * （装配期预算），inputJsonSchema 原样取 server 声明的 JSON Schema（模型侧参数定义
+ * 与声明逐字段一致，本地不校验；未声明时给 `{type:"object", properties:{}}`），
+ * run 委托连接管理器：
  * - 成功 → renderMcpToolResult 全文 → `Result.ok`；
  * - 连接 / 协议失败（`Result.err(McpFailure)`）→ `Result.err(TOOL_FAILED)`，
  *   detail 带原文前缀、cause 带 McpFailure；
@@ -16,7 +17,6 @@
  * @module domain/mcp/logic/to-nm-tool
  */
 
-import { z } from "zod";
 import { Encoding } from "@/common/encoding.js";
 import { Guards } from "@/common/guards.js";
 import { Json } from "@/common/json.js";
@@ -27,7 +27,7 @@ import type { Interrupt } from "@/errors/outcome.js";
 import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-context.js";
 import { OverflowSink } from "@/domain/tool/builtin/overflow-sink.js";
 import { TOOL_OUTPUT_MAX_BYTES } from "@/domain/tool/logic/tool-output-limits.js";
-import type { Tool } from "@/domain/tool/model/tool.js";
+import type { ExternalTool } from "@/domain/tool/model/tool.js";
 import type { McpFailure } from "../model/mcp-failure.js";
 import type { McpToolSnapshot } from "../model/mcp-tool-snapshot.js";
 import { McpToolResultRenderer } from "./render-mcp-tool-result.js";
@@ -45,20 +45,23 @@ export interface McpToolCallDeps {
 /** ctx 未注入 signal 时（旧测试 mock）给 callTool 的永不中止信号。 */
 const NEVER_ABORTED_SIGNAL: AbortSignal = new AbortController().signal;
 
+/** server 未声明参数定义时给模型的兜底（部分厂商拒绝没有 properties 的对象定义）。 */
+const NO_INPUT_JSON_SCHEMA: Readonly<Record<string, unknown>> = {type: "object", properties: {}};
+
 /** 失败 detail 的原文前缀（与 description 同一命名约定）。 */
 const detailPrefix = (serverId: string): string => `[MCP:${serverId}]`;
 
 export const McpToolAdapter = {
-    /** 快照条目 → nm 工具（name / description / inputSchema 同步可得；run 委托 call）。 */
+    /** 快照条目 → nm 工具（name / description / inputJsonSchema 同步可得；run 委托 call）。 */
     // nm-style: keep-public — spec §六的工具适配契约：装配期注册与 7 处用例都按名字调用，适配体是完整的闭包工厂不是转手
-    toNmTool: (snapshot: McpToolSnapshot, deps: McpToolCallDeps): Tool<unknown, string, BuiltinToolContext> => {
+    toNmTool: (snapshot: McpToolSnapshot, deps: McpToolCallDeps): ExternalTool<BuiltinToolContext> => {
         const name = McpToolSlug.toolName(snapshot.serverId, snapshot.toolName);
         const description = `${detailPrefix(snapshot.serverId)} ${snapshot.toolDescription ?? snapshot.toolName}`;
         const prefix = detailPrefix(snapshot.serverId);
         return {
             name,
             description: () => description,
-            inputSchema: McpToolAdapter.inputSchemaOf(snapshot),
+            inputJsonSchema: snapshot.inputSchema ?? NO_INPUT_JSON_SCHEMA,
             async run(input: unknown, ctx: BuiltinToolContext): Promise<Result<string, AppError>> {
                 const called = await deps.call(snapshot.toolName, input, ctx.signal ?? NEVER_ABORTED_SIGNAL);
                 // 取消是控制流不是失败：callTool 以 Interrupt 表达（spec §五随通道迁移更新）；
@@ -84,19 +87,5 @@ export const McpToolAdapter = {
                 return Result.ok(text);
             },
         };
-    },
-
-    /**
-     * server 声明的入参 JSON Schema → zod，填进 `Tool.inputSchema`：模型侧的参数定义与本地校验都由它来。
-     * server 没声明、或声明里有 zod 不认的写法（如 `not`、`if/then/else`）时退回 `z.unknown()`——
-     * 什么都不拦、交给 server 校验，此时模型看到的参数定义为空。
-     */
-    inputSchemaOf: (snapshot: McpToolSnapshot): z.ZodType<unknown> => {
-        if (snapshot.inputSchema === undefined) return z.unknown();
-        try {
-            return z.fromJSONSchema(snapshot.inputSchema);
-        } catch {
-            return z.unknown();
-        }
     },
 } as const;

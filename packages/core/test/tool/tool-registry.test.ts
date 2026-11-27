@@ -12,7 +12,7 @@ describe("ToolRegistry", () => {
             description: () => "echo",
             inputSchema: z.object({ x: z.number() }),
             outputSchema: z.object({ x: z.number() }),
-            async run(input) {
+            async run(input: unknown) {
                 return input;
             },
         });

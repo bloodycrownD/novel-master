@@ -1,0 +1,468 @@
+{
+  "note": "T-T8 基线：工具类型拆分前 ToolDefinitions.fromRegistry 对 11 个自带工具的输出（registry 插入序，ctx = {subagent:{callableAgents:[{name:\"general\"}]}}）。改自带工具定义时需有意重生成。",
+  "tools": [
+    {
+      "name": "read",
+      "description": "读取工作区单个文件的文本内容。只读，不修改文件。\n\n用法：\n- 首次读取：提供 path；默认从第 1 行起返回一段内容\n- 大文件续读：若返回 truncated=true，用 nextOffset 作为下次 offset 继续读；末行被截到字节预算点时（lastLineTruncated=true），被截行的尾部不可续读，续读从下一行开始\n- 指定范围：offset 为起始行号（从 1 起），limit 为最多返回行数\n- 输出预算：单次最多约 50KB（UTF-8 字节），预算内尽量填满；单行超长时末行截到预算点\n\n与 write 区别：write 整文件覆盖；与 edit 区别：edit 做局部替换。需要先看清文件再改时，优先 read。",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "工作区内文件的绝对或相对路径"
+          },
+          "offset": {
+            "description": "起始行号（从 1 起）；省略则从第 1 行开始",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "limit": {
+            "description": "最多返回的行数；省略则使用默认上限",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "write",
+      "description": "写入或整文件覆盖工作区路径的内容。会创建不存在的文件。\n\n用法：\n- 新建或全文重写：path + content\n\n与 edit 区别：write 替换整个文件；小改动、局部替换请用 edit。与 read 配合：先 read 确认现状再 write。",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "目标文件路径；不存在则创建"
+          },
+          "content": {
+            "type": "string",
+            "description": "写入后的完整文件内容（UTF-8 文本）"
+          }
+        },
+        "required": [
+          "path",
+          "content"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "edit",
+      "description": "在工作区文件内做精确文本替换（单次或 replaceAll）。适合小范围修改，避免整文件 write。\n\n用法：\n- 常规替换：oldString 为文件中待替换片段，newString 为替换结果；oldString 须在文件中唯一匹配\n- 尾追（追加）：以文件末尾一小段唯一文本为锚点，oldString=锚点，newString=锚点+要追加的新内容\n- 全文替换：options.replaceAll=true 时替换所有匹配项\n\n注意：默认要求 oldString 唯一；匹配 0 次或多于 1 次（且非 replaceAll）会报错。大段重写请用 write。",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "要修改的文件路径"
+          },
+          "oldString": {
+            "type": "string",
+            "minLength": 1,
+            "description": "要被替换的原文；须在文件中唯一定位（replaceAll 时除外）。不得为空串——空串会在文件开头「假命中」，或让 replaceAll 死循环。尾追时取文件末尾唯一锚点"
+          },
+          "newString": {
+            "type": "string",
+            "description": "替换后的文本；尾追时设为 oldString 与追加内容拼接"
+          },
+          "options": {
+            "description": "高级选项",
+            "type": "object",
+            "properties": {
+              "replaceAll": {
+                "description": "true 时替换所有匹配项；默认 false 且要求唯一匹配",
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "path",
+          "oldString",
+          "newString"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "fs",
+      "description": "执行单条文件系统命令（非 shell）。每次调用仅一条命令，通过结构化参数指定动作与路径。\n\n支持的 action：\n- ls：列目录；path 省略时列根目录；recursive=true 递归列出\n- rm：删文件或目录；recursive=true 强制递归删目录（不传时若目标是目录也会自动递归删）\n- rmdir：删空目录\n- mv：移动或重命名；需 from + to\n- cp：复制文件或目录；需 from + to；recursive=true 递归复制目录\n- mkdir：创建目录\n\n参数说明：\n- action：必填，上述子命令之一\n- path：ls / rm / rmdir / mkdir 的目标路径\n- from / to：mv / cp 的源与目标\n- recursive：ls / rm / cp 的递归标记\n\n路径可以是任意字符串（含空格、中文等），不需要担心 shell 转义。与 read/write/edit 区别：fs 管路径级操作（增删移复制、列目录）；改文件内容用 write/edit。",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "ls",
+              "rm",
+              "rmdir",
+              "mv",
+              "cp",
+              "mkdir"
+            ],
+            "description": "子命令，决定本次操作类型"
+          },
+          "path": {
+            "description": "ls / rm / rmdir / mkdir 的目标路径；ls 省略时列根目录",
+            "type": "string"
+          },
+          "from": {
+            "description": "mv / cp 的源路径",
+            "type": "string"
+          },
+          "to": {
+            "description": "mv / cp 的目标路径",
+            "type": "string"
+          },
+          "recursive": {
+            "description": "ls / rm / cp 的递归标记",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "glob",
+      "description": "按 glob 模式在工作区中查找路径列表。只返回路径，不读文件内容。\n\n用法：\n- pattern：glob 模式，如 `**/*.ts`、`src/**`\n- options.cwd：可选，限定搜索根目录；省略则在整个工作区范围搜索\n\n结果过多时会截断（见返回 truncated/total）。找到路径后通常再用 read 读取内容。",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "pattern": {
+            "type": "string",
+            "minLength": 1,
+            "description": "glob 模式，例如 `**/*.md` 或 `src/**/*.ts`"
+          },
+          "options": {
+            "description": "搜索范围选项",
+            "type": "object",
+            "properties": {
+              "cwd": {
+                "description": "可选：相对或绝对目录，作为模式匹配根路径",
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "pattern"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "grep",
+      "description": "在工作区文件**内容**中搜索，返回 path、行号、列号与 excerpt。\n\n用法：\n- pattern：搜索模式；默认 matchMode=auto（先尝试正则，失败则按字面量子串）\n- pathPrefix / pathGlob：缩小搜索文件范围（路径前缀或 glob，如 `**/*.md`）\n- caseInsensitive：忽略大小写\n- invert：为 true 时返回**不包含** pattern 的行\n- contextLines：在 excerpt 中附带命中行上下若干行上下文\n- oneMatchPerFile：每个文件至多返回一条命中\n\n与 glob 区别：glob 按路径名匹配；grep 读文件内容。结果过多时会截断（最多 100 条 / 50KB）。",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "pattern": {
+            "type": "string",
+            "minLength": 1,
+            "description": "搜索模式；auto 模式下合法正则按正则匹配，否则字面量"
+          },
+          "options": {
+            "description": "高级搜索选项",
+            "type": "object",
+            "properties": {
+              "pathPrefix": {
+                "description": "仅搜索路径以该前缀开头的文件",
+                "type": "string"
+              },
+              "pathGlob": {
+                "description": "仅搜索路径匹配该 glob 的文件，如 `**/*.ts`",
+                "type": "string"
+              },
+              "matchMode": {
+                "description": "auto：先正则后字面量；literal：子串；regex：纯正则",
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "literal",
+                  "regex"
+                ]
+              },
+              "caseInsensitive": {
+                "description": "忽略大小写",
+                "type": "boolean"
+              },
+              "invert": {
+                "description": "为 true 时返回不匹配 pattern 的行",
+                "type": "boolean"
+              },
+              "contextLines": {
+                "description": "excerpt 中附带命中行前后各 N 行上下文",
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "oneMatchPerFile": {
+                "description": "为 true 时每个文件至多一条命中",
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "pattern"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "task",
+      "description": "派生一个子代理执行子任务，等它跑完后回流结果。适用于把复杂或独立子任务（如查大纲设定、生成角色档案）委派给专门的 agent，避免在主对话中累积过多上下文。\n\n入参：\n- subagentName：目标子代理 name（你可以调用的 subagent 如下：\ngeneral\n）\n- description：3-5 词任务描述（用作子会话标题）\n- prompt：任务正文，写清要子代理完成什么\n- sessionId（可选）：续用某个已有子会话（传上次回流结果里的 subagentSessionId）。留空则新开。续用时该子会话的历史会被保留、子代理接着上一轮继续干，适合分多步推进同一件事；注意它只属于当前会话，不能拿去续用别的会话的子代理，同一个子会话也不能并发跑。subagentName 仍需填写（决定模型与工具策略），但子代理的实际身份以子会话历史为准。\n- fileAttachment（可选）：要交给子代理的文件路径列表，会像主会话附件一样把全文直接送进子会话，省得子代理再自己 read 一遍。总量过大时超出预算的文件只给文件名与分段读取引导。\n\n结果格式：本工具回流的是一个 JSON 对象，结构为 { text, subagentSessionId, stopped?, failureReason? }。\n- text：子代理的末条回复正文；若子代理被中断且还未输出文本，text 为占位文案「[用户停止，无已生成文本]」。\n- stopped：为 true 表示子代理被用户中断（部分成功），此时 failureReason 字段给出原因（如「用户停止」）。text 可能是中断前的半成品，需结合 stopped 判断：stopped=true 时不要把 text 当作完整答案。\n- subagentSessionId：子会话 id（UI 跳转用，也是下次 sessionId 续用的入参）。\n\n并行：本工具非突变工具，单条 assistant 消息里可同时发起多个 task tool_use，会并发执行各自独立子会话（但同一个 sessionId 不能被并发续用）。\n\n注意：子代理只能访问当前会话工作区文件（与父会话同一 VFS 视图）；它不会看到主对话的历史，仅看到你在 prompt 中提供的上下文与所附文件。",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "description": "3-5 词任务描述（用作子会话标题）"
+          },
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "description": "任务正文，写清要子代理完成什么"
+          },
+          "subagentName": {
+            "type": "string",
+            "minLength": 1,
+            "description": "目标子代理 name（非 id），需为 mode 非 primary 的 agent"
+          },
+          "sessionId": {
+            "description": "续用已有子会话 id（上次回流的 subagentSessionId）；留空则新开。仅限当前会话派生的子会话，且不可并发续用同一个",
+            "type": "string"
+          },
+          "fileAttachment": {
+            "description": "要交付给子代理的文件路径列表（正文全文随附件送达）；超出体积预算的部分只给文件名与分段读取引导",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "required": [
+          "description",
+          "prompt",
+          "subagentName"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "skill",
+      "description": "读取与管理技能（Skills）。技能是可复用的提示词包（SKILL.md + 附属文件），通过本工具查看或修改其内容。\n\n当前可用技能（装配期快照，回合内变更不即时反映）：\n（暂无可用技能）\n\naction 说明：\n- load：装载技能开工。name 必填，读生效副本（项目副本优先）的 SKILL.md 全文并附附属文件清单；若全文已在本请求提示词中则返回短提示\n- read：读取技能文件。name 必填；path 缺省 SKILL.md；domain 缺省读生效副本（项目副本优先，输出 domain 为实际命中域）\n- write：整文件覆盖写入。name / content 必填；domain 缺省 project；向新目录写 SKILL.md 即新建技能\n- edit：局部查找替换。name / oldString / newString 必填（可配 replaceAll）；**domain 必填**，必须显式传 global 或 project——同名技能可能同时存在项目副本与全局本体，缺省会改错那一份\n- list：列技能清单。domain 缺省列当前项目合并视图（含禁用/覆盖标记）；显式 domain 列对应域\n\n参数说明：\n- name：技能名（list 不需要）\n- domain：global（全部项目共享）或 project（仅当前项目）\n- path：相对技能目录的路径，不得包含 ..\n\n注意：技能文件跨域读写不进会话工作区；修改只影响技能本身，不改当前会话文件。",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "load",
+              "read",
+              "write",
+              "edit",
+              "list"
+            ],
+            "description": "动作类型：load 装载技能 / read 读取 / write 覆盖写 / edit 局部替换 / list 列清单"
+          },
+          "name": {
+            "description": "技能名（read/write/edit 必填；list 不需要）",
+            "type": "string",
+            "minLength": 1
+          },
+          "domain": {
+            "description": "技能域；read 缺省读生效副本，write 缺省 project，list 缺省合并视图；edit 必须显式传",
+            "type": "string",
+            "enum": [
+              "global",
+              "project"
+            ]
+          },
+          "path": {
+            "description": "相对技能目录的路径，缺省 SKILL.md，不得包含 ..",
+            "type": "string"
+          },
+          "content": {
+            "description": "write 动作的整文件内容",
+            "type": "string"
+          },
+          "oldString": {
+            "description": "edit 动作的匹配串；给了就不得为空串（空串会假命中或死循环）",
+            "type": "string",
+            "minLength": 1
+          },
+          "newString": {
+            "description": "edit 动作的替换串",
+            "type": "string"
+          },
+          "replaceAll": {
+            "description": "edit 动作是否替换全部匹配",
+            "type": "boolean"
+          },
+          "offset": {
+            "description": "read 分页起始行（1-based）",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "limit": {
+            "description": "read 分页行数上限",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "agent",
+      "description": "管理 agent 定义（list / get / create / update）：可配置智能体（提示词布局 + 模型 pin + 工具策略），可在 task 工具中作为子代理调用。\n\n当前可管理 agent 名单（装配期快照，回合内变更不即时反映）：\n（暂无）\n\naction 一览：list 列清单 / get 查完整定义（name 或 agentId 定位，name 优先）/ create 新建（definition 必填且顶层含 name，agentId 自动生成）/ update 整体覆盖更新（定位同 get + definition 必填）。\n\n配置字段详情与完整示例请先 skill load agent-config。\n\n注意：无删除动作（删除走用户界面 agent 管理）；定义保存后立即可用。",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "list",
+              "get",
+              "create",
+              "update"
+            ],
+            "description": "动作类型：list 列清单 / get 查定义 / create 新建 / update 更新"
+          },
+          "name": {
+            "description": "agent 名称（get/update 定位用，优先于 agentId；可命中内置 general。create/update 的名称写在 definition.name，此字段不替代）",
+            "type": "string",
+            "minLength": 1
+          },
+          "agentId": {
+            "description": "agent 持久化 id（get/update 定位用；create 时由工具生成，无需提供）",
+            "type": "string",
+            "minLength": 1
+          },
+          "definition": {
+            "description": "create 必填完整定义体（顶层必含 name，名称全局唯一，撞名会报错）；update 为部分更新——只填要改的字段，未填的保留现值，置 null 清除回缺省，prompts 按子键合并（如只填 dynamic 只换 dynamic）；prompts.persist / prompts.dynamic 为块数组，结构对齐 get 输出；字段详情先 skill load agent-config",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "curl",
+      "description": "对 http/https URL 发起 HTTP 请求（对齐 curl 定位），支持自定义方法、请求头与请求体，返回状态码、内容类型与响应正文。适用于获取或提交网页、接口文档与 API 内容。\n\n入参：\n- url：目标 URL，仅支持 http/https 协议（file://、ftp://、data: 等会被拒绝）\n- method：HTTP 方法 GET/POST/PUT/PATCH/DELETE/HEAD/OPTIONS，默认 GET\n- headers：可选自定义请求头，最多 16 条（名称仅限字母/数字/连字符/下划线，单条值上限 8KB）\n- body：可选请求体，上限 1MB；GET/HEAD 不携带请求体；有 body 且未显式给 content-type 时默认 application/json\n- timeout：超时秒数，默认 30，上限 120\n\n结果格式：可读文本，非 JSON——第一行为「curl METHOD url」请求行（发生重定向时附「→ 最终 URL」），第二行为 Status 状态行（含 content-type），空行后是正文文本；正文超过 50KB 时自动保存到会话工作区 /tmp/（可用 read 读取），空行后显示落盘路径。\n- status：HTTP 状态码（非 2xx 也照常返回，不会当作工具错误）。\n- body：响应正文；超过 50KB 时全文自动保存到会话工作区 /tmp/ 并置 truncated=true、附 savedPath 与 message（body 为空串占位，可用 read 读取全文）；非文本类型返回占位说明。\n- finalUrl：重定向后的最终 URL。\n\n注意：无鉴权管理（需要时经 headers 自行携带 token）；网络错误或超时会返回可读错误。",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "minLength": 1,
+            "description": "目标 URL，仅支持 http/https 协议"
+          },
+          "method": {
+            "default": "GET",
+            "description": "HTTP 方法，默认 GET",
+            "type": "string",
+            "enum": [
+              "GET",
+              "POST",
+              "PUT",
+              "PATCH",
+              "DELETE",
+              "HEAD",
+              "OPTIONS"
+            ]
+          },
+          "headers": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "可选自定义请求头（最多 16 条，单条值上限 8KB）"
+          },
+          "body": {
+            "type": "string",
+            "description": "可选请求体（上限 1MB；GET/HEAD 不携带请求体）"
+          },
+          "timeout": {
+            "default": 30,
+            "description": "超时秒数，默认 30，上限 120",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 120
+          }
+        },
+        "required": [
+          "url",
+          "method",
+          "timeout"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "search",
+      "description": "联网搜索：按当前配置的搜索引擎串行检索网页，结果以 JSON 文本返回（提取引擎响应中的结果数组，字段原样保留），适用于写作资料查找、事实核验与背景考据。\n\n入参：\n- engine：可选，指定搜索引擎 id（见下方可用引擎清单）；缺省按配置顺序串行尝试，前一个失败自动降级到下一个；显式指定时钉死该引擎，失败不降级直接报错\n- params：引擎参数对象（自由 JSON）。搜索词也放在这里，字段名随引擎不同（如 Brave 用 q、博查用 query、智谱用 search_query），具体见下方逐引擎说明；同名参数覆盖模板默认值，引擎忽略未知字段\n\n可用引擎（按串行链顺序）：\n当前运行时未装配搜索能力，调用将不可用。\n\n结果格式：结果以 JSON 文本返回——模板引擎提取引擎响应中最长的对象数组（引擎原始字段原样保留，自行读取所需字段；超 50KB 预算截断并标注），DuckDuckGo 为「标题 — 链接 — 摘要」紧凑列表；发生过降级时附尝试轨迹；全文序列化超 50KB 时自动保存到会话工作区 /tmp/（可用 read 读取）并返回落盘路径。\n\n串行链总预算 120s；全链失败返回逐引擎聚合错误。引擎配置在 设置 → 搜索配置 中管理，当回合内改配置下回合生效。",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "engine": {
+            "description": "可选：指定搜索引擎 id（当前启用且配置完整的引擎，见描述「可用引擎」）；缺省按配置顺序串行尝试（失败自动降级），显式指定时钉死该引擎、失败不降级",
+            "type": "string",
+            "minLength": 1
+          },
+          "params": {
+            "description": "引擎参数对象（自由 JSON）：搜索词 + 引擎方言参数（时间范围 / 结果深度 / 域名过滤 / count 等）都放这里；搜索词字段名随引擎（q / query / search_query），见描述里的逐引擎参数说明；同名参数覆盖模板默认值，引擎忽略未知字段",
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  ]
+}

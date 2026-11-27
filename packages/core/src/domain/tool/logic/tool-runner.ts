@@ -96,14 +96,21 @@ export class ToolRunner<Ctx = unknown> {
             return Result.err(new AppError("TOOL_NOT_FOUND", {toolName: name, detail: `Tool not registered: ${name}`}));
         }
 
-        const parsedIn = tool.inputSchema.safeParse(input);
-        if (!parsedIn.success) {
-            return Result.err(new AppError("TOOL_INVALID_ARGUMENT", {toolName: name, issues: parsedIn.error.issues, detail: `Invalid input for tool: ${name}`}));
+        // 工具拆两种（spec mcp-connect-model §A）：自带工具带 zod inputSchema，入参校验
+        // 通过后把解析值交给路径检查与 run；外部工具（判别式 `"inputSchema" in tool`）
+        // 的参数定义是提供方现成 JSON Schema，本地不校验，原始 input 直达（校验权威是提供方）。
+        let runInput: unknown = input;
+        if ("inputSchema" in tool) {
+            const parsedIn = tool.inputSchema.safeParse(input);
+            if (!parsedIn.success) {
+                return Result.err(new AppError("TOOL_INVALID_ARGUMENT", {toolName: name, issues: parsedIn.error.issues, detail: `Invalid input for tool: ${name}`}));
+            }
+            runInput = parsedIn.data;
         }
 
-        // A-14: path 白名单二次校验（schema 之后的第二道闸）。
+        // A-14: path 白名单二次校验（自带工具 schema 之后的第二道闸；外部工具没有 schema 闸，这里是唯一一道）。
         // ctx 上没有 allowedPaths 时 ToolPathPolicy.check 直接返回 null，向后兼容。
-        const disallowedPath = ToolPathPolicy.check(parsedIn.data, ctx);
+        const disallowedPath = ToolPathPolicy.check(runInput, ctx);
         if (disallowedPath !== null) {
             return Result.err(new AppError("TOOL_FORBIDDEN", {toolName: name, path: disallowedPath, detail: `Tool path outside allowed scope: ${name} -> ${disallowedPath}`}));
         }
@@ -123,7 +130,7 @@ export class ToolRunner<Ctx = unknown> {
             // 竞速交给 signalView（只读视图，不把 scope 传染进工具 API）；race 的
             // reject 载荷用 AbortError.create()（race 接口只认异常载荷），取消在
             // 下方 catch 收回 Result.err(TOOL_CANCELLED) 返回值通道。
-            const work = tool.run(parsedIn.data, ctx);
+            const work = tool.run(runInput, ctx);
             const out: Result<unknown, AppError> = signal == null ? await work : await AbortScopeFactory.signalView(signal).race(work, () => AbortError.create());
 
             // 工具闭包不再解包 throw（门⑦）：Err 交回 runner，与未知异常走同一条
@@ -132,7 +139,7 @@ export class ToolRunner<Ctx = unknown> {
             // Result.err 回来（七期：取消统一走返回值通道）。
             if (!out.ok) return Result.err(normalizeToolFailure(name, out.error));
 
-            if (tool.outputSchema) {
+            if ("inputSchema" in tool && tool.outputSchema) {
                 const parsedOut = tool.outputSchema.safeParse(out.value);
                 if (!parsedOut.success) {
                     return Result.err(new AppError("TOOL_FAILED", {toolName: name, cause: parsedOut.error, detail: `Tool failed: ${name}`}));

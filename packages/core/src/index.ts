@@ -117,7 +117,7 @@ export {
 /**
  * Tool 运行时：注册表、执行器与内置 `vfs.*` 工具。
  */
-export type { Tool } from "./domain/tool/model/tool.js";
+export type { Tool, ExternalTool, RegisteredTool } from "./domain/tool/model/tool.js";
 export { ToolRegistry } from "./domain/tool/logic/tool-registry.js";
 export { ToolRunner } from "./domain/tool/logic/tool-runner.js";
 export type { ToolCall, ParallelToolOutcome } from "./domain/tool/logic/tool-runner.js";

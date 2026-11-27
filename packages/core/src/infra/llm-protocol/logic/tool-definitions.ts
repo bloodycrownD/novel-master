@@ -18,10 +18,13 @@ export const ToolDefinitions = {
     fromRegistry<Ctx>(registry: ToolRegistry<Ctx>, ctx: Ctx): LlmToolDefinition[] {
         return registry.list().map((name) => {
             const tool = registry.get(name)!;
+            // 自带工具：zod inputSchema 转 JSON Schema；外部工具（判别式 `"inputSchema" in tool`）：
+            // 声明就是现成 JSON Schema，原样透出、不经 zod（转不了也不回退，见 ExternalTool 注释）。
+            const inputSchema = "inputSchema" in tool ? SerializationZodToJsonSchema.toJsonSchema(tool.inputSchema) : {...tool.inputJsonSchema};
             return {
                 name: tool.name,
                 description: tool.description(ctx),
-                inputSchema: SerializationZodToJsonSchema.toJsonSchema(tool.inputSchema),
+                inputSchema,
             };
         });
     },
