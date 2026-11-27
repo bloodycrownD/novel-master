@@ -519,6 +519,18 @@ describe("McpConnectionManagerFactory.create", () => {
         assert.equal(marked["a_b"], "failed");
     });
 
+    it("T-C21b: cachedTools({includeDisabled}) 给详情页工具卡用：被关掉的工具、撞名标记后的工具都照样返回；装配面不带参数时仍然滤掉", async () => {
+        const disabled = new Map<string, readonly string[]>([["a_b", ["read"]]]);
+        const harness = makeHarness([{id: "a.b", tools: ["read", "write"]}, {id: "a_b", tools: ["read"]}], {connectBudgetMs: 2_000, disabledTools: (serverId) => disabled.get(serverId) ?? []});
+        await harness.manager.connectUnconnected();
+        assert.deepEqual(harness.manager.cachedTools({includeDisabled: true}).map((tool) => [tool.serverId, tool.toolName]), [["a.b", "read"], ["a.b", "write"], ["a_b", "read"]], "关掉的工具在详情页的读取面里看得见，才打得回来");
+        assert.deepEqual(harness.manager.cachedTools().map((tool) => [tool.serverId, tool.toolName]), [["a.b","read"],["a.b","write"]], "装配面照旧滤掉被关的工具");
+        disabled.set("a_b", []);
+        assert.deepEqual(harness.manager.cachedTools({includeDisabled: true}).map((tool) => [tool.serverId, tool.toolName]), [["a.b", "read"], ["a.b", "write"], ["a_b", "read"]], "撞名标记成 failed 后，详情页仍看得到工具，才能关掉其中一个");
+        assert.deepEqual(harness.manager.cachedTools(), [], "装配面不注册撞名服务器的工具");
+        assert.equal(statusOf(harness.manager, "a.b")?.state, "failed");
+    });
+
     it("T-C22: connectUnconnected() 调用后立刻读状态，被触发的服务器已是 connecting（同步落表）", async () => {
         const harness = makeHarness([{id: "srv", gateInitializeAt: [0]}], {connectBudgetMs: 5_000});
         const round = harness.manager.connectUnconnected();

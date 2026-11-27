@@ -244,17 +244,22 @@ export const McpConnectionManagerFactory = {
 
         /**
          * nm-style: keep-public — McpConnectionManager port 契约的实现方法（装配与
-         * 双端目录读取面）：同步读缓存，读取前先跑撞名检测。生产消费在后续波次接线，
-         * 本波次仅测试可达。
+         * 双端目录读取面）：同步读缓存，读取前先跑撞名检测。
          */
-        const cachedTools = (): readonly McpToolSnapshot[] => {
+        const cachedTools = (options: {readonly includeDisabled?: boolean} = {}): readonly McpToolSnapshot[] => {
             detectSlugConflicts();
             const tools: McpToolSnapshot[] = [];
+            const includeDisabled = options.includeDisabled === true;
             for (const config of deps.listServers()) {
                 if (!config.enabled || !McpServerConfigOps.isTransportSupported(config)) continue;
                 const entry = connections.get(config.id);
-                // 只返回「启用、传输受支持、未撞名、未处于 failed」服务器的工具；connecting 期间保留旧缓存继续可用。
-                if (entry === undefined || entry.snapshots.length === 0 || entry.status.state === "failed") continue;
+                // 装配面只返回「未撞名、未处于 failed」服务器的、未被关掉的工具；connecting 期间保留旧缓存继续可用。
+                // includeDisabled 是详情页工具卡的读取面：被关掉的工具与撞名标记后的快照都要看得见，否则关掉后就没法再打开。
+                if (entry === undefined || entry.snapshots.length === 0 || (!includeDisabled && entry.status.state === "failed")) continue;
+                if (includeDisabled) {
+                    tools.push(...entry.snapshots);
+                    continue;
+                }
                 const disabled = deps.disabledTools(config.id);
                 tools.push(...entry.snapshots.filter((tool) => !disabled.includes(tool.toolName)));
             }

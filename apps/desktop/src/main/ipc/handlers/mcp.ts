@@ -220,15 +220,15 @@ export namespace Mcp {
 
     /**
      * 详情页「工具」卡的行清单：工具缓存按 server 过滤 + 禁用位，只读缓存不触发请求。
-     * 禁用位只读 `mcpConfig.listDisabledTools()`——cachedTools 的出口已滤掉被关的工具，
-     * 拿它判断 disabled 会漏。
+     * 读 includeDisabled（连被关的工具一起返回）——装配面的出口滤掉了被关的工具，拿它当行清单，关掉的工具会从卡上消失、没法再打开。
+     * 禁用位只读 `mcpConfig.listDisabledTools()`，与行清单的来源分开。
      */
     export async function toolList(req: McpToolListRequest): Promise<IpcResult<readonly McpToolRowDto[]>> {
         try {
             const built = await DesktopRuntimeSingleton.get();
             if (!built.ok) return { ok: false, error: FormatIpcError.format(built.error) };
             const rt = built.value;
-            const cached = rt.mcp.connectionManager.cachedTools();
+            const cached = rt.mcp.connectionManager.cachedTools({includeDisabled: true});
             const disabled = await rt.mcpConfig.listDisabledTools();
             if (!disabled.ok) return { ok: false, error: FormatIpcError.format(disabled.error) };
             const disabledNames = disabled.value[req.serverId] ?? [];

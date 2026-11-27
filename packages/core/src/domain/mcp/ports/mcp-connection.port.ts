@@ -15,8 +15,8 @@ import type { McpServerStatus, McpToolSnapshot } from "../model/mcp-tool-snapsho
 
 /** MCP 连接管理器：连接状态机 + 工具缓存 + 失败隔离（状态与缓存语义见总体方案 B）。 */
 export interface McpConnectionManager {
-    /** 只读缓存，同步，不建连不发请求。只返回「启用、传输受支持、未撞名、未处于 failed」服务器的、未被 deps.disabledTools 关掉的工具。 */
-    cachedTools(): readonly McpToolSnapshot[];
+    /** 只读缓存，同步，不建连不发请求。只返回「启用、传输受支持、未撞名、未处于 failed」服务器的、未被 deps.disabledTools 关掉的工具。`includeDisabled` 给详情页工具卡用：连被关掉的工具和撞名标记后的快照一起返回，否则关掉的工具在页面上消失、没法再打开。 */
+    cachedTools(options?: {readonly includeDisabled?: boolean}): readonly McpToolSnapshot[];
     /** 进页面触发：对每个启用服务器只看本地状态，pending / disconnected 并发发起后台连接，其余不动。返回的 Promise 在「本次发起的尝试」以及「撞上的进行中尝试」都结束后才 resolve（永不 reject）；聊天页可以不等，配置页等它来刷新状态。 */
     connectUnconnected(): Promise<void>;
     /** 显式动作（开关打开 / 保存 / 测试连接 / 授权成功）：作废该服务器缓存与在途尝试，连接并等结果。serverId 不在配置里属不变量破坏，走 assert。 */

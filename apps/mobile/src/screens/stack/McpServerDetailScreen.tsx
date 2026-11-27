@@ -114,9 +114,9 @@ export function McpServerDetailScreen() {
     }, [setStackOverride, title]);
     useFocusEffect(syncHeader);
 
-    /** 从该 server 的工具缓存与状态面刷新工具卡数据（同步读，不置全屏 loading）。 */
+    /** 从该 server 的工具缓存与状态面刷新工具卡数据（同步读，不置全屏 loading）；连被关掉的工具一起读，卡上的开关才打得回来。 */
     const refreshTools = useCallback(() => {
-        setTools(mcp.connectionManager.cachedTools().filter(entry => entry.serverId === serverId));
+        setTools(mcp.connectionManager.cachedTools({includeDisabled: true}).filter(entry => entry.serverId === serverId));
         setStatus(mcp.connectionManager.serverStatuses().find(candidate => candidate.serverId === serverId) ?? null);
     }, [mcp, serverId]);
 
