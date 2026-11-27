@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { AssertionError } from "../../src/common/assert.js";
+import { Result } from "../../src/common/result.js";
 import {  describe, it  } from "node:test";
 import {  ToolRegistry  } from "../../src/domain/tool/logic/tool-registry.js";
 import {  z  } from "zod";
@@ -12,8 +13,8 @@ describe("ToolRegistry", () => {
             description: () => "echo",
             inputSchema: z.object({ x: z.number() }),
             outputSchema: z.object({ x: z.number() }),
-            async run(input: unknown) {
-                return input;
+            async run(input: { x: number }) {
+                return Result.ok(input);
             },
         });
 
