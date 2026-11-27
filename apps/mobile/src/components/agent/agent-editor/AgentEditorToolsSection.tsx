@@ -1,13 +1,14 @@
 /**
  * 「工具策略」区（comp-rest/C-3 自 AgentEditorForm 拆出）：
- * 模式下拉 + 白/黑名单选择；默认模式下的内置工具计数文案是
- * 硬编码源码锁（__tests__/agent-editor-form-tool-count.test.tsx 行为断言锁展示文案），
- * 改内置工具时需同步这里的计数。
+ * 模式下拉 + 白/黑名单选择；默认模式下的内置工具计数取
+ * BUILTIN_TOOL_CATALOG.length（mcp 占位含内，自动为 12），i18n 文案里的
+ * 工具枚举串为硬编码源码锁（__tests__/agent-editor-form-tool-count.test.tsx
+ * 行为断言锁展示文案），改内置工具时需同步那里的枚举。
  */
 import React from 'react';
 import {Text} from 'react-native';
 
-import {BUILTIN_TOOL_CATALOG, TOOL_MODE_OPTIONS, type AgentToolCatalogMcpTool, type ToolsMode} from '@/config-forms/agent';
+import {BUILTIN_TOOL_CATALOG, TOOL_MODE_OPTIONS, type ToolsMode} from '@/config-forms/agent';
 
 import {coreT} from '@/i18n/core';
 
@@ -24,8 +25,6 @@ type Props = {
     onToolsModeChange: (value: ToolsMode) => void;
     toolsSelected: readonly string[];
     onToolsSelectedChange: (value: string[]) => void;
-    /** 页面打开时刻的 MCP 工具快照（spec §九移动端直读 connection manager 缓存）；缺省 = mcp 分组只显示「未配置」占位。 */
-    mcpTools?: readonly AgentToolCatalogMcpTool[];
     /** 只读态（内置智能体详情）：模式下拉与工具选择器全禁用灰显。 */
     readOnly?: boolean;
 };
@@ -36,7 +35,6 @@ export function AgentEditorToolsSection({
     onToolsModeChange,
     toolsSelected,
     onToolsSelectedChange,
-    mcpTools,
     readOnly = false,
 }: Props) {
     return (
@@ -60,7 +58,6 @@ export function AgentEditorToolsSection({
                         tokens={tokens}
                         selected={toolsSelected}
                         onChange={onToolsSelectedChange}
-                        mcpTools={mcpTools}
                         disabled={readOnly}
                     />
                 </FormField>

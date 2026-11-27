@@ -3,8 +3,8 @@
  *
  * 写路径全部委托 core：配置 CRUD 与每工具启停走 `McpConfigStoreFactory.create`
  * 的 store（KKV nm-mcp + SKSP 的唯一所有者），换 ID 编排走
- * `McpToolRefs.renameWithRewrite`（改写 agent 工具引用 → store.rename →
- * afterRename，任一步失败反向回滚，本文件不再各写一份）。本文件只保留
+ * `McpServerRename.withAfterStep`（store.rename → afterRename，收尾失败按旧
+ * 配置改回旧 ID，本文件不再各写一份）。本文件只保留
  * 「同步读镜像」这一层：连接管理器的 `listServers` / `disabledTools` 与 OAuth
  * 工厂的 `listServers` 是同步读接缝，而 KKV 是异步读，所以每次 core 写成功后
  * 一次刷新两份镜像（servers + disabledTools），装配期读失败按空镜像降级并
@@ -12,18 +12,17 @@
  *
  * per-server 工具启停的过滤在 core 连接管理器出口按注入的 disabledTools 闭包
  * 执行（先过滤再查撞名）——run 装配期（core AgentTurnRuntimePort.mcp）与配置
- * 页工具卡消费同一份过滤后快照，开关真正决定工具是否注册进 agent。
+ * 页工具卡消费同一份过滤后缓存，开关真正决定工具是否注册进 agent。
  *
  * core 写路径的业务失败（create / rename 撞名、KKV 写失败）在本边界转 throw
  * 冒出、由 UI 收口（照 search-config.store 先例）。
  *
  * @module services/mcp-config.store
  */
-import type {AgentRegistryService} from '@novel-master/core/agent';
 import {Result, type AppError} from '@novel-master/core/errors';
 import type {KkvService} from '@novel-master/core/kkv';
 import {LogFactory} from '@novel-master/core/log';
-import {McpConfigStoreFactory, McpConnectionManagerFactory, McpOAuthFactory, McpToolRefs, MCP_DEFAULT_TIMEOUT_MS, type McpConnectionManager, type McpHttpRequest, type McpHttpResponse, type McpOAuth, type McpRequestFn, type McpServerConfig} from '@novel-master/core/mcp';
+import {McpConfigStoreFactory, McpConnectionManagerFactory, McpOAuthFactory, McpServerRename, MCP_DEFAULT_TIMEOUT_MS, type McpConnectionManager, type McpHttpRequest, type McpHttpResponse, type McpOAuth, type McpRequestFn, type McpServerConfig} from '@novel-master/core/mcp';
 import type {SecretStore} from '@novel-master/core/sksp';
 
 const log = LogFactory.create('mcp.config');
@@ -38,11 +37,13 @@ export interface McpRuntimeSlice {
     readonly save: (config: McpServerConfig) => Promise<void>;
     /** 新建：core store 撞名拒绝（转 throw 由 UI 收口），全程不写任何密钥。 */
     readonly create: (config: McpServerConfig) => Promise<void>;
-    /** 换 ID 保存（core renameWithRewrite 编排）：afterRename 在 rename 成功后、回滚链之内执行（写用户新填的 bearer）。 */
+    /** 换 ID 保存（core McpServerRename.withAfterStep 编排）：afterRename 在 rename 成功后、回滚链之内执行（写用户新填的 bearer）。 */
     readonly rename: (serverId: string, config: McpServerConfig, afterRename?: () => Promise<void>) => Promise<void>;
     /** 行开关：按 id 改 enabled 落库（列表页乐观更新的写通道）。 */
     readonly setEnabled: (serverId: string, enabled: boolean) => Promise<void>;
-    /** 主动连接某台服务器（打开开关 / 保存后调用）：失效快照缓存后重拉，结果进 serverStatuses()。 */
+    /** 进页面触发（聊天页 / 列表页）：对 pending / disconnected 的启用服务器并发发起后台连接，其余不动；永不 reject。 */
+    readonly connectUnconnected: () => Promise<void>;
+    /** 显式连接某台服务器（开关打开 / 保存 / 测试连接 / 授权成功）：作废缓存与在途尝试后连接并等结果。 */
     readonly connect: (serverId: string) => Promise<void>;
     /** 删除 server（core 口径连带清 SKSP bearer/headers/oauth refs 与工具禁用清单）+ 镜像与连接缓存同步失效。 */
     readonly remove: (serverId: string) => Promise<void>;
@@ -50,7 +51,7 @@ export interface McpRuntimeSlice {
     readonly disabledTools: (serverId: string) => readonly string[];
     /** 启停某 server 的某工具：core store 落库 + 镜像同步刷新（过滤在连接管理器出口即时生效，无需 invalidate）。 */
     readonly setToolDisabled: (serverId: string, toolName: string, disabled: boolean) => Promise<void>;
-    /** 连接管理器（core 实例：快照出口已按工具禁用清单过滤；状态标签与「测试连接」读 serverStatuses）。 */
+    /** 连接管理器（core 实例：缓存出口已按工具禁用清单过滤；状态标签与「测试连接」读 serverStatuses）。 */
     readonly connectionManager: McpConnectionManager;
     /** OAuth 双端回调接缝（deep link service 只调 start / handleCallback）。 */
     readonly oauth: McpOAuth;
@@ -59,8 +60,6 @@ export interface McpRuntimeSlice {
 export interface McpRuntimeFactoryDeps {
     readonly kkv: KkvService;
     readonly secretStore: SecretStore;
-    /** 换 ID 时改写 agent 工具白/黑名单引用（`mcp__<旧ID>__` → `mcp__<新ID>__`）。 */
-    readonly agentRegistry: AgentRegistryService;
     /**
    * 单请求预算（毫秒）→ 请求函数的适配构造（原生 request / 回落 fetch 的方法面
    * 由 runtime 收口）；工厂按各 server 配置的 timeoutMs 选建（同预算 memo 复用），
@@ -142,7 +141,7 @@ export const McpRuntimeFactory = {
                 await persistThrough(() => store.create(config), config.id);
             },
             rename: async (serverId: string, config: McpServerConfig, afterRename?: () => Promise<void>) => {
-                const renamed = await McpToolRefs.renameWithRewrite({agentRegistry: deps.agentRegistry, configStore: store}, serverId, config, afterRename);
+                const renamed = await McpServerRename.withAfterStep({configStore: store}, serverId, config, afterRename);
                 // nm-throw: keep — 写路径口径（见文件头）：core 的业务失败转 throw，由 UI 边界收口
                 if (!renamed.ok) throw renamed.error;
                 const refreshed = await refreshMirror();
@@ -158,9 +157,9 @@ export const McpRuntimeFactory = {
                 }
                 await persistThrough(() => store.save({...config, enabled}), serverId);
             },
+            connectUnconnected: () => connectionManager.connectUnconnected(),
             connect: async (serverId: string) => {
-                connectionManager.invalidate(serverId);
-                await connectionManager.snapshotTools();
+                await connectionManager.connect(serverId);
             },
             remove: async (serverId: string) => {
                 await persistThrough(() => store.remove(serverId), serverId);

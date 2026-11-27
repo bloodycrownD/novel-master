@@ -3,15 +3,15 @@
  * create 模式（无 route 参数）。
  *
  * - 连接：ID（`mcp__<ID>__<tool>` 的服务器段，只允许英文字母、数字和下划线，
- *   编辑时可改——换 ID 由镜像层 rename 改写 agent 工具引用并迁移密钥）/ 描述
- *   （选填）/ 传输类型（HTTP | SSE，SSE 归一保留但连接管理器报 unsupported）/
- *   地址 / 超时时间（秒；保存时 ×1000 归一，下限 1000ms）；
+ *   编辑时可改——换 ID 由镜像层 rename 编排（core McpServerRename.withAfterStep）
+ *   并迁移密钥）/ 描述（选填）/ 传输类型（HTTP | SSE，SSE 归一保留但连接管理器
+ *   报 unsupported）/ 地址 / 超时时间（秒；保存时 ×1000 归一，下限 1000ms）；
  * - 认证：方式 FormSelectField（无 / API Key / OAuth）。bearer 的密钥只经 SKSP
  *   写入（ref `mcp/{id}/bearer`），不回显明文；OAuth 显示授权状态与「重新授权」
  *   （McpOauthService.start → 系统浏览器，回调由 deep link service 接住）；
- * - 工具：测试连接（invalidate + 重拉快照）+ server 状态行（不可用时直显
- *   `failure.detail` 原文，可选中复制）+ 每个工具的启停开关（KKV
- *   `nm-mcp/disabledTools`，过滤发生在 connectionManager 快照出口——开关
+ * - 工具：测试连接（显式连接：作废缓存与在途尝试后连接并等结果）+ server 状态行
+ *   （不可用时直显 `failure.detail` 原文，可选中复制）+ 每个工具的启停开关（KKV
+ *   `nm-mcp/disabledTools`，过滤发生在 connectionManager 缓存出口——开关
  *   真正决定工具是否注册进 agent）。
  *
  * 界面说明文字按 Step 14 五条：一组只出现一次（工具组脚注），字段级 hint 只留
@@ -91,7 +91,7 @@ export function McpServerDetailScreen() {
     const [hasBearerKey, setHasBearerKey] = useState(false);
     /** OAuth 授权状态（SKSP oauth 键的 tokens 判定）。 */
     const [oauthAuthorized, setOauthAuthorized] = useState(false);
-    /** 该 server 的工具快照（connectionManager 缓存，TTL 60s）。 */
+    /** 该 server 的工具缓存（connectionManager 只读缓存，无过期时间）。 */
     const [tools, setTools] = useState<readonly McpToolSnapshot[]>([]);
     /** 该 server 的禁用工具名清单（镜像读 + 本地乐观更新）。 */
     const [disabledTools, setDisabledTools] = useState<readonly string[]>([]);
@@ -114,10 +114,9 @@ export function McpServerDetailScreen() {
     }, [setStackOverride, title]);
     useFocusEffect(syncHeader);
 
-    /** 从该 server 的快照与状态面刷新工具卡数据（不置全屏 loading）。 */
-    const refreshTools = useCallback(async () => {
-        const snapshot = await mcp.connectionManager.snapshotTools();
-        setTools(snapshot.filter(entry => entry.serverId === serverId));
+    /** 从该 server 的工具缓存与状态面刷新工具卡数据（同步读，不置全屏 loading）。 */
+    const refreshTools = useCallback(() => {
+        setTools(mcp.connectionManager.cachedTools().filter(entry => entry.serverId === serverId));
         setStatus(mcp.connectionManager.serverStatuses().find(candidate => candidate.serverId === serverId) ?? null);
     }, [mcp, serverId]);
 
@@ -165,20 +164,8 @@ export function McpServerDetailScreen() {
                 setHasBearerKey(false);
                 setOauthAuthorized(false);
             }
-            try {
-                const current = mcp.connectionManager.serverStatuses().find(candidate => candidate.serverId === serverId) ?? null;
-                // 已失败的不在进页时重试（重试入口是「测试连接」）；未连接的试一次，已连接的读缓存快照。
-                if (current?.state === 'failed') {
-                    setTools([]);
-                    setStatus(current);
-                } else {
-                    await refreshTools();
-                }
-            } catch {
-                // 工具拉取失败不阻断表单（连接失败在状态区可见；快照保持空列表）
-                setTools([]);
-                setStatus(mcp.connectionManager.serverStatuses().find(candidate => candidate.serverId === serverId) ?? null);
-            }
+            // 工具卡读缓存与状态（同步读，不联网）：failed 无缓存所以工具为空、原因由状态行直显；disconnected 缓存保留，工具照常显示。
+            refreshTools();
         },
         [mcp, refreshTools, runtime, serverId],
     );
@@ -270,7 +257,7 @@ export function McpServerDetailScreen() {
                 await mcp.create(config);
                 await writeBearerKey();
             } else if (renamed) {
-                // 换 ID 经 afterRename 写新密钥：落在 core renameWithRewrite 的回滚链之内（写入失败整体回滚）；
+                // 换 ID 经 afterRename 写新密钥：落在 core McpServerRename.withAfterStep 的回滚链之内（写入失败整体改回旧 ID）；
                 // core 对 oauth 搬迁失败已降级为未授权，不中断换 ID。
                 await mcp.rename(serverId, config, writeBearerKey);
             } else {
@@ -325,6 +312,10 @@ export function McpServerDetailScreen() {
             return {text: settingsTranslator({key: 'settings.mcp.detail.status_disabled'}), color: tokens.textSecondary};
         }
         // 状态不可用：状态位置直显 core 事实提示（failure.detail），不自写文案。
+        // 已断开有原因显示原因，否则显示「已断开」。
+        if (status.state === 'disconnected') {
+            return {text: status.failure?.detail ?? settingsTranslator({key: 'settings.mcp.detail.status_disconnected'}), color: tokens.danger};
+        }
         return {text: status.failure?.detail ?? settingsTranslator({key: 'settings.mcp.detail.status_pending'}), color: tokens.danger};
     })();
 
@@ -438,13 +429,17 @@ export function McpServerDetailScreen() {
                     rightAction={
                         <Pressable
                             onPress={() => {
-                                // 测试连接：失效缓存重拉快照（预算内未完成记 pending，被拒记 failed）；快照拉取失败被连接管理器隔离，这里不会 reject。
+                                // 测试连接（显式动作）：作废缓存与在途尝试后连接并等结果，结束后同步工具与状态；失败由状态行直显。
                                 if (serverId == null || testing) {
                                     return;
                                 }
                                 setTesting(true);
-                                mcp.connectionManager.invalidate(serverId);
-                                void refreshTools().finally(() => setTesting(false));
+                                mcp.connect(serverId)
+                                    .catch(() => undefined)
+                                    .finally(() => {
+                                        refreshTools();
+                                        setTesting(false);
+                                    });
                             }}
                             hitSlop={8}
                             disabled={testing}

@@ -4,11 +4,13 @@
  * 底部「新建服务器」入口；点击行进详情页。
  *
  * 状态标签读连接管理器的 `serverStatuses()`（spec §五：server 级状态唯一读取
- * 面），只有「已连接 / 未连接」两态；server 带失败时副标题直显 `failure.detail`
- * 原文（不自写文案）。本页不主动发起连接（首次进入状态多为未连接，由详情页的
- * 连接/测试点亮）。长说明收进标题栏「?」帮助弹窗（照 SearchEnginesScreen 先例）。
+ * 面），有已连接 / 连接中 / 已断开 / 未连接四态；server 带失败时副标题直显
+ * `failure.detail` 原文（不自写文案）。进列表页对 pending / disconnected 的
+ * 服务器经 `connectUnconnected()` 自动补一轮连接（每次进入只一轮，发起后不等、
+ * 立即与结束后各重读一次状态；已连接 / 连接中 / 已失败不动），下拉刷新按重新
+ * 进入处理会再发起一轮。长说明收进标题栏「?」帮助弹窗（照 SearchEnginesScreen 先例）。
  */
-import React, {useCallback, useEffect, useState} from 'react';
+import React, {useCallback, useRef, useState} from 'react';
 import {ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Switch, Text, View} from 'react-native';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
@@ -42,15 +44,19 @@ interface McpServerRow {
 
 const EMPTY_ROWS: readonly McpServerRow[] = [];
 
-/** 列表状态标签：已连接 / 连接中 / 未连接（失败原因另由副标题直显 failure.detail）。 */
+/** 列表状态标签：已连接 / 连接中 / 已断开 / 未连接（从未尝试与已失败同标「未连接」；失败原因另由副标题直显 failure.detail）。 */
 const statusLabelKey = (status: McpServerStatus): SettingsMessageKey => {
-    if (status.state === 'ready') {
-        return 'settings.mcp.list.connected';
+    switch (status.state) {
+        case 'ready':
+            return 'settings.mcp.list.connected';
+        case 'connecting':
+            return 'settings.mcp.list.connecting';
+        // 已断开复用详情页的键（list.disconnected 的键值是「未连接」，别接错）。
+        case 'disconnected':
+            return 'settings.mcp.detail.status_disconnected';
+        default:
+            return 'settings.mcp.list.disconnected';
     }
-    if (status.state === 'connecting') {
-        return 'settings.mcp.list.connecting';
-    }
-    return 'settings.mcp.list.disconnected';
 };
 
 export function McpServersScreen() {
@@ -103,7 +109,38 @@ export function McpServersScreen() {
         fallbackValue: EMPTY_ROWS,
     });
 
-    /** 连接某一行并在结束后回读状态，不阻塞界面；连接中 / 已连接的由连接管理器去重，失败不自动重试。 */
+    /** 本轮自动连接是否已发起（进页标志：状态重读不得再次发起，防「重读 → 再发起」循环）。 */
+    const roundFired = useRef(false);
+
+    // nm-style: keep-local — 一轮自动连接的编排（发起 + 前后两次重读 + 进页标志），内联进 focus 回调会拆散标志与重读时序
+    /** 发起一轮自动连接：发起后立即重读一次，结束后再重读一次；不等结果、不挡首屏。 */
+    const fireConnectRound = useCallback(() => {
+        if (roundFired.current) {
+            return;
+        }
+        roundFired.current = true;
+        const round = mcp.connectionManager.connectUnconnected();
+        void reload({silent: true});
+        void round.finally(() => {
+            void reload({silent: true});
+        });
+    }, [mcp, reload]);
+
+    // 进列表页（含从详情页返回）按重新进入处理：重置标志并发起一轮；pending / disconnected 的圈定由连接管理器做（已连接 / 连接中 / 已失败不动）。
+    const onScreenFocus = useCallback(() => {
+        roundFired.current = false;
+        fireConnectRound();
+    }, [fireConnectRound]);
+    useFocusEffect(onScreenFocus);
+
+    // 下拉刷新算重新进入：重置标志再发起一轮。
+    const onRefresh = useCallback(() => {
+        roundFired.current = false;
+        fireConnectRound();
+        return reload();
+    }, [fireConnectRound, reload]);
+
+    /** 连接某一行（开关打开的显式动作）并在结束后回读状态，不阻塞界面。 */
     const connectRow = (serverId: string) => {
         const syncRow = () => {
             const status = mcp.connectionManager.serverStatuses().find(candidate => candidate.serverId === serverId);
@@ -113,13 +150,6 @@ export function McpServersScreen() {
         syncRow();
         void done.finally(syncRow);
     };
-
-    // 启用但从未尝试连接的服务器，进列表时自动试一次；已失败的只在详情页「测试连接」时重试。
-    useEffect(() => {
-        rows.forEach(row => {
-            if (row.config.enabled && row.status.state === 'pending') connectRow(row.config.id);
-        });
-    }, [rows]);
 
     const menuRow = rows.find(row => row.config.id === menuServerId);
     const deleteRow = rows.find(row => row.config.id === pendingDelete);
@@ -154,7 +184,7 @@ export function McpServersScreen() {
                     data={rows}
                     keyExtractor={item => item.config.id}
                     contentContainerStyle={listScreenStyles.listContent}
-                    refreshControl={<RefreshControl refreshing={loading} onRefresh={reload} />}
+                    refreshControl={<RefreshControl refreshing={loading} onRefresh={onRefresh} />}
                     renderItem={({item}) => {
                         const failure = item.status.failure;
                         // 开关本身已表达启停态，副标题给描述（选填，可为空）；有失败时直显 failure.detail 原文（core 事实提示，不自写文案）。
@@ -171,7 +201,7 @@ export function McpServersScreen() {
                                 subtitle={subtitle}
                                 trailingMeta={
                                     <View style={styles.rowMeta}>
-                                        {/* 状态胶囊（照 ApiKeyStatusTag 的 hex-alpha 底色形态）：只有两态，失败原文进详情页。 */}
+                                        {/* 状态胶囊（照 ApiKeyStatusTag 的 hex-alpha 底色形态）：只有已连接（绿）/ 其余（中性）两色，失败原文进详情页。 */}
                                         <View style={[styles.stateTag, {backgroundColor: item.status.state === 'ready' ? `${tokens.success}1A` : `${tokens.textSecondary}1A`}]}>
                                             <Text style={{color: item.status.state === 'ready' ? tokens.success : tokens.text, fontSize: 12, fontWeight: '600'}}>
                                                 {settingsTranslator({key: statusLabelKey(item.status)})}

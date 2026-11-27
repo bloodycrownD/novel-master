@@ -1,14 +1,15 @@
 /**
- * McpRuntimeStore 薄镜像（spec mcp-support Step 13/14 / CR-09 / CR-02）：
+ * McpRuntimeStore 薄镜像（spec mcp-support Step 13/14 / MCP 连接模型第四阶段）：
  *
- * - 写路径全部委托 core（McpConfigStoreFactory 的 store + McpToolRefs.renameWithRewrite），
- *   连接管理器工厂被 mock 以便观测 connect 的 invalidate → snapshotTools 次序
- *   与注入的 disabledTools 闭包；KKV / SKSP / agentRegistry 用内存实现跑真链路
- * - rename 成功（引用改写 + 密钥迁移 + afterRename 落点）与失败回滚（不留半截状态）
+ * - 写路径全部委托 core（McpConfigStoreFactory 的 store + McpServerRename.withAfterStep），
+ *   连接管理器工厂被 mock 以便观测 connect 直连与 invalidate 的调用；KKV / SKSP
+ *   用内存实现跑真链路
+ * - rename 成功（密钥迁移 + afterRename 落点）与失败回滚（不留半截状态）
  * - create 撞名被拒转 throw 且不写任何密钥（CR-02 的 store 级断言）
+ * - connect 直连 connectionManager.connect（作废由 core 负责）；停用与删除只
+ *   invalidate 不连接（T-MO2）；connectUnconnected 透传
  * - setToolDisabled 落库并刷新镜像；remove 连带清镜像、禁用表与 SKSP refs
  */
-import type {AgentRegistryService} from '@novel-master/core/agent';
 import {AppError, Result} from '@novel-master/core/errors';
 import type {KkvService} from '@novel-master/core/kkv';
 import {McpConfigStoreFactory, McpConnectionManagerFactory, McpSecretRefs, type McpConnectionManagerDeps, type McpRequestFn, type McpServerConfig} from '@novel-master/core/mcp';
@@ -19,7 +20,7 @@ jest.mock('@novel-master/core/mcp', () => {
     const actual = jest.requireActual<typeof import('@novel-master/core/mcp')>('@novel-master/core/mcp');
     return {
         ...actual,
-        // 只 mock 连接管理器工厂（不发真请求、可观测调用次序）；store / renameWithRewrite / OAuth 走真实 core 实现。
+        // 只 mock 连接管理器工厂（不发真请求、可观测调用）；store / withAfterStep / OAuth 走真实 core 实现。
         McpConnectionManagerFactory: {
             ...actual.McpConnectionManagerFactory,
             create: jest.fn(),
@@ -76,46 +77,12 @@ function createSecretStore(initial: Record<string, string> = {}) {
     };
 }
 
-/** 内存版 agent 注册表：只实现 renameWithRewrite 的窄接缝（listAgentIds / get / upsert）。 */
-class InMemoryAgentRegistry {
-    private defs = new Map<string, Record<string, unknown>>();
-    private upsertGate: ((agentId: string) => boolean) | null = null;
-
-    seed(agentId: string, def: Record<string, unknown>): void {
-        this.defs.set(agentId, def);
-    }
-
-    /** 注入 upsert 拒绝（模拟写库失败），命中谓词的 agent 写不进去。 */
-    rejectUpsertWhen(matches: (agentId: string) => boolean): void {
-        this.upsertGate = matches;
-    }
-
-    raw(agentId: string): Record<string, unknown> | undefined {
-        return this.defs.get(agentId);
-    }
-
-    async listAgentIds(): Promise<readonly string[]> {
-        return [...this.defs.keys()];
-    }
-
-    async get(agentId: string): Promise<Result<Record<string, unknown>, AppError>> {
-        const def = this.defs.get(agentId);
-        return def == null ? Result.err(new AppError('INFRA_UNEXPECTED_ERROR', {detail: `agent 未找到: ${agentId}`})) : Result.ok(def);
-    }
-
-    async upsert(agentId: string, def: Record<string, unknown>): Promise<Result<void, AppError>> {
-        if (this.upsertGate?.(agentId) === true) {
-            return Result.err(new AppError('INFRA_UNEXPECTED_ERROR', {detail: `agent 写库失败: ${agentId}`}));
-        }
-        this.defs.set(agentId, def);
-        return Result.ok(undefined);
-    }
-}
-
-/** mock 版连接管理器（McpConnectionManager 五方法全数 jest.fn，不发真请求）。 */
+/** mock 版连接管理器（McpConnectionManager 全方法 jest.fn，不发真请求）。 */
 function createFakeManager() {
     return {
-        snapshotTools: jest.fn(async () => []),
+        cachedTools: jest.fn(() => []),
+        connectUnconnected: jest.fn(async () => undefined),
+        connect: jest.fn(async (serverId: string) => ({serverId, state: 'ready' as const})),
         serverStatuses: jest.fn(() => []),
         callTool: jest.fn(async () => Result.err({kind: 'server', action: 'report', detail: 'fake manager 不发请求'})),
         invalidate: jest.fn(),
@@ -140,45 +107,32 @@ function disabledJson(kkv: InMemoryKkv): unknown {
     return raw == null ? null : JSON.parse(raw);
 }
 
-/** 读内存 agent 的 tools 名单（断言用；agent 或 tools 缺失回空对象）。 */
-function agentTools(registry: InMemoryAgentRegistry, agentId: string): {allow?: string[]; deny?: string[]} {
-    const tools = registry.raw(agentId)?.tools;
-    return (tools ?? {}) as {allow?: string[]; deny?: string[]};
-}
-
 interface SliceHarness {
     mcp: McpRuntimeSlice;
     kkv: InMemoryKkv;
     secretStore: ReturnType<typeof createSecretStore>;
-    registry: InMemoryAgentRegistry;
     fakeManager: ReturnType<typeof createFakeManager>;
     managerDeps: McpConnectionManagerDeps;
 }
 
-async function makeHarness(seed: {servers?: McpServerConfig[]; disabledTools?: Record<string, readonly string[]>; secrets?: Record<string, string>; agents?: Array<[string, Record<string, unknown>]>} = {}): Promise<SliceHarness> {
+async function makeHarness(seed: {servers?: McpServerConfig[]; disabledTools?: Record<string, readonly string[]>; secrets?: Record<string, string>} = {}): Promise<SliceHarness> {
     const kkv = new InMemoryKkv();
     if (seed.servers != null) kkv.inject(McpConfigStoreFactory.KKV_MODULE, McpConfigStoreFactory.KEY_SERVERS, JSON.stringify(seed.servers));
     if (seed.disabledTools != null) kkv.inject(McpConfigStoreFactory.KKV_MODULE, McpConfigStoreFactory.KEY_DISABLED_TOOLS, JSON.stringify(seed.disabledTools));
     const secretStore = createSecretStore(seed.secrets ?? {});
-    const registry = new InMemoryAgentRegistry();
-    for (const [agentId, def] of seed.agents ?? []) registry.seed(agentId, def);
     const fakeManager = createFakeManager();
     const managerCreate = McpConnectionManagerFactory.create as unknown as jest.Mock;
     managerCreate.mockReset();
     managerCreate.mockImplementation(() => fakeManager);
-    const mcp = await McpRuntimeFactory.create({kkv, secretStore: secretStore as unknown as SecretStore, agentRegistry: registry as unknown as AgentRegistryService, requestFnFor: () => fakeRequestFn});
+    const mcp = await McpRuntimeFactory.create({kkv, secretStore: secretStore as unknown as SecretStore, requestFnFor: () => fakeRequestFn});
     const managerDeps = managerCreate.mock.calls[0][0] as McpConnectionManagerDeps;
-    return {mcp, kkv, secretStore, registry, fakeManager, managerDeps};
+    return {mcp, kkv, secretStore, fakeManager, managerDeps};
 }
 
-describe('mcp-config.store 薄镜像（CR-09 / CR-02）', () => {
-    it('rename 成功：agent 引用改写、KKV 原位替换、SKSP 密钥迁新 ref 清旧 ref、afterRename 落在新 ref、镜像刷新并 invalidate 新旧 ID', async () => {
+describe('mcp-config.store 薄镜像（CR-09 / CR-02 / 连接模型第四阶段）', () => {
+    it('rename 成功：KKV 原位替换、SKSP 密钥迁新 ref 清旧 ref、afterRename 落在新 ref、镜像刷新并 invalidate 新旧 ID', async () => {
         const oldConfig = serverConfig('a');
-        const h = await makeHarness({
-            servers: [oldConfig],
-            secrets: {[McpSecretRefs.bearer('a')]: 'key-a'},
-            agents: [['agent-1', {id: 'agent-1', tools: {allow: ['mcp__a__x'], deny: ['mcp__a__y']}}]],
-        });
+        const h = await makeHarness({servers: [oldConfig], secrets: {[McpSecretRefs.bearer('a')]: 'key-a'}});
         const newConfig = {...oldConfig, id: 'b'};
 
         let afterRenameTarget = '';
@@ -189,8 +143,6 @@ describe('mcp-config.store 薄镜像（CR-09 / CR-02）', () => {
 
         expect(h.mcp.servers().map(config => config.id)).toEqual(['b']);
         expect(serversJson(h.kkv)).toEqual([JSON.parse(JSON.stringify(newConfig))]);
-        expect(agentTools(h.registry, 'agent-1').allow).toEqual(['mcp__b__x']);
-        expect(agentTools(h.registry, 'agent-1').deny).toEqual(['mcp__b__y']);
         expect(afterRenameTarget).toBe(McpSecretRefs.bearer('b'));
         expect(await h.secretStore.get(McpSecretRefs.bearer('b'))).toBe('key-new');
         expect(await h.secretStore.get(McpSecretRefs.bearer('a'))).toBeNull();
@@ -198,13 +150,9 @@ describe('mcp-config.store 薄镜像（CR-09 / CR-02）', () => {
         expect(h.fakeManager.invalidate).toHaveBeenCalledWith('b');
     });
 
-    it('rename 失败（afterRename 抛错）：转 throw 且回滚不留半截状态——配置回旧 ID、引用回旧前缀、旧密钥仍在旧 ref', async () => {
+    it('rename 失败（afterRename 抛错）：转 throw 且回滚不留半截状态——配置回旧 ID、旧密钥仍在旧 ref', async () => {
         const oldConfig = serverConfig('a');
-        const h = await makeHarness({
-            servers: [oldConfig],
-            secrets: {[McpSecretRefs.bearer('a')]: 'key-a'},
-            agents: [['agent-1', {id: 'agent-1', tools: {allow: ['mcp__a__x']}}]],
-        });
+        const h = await makeHarness({servers: [oldConfig], secrets: {[McpSecretRefs.bearer('a')]: 'key-a'}});
 
         await expect(
             h.mcp.rename('a', {...oldConfig, id: 'b'}, async () => {
@@ -213,26 +161,8 @@ describe('mcp-config.store 薄镜像（CR-09 / CR-02）', () => {
         ).rejects.toThrow('写 bearer 失败');
 
         expect(h.mcp.servers().map(config => config.id)).toEqual(['a']);
-        expect(agentTools(h.registry, 'agent-1').allow).toEqual(['mcp__a__x']);
         expect(await h.secretStore.get(McpSecretRefs.bearer('a'))).toBe('key-a');
         expect(await h.secretStore.get(McpSecretRefs.bearer('b'))).toBeNull();
-    });
-
-    it('rename 失败（agent 引用改写被拒）：转 throw 且 store 完全未动', async () => {
-        const oldConfig = serverConfig('a');
-        const h = await makeHarness({
-            servers: [oldConfig],
-            secrets: {[McpSecretRefs.bearer('a')]: 'key-a'},
-            agents: [['agent-1', {id: 'agent-1', tools: {allow: ['mcp__a__x']}}]],
-        });
-        h.registry.rejectUpsertWhen(() => true);
-
-        await expect(h.mcp.rename('a', {...oldConfig, id: 'b'})).rejects.toThrow('MCP 工具引用改写失败');
-
-        expect(h.mcp.servers().map(config => config.id)).toEqual(['a']);
-        expect(agentTools(h.registry, 'agent-1').allow).toEqual(['mcp__a__x']);
-        expect(await h.secretStore.get(McpSecretRefs.bearer('a'))).toBe('key-a');
-        expect(serversJson(h.kkv)).toEqual([JSON.parse(JSON.stringify(oldConfig))]);
     });
 
     it('create 撞名被拒：转 throw、不写任何密钥、KKV 不变（CR-02 的 store 级断言）', async () => {
@@ -246,19 +176,21 @@ describe('mcp-config.store 薄镜像（CR-09 / CR-02）', () => {
         expect(await h.secretStore.get(McpSecretRefs.bearer('a'))).toBe('existing-key');
     });
 
-    it('connect 先 invalidate 再 snapshotTools', async () => {
+    it('connect 直连 connectionManager.connect（作废由 core 负责，本层不再 invalidate）', async () => {
         const h = await makeHarness({servers: [serverConfig('a')]});
 
         await h.mcp.connect('a');
 
-        expect(h.fakeManager.invalidate).toHaveBeenCalledWith('a');
-        expect(h.fakeManager.snapshotTools).toHaveBeenCalledTimes(1);
-        const [invalidateOrder] = h.fakeManager.invalidate.mock.invocationCallOrder;
-        const [snapshotOrder] = h.fakeManager.snapshotTools.mock.invocationCallOrder;
-        if (invalidateOrder == null || snapshotOrder == null) {
-            throw new Error('connect 未触发 invalidate / snapshotTools');
-        }
-        expect(invalidateOrder).toBeLessThan(snapshotOrder);
+        expect(h.fakeManager.connect).toHaveBeenCalledWith('a');
+        expect(h.fakeManager.invalidate).not.toHaveBeenCalled();
+    });
+
+    it('connectUnconnected 透传 connectionManager.connectUnconnected（进页面触发）', async () => {
+        const h = await makeHarness({servers: [serverConfig('a')]});
+
+        await h.mcp.connectUnconnected();
+
+        expect(h.fakeManager.connectUnconnected).toHaveBeenCalledTimes(1);
     });
 
     it('setToolDisabled 落库并刷新镜像，连接管理器注入的 disabledTools 闭包即时反映', async () => {
@@ -272,6 +204,21 @@ describe('mcp-config.store 薄镜像（CR-09 / CR-02）', () => {
         await h.mcp.setToolDisabled('a', 'x', false);
         expect(h.mcp.disabledTools('a')).toEqual([]);
         expect(disabledJson(h.kkv)).toEqual({});
+    });
+
+    it('停用与删除只 invalidate 不连接（T-MO2）', async () => {
+        const kept = serverConfig('b');
+        const h = await makeHarness({servers: [serverConfig('a'), kept]});
+
+        await h.mcp.setEnabled('a', false);
+        expect(h.fakeManager.invalidate).toHaveBeenCalledWith('a');
+        expect(h.fakeManager.connect).not.toHaveBeenCalled();
+        expect(h.fakeManager.connectUnconnected).not.toHaveBeenCalled();
+
+        await h.mcp.remove('a');
+        expect(h.fakeManager.invalidate).toHaveBeenCalledWith('a');
+        expect(h.fakeManager.connect).not.toHaveBeenCalled();
+        expect(h.fakeManager.connectUnconnected).not.toHaveBeenCalled();
     });
 
     it('remove 后镜像与禁用表都清掉，SKSP 三 ref 一并清除', async () => {

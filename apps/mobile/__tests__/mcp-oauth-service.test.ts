@@ -37,6 +37,7 @@ interface OauthHarness {
     oauthStart: jest.Mock;
     handleCallback: jest.Mock;
     invalidate: jest.Mock;
+    connect: jest.Mock;
     toasts: string[];
 }
 
@@ -44,12 +45,13 @@ function makeHarness(): OauthHarness {
     const oauthStart = jest.fn(async () => Result.ok({authorizeUrl: 'https://auth.example.com/authorize'}));
     const handleCallback = jest.fn(async () => Result.ok(undefined));
     const invalidate = jest.fn();
+    const connect = jest.fn(async (serverId: string) => ({serverId, state: 'ready' as const}));
     const toasts: string[] = [];
     jest.spyOn(AppToast, 'show').mockImplementation(message => {
         toasts.push(message);
     });
-    const runtime = {mcp: {oauth: {start: oauthStart, handleCallback}, connectionManager: {invalidate}}} as unknown as MobileNovelMasterRuntime;
-    return {runtime, oauthStart, handleCallback, invalidate, toasts};
+    const runtime = {mcp: {oauth: {start: oauthStart, handleCallback}, connectionManager: {invalidate, connect}}} as unknown as MobileNovelMasterRuntime;
+    return {runtime, oauthStart, handleCallback, invalidate, connect, toasts};
 }
 
 /** 挂上 deep link 监听（分发回调用；getInitialURL 由 beforeEach 钉在 null）。 */
@@ -103,6 +105,32 @@ describe('mcp-oauth-service（CR-10）', () => {
         expect(h.handleCallback).toHaveBeenCalledTimes(1);
         expect(h.handleCallback).toHaveBeenCalledWith('a', {code: 'abc def', state: 'st/ate', error: undefined});
         expect(h.invalidate).toHaveBeenCalledWith('a');
+        expect(h.toasts).toContain('settings.mcp.toast.oauth_callback_ok');
+    });
+
+    it('授权成功 → 先 invalidate 后 connect，不等连接结果（connect 挂起时成功 toast 已出，T-MO3）', async () => {
+        const h = makeHarness();
+        listen(h);
+        let releaseConnect: (() => void) | undefined;
+        h.connect.mockImplementation(() => {
+            return new Promise(resolve => {
+                releaseConnect = resolve;
+            });
+        });
+        await McpOauthService.start(h.runtime, 'a');
+
+        await lastUrlHandler()({url: `${MCP_OAUTH_REDIRECT_URL}?code=ok`});
+
+        expect(h.invalidate).toHaveBeenCalledWith('a');
+        expect(h.connect).toHaveBeenCalledWith('a');
+        const [invalidateOrder] = h.invalidate.mock.invocationCallOrder;
+        const [connectOrder] = h.connect.mock.invocationCallOrder;
+        if (invalidateOrder == null || connectOrder == null) {
+            throw new Error('授权成功后未触发 invalidate / connect');
+        }
+        expect(invalidateOrder).toBeLessThan(connectOrder);
+        // connect 仍挂起而成功 toast 已出：回调处理没有等连接结果。
+        expect(releaseConnect).toBeDefined();
         expect(h.toasts).toContain('settings.mcp.toast.oauth_callback_ok');
     });
 

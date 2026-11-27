@@ -114,7 +114,6 @@ export const MobileRuntimeFactory = {
         const mcp = await McpRuntimeFactory.create({
             kkv,
             secretStore,
-            agentRegistry,
             requestFnFor: timeoutMs => McpRequestAdapter.create({request: nativeRequest, ...(nativeRequestAbort == null ? {} : {requestAbort: nativeRequestAbort}), timeoutMs}),
         });
 

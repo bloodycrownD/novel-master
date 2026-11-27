@@ -9,8 +9,8 @@
  * 回调：`listen` 挂全局 `url` 监听（含冷启动 getInitialURL——授权期间进程可能
  * 被系统回收，浏览器回跳会重新拉起 app），只接受 `nm://oauth/callback` 形态，
  * 解析出的 code / state / error **原样透传**给 core `McpOAuth.handleCallback`，
- * 不自己拼 token 请求；结果经 AppToast 反馈，成功后 invalidate 该 server 的
- * 连接缓存（下次连接带新令牌）。
+ * 不自己拼 token 请求；结果经 AppToast 反馈，成功后作废该 server 的连接缓存
+ * 并立即重连（显式动作，不等连接结果）。
  *
  * @module services/mcp-oauth.service
  */
@@ -60,8 +60,10 @@ const handleCallbackUrl = async (runtime: MobileNovelMasterRuntime, url: string)
         AppToast.show(settingsTranslator({key: 'settings.mcp.toast.oauth_callback_failed.mobile', params: {reason: result.error.message}}));
         return;
     }
-    // 授权成功后旧连接可能还挂着过期令牌：失效让下次连接用新 token 重连。
+    // 授权成功后旧连接可能还挂着过期令牌：显式动作作废缓存并立即重连（不等连接
+    // 结果，连接失败经配置页状态呈现），与桌面端同口径。
     runtime.mcp.connectionManager.invalidate(serverId);
+    void runtime.mcp.connectionManager.connect(serverId).catch(() => undefined);
     AppToast.show(settingsTranslator({key: 'settings.mcp.toast.oauth_callback_ok'}));
 };
 

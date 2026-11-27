@@ -436,7 +436,10 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
         refreshChatRichTextPref().catch(() => undefined);
         refreshChatTranscriptEngine().catch(() => undefined);
         refreshChatMeta().catch(() => undefined);
-    }, [refreshChatRichTextPref, refreshChatTranscriptEngine, refreshChatMeta]);
+        // 进聊天页触发（spec MCP 连接模型）：pending / disconnected 的 MCP 服务器
+        // 后台补一轮连接，其余状态不动；不等结果、不引入 state（永不 reject）。
+        void runtime.mcp.connectionManager.connectUnconnected();
+    }, [refreshChatRichTextPref, refreshChatTranscriptEngine, refreshChatMeta, runtime]);
 
     useFocusEffect(refreshOnFocus);
 

@@ -4,15 +4,15 @@ import { it } from "@jest/globals";
 import {AgentToolCatalog, BUILTIN_TOOL_CATALOG} from "@/config-forms/agent/agent-tool-catalog";
 
 /**
- * T-AG5：catalog 计数同步锁。
+ * T-AG5 / T-MO4：catalog 计数同步锁。
  *
  * BUILTIN_TOOL_CATALOG 是双端 ToolPolicyPicker 的数据源（计数走
- * `BUILTIN_TOOL_CATALOG.length` 自动适应），`search` 工具上线后为 11 条。
- * 本用例锁总数与 agent 条目口径，防止后续增删内置工具时 catalog 与
- * registerBuiltinTools 注册表失同步。
+ * `BUILTIN_TOOL_CATALOG.length` 自动适应），mcp 占位进名单后为 12 条
+ * （11 个自带 + mcp）。本用例锁总数、agent / curl / search / mcp 条目口径，
+ * 防止后续增删内置工具时 catalog 与 registerBuiltinTools 注册表失同步。
  */
-it("BUILTIN_TOOL_CATALOG 含 agent 共 11 条（T-AG5）", () => {
-    assert.equal(BUILTIN_TOOL_CATALOG.length, 11);
+it("BUILTIN_TOOL_CATALOG 含 agent 共 12 条（T-MO4：11 自带 + mcp 占位）", () => {
+    assert.equal(BUILTIN_TOOL_CATALOG.length, 12);
 
     const agent = BUILTIN_TOOL_CATALOG.find((e) => e.name === "agent");
     assert.ok(agent, "catalog 缺 agent 条目");
@@ -20,6 +20,14 @@ it("BUILTIN_TOOL_CATALOG 含 agent 共 11 条（T-AG5）", () => {
     // 描述口径照 skill 条目：动作清单括注 + 可用性说明。
     assert.match(agent.description, /list\/get\/create\/update/);
     assert.match(agent.description, /仅主智能体可用/);
+});
+
+it("mcp 是与其他工具平等的第 12 条：描述来自 core i18n 的 tool_desc_mcp（spec §D）", () => {
+    const mcp = BUILTIN_TOOL_CATALOG.find((e) => e.name === "mcp");
+    assert.ok(mcp, "catalog 缺 mcp 条目");
+    assert.equal(mcp.label, "mcp");
+    assert.equal(mcp.description, "MCP 服务器提供的工具");
+    assert.deepEqual(BUILTIN_TOOL_CATALOG.filter((e) => e.name === "mcp").length, 1, "mcp 条目不得重复");
 });
 
 it("BUILTIN_TOOL_CATALOG 含 curl 条目（与 registerBuiltinTools 同步）", () => {
@@ -51,30 +59,8 @@ it("BUILTIN_TOOL_CATALOG 条目字段完整（name/label/description）", () => 
     }
 });
 
-it("AgentToolCatalog.get 分组结构：builtin 照旧 + mcp 追加（spec §九）", () => {
-    const groups = AgentToolCatalog.get({mcpTools: () => []});
-    assert.deepEqual(groups.map(g => g.id), ['builtin', 'mcp']);
+it("AgentToolCatalog.get 返回单组（spec §D：mcp 已并入名单，不再动态分组）", () => {
+    const groups = AgentToolCatalog.get();
+    assert.deepEqual(groups.map(g => g.id), ['builtin']);
     assert.ok(groups[0].entries === BUILTIN_TOOL_CATALOG, 'builtin 分组应复用静态常量原引用');
-});
-
-it("AgentToolCatalog.get 空快照回落「未配置 MCP 服务器」单项提示（不参与勾选与计数）", () => {
-    const mcp = AgentToolCatalog.get({mcpTools: () => []})[1].entries;
-    assert.equal(mcp.length, 1);
-    assert.equal(mcp[0].placeholder, true);
-    assert.equal(mcp[0].description, '未配置 MCP 服务器');
-});
-
-it("AgentToolCatalog.get 快照条目映射为 mcp__ 复合名条目（名字与描述取快照，不在 app 侧重算）", () => {
-    const mcp = AgentToolCatalog.get({
-        mcpTools: () => [
-            {registeredName: 'mcp__fs__read', serverId: 'fs', toolDescription: 'Read files'},
-            {registeredName: 'mcp__fs__write', serverId: 'fs'},
-        ],
-    })[1].entries;
-    assert.equal(mcp.length, 2);
-    assert.equal(mcp[0].name, 'mcp__fs__read');
-    assert.equal(mcp[0].label, 'mcp__fs__read');
-    assert.equal(mcp[0].description, '[MCP:fs] Read files');
-    assert.equal(mcp[0].placeholder, undefined);
-    assert.equal(mcp[1].description, '[MCP:fs] mcp__fs__write', 'toolDescription 缺省回落 registeredName');
 });

@@ -14,7 +14,7 @@
 import React, {useCallback, useEffect, useId, useMemo, useRef, useState} from 'react';
 import {FlatList, Pressable, StyleSheet, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {AgentToolCatalog, type AgentToolCatalogMcpTool} from '@/config-forms/agent';
+import {AgentToolCatalog} from '@/config-forms/agent';
 import {coreT} from '@/i18n/core';
 import {FormTextInput} from '../form/FormTextInput';
 import {useFormOverlay} from '../form/FormOverlayHost';
@@ -25,13 +25,11 @@ type Props = {
     tokens: ThemeTokens;
     selected: readonly string[];
     onChange: (selected: string[]) => void;
-    /** 页面打开时刻的 MCP 工具快照；缺省 = 未配置，mcp 分组只显示提示占位（不参与勾选与计数）。 */
-    mcpTools?: readonly AgentToolCatalogMcpTool[];
     /** 禁用态（只读详情）：trigger 禁点并灰显，不弹 sheet。 */
     disabled?: boolean;
 };
 
-export function ToolPolicyPicker({tokens, selected, onChange, mcpTools, disabled = false}: Props) {
+export function ToolPolicyPicker({tokens, selected, onChange, disabled = false}: Props) {
     const overlay = useFormOverlay();
     const overlayKey = useId();
     const insets = useSafeAreaInsets();
@@ -53,9 +51,9 @@ export function ToolPolicyPicker({tokens, selected, onChange, mcpTools, disabled
 
     const draftSet = useMemo(() => new Set(draft), [draft]);
 
-    // 页面打开时刻的 catalog 快照：mcp 分组由注入的 prop 同步组装（spec §九，不接 Promise）
-    const entries = useMemo(() => AgentToolCatalog.get({mcpTools: () => mcpTools ?? []}).flatMap(group => group.entries), [mcpTools]);
-    const total = entries.filter(entry => !entry.placeholder).length;
+    // nm-style: keep-local — React hook：多行回调，deps 无法单行（prettier@80 必折行）
+    const entries = useMemo(() => AgentToolCatalog.get().flatMap(group => group.entries), []);
+    const total = entries.length;
 
     // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
     const filtered = useMemo(() => {
@@ -119,13 +117,6 @@ export function ToolPolicyPicker({tokens, selected, onChange, mcpTools, disabled
                     keyExtractor={item => item.name}
                     style={styles.list}
                     renderItem={({item}) => {
-                        if (item.placeholder) {
-                            return (
-                                <View style={[styles.row, {borderBottomColor: tokens.border}]}>
-                                    <Text style={{color: tokens.textSecondary, fontSize: 13}}>{item.description}</Text>
-                                </View>
-                            );
-                        }
                         const active = draftSet.has(item.name);
                         return (
                             <Pressable style={[styles.row, {borderBottomColor: tokens.border}, active && {backgroundColor: tokens.bgSecondary}]} onPress={() => toggle(item.name)}>

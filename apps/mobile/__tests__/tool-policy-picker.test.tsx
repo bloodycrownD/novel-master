@@ -1,13 +1,15 @@
 /**
- * ToolPolicyPicker（mobile）测试：T-P1 / T-P2 / T-P3。
+ * ToolPolicyPicker（mobile）测试：
  *
- * - T-P1：trigger 文案反映选择数量；点开 sheet → 勾选 → 确定 → onChange 收到新数组
- * - T-P2：点行只 toggle draft 不关 sheet；点取消 → onChange 不被调用
- * - T-P3：选中行有 ✓，渲染树不含 ☑/☐
+ * - 勾选往返：trigger 文案反映选择数量；点开 sheet → 勾选 → 确定 → onChange 收到新数组
+ * - 点行只 toggle draft 不关 sheet；点取消 → onChange 不被调用
+ * - 选中行有 ✓，渲染树不含 ☑/☐
+ * - T-MO5：选中 mcp → 策略含 mcp → 回读仍选中（mcp 是与其他工具平等的第 12 条）
  *
  * sheet 通过 FormOverlayHost 顶起，所以测试要在 FormOverlayProvider 内渲染。
  */
 import React from 'react';
+import {TextInput} from 'react-native';
 import {describe, expect, it, jest} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 
@@ -112,7 +114,6 @@ function findAllPressablesByChildText(root: any, text: string): any[] {
 function renderPicker(props: {
     selected: string[];
     onChange: (s: string[]) => void;
-    mcpTools?: any[];
 }) {
     let renderer: any;
     act(() => {
@@ -122,7 +123,6 @@ function renderPicker(props: {
                     tokens={tokens}
                     selected={props.selected}
                     onChange={props.onChange}
-                    mcpTools={props.mcpTools}
                 />
             </FormOverlayProvider>,
         );
@@ -130,17 +130,17 @@ function renderPicker(props: {
     return renderer;
 }
 
-describe('ToolPolicyPicker (mobile) — T-P1/T-P2/T-P3', () => {
-    it('T-P1: trigger 显示「已选工具（N/11）」；打开 sheet 勾选后确定 → onChange 收到新数组', () => {
+describe('ToolPolicyPicker (mobile) — 勾选往返 / 草稿 / 选中态', () => {
+    it('trigger 显示「已选工具（N/12）」；打开 sheet 勾选后确定 → onChange 收到新数组', () => {
         const onChange = jest.fn();
         const renderer = renderPicker({selected: ['read'], onChange});
 
         const json = JSON.stringify(renderer.toJSON());
-        expect(json).toContain('已选工具（1/11）');
+        expect(json).toContain('已选工具（1/12）');
         expect(json).toContain('▼');
 
         // trigger 是 trigger 样式（含 minHeight），靠文案定位
-        const trigger = findPressableByChildText(renderer.root, '已选工具（1/11）');
+        const trigger = findPressableByChildText(renderer.root, '已选工具（1/12）');
         expect(trigger).toBeTruthy();
         act(() => {
             trigger.props.onPress();
@@ -172,11 +172,11 @@ describe('ToolPolicyPicker (mobile) — T-P1/T-P2/T-P3', () => {
         expect(onChange).toHaveBeenCalledWith(['read', 'write']);
     });
 
-    it('T-P2: 点行只 toggle draft 不关 sheet；点取消 → onChange 不被调用', () => {
+    it('点行只 toggle draft 不关 sheet；点取消 → onChange 不被调用', () => {
         const onChange = jest.fn();
         const renderer = renderPicker({selected: ['read'], onChange});
 
-        const trigger = findPressableByChildText(renderer.root, '已选工具（1/11）');
+        const trigger = findPressableByChildText(renderer.root, '已选工具（1/12）');
         act(() => {
             trigger.props.onPress();
         });
@@ -198,14 +198,14 @@ describe('ToolPolicyPicker (mobile) — T-P1/T-P2/T-P3', () => {
         expect(onChange).not.toHaveBeenCalled();
 
         // 关闭后 trigger 文案仍是原值（草稿被丢弃）
-        expect(JSON.stringify(renderer.toJSON())).toContain('已选工具（1/11）');
+        expect(JSON.stringify(renderer.toJSON())).toContain('已选工具（1/12）');
     });
 
-    it('T-P3: 选中行有 ✓；渲染树不含 ☑ / ☐ 字符', () => {
+    it('选中行有 ✓；渲染树不含 ☑ / ☐ 字符', () => {
         const onChange = jest.fn();
         const renderer = renderPicker({selected: ['read'], onChange});
 
-        const trigger = findPressableByChildText(renderer.root, '已选工具（1/11）');
+        const trigger = findPressableByChildText(renderer.root, '已选工具（1/12）');
         act(() => {
             trigger.props.onPress();
         });
@@ -231,7 +231,7 @@ describe('ToolPolicyPicker (mobile) — T-P1/T-P2/T-P3', () => {
                 </FormOverlayProvider>,
             );
         });
-        expect(JSON.stringify(r1.toJSON())).toContain('未选择工具（0/11）');
+        expect(JSON.stringify(r1.toJSON())).toContain('未选择工具（0/12）');
 
         const all = [
             'task',
@@ -245,6 +245,7 @@ describe('ToolPolicyPicker (mobile) — T-P1/T-P2/T-P3', () => {
             'agent',
             'curl',
             'search',
+            'mcp',
         ];
         let r2: any;
         act(() => {
@@ -258,49 +259,59 @@ describe('ToolPolicyPicker (mobile) — T-P1/T-P2/T-P3', () => {
                 </FormOverlayProvider>,
             );
         });
-        expect(JSON.stringify(r2.toJSON())).toContain('全部工具（11/11）');
+        expect(JSON.stringify(r2.toJSON())).toContain('全部工具（12/12）');
     });
 
-    it('mcpTools 快照并入计数与列表；缺省（未配置）时 mcp 分组只显示提示占位', () => {
+    it('T-MO5: 工具选择往返——勾选 mcp → 策略含 mcp → 回读仍选中', () => {
         const onChange = jest.fn();
-        const renderer = renderPicker({
-            selected: ['mcp__fs__read'],
-            onChange,
-            mcpTools: [
-                {registeredName: 'mcp__fs__read', serverId: 'fs', toolDescription: 'Read files'},
-                {registeredName: 'mcp__fs__write', serverId: 'fs'},
-            ],
-        });
-        expect(JSON.stringify(renderer.toJSON())).toContain('已选工具（1/13）');
+        const first = renderPicker({selected: [], onChange});
 
-        // 打开 sheet：MCP 工具行以复合名出现，描述带 [MCP:fs] 前缀
-        const trigger = findPressableByChildText(renderer.root, '已选工具（1/13）');
+        const trigger = findPressableByChildText(first.root, '未选择工具（0/12）');
         act(() => {
             trigger.props.onPress();
         });
-        let json = JSON.stringify(renderer.toJSON());
-        expect(json).toContain('mcp__fs__read');
-        expect(json).toContain('[MCP:fs] Read files');
-
-        // 未配置（不传 / 传空数组）：占位提示不参与计数（总数仍 11），sheet 里只显示提示文案
-        const empty = renderPicker({selected: [], onChange: jest.fn(), mcpTools: []});
-        expect(JSON.stringify(empty.toJSON())).toContain('未选择工具（0/11）');
-        const emptyTrigger = findPressableByChildText(empty.root, '未选择工具（0/11）');
+        // mcp 是第 12 条，可能不在 FlatList 初始渲染窗口：用 sheet 搜索框过滤后定位（query 命中 name 与 description）。
+        const searchInput = first.root.findAllByType(TextInput).find((node: any) => typeof node.props.onChangeText === 'function');
+        expect(searchInput).toBeTruthy();
         act(() => {
-            emptyTrigger.props.onPress();
+            searchInput.props.onChangeText('mcp');
         });
-        expect(JSON.stringify(empty.toJSON())).toContain('未配置 MCP 服务器');
+        const mcpRows = findAllPressablesByChildText(first.root, 'mcp').filter((row: any) => collectOwnText(row).includes('服务器提供'));
+        expect(mcpRows.length).toBe(1);
+        act(() => {
+            mcpRows[0].props.onPress();
+        });
+        const confirmBtn = findPressableByChildText(first.root, '确定');
+        act(() => {
+            confirmBtn.props.onPress();
+        });
+        expect(onChange).toHaveBeenCalledWith(['mcp']);
+
+        // 回读：以含 mcp 的名单再渲染 → trigger 计数为 1/12，sheet 里搜索过滤后 mcp 行有 ✓。
+        const second = renderPicker({selected: ['mcp'], onChange: jest.fn()});
+        expect(JSON.stringify(second.toJSON())).toContain('已选工具（1/12）');
+        const secondTrigger = findPressableByChildText(second.root, '已选工具（1/12）');
+        act(() => {
+            secondTrigger.props.onPress();
+        });
+        const secondSearch = second.root.findAllByType(TextInput).find((node: any) => typeof node.props.onChangeText === 'function');
+        act(() => {
+            secondSearch.props.onChangeText('mcp');
+        });
+        const secondJson = JSON.stringify(second.toJSON());
+        expect(secondJson).toContain('✓');
+        expect(secondJson).toContain('MCP 服务器提供的工具');
     });
 });
 
-describe('ToolPolicyPicker (mobile) — C-1 键盘避让接线（行为断言）', () => {
+describe('ToolPolicyPicker (mobile) — 键盘避让接线（行为断言）', () => {
     it('ModalShell 接 adaptive 策略并传 iosTranslateY: true（FormOverlayHost 无 KAV 外壳，iOS 由面板自身位移）', () => {
         const renderer = renderPicker({selected: [], onChange: jest.fn()});
 
         // 打开 sheet：ModalShell 由 overlay.show 挂载，靠 keyboardAvoid prop 定位
         const trigger = findPressableByChildText(
             renderer.root,
-            '未选择工具（0/11）',
+            '未选择工具（0/12）',
         );
         expect(trigger).toBeTruthy();
         act(() => {

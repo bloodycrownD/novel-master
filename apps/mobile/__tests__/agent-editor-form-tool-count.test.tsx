@@ -1,8 +1,9 @@
 /**
  * T-AG5：AgentEditorForm 内置工具计数文案（行为断言）。
  *
- * 该提示文案是硬编码计数（catalog 改动不会自动同步这里），锁住「10 个」
- * 与工具名单含 agent、curl，防止后续加内置工具时漏改。
+ * 计数取 BUILTIN_TOOL_CATALOG.length（自动为 12），但 i18n 文案里的
+ * 工具枚举串是硬编码，锁住「12 个」与名单含 mcp、curl，防止后续加内置
+ * 工具时漏改。
  * tests/G-3：改 TestRenderer 渲染 default 模式断实际展示文案，
  * 等价重构（挪文案、改结构）不再碎。
  */
@@ -69,16 +70,17 @@ function renderDefaultMode(): string {
 }
 
 describe('AgentEditorForm builtin tools hint (T-AG5)', () => {
-    it('默认模式展示提示文案计 11 个且名单含 agent 与 curl', () => {
+    it('默认模式展示提示文案计 12 个且名单含 mcp 与 curl（T-MO4）', () => {
         const json = renderDefaultMode();
-        expect(json).toContain('未配置时使用全部内置工具（11 个）');
+        expect(json).toContain('未配置时使用全部内置工具（12 个）');
         expect(json).toContain(
-            'task、read、write、edit、fs、glob、grep、skill、agent、curl、search。',
+            'task、read、write、edit、fs、glob、grep、skill、agent、curl、search、mcp。',
         );
     });
 
-    it('不再残留 8 / 10 个的旧计数', () => {
+    it('不再残留 8 / 10 / 11 个的旧计数', () => {
         expect(renderDefaultMode()).not.toContain('全部内置工具（8');
         expect(renderDefaultMode()).not.toContain('全部内置工具（10');
+        expect(renderDefaultMode()).not.toContain('全部内置工具（11');
     });
 });
