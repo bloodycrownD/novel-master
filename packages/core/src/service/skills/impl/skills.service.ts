@@ -264,7 +264,10 @@ export class SkillsService implements SkillService {
     private async toReadNotFoundError(domain: SkillDomain, name: string, path: string, projectId?: string): Promise<AppError<"SKILL_NOT_FOUND">> {
         const otherDomain: SkillDomain = domain === "global" ? "project" : "global";
         const otherVfs = otherDomain === "project" && (projectId == null || projectId.length === 0) ? null : this.vfsForDomain(otherDomain, projectId);
-        const exists: boolean | null = otherVfs == null ? null : otherVfs.ok ? (await otherVfs.value.read(`${SKILLS_ROOT}/${name}/${path}`)).ok : null;
+        let exists: boolean | null = null;
+        if (otherVfs?.ok) {
+            exists = (await otherVfs.value.read(`${SKILLS_ROOT}/${name}/${path}`)).ok;
+        }
         const hint = exists === false ? { key: "error.skill.not_found_in_domain_hint.read_neither_domain", params: { other_domain: otherDomain } } : { key: "error.skill.not_found_in_domain_hint.read_other_domain", params: { other_domain: otherDomain } };
         return new AppError("SKILL_NOT_FOUND", { descriptor: { key: "error.skill.not_found_in_domain", params: { name, domain, path, hint } }, skillName: name, path, domain });
     }
