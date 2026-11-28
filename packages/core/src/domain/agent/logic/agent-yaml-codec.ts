@@ -27,9 +27,13 @@ export const AgentYamlCodec = {
         return Result.ok(decoded.value);
     },
 
-    /** {@link AgentDefinition} → YAML 文本。 */
-    encode(def: AgentDefinition): string {
+    /**
+     * {@link AgentDefinition} → YAML 文本；toWire 门禁失败（块名重名等）沿 `Result.err` 返回。
+     * 只有 toWire 成功的文档才会被序列化——不能把 Result 信封本身写进文件（那样导出的文件再导入必失败）。
+     */
+    encode(def: AgentDefinition): Result<string, AppError> {
         const doc = SerializationEncode.encode(def, agentDefinitionSchema);
-        return SerializationStringifyText.stringify(doc, "yaml");
+        if (!doc.ok) return Result.err(doc.error);
+        return Result.ok(SerializationStringifyText.stringify(doc.value, "yaml"));
     },
 } as const;

@@ -217,8 +217,9 @@ export namespace AgentRegistry {
             const def = await rt.agentRegistry.get(req.agentId);
             // registry 已知失败就地短路（与本 handler 上方 built 短路同款），未知异常仍由 catch 兜。
             if (!def.ok) return { ok: false, error: FormatIpcError.format(def.error) };
-            const yaml = AgentYamlCodec.encode(def.value);
-            const result = await YamlShared.exportWithDialog(yaml, `${req.agentId}.agent.yaml`, BrowserWindow.getFocusedWindow());
+            const encoded = AgentYamlCodec.encode(def.value);
+            if (!encoded.ok) return { ok: false, error: FormatIpcError.format(encoded.error) };
+            const result = await YamlShared.exportWithDialog(encoded.value, `${req.agentId}.agent.yaml`, BrowserWindow.getFocusedWindow());
             return { ok: true, data: result };
         } catch (err) {
             return { ok: false, error: FormatIpcError.format(err) };

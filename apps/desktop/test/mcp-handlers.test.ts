@@ -4,7 +4,7 @@
  * （mcp-handlers-mock-runtime.ts：密钥表 / 配置表 / agent 注册表 / 连接管理器全可断言），
  * 聚焦 saveServer 的编排与回滚顺序（bearer 写入时机、换 ID 回滚）、进页连接与测试连接
  * 的接线（connect / connectUnconnected）、toolList 只读缓存，以及 OAuth 授权成功后的
- * 作废重连；每工具启停的读写保留回归覆盖。
+ * 缓存作废（处理器不连，连接由界面编排）；每工具启停的读写保留回归覆盖。
  */
 import assert from "node:assert/strict";
 import { register } from "node:module";
@@ -144,16 +144,8 @@ describe("MCP 进页连接 / 工具清单 / OAuth（T-D1 / T-D3 / T-D5）", () =
         assert.equal(manager.calls.connectUnconnected, 0, "不发起进页连接轮");
     });
 
-    it("T-D5：oauthStart 授权成功 → invalidate 后 connect(serverId)，不等连接结果、连接失败仍返回成功", async () => {
-        let releaseConnect: (() => void) | null = null;
-        const connectGate = new Promise<McpServerStatus>((resolve) => {
-            releaseConnect = () => resolve({ serverId: "a", state: "failed", failure: { kind: "network", action: "retry", detail: "ECONNREFUSED" } });
-        });
+    it("T-D5：oauthStart 只做授权：成功后作废旧缓存即返回，不发起连接（连接由界面编排）", async () => {
         const manager = makeConnectionManager();
-        manager.connect = (serverId) => {
-            manager.calls.connect.push(serverId);
-            return connectGate;
-        };
         // fake 授权双入口：start 在拿到 redirectUrl 后模拟浏览器跳回（loopback 收到 /callback 即收口），
         // handleCallback 直接成功——oauthStart 的授权腿全程不碰真实网络。
         const runtime = makeRuntime({
@@ -169,12 +161,9 @@ describe("MCP 进页连接 / 工具清单 / OAuth（T-D1 / T-D3 / T-D5）", () =
         });
         runtimeHolder.current = runtime;
         const res = await Mcp.oauthStart({ serverId: "a" });
-        // oauthStart 在连接收口前就返回：授权成功即动作完成，connect 只挂后台（gate 未释放）。
-        assert.equal(res.ok, true, "连接失败不改变 oauthStart 的返回值");
+        assert.equal(res.ok, true, "授权成功即返回成功");
         assert.deepEqual(manager.calls.invalidated, ["a"], "授权成功先作废旧缓存");
-        assert.deepEqual(manager.calls.connect, ["a"], "随后对同一 server 发起连接");
-        releaseConnect?.();
-        await connectGate.catch(() => undefined);
+        assert.deepEqual(manager.calls.connect, [], "处理器不发起连接——授权后的连接由界面另调 connect 编排");
     });
 });
 
@@ -189,10 +178,7 @@ describe("MCP 每工具启停（mcp-support D4，与移动端对齐）", () => {
         const before = await Mcp.toolList({ serverId: "a" });
         assert.equal(before.ok, true);
         if (before.ok) {
-            assert.deepEqual(before.data.map((row) => ({ toolName: row.toolName, disabled: row.disabled })), [
-                { toolName: "toolA", disabled: false },
-                { toolName: "toolB", disabled: false },
-            ], "只含目标 server 的工具，初始全部启用");
+            assert.deepEqual(before.data.map((row) => ({ toolName: row.toolName, disabled: row.disabled })), [{ toolName: "toolA", disabled: false }, { toolName: "toolB", disabled: false }], "只含目标 server 的工具，初始全部启用");
             assert.equal(before.data[0]?.toolDescription, "第一个工具", "描述透传");
         }
         const written = await Mcp.setToolDisabled({ serverId: "a", toolName: "toolB", disabled: true });

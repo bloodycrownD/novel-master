@@ -12,8 +12,8 @@
  * `toolList` 只读连接管理器的工具缓存，不触发任何请求；OAuth 桌面侧只经 `McpOAuth.start` /
  * `handleCallback` 两个入口——本文件负责 loopback 回调 server（127.0.0.1 随机端口，先起
  * server 拿到 redirectUrl 再调 start）与打开系统浏览器（拿到 authorizeUrl 后
- * shell.openExternal），授权成功即返回成功，随后的 invalidate + connect 后台进行、
- * 失败经状态查询的 `failure.detail` 呈现，不自己拼 token 请求。
+ * shell.openExternal），授权成功即作废旧缓存并返回成功，连接由界面拿到成功结果后
+ * 另调 connect 编排、失败经状态查询的 `failure.detail` 呈现，不自己拼 token 请求。
  *
  * store 方法 throw 的失败（SKSP / KKV infra）在编排边界经 FormatIpcError 收进
  * IpcResult；store 方法自身的已知失败沿 Result 上行、就地短路（与 search handler 同构）。
@@ -252,7 +252,8 @@ export namespace Mcp {
      * 发起 OAuth 授权：先起 loopback server 拿 redirectUrl，再调 `McpOAuth.start`
      * （start 不负责选端口，spec §八端口时序）；拿到 authorizeUrl 后 main 侧
      * shell.openExternal 打开系统浏览器。invoke 挂起至回调完成——返回值即授权
-     * 成败（浏览器打不开 / 等待 / 交换任一环失败都以 err 收口）。
+     * 成败（浏览器打不开 / 等待 / 交换任一环失败都以 err 收口）。授权成功只作废
+     * 旧缓存即返回（处理器只做原子操作），连接由界面另调 `connect` 编排。
      */
     export async function oauthStart(req: McpOAuthStartRequest): Promise<IpcResult<{ readonly authorizeUrl: string }>> {
         try {
@@ -275,10 +276,9 @@ export namespace Mcp {
                 const callback = await Promise.race([loopback.waitCallback(), timeoutPromise]);
                 const handled = await rt.mcpOAuth.handleCallback(req.serverId, callback);
                 if (!handled.ok) return { ok: false, error: FormatIpcError.format(handled.error) };
-                // 授权成功即视为动作完成（显式动作口径）：作废旧缓存并后台重连，不等结果、
-                // 连接失败不改变本返回值——失败经状态查询的 failure.detail 呈现。
+                // 授权成功即存好令牌：作废旧缓存是保存的一致性动作。连接是另一个原子操作
+                // （Mcp.connect），由界面拿到成功结果后自己编排——这里不连。
                 rt.mcp.connectionManager.invalidate(req.serverId);
-                void rt.mcp.connectionManager.connect(req.serverId).catch(() => undefined);
                 return IpcResults.ok({ authorizeUrl: started.value.authorizeUrl });
             } finally {
                 clearTimeout(waitTimer);

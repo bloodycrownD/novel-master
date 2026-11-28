@@ -6,7 +6,8 @@
  * SSE——与移动端同选项集；存量 stdio 配置做归一但不可连，不可用原因由 server 状态位置的
  * `failure.detail` 事实提示承担）/ 地址 / 超时时间 / 认证三态（无 / Bearer / OAuth）。
  * Bearer 明文只在输入框停留，保存经 IPC 写 SKSP（留空保留、清除按钮传空串）；OAuth 区
- * 显示授权状态并在「发起授权」时走 main 侧 loopback 回调（invoke 挂起至浏览器授权完成）。
+ * 显示授权状态并在「发起授权」时走 main 侧 loopback 回调（invoke 挂起至浏览器授权完成），
+ * 授权成功后界面再连一次并回读状态行（处理器只做原子操作，连接由界面编排）。
  * 状态行进页读一次（不加订阅；连接在途时显示「连接中」，返回重进或点测试连接可刷新）。
  * 工具分组（编辑态、有工具时才出现）：该 server 每个工具的启停开关，描述默认两行截断、
  * 点描述展开/收起；被关的工具不注册进 agent（过滤在连接管理器缓存出口，无需重连）；
@@ -17,7 +18,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { McpId } from "@shared/logic/mcp-id";
 import type { McpAuthType, McpServerStatus, McpToolRowDto, McpTransportType } from "@shared/ipc-types";
-import { ipcMcpListServers, ipcMcpOAuthStart, ipcMcpOAuthStatuses, ipcMcpSaveServer, ipcMcpSetToolDisabled, ipcMcpConnect, ipcMcpToolList } from "@/ipc/client";
+import { ipcMcpListServers, ipcMcpOAuthStart, ipcMcpOAuthStatuses, ipcMcpSaveServer, ipcMcpSetToolDisabled, ipcMcpConnect, ipcMcpServerStatuses, ipcMcpToolList } from "@/ipc/client";
 import { Button } from "@/components/ui/Button";
 import { Switch } from "@/components/ui/Switch";
 import { toastSettingsSuccess } from "@/utils/settings-feedback";
@@ -117,12 +118,6 @@ export function McpServerDetailView({ nav }: { nav: SettingsNavHandle }) {
 
     // 编辑态首次读库完成前只显示加载提示（避免空表单闪一下再被回填覆盖）。
     if (!isCreate && !loaded) {
-        let saveButtonLabel = settingsTranslator({ key: "settings.mcp.detail.save_action" });
-        if (saving) {
-            saveButtonLabel = settingsTranslator({ key: "settings.mcp.detail.saving.desktop" });
-        } else if (isCreate) {
-            saveButtonLabel = settingsTranslator({ key: "settings.mcp.detail.create.desktop" });
-        }
         return (
             <SettingsPanel>
                 <p className="settings-hint">{settingsTranslator({ key: "settings.mcp.list.loading.desktop" })}</p>
@@ -131,6 +126,13 @@ export function McpServerDetailView({ nav }: { nav: SettingsNavHandle }) {
     }
 
     const busy = saving || testing || authorizing;
+
+    let saveButtonLabel = settingsTranslator({ key: "settings.mcp.detail.save_action" });
+    if (saving) {
+        saveButtonLabel = settingsTranslator({ key: "settings.mcp.detail.saving.desktop" });
+    } else if (isCreate) {
+        saveButtonLabel = settingsTranslator({ key: "settings.mcp.detail.create.desktop" });
+    }
 
     /**
      * 保存草稿（测试连接 / 发起授权前也走这里，main 按已存配置操作）。
@@ -249,7 +251,7 @@ export function McpServerDetailView({ nav }: { nav: SettingsNavHandle }) {
                         <SettingsField label={settingsTranslator({ key: "settings.mcp.detail.oauth_status_label" })} row>
                             <span className={oauthAuthorized ? "settings-tag settings-tag--ok" : "settings-tag settings-tag--muted"}>{oauthAuthorized ? settingsTranslator({ key: "settings.mcp.detail.authorized" }) : settingsTranslator({ key: "settings.mcp.detail.not_authorized" })}</span>
                         </SettingsField>
-                        {/* 发起授权：先保存（拿真 id）再走 main loopback——main 侧开系统浏览器，invoke 挂起至授权完成（busy 互斥态就地维护）。 */}
+                        {/* 发起授权：先保存（拿真 id）再走 main loopback——main 侧开系统浏览器，invoke 挂起至授权完成（busy 互斥态就地维护）；授权成功后连一次并回读状态。 */}
                         <Button
                             variant="secondary"
                             disabled={busy}
@@ -267,6 +269,8 @@ export function McpServerDetailView({ nav }: { nav: SettingsNavHandle }) {
                                     setError(undefined);
                                     await reloadOAuth(id);
                                     toastSettingsSuccess(settingsTranslator({ key: "settings.mcp.toast.oauth_callback_ok" }));
+                                    // 授权成功即存好令牌：处理器只做原子操作，这里再连一次并回读状态行（与保存同口径）。
+                                    connectSaved(id);
                                 } catch (e) {
                                     setError(e instanceof Error ? e.message : String(e));
                                 } finally {

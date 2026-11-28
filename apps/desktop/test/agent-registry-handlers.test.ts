@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
+import { readFile, writeFile } from "node:fs/promises";
 import { after, before, describe, it } from "node:test";
+import { join } from "node:path";
+import { dialog } from "electron";
+import { AgentYamlCodec } from "@novel-master/core/agent";
 import { DesktopRuntimeSingleton } from "../src/main/runtime/desktop-runtime-singleton.js";
 import { DesktopRuntimeFactory } from "../src/main/runtime/create-desktop-runtime.js";
 import { AgentRegistry } from "../src/main/ipc/handlers/agent-registry.js";
@@ -244,5 +248,179 @@ describe("agent-registry mode 透传（agent-config-tabs T-D1/T-D2）", () => {
             String(plainRows[0]!.prompts_json),
         ) as Record<string, unknown>;
         assert.equal("mode" in plainWire, false);
+    });
+});
+
+describe("agent-registry YAML 导入导出（mcp 工具往返）", () => {
+    let tempDir: string;
+    const originalShowSaveDialog = dialog.showSaveDialog;
+    const originalShowOpenDialog = dialog.showOpenDialog;
+
+    before(async () => {
+        ({ tempDir } = await setupDesktopDbTestEnv("nm-agent-registry-yaml-"));
+    });
+
+    after(async () => {
+        dialog.showSaveDialog = originalShowSaveDialog;
+        dialog.showOpenDialog = originalShowOpenDialog;
+        await teardownDesktopDbTestEnv(tempDir);
+    });
+
+    /** 与 encode(toWire) 应产出内容一致的手写 YAML（wire 形态）。 */
+    const MCP_TOOLS_YAML = `schemaVersion: 1
+name: mcp-agent
+prompts:
+  persistEnabled: false
+  dynamicEnabled: false
+  persist: {}
+  dynamic: {}
+tools:
+  allow:
+    - search
+    - mcp
+    - curl
+`;
+
+    const PLAIN_TOOLS_YAML = `schemaVersion: 1
+name: plain-agent
+prompts:
+  persistEnabled: false
+  dynamicEnabled: false
+  persist: {}
+  dynamic: {}
+tools:
+  allow:
+    - search
+    - curl
+`;
+
+    /** 经 AgentRegistry.upsert 落一个带 tools.allow 的智能体定义。 */
+    async function upsertWithTools(
+        agentId: string,
+        allow: readonly string[],
+    ): Promise<void> {
+        const saved = await AgentRegistry.upsert({
+            agentId,
+            definition: {
+                name: agentId,
+                prompts: { persist: [], dynamic: [] },
+                tools: { allow: [...allow] },
+            },
+        });
+        if (!saved.ok) {
+            assert.fail(`upsert failed: ${JSON.stringify(saved.error)}`);
+        }
+    }
+
+    /** 经 AgentRegistry.exportYaml 导出 YAML 文本（保存框目标固定在 tempDir）。 */
+    async function exportYamlText(agentId: string): Promise<string> {
+        const outPath = join(tempDir, `${agentId}.export.yaml`);
+        dialog.showSaveDialog = (async () => ({
+            canceled: false,
+            filePath: outPath,
+        })) as typeof dialog.showSaveDialog;
+        const exported = await AgentRegistry.exportYaml({ agentId });
+        if (!exported.ok) {
+            assert.fail(`exportYaml failed: ${JSON.stringify(exported.error)}`);
+        }
+        assert.equal(exported.data, "saved");
+        return readFile(outPath, "utf8");
+    }
+
+    /** 把 YAML 文本放进 tempDir 并让打开对话框指向它。 */
+    async function stageImportFile(
+        name: string,
+        yaml: string,
+    ): Promise<string> {
+        const importPath = join(tempDir, name);
+        await writeFile(importPath, yaml, "utf8");
+        dialog.showOpenDialog = (async () => ({
+            canceled: false,
+            filePaths: [importPath],
+        })) as typeof dialog.showOpenDialog;
+        return importPath;
+    }
+
+    /** 读回目标智能体落库 wire 的 tools.allow。 */
+    async function readWireToolsAllow(
+        agentId: string,
+    ): Promise<readonly string[] | undefined> {
+        const got = await AgentRegistry.get({ agentId });
+        if (!got.ok) {
+            assert.fail(`get failed: ${JSON.stringify(got.error)}`);
+        }
+        const wire = got.data.wire as { tools?: { allow?: string[] } };
+        return wire.tools?.allow;
+    }
+
+    it("导出：tools.allow 含 mcp 的智能体导出后 mcp 在 tools 下且可再解码", async () => {
+        await upsertWithTools("yaml-mcp-src", ["search", "mcp", "curl"]);
+        const yaml = await exportYamlText("yaml-mcp-src");
+        assert.match(yaml, /mcp/);
+        // 编解码单源在 core：导出物必须能被真实 decode 还原 tools.allow。
+        const decoded = AgentYamlCodec.decode(yaml);
+        if (!decoded.ok) {
+            assert.fail(`decode failed: ${decoded.error.message}`);
+        }
+        assert.deepEqual(decoded.value.tools?.allow, [
+            "search",
+            "mcp",
+            "curl",
+        ]);
+    });
+
+    it("导入：mcp 与其余工具按原顺序落库（registeredToolNames 含 mcp 占位）", async () => {
+        // 导入侧先用手写 wire YAML 锁行为：导出侧 encode 目前带 Result 信封
+        // （生产缺陷，见上方导出用例），修复后与导出用例合起来即完整往返。
+        await stageImportFile("yaml-mcp.import.yaml", MCP_TOOLS_YAML);
+        const imported = await AgentRegistry.importYaml({
+            agentId: "yaml-mcp-dst",
+        });
+        if (!imported.ok) {
+            assert.fail(`importYaml failed: ${JSON.stringify(imported.error)}`);
+        }
+        assert.equal(imported.data, "imported");
+        assert.deepEqual(await readWireToolsAllow("yaml-mcp-dst"), [
+            "search",
+            "mcp",
+            "curl",
+        ]);
+    });
+
+    it("导入：不含 mcp 的定义落库后不凭空多出 mcp", async () => {
+        await stageImportFile("yaml-plain.import.yaml", PLAIN_TOOLS_YAML);
+        const imported = await AgentRegistry.importYaml({
+            agentId: "yaml-plain-dst",
+        });
+        if (!imported.ok) {
+            assert.fail(`importYaml failed: ${JSON.stringify(imported.error)}`);
+        }
+        assert.deepEqual(await readWireToolsAllow("yaml-plain-dst"), [
+            "search",
+            "curl",
+        ]);
+    });
+
+    it("导入：tools 未知工具名仍被拒绝（放开 mcp 没有把校验放松成什么都收）", async () => {
+        await stageImportFile(
+            "yaml-unknown.import.yaml",
+            `schemaVersion: 1
+name: unknown-tool-agent
+prompts: {}
+tools:
+  allow:
+    - search
+    - no_such_tool_xyz
+`,
+        );
+        const imported = await AgentRegistry.importYaml({
+            agentId: "yaml-unknown-dst",
+        });
+        assert.equal(imported.ok, false);
+        if (imported.ok) return;
+        assert.match(imported.error.message, /unknown tool: no_such_tool_xyz/);
+        // 拒绝路径不落库：目标 agentId 不存在。
+        const got = await AgentRegistry.get({ agentId: "yaml-unknown-dst" });
+        assert.equal(got.ok, false);
     });
 });

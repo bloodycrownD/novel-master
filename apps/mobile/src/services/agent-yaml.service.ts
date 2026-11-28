@@ -21,8 +21,11 @@ export namespace AgentYamlService {
             if (!def.ok) {
                 return Result.err(Errors.normalizeYaml(def.error, 'Agent YAML 导出失败'));
             }
-            const yaml = AgentYamlCodec.encode(def.value);
-            return Result.ok(await YamlShared.exportWithDialog(yaml, `${agentId}.agent.yaml`));
+            const encoded = AgentYamlCodec.encode(def.value);
+            if (!encoded.ok) {
+                return Result.err(Errors.normalizeYaml(encoded.error, 'Agent YAML 导出失败'));
+            }
+            return Result.ok(await YamlShared.exportWithDialog(encoded.value, `${agentId}.agent.yaml`));
         } catch (error) {
             return Result.err(Errors.normalizeYaml(error, 'Agent YAML 导出失败'));
         }
