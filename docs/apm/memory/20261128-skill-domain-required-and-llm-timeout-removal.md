@@ -29,3 +29,22 @@ user:
 
 assistant:
 那就我自己收口：停 Metro、编 APK、覆盖安装、重启 Metro、重拉应用，全程没让你动手。装包时荣耀设备这次没弹确认门，直接 Success 了。
+
+user:
+（待决五项：oauthStart 拆分、已断开文案断言、YAML 含 mcp 测试、删旧 stash、重复签名写基线）这些需要我决定啥吗？这些也没有额外副作用啊
+
+assistant:
+那就全做了（5642d4b7f、3bbc5f38d）：
+
+- 桌面 oauthStart 处理器授权成功后只作废旧缓存，不再自己连接；详情页「发起授权」拿到成功结果后再连一次并回读状态。
+- 「已断开」等状态标签补了文案 key 断言（桌面端）。
+- 两端补了 YAML 导入导出含 mcp 的往返测试。补测试时查出一个存量缺陷：`AgentYamlCodec.encode` 把 Result 信封整个序列化进了文件，导出的智能体 YAML 外面套着 ok/value，再导入必然失败，而且所有智能体都导不回。已改为 encode 返回 Result，两端导出入口随动。主仓库 main 同样有这个问题，合并前就存在。
+- 同一处还查出桌面 MCP 详情页两个存量问题：漏导入 ipcMcpServerStatuses、保存按钮文案变量写在了提前返回的分支里。已修。
+- 6 组重复签名逐条写了保留理由并重建基线，门禁转绿；旧 stash impl-desktop-wip 已删。
+- 验证：core 3720、移动端 2436、桌面端 793 全过。
+
+user:
+发布吧
+
+assistant:
+发布了 v1.5.53（e366c2c2f，tag v1.5.53）。流程：还原主仓工作区里过期的文档副本 → feat/mcp-support 快进合并进 main（137 提交）→ 写 CHANGELOG → 两端 package.json 与 build.gradle 默认 versionName 升到 1.5.53（package-lock 随动）→ main 上 npm install、重建 dist → 全量验证（core 3720、原生包 26、桌面端 793、移动端 2436、webview 产物构建）→ 提交、打 tag、推 tag 与 main。CI Release 全绿（安卓 29 分钟、Windows 6 分钟、macOS 4 分钟），7 个产物已上 GitHub Release。CHANGELOG 面向用户写了三块：MCP 服务与连接方式、移除 600 秒上限与 skill 作用域必填、YAML 导出与桌面详情页等修复；旧版导出的 YAML 文件给了手动修法（删 ok/value 两行、左移两格）。
