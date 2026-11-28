@@ -227,26 +227,22 @@ describe("skill 工具", () => {
         );
     });
 
-    it("read：缺省域透传 undefined 由服务层解析生效副本，输出携带实际命中域", async () => {
+    it("read：缺 domain 被 schema 拦截（INVALID_ARGUMENT，不触达服务层）", async () => {
         const { runner } = makeRunner();
-        const out = unwrap(await runner.call(
-            SKILL_TOOL_NAME,
-            { action: "read", name: "demo" },
-            skillToolCtx(fakeSkillService()),
-        ));
-        assert.deepEqual(
-            (out as { domain: string }).domain,
-            "project",
-            "read 输出应携带生效副本解析后的命中域",
+        const svc = fakeSkillService();
+        await rejectsErr(
+            () => runner.call(SKILL_TOOL_NAME, { action: "read", name: "demo" }, skillToolCtx(svc)),
+            (e: unknown) => AppErrorOps.is(e, "TOOL_INVALID_ARGUMENT") && JSON.stringify((e as AppError).details).includes("domain"),
         );
+        assert.equal(svc.calls.length, 0, "缺 domain 不应触达 SkillService");
     });
 
-    it("read：project 覆盖 global 同名——服务层命中 project 副本时透传该结果", async () => {
+    it("read：显式 project——服务层命中项目副本时透传该结果，输出域为 project", async () => {
         const { runner } = makeRunner();
         const svc = fakeSkillService({
             read: async (domain, name, path, projectId) => {
-                // 镜像真实 SkillService 的生效副本解析：domain 缺省先 project 后 global
-                assert.equal(domain, undefined);
+                // 显式 project：只读项目副本，不回落 global
+                assert.equal(domain, "project");
                 assert.equal(name, "shared-name");
                 assert.equal(projectId, "proj-1");
                 return {
@@ -260,7 +256,7 @@ describe("skill 工具", () => {
         });
         const out = unwrap(await runner.call(
             SKILL_TOOL_NAME,
-            { action: "read", name: "shared-name" },
+            { action: "read", name: "shared-name", domain: "project" },
             skillToolCtx(svc),
         ));
         const parsed = out as {
@@ -279,25 +275,25 @@ describe("skill 工具", () => {
             () =>
                 runner.call(
                     SKILL_TOOL_NAME,
-                    { action: "read", name: "demo", offset: 99 },
+                    { action: "read", name: "demo", domain: "project", offset: 99 },
                     skillToolCtx(fakeSkillService()),
                 ),
             (e: unknown) => AppErrorOps.is(e, "TOOL_INVALID_ARGUMENT"),
         );
     });
 
-    it("write：domain 缺省补 project，content 缺失报 INVALID_ARGUMENT", async () => {
+    it("write：domain 透传给服务层，缺 domain / content 报 INVALID_ARGUMENT", async () => {
         const { runner } = makeRunner();
         const svc = fakeSkillService();
         const out = unwrap(await runner.call(
             SKILL_TOOL_NAME,
-            { action: "write", name: "demo", content: "新内容" },
+            { action: "write", name: "demo", content: "新内容", domain: "project" },
             skillToolCtx(svc),
         ));
         const writeCall = svc.calls.find((c) => c.method === "writeSkillFile");
         assert.ok(writeCall != null);
         const writeParams = writeCall.args[0];
-        assert.equal(writeParams.domain, "project", "write 缺省域应为 project");
+        assert.equal(writeParams.domain, "project", "write 显式传入的域原样透传");
         assert.equal(writeParams.name, "demo");
         assert.equal(writeParams.path, undefined, "path 缺省透传 undefined");
         assert.equal(writeParams.content, "新内容");
@@ -314,6 +310,14 @@ describe("skill 工具", () => {
             (e: unknown) =>
                 AppErrorOps.is(e, "TOOL_INVALID_ARGUMENT"),
         );
+
+        // content 齐全但缺 domain：同样被 schema 拦截，不再静默补 project
+        const missingDomain = fakeSkillService();
+        await rejectsErr(
+            () => runner.call(SKILL_TOOL_NAME, { action: "write", name: "demo", content: "x" }, skillToolCtx(missingDomain)),
+            (e: unknown) => AppErrorOps.is(e, "TOOL_INVALID_ARGUMENT") && JSON.stringify((e as AppError).details).includes("domain"),
+        );
+        assert.equal(missingDomain.calls.length, 0, "缺 domain 不应触达 SkillService");
     });
 
     it("edit：局部改透传 oldString/newString，输出带替换数", async () => {
@@ -405,7 +409,7 @@ describe("skill 工具", () => {
             () =>
                 runner.call(
                     SKILL_TOOL_NAME,
-                    { action: "read", name: "demo", path: "notes/../../other/SKILL.md" },
+                    { action: "read", name: "demo", domain: "project", path: "notes/../../other/SKILL.md" },
                     skillToolCtx(svc),
                 ),
             (e: unknown) =>

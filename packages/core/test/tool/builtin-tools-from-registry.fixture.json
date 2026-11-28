@@ -275,7 +275,7 @@
     },
     {
       "name": "skill",
-      "description": "读取与管理技能（Skills）。技能是可复用的提示词包（SKILL.md + 附属文件），通过本工具查看或修改其内容。\n\n当前可用技能（装配期快照，回合内变更不即时反映）：\n（暂无可用技能）\n\naction 说明：\n- load：装载技能开工。name 必填，读生效副本（项目副本优先）的 SKILL.md 全文并附附属文件清单；若全文已在本请求提示词中则返回短提示\n- read：读取技能文件。name 必填；path 缺省 SKILL.md；domain 缺省读生效副本（项目副本优先，输出 domain 为实际命中域）\n- write：整文件覆盖写入。name / content 必填；domain 缺省 project；向新目录写 SKILL.md 即新建技能\n- edit：局部查找替换。name / oldString / newString 必填（可配 replaceAll）；**domain 必填**，必须显式传 global 或 project——同名技能可能同时存在项目副本与全局本体，缺省会改错那一份\n- list：列技能清单。domain 缺省列当前项目合并视图（含禁用/覆盖标记）；显式 domain 列对应域\n\n参数说明：\n- name：技能名（list 不需要）\n- domain：global（全部项目共享）或 project（仅当前项目）\n- path：相对技能目录的路径，不得包含 ..\n\n注意：技能文件跨域读写不进会话工作区；修改只影响技能本身，不改当前会话文件。",
+      "description": "读取与管理技能（Skills）。技能是可复用的提示词包（SKILL.md + 附属文件），通过本工具查看或修改其内容。\n\n当前可用技能（装配期快照，回合内变更不即时反映）：\n（暂无可用技能）\n\naction 说明：\n- load：装载技能开工。name 必填，读生效副本（项目副本优先）的 SKILL.md 全文并附附属文件清单；若全文已在本请求提示词中则返回短提示\n- read：读取技能文件。name / domain 必填；path 缺省 SKILL.md；domain 填错了报「在该域不存在」并提示该技能实际在哪个域\n- write：整文件覆盖写入。name / content / domain 必填；向新目录写 SKILL.md 即新建技能\n- edit：局部查找替换。name / oldString / newString / domain 必填（可配 replaceAll）——同名技能可能同时存在项目副本与全局本体，必须显式传 global 或 project\n- list：列技能清单。domain 可不填：不填列全部（含禁用/覆盖标记）；显式 domain 只列对应域\n\n参数说明：\n- name：技能名（list 不需要）\n- domain：global（全部项目共享）或 project（仅当前项目）\n- path：相对技能目录的路径，不得包含 ..\n\n注意：技能文件跨域读写不进会话工作区；修改只影响技能本身，不改当前会话文件。",
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -297,7 +297,7 @@
             "minLength": 1
           },
           "domain": {
-            "description": "技能域；read 缺省读生效副本，write 缺省 project，list 缺省合并视图；edit 必须显式传",
+            "description": "技能域；read / write / edit 必填，填错域会报「在该域不存在」；list 可不填，不填列全部",
             "type": "string",
             "enum": [
               "global",

@@ -249,6 +249,8 @@ const ERROR_MESSAGE_KEYS = [
     "error.skill.not_found_in_domain_hint.other_domain",
     "error.skill.not_found_in_domain_hint.neither_domain",
     "error.skill.not_found_in_domain_hint.probe_failed",
+    "error.skill.not_found_in_domain_hint.read_other_domain",
+    "error.skill.not_found_in_domain_hint.read_neither_domain",
     "error.skill.builtin_not_deletable",
     "error.skill.builtin_name_reserved",
     "error.skill.builtin_rename_forbidden",

@@ -256,6 +256,19 @@ export class SkillsService implements SkillService {
         return Result.ok(EffectiveSkills.compute({ global: global.value, project: project.value, disabledNames }));
     }
 
+    /**
+     * read 显式指定域却没找到时的报错：文案点名「在该域不存在」，并附另一域的存在性
+     * （三态，同 toWriteNotFoundError：null = 无法确认）。读与写的提示语不同——写提示
+     * 「可在该域新建」，读只提示「去另一域读」。
+     */
+    private async toReadNotFoundError(domain: SkillDomain, name: string, path: string, projectId?: string): Promise<AppError<"SKILL_NOT_FOUND">> {
+        const otherDomain: SkillDomain = domain === "global" ? "project" : "global";
+        const otherVfs = otherDomain === "project" && (projectId == null || projectId.length === 0) ? null : this.vfsForDomain(otherDomain, projectId);
+        const exists: boolean | null = otherVfs == null ? null : otherVfs.ok ? (await otherVfs.value.read(`${SKILLS_ROOT}/${name}/${path}`)).ok : null;
+        const hint = exists === false ? { key: "error.skill.not_found_in_domain_hint.read_neither_domain", params: { other_domain: otherDomain } } : { key: "error.skill.not_found_in_domain_hint.read_other_domain", params: { other_domain: otherDomain } };
+        return new AppError("SKILL_NOT_FOUND", { descriptor: { key: "error.skill.not_found_in_domain", params: { name, domain, path, hint } }, skillName: name, path, domain });
+    }
+
     async readSkillFile(domain: SkillDomain | undefined, name: string, path?: string, projectId?: string): Promise<Result<SkillFileContent, AppError>> {
         // 技能名不得含 `/`（防路径拼接逃逸；read 等只做该项弱校验）。
         if (name.includes("/")) {
@@ -291,6 +304,7 @@ export class SkillsService implements SkillService {
             }
             return Result.err(result.error);
         }
+        if (domain != null) return Result.err(await this.toReadNotFoundError(domain, name, relPath, projectId));
         return Result.err(new AppError("SKILL_NOT_FOUND", { detail: `Skill file not found: ${name}/${relPath}`, skillName: name, path: relPath }));
     }
 

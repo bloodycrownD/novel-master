@@ -133,11 +133,11 @@ type SkillToolOutput = SkillToolLoadOutput | SkillToolReadOutput | SkillToolWrit
  */
 const SKILL_ACTION_REQUIRED_FIELDS: Record<SkillToolInput["action"], readonly (keyof SkillToolInput)[]> = {
     load: ["name"],
-    read: ["name"],
-    write: ["name", "content"],
-    // domain 必填：同名技能可能同时有 project 副本与 global 本体，edit 打哪一份
-    // 是有歧义的，缺省猜 project 会让「改我刚 load 的那个」直接打到空域上
-    // （真实事故：全局技能被当成项目技能，报 Path not found）。
+    // domain 对 read / write / edit 必填（list 可不填）：同名技能可能同时有 project 副本
+    // 与 global 本体，打哪一份是有歧义的，缺省猜 project 会让「改我刚 load 的那个」
+    // 直接打到空域上（真实事故：全局技能被当成项目技能，报 Path not found）。
+    read: ["name", "domain"],
+    write: ["name", "content", "domain"],
     edit: ["name", "oldString", "newString", "domain"],
     list: [],
 };
@@ -148,7 +148,7 @@ const SKILL_FIELD_LABELS: Partial<Record<keyof SkillToolInput, string>> = {
     content: "整文件内容 content",
     oldString: "匹配串 oldString",
     newString: "替换串 newString",
-    domain: '技能域 domain（"global" 或 "project"）——edit 必须显式指定改哪一份副本',
+    domain: '技能域 domain（"global" 或 "project"）——read / write / edit 必须显式指定操作哪一份副本',
 };
 
 /**
@@ -167,14 +167,14 @@ const SKILL_LOAD_SEEN_TIP = "该技能 SKILL.md 全文已在本请求提示词�
 /**
  * 静态 `skill` 工具实例。
  *
- * 域缺省语义：read 缺省读生效副本（项目副本优先回落 global，由 SkillService
- * 解析，输出携带实际命中域）；write / edit 缺省写 project 域（服务层要求
- * 显式域，工具层补默认值）；list 缺省列当前项目合并视图。
+ * 域语义：load 读生效副本（项目副本优先回落 global，由 SkillService 解析）；
+ * read / write / edit 的 domain 必填（schema 强制），填错域报「在该域不存在」；
+ * list 的 domain 可不填，不填列全部（当前项目视角的合并视图）。
  */
 const skillInputObjectSchema = z.object({
     action: z.enum(["load", "read", "write", "edit", "list"]).describe("动作类型：load 装载技能 / read 读取 / write 覆盖写 / edit 局部替换 / list 列清单"),
     name: z.string().min(1).optional().describe("技能名（read/write/edit 必填；list 不需要）"),
-    domain: z.enum(["global", "project"]).optional().describe("技能域；read 缺省读生效副本，write 缺省 project，list 缺省合并视图；edit 必须显式传"),
+    domain: z.enum(["global", "project"]).optional().describe("技能域；read / write / edit 必填，填错域会报「在该域不存在」；list 可不填，不填列全部"),
     path: z.string().refine((p) => !p.split("/").includes(".."), { message: "技能文件路径不得包含 .." }).optional().describe("相对技能目录的路径，缺省 SKILL.md，不得包含 .."),
     content: z.string().optional().describe("write 动作的整文件内容"),
     oldString: z.string().min(1).optional().describe("edit 动作的匹配串；给了就不得为空串（空串会假命中或死循环）"),
@@ -204,10 +204,10 @@ ${availableSkills}
 
 action 说明：
 - load：装载技能开工。name 必填，读生效副本（项目副本优先）的 SKILL.md 全文并附附属文件清单；若全文已在本请求提示词中则返回短提示
-- read：读取技能文件。name 必填；path 缺省 SKILL.md；domain 缺省读生效副本（项目副本优先，输出 domain 为实际命中域）
-- write：整文件覆盖写入。name / content 必填；domain 缺省 project；向新目录写 SKILL.md 即新建技能
-- edit：局部查找替换。name / oldString / newString 必填（可配 replaceAll）；**domain 必填**，必须显式传 global 或 project——同名技能可能同时存在项目副本与全局本体，缺省会改错那一份
-- list：列技能清单。domain 缺省列当前项目合并视图（含禁用/覆盖标记）；显式 domain 列对应域
+- read：读取技能文件。name / domain 必填；path 缺省 SKILL.md；domain 填错了报「在该域不存在」并提示该技能实际在哪个域
+- write：整文件覆盖写入。name / content / domain 必填；向新目录写 SKILL.md 即新建技能
+- edit：局部查找替换。name / oldString / newString / domain 必填（可配 replaceAll）——同名技能可能同时存在项目副本与全局本体，必须显式传 global 或 project
+- list：列技能清单。domain 可不填：不填列全部（含禁用/覆盖标记）；显式 domain 只列对应域
 
 参数说明：
 - name：技能名（list 不需要）
@@ -331,6 +331,7 @@ action 说明：
             case "read": {
                 const name = input.name;
                 if (name === undefined) return missingField("name");
+                if (input.domain === undefined) return missingField("domain");
                 const result = await service.readSkillFile(input.domain, name, input.path, skills.projectId);
                 if (!result.ok) return Result.err(result.error);
                 const offset = input.offset ?? 1;
@@ -365,9 +366,9 @@ action 说明：
                 if (name === undefined) return missingField("name");
                 const content = input.content;
                 if (content === undefined) return missingField("content");
-                // write 保留缺省 project：写向项目域=建项目覆盖副本，是明确且安全的语义
-                // （不像 edit 那样有「打哪一份」的歧义），不必强求模型每次显式声明。
-                const domain = input.domain ?? "project";
+                // domain 必填（schema 保证）：写错域会污染全局技能或建出错误的项目副本。
+                const domain = input.domain;
+                if (domain === undefined) return missingField("domain");
                 const path = input.path ?? SKILL_DEFAULT_ENTRY;
                 const written = await service.writeSkillFile({ domain, name, path: input.path, content, projectId: skills.projectId });
                 if (!written.ok) return Result.err(written.error);

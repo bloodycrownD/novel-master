@@ -143,6 +143,8 @@ const ZH_CN: MessageCatalog<CoreMessageKey> = {
   "error.skill.not_found_in_domain_hint.other_domain": "该技能存在于 {other_domain} 域；如需修改它，请显式传 domain:\"{other_domain}\"。",
   "error.skill.not_found_in_domain_hint.neither_domain": "{other_domain} 域也没有该技能；如需在 {domain} 域新建，请显式传 domain:\"{domain}\"。",
   "error.skill.not_found_in_domain_hint.probe_failed": "未能确认 {other_domain} 域是否存在该技能（缺 projectId 无法探测该域）。",
+  "error.skill.not_found_in_domain_hint.read_other_domain": "该技能存在于 {other_domain} 域；读取请显式传 domain:\"{other_domain}\"。",
+  "error.skill.not_found_in_domain_hint.read_neither_domain": "{other_domain} 域也没有该技能。",
   "error.skill.builtin_not_deletable": "内置技能不支持删除：{skill_name}",
   "error.skill.builtin_name_reserved": "「{skill_name}」为内置技能保留名，不能用于新建；内置技能本身可在管理页编辑",
   "error.skill.builtin_rename_forbidden": "内置技能不支持重命名：{skill_name}",

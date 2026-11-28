@@ -201,6 +201,19 @@ describe("SkillService（T-SK5）", () => {
         ));
         assert.equal(fallback.domain, "global");
 
+        // 显式 project 但该项目没有副本：不回落 global，报「在 project 域不存在」并提示去 global 读
+        const wrongDomain = await skills.readSkillFile("project", name, undefined, other.id);
+        assert.ok(!wrongDomain.ok, "显式域读不到应返回失败，不回落另一域");
+        const wrong = wrongDomain.error as unknown as { key: string; messageKey?: string; messageParams?: Record<string, unknown> };
+        assert.equal(wrong.key, "SKILL_NOT_FOUND");
+        assert.equal(wrong.messageKey, "error.skill.not_found_in_domain");
+        assert.deepEqual(wrong.messageParams, { name, domain: "project", path: "SKILL.md", hint: { key: "error.skill.not_found_in_domain_hint.read_other_domain", params: { other_domain: "global" } } });
+
+        // 两边都没有：提示另一域也没有
+        const neither = await skills.readSkillFile("project", `missing-${suffix}`, undefined, other.id);
+        assert.ok(!neither.ok);
+        assert.equal((neither.error as unknown as { messageParams?: { hint: { key: string } } }).messageParams?.hint.key, "error.skill.not_found_in_domain_hint.read_neither_domain");
+
         // 不存在：NOT_FOUND
         await rejectsErr(
             () =>

@@ -34,7 +34,8 @@ export const SkillToolRefResolver = {
      * 从 tool_use 输入解析技能跳转三元组（供 UI 卡片「跳详情」门控使用）。
      *
      * - 仅 `skill` 处理；action 为 list、name 非非空字符串时返回 undefined，不抛错。
-     * - domain 缺省：write/edit 补工具同款默认 `project`；read 缺省读生效副本，
+     * - domain 缺省：write/edit 补工具同款默认 `project`；read 缺省读生效副本
+     *   （工具 schema 现已要求 read 必填，缺省只可能来自旧会话的历史调用），
      *   实际命中域只有工具输出知道——此时返回 undefined，等 `meta.skillRef`。
      * - `projectId` 仅 project 域携带（global 域剥离，避免误导跳转）。
      */
@@ -44,8 +45,8 @@ export const SkillToolRefResolver = {
         if (typeof action !== "string" || !REF_ACTIONS.has(action)) return undefined;
         const name = SkillToolRefResolver.parseName(input?.name);
         if (name == null) return undefined;
-        // load / read 缺省读生效副本，实际命中域只有工具输出知道——返回
-        // undefined 等 meta.skillRef；write/edit 补工具同款默认 project。
+        // load 缺省读生效副本，实际命中域只有工具输出知道——返回 undefined 等
+        // meta.skillRef；read 现由 schema 强制带域；write/edit 补工具同款默认 project。
         const domain = SkillToolRefResolver.parseDomain(input?.domain) ?? (action === "load" || action === "read" ? undefined : "project");
         if (domain == null) return undefined;
         return {
