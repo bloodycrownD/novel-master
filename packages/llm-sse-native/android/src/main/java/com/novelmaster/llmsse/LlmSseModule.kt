@@ -49,12 +49,10 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
 
     /**
      * 已退役的空闲超时默认值（保留常量与 sseConnect 的 readTimeoutMs 参数
-     * 仅为 JS 接口兼容）：流式流体现在不设空闲界——首字与流体停顿均由
-     * callTimeout 单一兜底（产品拍板：流式不应有固定空闲时间限制）。
-     * callTimeout 默认 600s：整调用兜底（connect + 首字 + 流体全周期）。
+     * 仅为 JS 接口兼容）：流式流体现不设空闲界。整调用预算（原默认 600s）
+     * 也已移除——流式没有任何自动超时（产品拍板：流式不应有固定时间限制）。
      */
     const val DEFAULT_READ_TIMEOUT_MS = 30_000L
-    const val DEFAULT_CALL_TIMEOUT_MS = 600_000L
 
     /** 合批参数：100ms 定时与 64K 字符阈值先到者 flush 一次（阈值按 UTF-16 字符计，中文场景约 192KB 字节）。 */
     private const val FLUSH_INTERVAL_MS = 100L
@@ -72,16 +70,16 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
   /**
    * 自有 OkHttpClient：独立 ConnectionPool（与 RN 网络层互不复用连接）。
    *
-   * client 级读超时**恒禁用**（0 = 无限）：OkHttp 的 readTimeout 从 connect 后
-   * 的第一次读就开始计时，会罩住「等首字节/等响应」——非流式请求的响应
-   * 等待与流式的首字等待都是正常形态，不应设 30s 界（真机实锤：非流式
-   * 大 prompt 30s 超时 × 重试一次 = 用户看到的 ~60s 报错）。流式流体会话内
-   * 也不再挂任何空闲界（首字与流体停顿均由 callTimeout 单一兜底）。
+   * client 级读超时与整调用超时**恒禁用**（0 = 无限）：OkHttp 的 readTimeout 从
+   * connect 后的第一次读就开始计时，会罩住「等首字节/等响应」——非流式请求的响应
+   * 等待与流式的首字等待都是正常形态，不应设 30s 界（真机实锤：非流式大 prompt
+   * 30s 超时 × 重试一次 = 用户看到的 ~60s 报错）。整调用预算（原 600s）也于
+   * 2026-11-28 移除：正常的长输出不再被掐，挂死的连接由用户手动 abort。
    */
   private val baseClient: OkHttpClient = OkHttpClient.Builder()
     .connectionPool(ConnectionPool())
     .readTimeout(0, TimeUnit.MILLISECONDS)
-    .callTimeout(DEFAULT_CALL_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+    .callTimeout(0, TimeUnit.MILLISECONDS)
     .build()
 
   /** 流式读循环线程池：同步 execute()，不占 OkHttp dispatcher 的 async 配额。 */
@@ -148,9 +146,9 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
    * 建立 SSE 流：读循环搬运响应体字节，合批后经 LlmSseChunk 事件回传。
    *
    * @param headersKv 扁平键值对 ["k1","v1","k2","v2",...]（ReadableArray 传输最省）
-   * @param readTimeoutMs / callTimeoutMs 传 0 或负数则用默认值（per-request
-   *   覆盖经 newBuilder 克隆 client，共享连接池——RN 官方同款手法）；
-   *   readTimeoutMs 已退役（读超时恒禁用），保留入参仅为 JS 接口兼容。
+    * @param readTimeoutMs 已退役（读超时恒禁用），保留入参仅为 JS 接口兼容。
+    * @param callTimeoutMs 整调用预算（毫秒）；传 0 或负数 = 不设预算。per-request
+    *   覆盖经 newBuilder 克隆 client，共享连接池——RN 官方同款手法。
    */
   @ReactMethod
   fun sseConnect(
@@ -370,8 +368,8 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
 
   /**
    * per-request 整调用预算（克隆 builder 共享连接池，RN 官方同款手法）。
-   * 读超时不在此设置——client 级读超时已恒禁用（见 baseClient 注释），
-   * 流式全程不设空闲界；唯一自动兜底即此处的 callTimeout。
+   * 传 0 或负数 = 不设预算（整调用预算已移除，2026-11-28）：流式不设空闲界，
+   * 也没有整调用上限，挂死的连接由用户手动 abort。
    */
   private fun clientWithCallTimeout(callTimeoutMs: Int): OkHttpClient {
     if (callTimeoutMs <= 0) {
@@ -383,15 +381,12 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
   }
 
   /**
-   * 本请求生效的整调用预算（ms），供 callTimeout 归类判定使用。
+   * 本请求生效的整调用预算（ms），供 callTimeout 归类判定使用；0 = 无预算。
    *
-   * ⚠️ 与 [clientWithCallTimeout] 的分支口径**必须一致，改一处要改两处**：
-   * `callTimeoutMs <= 0` 时 client 走 `baseClient`（预算 600s），若这里直接存
-   * `callTimeoutMs` 本身（可能是 -1），`elapsed >= effectiveCallTimeoutMs`
-   * 会恒真、保险条件失效。
+   * ⚠️ 与 [clientWithCallTimeout] 的分支口径**必须一致，改一处要改两处**。
    */
   private fun effectiveCallTimeoutMs(callTimeoutMs: Int): Long =
-    if (callTimeoutMs > 0) callTimeoutMs.toLong() else DEFAULT_CALL_TIMEOUT_MS
+    if (callTimeoutMs > 0) callTimeoutMs.toLong() else 0L
 
   private fun buildRequest(
     method: String,
@@ -580,12 +575,12 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
    * 唯一可能来源就是 callTimeout，elapsed 判定只是把「万一是别的原因」排除掉
    * 的保险。
    *
-   * ⚠️ **本条不改预算**（600s 仍是 connect + 首字 + 流体全周期的整调用兜底，
-   * 流式不设固定空闲超时那条产品口径不变）：只把「到点形态」从**静默**
-   * （一个事件都不发 ⇒ JS Promise 永不 settle）改成发 `kind:"timeout"` 事件。
-   *
-   * SocketTimeoutException 分支为防御性保留——client 级读超时恒禁用、流中
-   * 无空闲界，正常不可达；真触发时 message 携带数值供 JS 侧文案透传来源。
+     * 整调用预算已移除（2026-11-28）：默认不再设 callTimeout，上面的 timeout
+     * 分支只在调用方显式传了正的 callTimeoutMs 时才可达（effectiveCallTimeoutMs
+     * 为 0 表示无预算，直接跳过）。
+     *
+     * SocketTimeoutException 分支为防御性保留——client 级读超时恒禁用、流中
+     * 无空闲界，正常不可达；真触发时 message 携带数值供 JS 侧文案透传来源。
    */
   private fun classifyError(
     t: Throwable,
@@ -601,7 +596,7 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
     if (userAbortedHit) {
       return "abort" to "aborted by user"
     }
-    if (call?.isCanceled() == true) {
+    if (call?.isCanceled() == true && effectiveCallTimeoutMs > 0) {
       val elapsedMs = (System.nanoTime() - startedAtNanos) / 1_000_000
       if (elapsedMs >= effectiveCallTimeoutMs) {
         return "timeout" to "call timeout after ${effectiveCallTimeoutMs}ms"

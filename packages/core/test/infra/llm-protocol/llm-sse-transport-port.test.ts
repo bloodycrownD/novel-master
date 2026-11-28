@@ -4,26 +4,33 @@
  *
  * - T-N3: 三分支逐请求择优 registered native > XHR > fetch；测试强制位
  *   `setSseTransportOverrideForTests`；`Connection: close` 条件化——native
- *   分支不设（init 原样透传），注销 native 回落 XHR 时保留。
+ *   分支不设（init 原样透传），注销 native 回落 XHR 时保留；整调用预算不再
+ *   下发（postOptions 不含 `wholeCallTimeoutMs`，流式无任何自动超时）。
  * - T-N2: transport 超时错误（native LlmSseError(kind:"timeout") 经 wrapper
  *   转换的两种契约形态）映射 PROVIDER_STREAM_TIMEOUT 分级——0 数据 →
- *   first-chunk（可重试）；已投数据 → idle（不自动重试）。
+ *   first-chunk（可重试）；已投数据 → idle（不自动重试）；错误不再携带
+ *   timeoutMs，文案只描述现象与来源（整调用预算已移除）。
  * - native 分支时序（公共层上移后与 XHR/fetch 同一套语义）：流中长静默不
- *   自动超时（空闲看门狗已退役——产品拍板流式不设固定空闲限制）、首字黑洞
- *   由 transport callTimeout 承接（JS 侧不开 whole-call 定时器）、用户取消
- *   AbortError 原样上抛与 isRequestAborted 判据链路兼容。
+ *   自动超时（空闲看门狗已退役——产品拍板流式不设固定空闲限制）、JS 侧不开
+ *   whole-call 定时器（首字黑洞的收敛来源是 transport 超时错误，如旧版安装包
+ *   的 Kotlin 默认 600s）、用户取消 AbortError 原样上抛与 isRequestAborted
+ *   判据链路兼容。
  *
  * @module test/infra/llm-protocol/llm-sse-transport-port
  */
 
 import assert from "node:assert/strict";
 import {  describe, it, mock, afterEach  } from "node:test";
-import {  LlmSseTransport, SSE_WHOLE_CALL_TIMEOUT_MS, type SseByteHandler, type SseTransport  } from "../../../src/infra/llm-protocol/logic/llm-sse-transport.js";
+import {  LlmSseTransport, type SseByteHandler, type SseTransport  } from "../../../src/infra/llm-protocol/logic/llm-sse-transport.js";
 import {  STREAM_IDLE_TIMEOUT_MS  } from "../../../src/infra/llm-protocol/logic/stream-watchdog.js";
 import {  AppErrorOps  } from "../../../src/errors/app-error.js";
 import {  RequestAbort  } from "../../../src/infra/llm-protocol/logic/request-abort.js";
 
 const SSE_URL = "https://api.example.com/v1/chat/completions";
+
+/** 原 SSE_WHOLE_CALL_TIMEOUT_MS 的数值（常量已随整调用预算删除）：仅作
+ * 「推进超过原 600s 预算」的假时钟步进基准，不再断言任何行为绑定它。 */
+const REMOVED_WHOLE_CALL_BUDGET_MS = 600_000;
 
 /** Mock XHR：send 后挂起等待外部驱动（onprogress/onload/abort/ontimeout）。 */
 class HangingXhr {
@@ -175,12 +182,15 @@ describe("T-N3: 三分支逐请求择优（registered native > XHR > fetch）", 
         assert.equal(chunks.join(""), 'data: {"x":1}\n\n');
         assert.equal(fake.calls.length, 1, "registered transport 承载请求");
         assert.equal(fake.calls[0]!.url, SSE_URL);
-        // C-orch-1：整调用预算单点下发——core 以 SSE_WHOLE_CALL_TIMEOUT_MS
-        // 覆盖 wrapper 的 timeouts.callMs（wrapper 缺省时回退 Kotlin 默认 600s）。
+        // C-orch-1 反转（2026-11-29 整调用预算移除）：core 不向 native transport
+        // 下发预算——postOptions 不含 wholeCallTimeoutMs 字段，wrapper/Kotlin 侧
+        // 自身也不设 callTimeout（流式无任何自动超时）。
+        const opts = fake.calls[0]!.opts;
+        assert.ok(opts != null, "post 应向 transport 传 opts");
         assert.equal(
-            fake.calls[0]!.opts?.wholeCallTimeoutMs,
-            SSE_WHOLE_CALL_TIMEOUT_MS,
-            "core 向 native transport 下发整调用预算 600_000ms",
+            "wholeCallTimeoutMs" in opts,
+            false,
+            "core 不再向 native transport 下发整调用预算",
         );
         assert.equal(
             instances.length,
@@ -266,7 +276,7 @@ describe("T-N3: Connection: close 条件化（spec §7）", () => {
         await promise;
 
         // init 原样透传给 transport：公共层不注入 Connection: close（native 管子
-        // 自带读超时 + callTimeout，黑洞有界，保留连接复用）。
+        // 保留连接复用；挂死连接由用户手动终止）。
         assert.deepEqual(fake.calls[0]!.init.headers, {
             Authorization: "Bearer k",
         });
@@ -302,7 +312,7 @@ describe("T-N3: Connection: close 条件化（spec §7）", () => {
         assert.deepEqual(
             connCalls[1]!.arguments,
             ["Connection", "close"],
-            "回落 XHR 时保留 close（首字黑洞由 close + xhr.timeout 兜底，spec §7）",
+            "回落 XHR 时保留 close（消灭可复用的死连接，spec §7）",
         );
 
         xhr.status = 200;
@@ -312,14 +322,15 @@ describe("T-N3: Connection: close 条件化（spec §7）", () => {
 });
 
 describe("T-N2: transport 超时错误映射 PROVIDER_STREAM_TIMEOUT 分级", () => {
-    it("0 数据超时（name 形态）→ 'first-chunk'（可重试分级），整调用预算", async () => {
+    it("0 数据超时（name 形态）→ 'first-chunk'（可重试分级），文案只描述现象与来源", async () => {
         const fake = createHangingTransport();
         LlmSseTransport.register(fake.transport);
 
         const promise = LlmSseTransport.post({ url: SSE_URL, init: { method: "POST", body: "{}" }, onChunk: () => {} });
         await settleAsync();
 
-        // native callTimeout 到点：无任何 onChunk 投递（首字黑洞形态）
+        // native callTimeout 到点：无任何 onChunk 投递（首字黑洞形态；
+        // 旧版安装包的 Kotlin 默认 600s 仍会走到这里）
         fake.reject(nameTimeoutError());
 
         await assert.rejects(
@@ -331,10 +342,15 @@ describe("T-N2: transport 超时错误映射 PROVIDER_STREAM_TIMEOUT 分级", ()
                 );
                 assert.equal(err.name, "PROVIDER_STREAM_TIMEOUT");
                 assert.equal(err.details?.phase, "first-chunk", "0 数据 → first-chunk 可重试");
+                assert.equal(
+                    err.details?.timeoutMs,
+                    undefined,
+                    "整调用预算已移除：错误不再携带 timeoutMs",
+                );
                 assert.match(
                     err.message,
-                    new RegExp(String(SSE_WHOLE_CALL_TIMEOUT_MS)),
-                    "timeoutMs 取整调用预算",
+                    /^LLM stream timed out waiting for the first chunk \(native timeout: /,
+                    "文案只描述现象与来源（budget = detail 透传真实信息）",
                 );
                 assert.match(err.message, /native timeout:/, "detail 标记来源并透传真实信息");
                 // 不冒充用户取消（isRequestAborted 三判据全不命中）
@@ -356,8 +372,21 @@ describe("T-N2: transport 超时错误映射 PROVIDER_STREAM_TIMEOUT 分级", ()
 
         await assert.rejects(
             promise,
-            (err: unknown) =>
-                AppErrorOps.is(err, "PROVIDER_STREAM_TIMEOUT") && err.details?.phase === "idle",
+            (err: unknown) => {
+                assert.ok(
+                    AppErrorOps.is(err, "PROVIDER_STREAM_TIMEOUT") && err.details?.phase === "idle",
+                );
+                assert.equal(
+                    err.details?.timeoutMs,
+                    undefined,
+                    "整调用预算已移除：错误不再携带 timeoutMs",
+                );
+                assert.match(
+                    err.message,
+                    /^LLM stream timed out after the last chunk \(native timeout: /,
+                );
+                return true;
+            },
         );
         assert.equal(chunks.join(""), 'data: {"x":1}\n\n', "超时前数据已投递");
     });
@@ -435,10 +464,11 @@ describe("native 分支时序（公共层上移后与 XHR/fetch 同一套语义�
         );
         await settleAsync();
 
-        // 推进超过整调用预算：native 分支不 arm JS 定时器（XHR 用 xhr.timeout、
-        // native 用 transport 内 callTimeout），promise 必须仍 pending——首字
-        // 黑洞的收敛来源是 transport 超时错误，而非公共层 JS 兜底。
-        mock.timers.tick(SSE_WHOLE_CALL_TIMEOUT_MS + 1_000);
+        // 推进超过原整调用预算（600s）：native 分支不 arm JS 定时器（XHR 不设
+        // xhr.timeout、fetch 不开定时器、native 不下发预算——流式无任何自动
+        // 超时），promise 必须仍 pending——首字黑洞的收敛来源是 transport 超时
+        // 错误（如旧版安装包的 Kotlin 默认 600s），而非公共层 JS 兜底。
+        mock.timers.tick(REMOVED_WHOLE_CALL_BUDGET_MS + 1_000);
         assert.equal(settledFlag, false, "JS 侧 whole-call 定时器不应存在");
 
         // transport callTimeout 错误到达 → 公共层映射分级收敛

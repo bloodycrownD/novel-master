@@ -40,12 +40,15 @@ export const LLM_SSE_EVENT_ERROR = "LlmSseError";
  * 读超时恒禁用），Kotlin 侧保留常量与 `sseConnect` 的 `readTimeoutMs` 参数
  * 仅为 JS 接口兼容，该值至多落进一条正常不可达的 SocketTimeoutException 文案。
  *
- * @deprecated 读超时已退役（恒禁用）；唯一自动兜底是整调用 callTimeout
- * （见 {@link LLM_SSE_DEFAULT_CALL_TIMEOUT_MS}）。
+ * @deprecated 读超时已退役（恒禁用）；整调用预算也已移除，流式没有任何自动超时。
+ 
  */
 export const LLM_SSE_DEFAULT_READ_TIMEOUT_MS = 30_000;
-/** native 整调用超时默认值（毫秒），与 Kotlin 侧一致：唯一自动兜底（connect + 首字 + 流体全周期）。 */
-export const LLM_SSE_DEFAULT_CALL_TIMEOUT_MS = 600_000;
+/**
+ * native 整调用超时默认值（毫秒），与 Kotlin 侧一致。0 = 不设预算：整调用预算已移除
+ * （2026-11-28），流式没有任何自动超时，挂死的连接由用户手动 abort。
+ */
+export const LLM_SSE_DEFAULT_CALL_TIMEOUT_MS = 0;
 
 /**
  * 事件订阅抽象：addListener 返回退订函数。
@@ -103,8 +106,8 @@ export type LlmSseNativeBridge = Pick<LlmSseNativeModule, "sseConnect" | "sseAbo
  *
  * 本包不依赖 @novel-master/core 运行时——此接口是鸭子类型声明；
  * core 侧 Step 3 落地 `registerSseTransport(transport)` 后按结构兼容直接注册。
- * `opts.wholeCallTimeoutMs` 为 core 下发的整调用预算（单点口径），
- * `opts.nativeTimeouts` 为本包扩展位（core port 不携带时用 native 默认值）。
+ * `opts.wholeCallTimeoutMs` 与 `opts.nativeTimeouts.callMs` 为可选的整调用预算：
+ * core 不下发，缺省不设上限。
  */
 export interface SseTransport {
     post(
@@ -116,13 +119,13 @@ export interface SseTransport {
             signal?: AbortSignal;
             logTag?: string;
             /**
-       * core 下发的整调用预算（毫秒，= `SSE_WHOLE_CALL_TIMEOUT_MS` 600_000）；
-       * 存在时覆盖 `nativeTimeouts.callMs`，缺省传 -1 由 Kotlin 默认 600s 兜底。
+       * 可选的整调用预算（毫秒）。core 不下发；显式传正值时覆盖 nativeTimeouts.callMs；
+       * 缺省传 -1（Kotlin 侧 = 不设预算）。
        */
             wholeCallTimeoutMs?: number;
             /**
-       * native 超时覆盖（毫秒；不传用 native 默认）。
-       * `callMs` 为整调用预算（缺省 600s）；`readMs` 已退役——读超时恒禁用，
+       * native 超时覆盖（毫秒；不传 = 不设）。
+       * `callMs` 为整调用预算（缺省不设）；`readMs` 已退役——读超时恒禁用，
        * 仅保留接口兼容与错误文案位（同 Kotlin `sseConnect` 的入参）。
        */
             nativeTimeouts?: { readMs?: number; callMs?: number };

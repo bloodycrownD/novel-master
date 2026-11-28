@@ -3,6 +3,8 @@
  *
  * - shim 经 native request 底座：转发参数（method/url/headers/body/callTimeout）
  * - GET 分发（无 body，含 method 缺省）与 POST 分发（带 body）各一例
+ * - 整调用预算已移除：传给 native 的 callTimeout 恒为 0（不设预算），常量钉死 0；
+ *   timeout 形态错误只可能来自原生层（旧安装包的 600s 默认兜底等），shim 映射不变
  * - 非 2xx 按 Response.ok 语义返回不 reject；网络/超时错误 reject
  *   NativeSseTransportError（有限收敛，不挂起）
  * - 取消（shim-1 / T-S17）：signal 已 aborted 与请求途中 abort 两种时序均立刻
@@ -66,7 +68,7 @@ describe('llm-native-fetch-shim (T-N4)', () => {
     });
 
     describe('method 分发与参数转发', () => {
-        it('GET 分发：不传 body（listModels 形态），headers 扁平化，callTimeout 透传', async () => {
+        it('GET 分发：不传 body（listModels 形态），headers 扁平化，callTimeout 传 0（无预算）', async () => {
             const request = createMockRequest();
             const shim = bindNativeFetch({request});
 
@@ -81,7 +83,7 @@ describe('llm-native-fetch-shim (T-N4)', () => {
                 'https://api.example.com/v1/models',
                 ['Authorization', 'Bearer sk-test', 'Accept', 'application/json'],
                 null,
-                LLM_NATIVE_FETCH_CALL_TIMEOUT_MS,
+                0, // 无预算：整调用预算（原 600s）已移除
             );
             expect(response.ok).toBe(true);
         });
@@ -98,7 +100,7 @@ describe('llm-native-fetch-shim (T-N4)', () => {
                 'https://api.example.com/v1/models',
                 [],
                 null,
-                LLM_NATIVE_FETCH_CALL_TIMEOUT_MS,
+                0, // 无预算
             );
         });
 
@@ -122,8 +124,21 @@ describe('llm-native-fetch-shim (T-N4)', () => {
                 'https://api.example.com/v1/chat/completions',
                 ['Authorization', 'Bearer sk-test', 'Content-Type', 'application/json'],
                 body,
-                LLM_NATIVE_FETCH_CALL_TIMEOUT_MS,
+                0, // 无预算
             );
+        });
+
+        it('整调用预算已移除：callTimeout 恒传 0（不设预算），常量钉在 0', async () => {
+            const request = createMockRequest();
+            const shim = bindNativeFetch({request});
+
+            await shim('https://api.example.com/v1/models', {method: 'GET'});
+
+            // 0 = 不设预算：非流式不再有任何自动超时，挂死的连接只能等系统报网络错误。
+            // 旧版安装包的原生层把 0 当作「用默认值 600s」——那是原生侧兼容行为，
+            // JS 侧契约就是恒传 0，改回非 0 必须连同本用例一起有意识地改。
+            expect(LLM_NATIVE_FETCH_CALL_TIMEOUT_MS).toBe(0);
+            expect(request).toHaveBeenCalledWith(expect.any(String), 'GET', 'https://api.example.com/v1/models', [], null, 0);
         });
 
         it('非 GET/POST method 明确报错（shim 只承载非流式请求-响应）', async () => {
@@ -243,7 +258,9 @@ describe('llm-native-fetch-shim (T-N4)', () => {
             });
         });
 
-        it('bridge code=timeout（callTimeout 到点/服务端死亡）→ reject kind timeout', async () => {
+        it('bridge code=timeout（原生层上报：旧安装包 600s 默认到点/服务端死亡）→ reject kind timeout', async () => {
+            // JS 侧已不设预算（恒传 0）：timeout 形态只会由原生层产生（如新 JS 配
+            // 旧安装包时原生按默认 600s 兜底）。shim 对 code=timeout 的映射保持不变。
             const request = jest.fn(async () => {
                 const err = new Error('timeout') as Error & {code?: string};
                 err.code = 'timeout';

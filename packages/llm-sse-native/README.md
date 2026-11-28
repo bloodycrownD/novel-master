@@ -11,15 +11,15 @@ LLM SSE 原生字节管子（Android / Kotlin）：自有 OkHttpClient + native 
 
 ## Native API（Kotlin `LlmSseModule`，autolink 后 `NativeModules.LlmSseNative`）
 
-- `sseConnect(requestId, url, headersKv, body, readTimeoutMs, callTimeoutMs)` — 建流；事件驱动无 Promise。`readTimeoutMs` 已退役（读超时恒禁用），参数仅为接口兼容保留
+- `sseConnect(requestId, url, headersKv, body, readTimeoutMs, callTimeoutMs)` — 建流；事件驱动无 Promise。`readTimeoutMs` 已退役（读超时恒禁用），参数仅为接口兼容保留；`callTimeoutMs` 传 0 或负数 = 不设预算
 - `sseAbort(requestId)` — 主动中止（`call.cancel()`，此后该 requestId 不再发事件）
-- `request(method, url, headersKv, body?, callTimeoutMs) → Promise<{status, contentType, body}>` — 非流式（listModels GET / chatNonStream POST 底座）；非 2xx 不 reject，status/body 带回由 JS 侧处理
+- `request(requestId, method, url, headersKv, body, callTimeoutMs) → Promise<{status, contentType, body}>` — 非流式（listModels GET / chatNonStream POST 底座）；非 2xx 不 reject，status/body 带回由 JS 侧处理；`callTimeoutMs` 传 0 = 不设预算（旧版安装包把 0 当默认 600s，属原生侧兼容行为）
 
 事件（`NativeEventEmitter`）按序到达：`LlmSseHeaders {requestId, status, contentType}` → `LlmSseChunk {requestId, text}`（合批后 ~10 事件/s）→ `LlmSseDone {requestId}` / `LlmSseError {requestId, kind: "network"|"timeout"|"http", message}`。
 
-超时口径（终版语义）：读超时已退役——client 级读超时恒禁用，流式全程无空闲界（首字与流体停顿都不是错误），唯一自动兜底是 callTimeout 600s（connect + 首字 + 流体全周期）。per-request 覆盖传非正值即用默认（克隆 builder 手法，共享连接池）；`readMs` 仅保留接口兼容与错误文案位。
+超时口径（终版语义）：读超时与整调用预算均已移除——client 级读超时恒禁用（流式全程无空闲界，首字与流体停顿都不是错误），整调用 callTimeout 也不再设 600s 兜底：baseClient `callTimeout(0)`，流式与非流式都没有任何自动超时，挂死的连接只能等系统报网络错误，或由用户手动 abort。per-request 覆盖位保留接口兼容：`callTimeoutMs` 传正值 = 整调用预算（克隆 builder 共享连接池），传 0 或负数 = 不设预算（直接用共享 baseClient）；`readMs` 仅保留接口兼容与错误文案位。
 
-core 下发的 `opts.wholeCallTimeoutMs` 存在时会覆盖 `timeouts.callMs`（整调用预算单点口径，见 core `SSE_WHOLE_CALL_TIMEOUT_MS`）。
+`opts.wholeCallTimeoutMs` / `opts.nativeTimeouts.callMs` 是可选覆盖位：显式传正值时生效（`wholeCallTimeoutMs` 优先），两者都缺省时 wrapper 给原生传 -1（不设预算）。core 已不再下发整调用预算。
 
 ## JS wrapper
 

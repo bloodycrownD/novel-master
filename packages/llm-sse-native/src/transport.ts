@@ -142,8 +142,8 @@ export namespace NativeSseTransport {
                 const body = init.body == null ? "" : String(init.body);
                 const timeouts = opts?.nativeTimeouts;
                 const readTimeoutMs = timeouts?.readMs ?? -1;
-                // 整调用预算单点下发（core-transport/C-orch-1）：core 的 opts.wholeCallTimeoutMs
-                // 存在即覆盖 nativeTimeouts.callMs；两者都缺省传 -1，由 Kotlin 默认 600s 兜底。
+                // 整调用预算可选：opts.wholeCallTimeoutMs 存在即覆盖 nativeTimeouts.callMs；
+                // 两者都缺省传 -1（Kotlin 侧 = 不设预算；整调用预算已移除）。
                 const callTimeoutMs = opts?.wholeCallTimeoutMs ?? timeouts?.callMs ?? -1;
                 const signal = opts?.signal ?? init.signal;
 

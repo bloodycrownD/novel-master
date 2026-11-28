@@ -3,7 +3,8 @@
  *
  * mock bridge 高速注入 LlmSseChunk 事件，断言 requestId 匹配、事件 1:1 透传
  * （无丢失/重复/放大）、LlmSseError → transport 错误映射；含 requestId 实例
- * 前缀（跨模块重载不撞 id）与 core 下发整调用预算（wholeCallTimeoutMs）透传。
+ * 前缀（跨模块重载不撞 id）与可选整调用预算（wholeCallTimeoutMs / callMs）
+ * 透传——缺省不下发预算，sseConnect 收 -1（原生侧 = 不设预算，预算已移除）。
  * native 合批精度（100ms/64K 字符、事件率）不在此断言——归 Step 7/8 manual。
  */
 
@@ -15,6 +16,7 @@ import {
     NativeSseTransport,
 } from "../src/transport.js";
 import {
+    LLM_SSE_DEFAULT_CALL_TIMEOUT_MS,
     LLM_SSE_EVENT_CHUNK,
     LLM_SSE_EVENT_DONE,
     LLM_SSE_EVENT_ERROR,
@@ -225,11 +227,17 @@ describe("NativeSseTransport.create（T-N1）", () => {
         assert.deepEqual(connect.headersKv, ["Authorization", "Bearer tk", "Content-Type", "application/json"]);
         assert.equal(connect.body, '{"x":1}');
         assert.equal(connect.readTimeoutMs, -1); // readMs 已退役（恒禁用）：未覆盖传 -1
-        assert.equal(connect.callTimeoutMs, -1); // 未覆盖 → Kotlin 默认整调用预算 600s
+        assert.equal(connect.callTimeoutMs, -1); // 未覆盖 → 缺省 -1（原生侧 = 不设预算，整调用预算已移除）
 
         mock.emit(LLM_SSE_EVENT_HEADERS, { requestId, status: 200, contentType: null });
         mock.emit(LLM_SSE_EVENT_DONE, { requestId });
         await promise;
+    });
+
+    it("整调用预算已移除：LLM_SSE_DEFAULT_CALL_TIMEOUT_MS 钉在 0（0 = 不设预算）", () => {
+        // 0 = 不设预算：流式不再有任何自动超时，挂死的连接由用户手动 abort。
+        // 旧版安装包的原生层把非正值当默认 600s——那是原生侧兼容行为，JS 侧契约是 0。
+        assert.equal(LLM_SSE_DEFAULT_CALL_TIMEOUT_MS, 0);
     });
 
     it("nativeTimeouts 覆盖传参（per-request 超时覆盖）", async () => {
@@ -251,7 +259,7 @@ describe("NativeSseTransport.create（T-N1）", () => {
         await promise;
     });
 
-    it("core 下发 wholeCallTimeoutMs：作为第 6 参透传给 sseConnect（单点整调用预算）", async () => {
+    it("显式传 wholeCallTimeoutMs：作为第 6 参透传给 sseConnect（可选整调用预算覆盖位）", async () => {
         const mock = createMockBridge();
         const promise = NativeSseTransport.create(mock.bridge).post(
             "https://example.test/stream",
@@ -269,7 +277,7 @@ describe("NativeSseTransport.create（T-N1）", () => {
         await promise;
     });
 
-    it("wholeCallTimeoutMs 优先于 nativeTimeouts.callMs（core 单点口径覆盖本包扩展位）", async () => {
+    it("wholeCallTimeoutMs 优先于 nativeTimeouts.callMs（显式预算的覆盖次序）", async () => {
         const mock = createMockBridge();
         const promise = NativeSseTransport.create(mock.bridge).post(
             "https://example.test/stream",

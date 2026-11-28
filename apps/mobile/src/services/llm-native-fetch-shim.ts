@@ -1,8 +1,10 @@
 /**
  * 非流式 LLM 请求的 fetch shim：以 llm-sse-native 的 `request`（请求-响应
  * 形态）为底座实现标准 fetch 形状，经 `Registry.configureLlmFetch` 注入后让
- * `listModels` / `chatNonStream` 等一切非流式调用零改动获得整调用
- * callTimeout 与 native 连接池（spec llm-stream-native §4 非流式收编）。
+ * `listModels` / `chatNonStream` 等一切非流式调用零改动获得 native 连接池
+ * （spec llm-stream-native §4 非流式收编）。整调用预算（原 600s callTimeout）
+ * 已移除：向原生恒传 0（不设预算），非流式请求不再有任何自动超时——挂死的
+ * 连接只能等系统报网络错误，或由用户手动取消。
  *
  * 边界（与 spec §4 对齐）：
  * - 只承载非流式请求-响应；返回的 Response 不提供 body 流（body 置 null）。
@@ -14,7 +16,9 @@
  *   请求途中取消先调 native `requestAbort(requestId)`（OkHttp `Call.cancel()`
  *   真断连），再本地立刻 reject，不等 native 返回。旧 native 构建缺
  *   `requestAbort` 时退化为「仅本地取消」——对外行为一致（停止按钮立刻生效），
- *   只是底层连接跑到 callTimeout。
+ *   只是底层连接没有真断连（新版原生不设预算，挂死的连接等系统报网络错误）。
+ * - 兼容：旧版安装包的原生层把 callTimeout=0 当作「用默认值 600s」，所以
+ *   新 JS 配旧安装包仍有 600s 兜底；新原生对 0 即不设预算。
  *
  * @module services/llm-native-fetch-shim
  */
@@ -23,14 +27,12 @@ import {NativeSseAbortError, NativeSseTransportError, NativeSseTransport} from '
 import type {LlmSseNativeModule} from '@novel-master/llm-sse-native/native';
 
 /**
- * shim 层整调用超时（毫秒）。
+ * shim 层整调用超时（毫秒）。0 = 不设预算：整调用预算（原 600s）已于 2026-11-28 移除，
+ * 非流式请求不再有任何自动超时——挂死的连接只能等系统报网络错误。
  *
- * 取值对齐管子默认（llm-sse-native `LLM_SSE_DEFAULT_CALL_TIMEOUT_MS`）与
- * core 流式整调用兜底 `SSE_WHOLE_CALL_TIMEOUT_MS` 的 600s——connect + 写
- * 请求体 + 服务端处理 + 读响应体全周期预算，非流式请求不再无限黑洞；
- * 正常 listModels / chatNonStream（含长思考回复）远小于该预算。
+ * 兼容：旧版安装包的原生层把 0 当作「用默认值 600s」，所以新 JS 配旧安装包仍是 600s。
  */
-export const LLM_NATIVE_FETCH_CALL_TIMEOUT_MS = 600_000;
+export const LLM_NATIVE_FETCH_CALL_TIMEOUT_MS = 0;
 
 /**
  * 非流式 requestId 的实例前缀（6 位 base36）：形态同 transport，但计数器独立维护。

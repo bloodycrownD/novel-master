@@ -107,7 +107,8 @@ export interface ErrorParamsMap {
     PROVIDER_INVALID_SAVED_MODEL_ID: { readonly modelId?: string };
     PROVIDER_INVALID_ARGUMENT: { readonly modelId?: string; readonly providerId?: string; readonly issues?: readonly ZodIssue[] };
     PROVIDER_HTTP_ERROR: { readonly providerId?: string };
-    PROVIDER_STREAM_TIMEOUT: { readonly phase: "first-chunk" | "idle"; readonly timeoutMs: number };
+    /** timeoutMs 仅在 transport 自己报出预算时携带（流式已无整调用预算，公共层不再触发超时）。 */
+    PROVIDER_STREAM_TIMEOUT: { readonly phase: "first-chunk" | "idle"; readonly timeoutMs?: number };
     CHAT_NOT_FOUND: { readonly kind: string; readonly id: string; readonly messageId?: string; readonly projectId?: string; readonly sessionId?: string };
     CHAT_INVALID_ARGUMENT: { readonly path?: string };
     CHAT_MESSAGE_CORRUPT: { readonly messageId?: string; readonly field?: string };

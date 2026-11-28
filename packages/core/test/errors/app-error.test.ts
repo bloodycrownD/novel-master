@@ -47,7 +47,7 @@ const PARAM_FIELDS: Partial<Record<keyof ErrorParamsMap, readonly string[]>> = {
     TOOL_CANCELLED: ["toolName", "detail?"],
     PROVIDER_NOT_FOUND: ["providerId"],
     PROVIDER_SAVED_MODEL_IN_USE: ["modelName", "blockingRefs"],
-    PROVIDER_STREAM_TIMEOUT: ["phase", "timeoutMs"],
+    PROVIDER_STREAM_TIMEOUT: ["phase", "timeoutMs?"],
     CHAT_NOT_FOUND: ["kind", "id", "messageId?", "projectId?", "sessionId?"],
     SKILL_INVALID_NAME: ["skillName", "reason"],
     SKILL_INVALID_PATH: ["path", "reason?"],

@@ -1,8 +1,9 @@
 /**
  * T-N2（wrapper 可测部分）：LlmSseError kind → transport 错误映射。
  *
- * callTimeout 触发的 native `LlmSseError(kind:"timeout")` 须原样携带 kind
- * 上抛（读超时已退役：恒禁用，仅存防御性文案路径）。core 侧（Step 3）据此
+ * native 上报的 `LlmSseError(kind:"timeout")` 须原样携带 kind 上抛（整调用
+ * 预算已移除：JS 侧不再触发 callTimeout，timeout 形态只可能来自原生层——
+ * 如新 JS 配旧安装包时原生按默认 600s 兜底）。core 侧（Step 3）据此
  * 映射 `LlmStreamTimeoutError` 分级（processedLength>0 → idle，否则
  * first-chunk），分级逻辑不在本包。
  */
@@ -22,7 +23,7 @@ import {
 import { createMockBridge } from "./mock-bridge.js";
 
 describe("LlmSseError → transport 错误映射（T-N2）", () => {
-    it('kind:"timeout"（callTimeout；原读超时口径已退役）原样携带，供 core 映射 LlmStreamTimeoutError', async () => {
+    it('kind:"timeout"（原生层上报；JS 已不下发预算，不再触发 callTimeout）原样携带，供 core 映射 LlmStreamTimeoutError', async () => {
         const mock = createMockBridge();
         const promise = NativeSseTransport.create(mock.bridge).post(
             "https://example.test/stream",
@@ -33,7 +34,7 @@ describe("LlmSseError → transport 错误映射（T-N2）", () => {
 
         mock.emit(LLM_SSE_EVENT_HEADERS, { requestId, status: 200, contentType: "text/event-stream" });
         mock.emit(LLM_SSE_EVENT_CHUNK, { requestId, text: "partial" });
-        // 首字之后整调用 callTimeout 到点（读超时已退役）→ kind timeout
+        // 原生上报 kind timeout（模拟旧安装包默认 600s 到点等原生层来源）→ 原样映射
         mock.emit(LLM_SSE_EVENT_ERROR, { requestId, kind: "timeout", message: "timeout" });
 
         await assert.rejects(promise, (error: unknown) => {
@@ -52,7 +53,7 @@ describe("LlmSseError → transport 错误映射（T-N2）", () => {
             () => {},
         );
         const requestId = mock.connects[0]?.requestId ?? "";
-        // headers 之前就超时（connect/首字阶段，同由 callTimeout 覆盖）
+        // headers 之前原生就上报 timeout（connect/首字阶段；分级判定归 core）
         mock.emit(LLM_SSE_EVENT_ERROR, { requestId, kind: "timeout", message: "connect timeout" });
 
         await assert.rejects(promise, (error: unknown) => {
